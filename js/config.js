@@ -1,0 +1,664 @@
+// Shared configuration, class definitions, weapon progression, 9-archetype enemy roster, and 25-level campaign
+// All modules import from './config.js' and adhere strictly to these IDs and data shapes.
+
+export const ARENA_HALF_SIZE = 27; // Spacious 3D gothic courtyard arena [-27, +27]
+export const WEAPON_MAX_LEVEL = 12;
+
+export const CLASSES = {
+  warrior: {
+    id: 'warrior',
+    nameRu: 'Воин Клятвы',
+    nameEn: 'Oath Warrior',
+    roleRu: 'Ближний бой • Стальной щит и рассекающий клинок',
+    roleEn: 'Melee • High HP & Shield Block',
+    descRu: 'Неудержимый скелет-латник с мечом и щитом. Держит удар в самой гуще орды, отражает выпады и рубит нежить широкими дугами.',
+    descEn: 'Armored skeleton bruiser with high health, shield block, and sweeping blade strikes.',
+    portrait: './assets/ui/portrait_warrior.png',
+    maxHp: 145,
+    moveSpeed: 7.5,
+    damageBlock: 0.26,
+    blockChance: 0.22,
+    colorPrimary: 0x8b2635,
+    colorSecondary: 0xc8ccd4,
+    colorAccent: 0xf4b942,
+    starterWeapon: 'club',
+    weapons: ['club', 'cleaver', 'flail'],
+    beastNameRu: 'Железный Жнец',
+    beastColor: 0xd9480f
+  },
+  gunslinger: {
+    id: 'gunslinger',
+    nameRu: 'Охотник-Стрелок',
+    nameEn: 'Grim Shotgunner',
+    roleRu: 'Дробовик • Мощная картечь, отдача и перезарядка',
+    roleEn: 'Shotgunner • Heavy Buckshot, Recoil & Reload',
+    descRu: 'Ловкий стрелок в капюшоне с тяжёлым ружьём в обеих руках. Рвёт дистанцию, всаживает веер свинцовой картечи в упор и перезаряжает патроны на бегу.',
+    descEn: 'Swift hooded hunter wielding heavy black-powder shotguns with devastating close-range buckshot.',
+    portrait: './assets/ui/portrait_gunslinger.png',
+    maxHp: 110,
+    moveSpeed: 8.8,
+    damageBlock: 0.14,
+    blockChance: 0.08,
+    colorPrimary: 0x2b3a4a,
+    colorSecondary: 0x6b4423,
+    colorAccent: 0xe09f3e,
+    starterWeapon: 'pistol',
+    weapons: ['pistol', 'blunderbuss', 'gatling'],
+    beastNameRu: 'Гончая Пороха',
+    beastColor: 0x3b82f6
+  },
+  mage: {
+    id: 'mage',
+    nameRu: 'Пепельный Маг',
+    nameEn: 'Ashen Mage',
+    roleRu: 'Тёмные чары • Взрывные кометы и контроль толпы',
+    roleEn: 'Arcane • AoE Comets & Crowd Control',
+    descRu: 'Хрупкий заклинатель с кристальным посохом. Выжигает скопления чудовищ разрывными кометами и рунами, но требует точного позиционирования.',
+    descEn: 'Fragile skeletal spellcaster hurling explosive arcane comets across the battlefield.',
+    portrait: './assets/ui/portrait_mage.png',
+    maxHp: 92,
+    moveSpeed: 7.6,
+    damageBlock: 0.05,
+    blockChance: 0.0,
+    colorPrimary: 0x4c1d95,
+    colorSecondary: 0x1e1b4b,
+    colorAccent: 0xc084fc,
+    starterWeapon: 'spark_staff',
+    weapons: ['spark_staff', 'cinder_tome', 'void_orb'],
+    beastNameRu: 'Архонт Пустоты',
+    beastColor: 0xa855f7
+  }
+};
+
+export const WEAPONS = {
+  // === WARRIOR ===
+  club: {
+    id: 'club',
+    classId: 'warrior',
+    tier: 1,
+    unlockLevel: 1,
+    nameRu: 'Клинок Клятвы',
+    nameEn: 'Oath Broadsword',
+    descRu: 'Тяжёлый широкий меч стража склепа. Рубит плотной дугой и отшвыривает ходячих мертвецов.',
+    type: 'melee',
+    baseDamage: 32,
+    cooldown: 0.48,
+    range: 3.6,
+    arcAngle: Math.PI * 0.78,
+    knockback: 7.4,
+    splashRadius: 0,
+    color: 0xd97706,
+    upgradeBaseCost: 45
+  },
+  cleaver: {
+    id: 'cleaver',
+    classId: 'warrior',
+    tier: 2,
+    unlockLevel: 3,
+    nameRu: 'Секач Инквизитора',
+    nameEn: 'Inquisitor Cleaver',
+    descRu: 'Двуручный багровый тесак. Рассекает строй врагов широкой дугой с ударной волной.',
+    type: 'melee',
+    baseDamage: 48,
+    cooldown: 0.56,
+    range: 4.4,
+    arcAngle: Math.PI * 0.95,
+    knockback: 9.4,
+    splashRadius: 2.2,
+    color: 0xef4444,
+    upgradeBaseCost: 85
+  },
+  flail: {
+    id: 'flail',
+    classId: 'warrior',
+    tier: 3,
+    unlockLevel: 7,
+    nameRu: 'Клинок Пепельной Бури',
+    nameEn: 'Cinderstorm Greatsword',
+    descRu: 'Легендарный двуручный меч: сокрушительный круговой вихрь стали с огненным разломом.',
+    type: 'melee',
+    baseDamage: 70,
+    cooldown: 0.62,
+    range: 4.9,
+    arcAngle: Math.PI * 1.35,
+    knockback: 11.8,
+    splashRadius: 3.3,
+    color: 0xf59e0b,
+    upgradeBaseCost: 135
+  },
+
+  // === GUNSLINGER (True Heavy Shotguns — NO pistol spam!) ===
+  pistol: {
+    id: 'pistol',
+    classId: 'gunslinger',
+    tier: 1,
+    unlockLevel: 1,
+    nameRu: 'Охотничье ружьё',
+    nameEn: 'Hunter Pump Shotgun',
+    descRu: 'Тяжёлое помповое ружьё на 5 патронов. Бьёт плотным веером из 7 свинцовых картечин с ощутимой отдачей и мощным уроном вблизи.',
+    type: 'ranged',
+    isShotgun: true,
+    baseDamage: 11,        // 7 pellets * 11 = 77 point-blank meatshot!
+    cooldown: 0.80,        // Weighty pump-action shotgun cadence
+    range: 13.8,
+    projectileSpeed: 27,
+    pellets: 7,
+    spread: 0.36,
+    pierce: 1,
+    splashRadius: 0,
+    knockback: 7.5,
+    magSize: 5,
+    reloadTime: 1.32,
+    recoilKick: 2.8,
+    color: 0xfbbf24,
+    upgradeBaseCost: 45
+  },
+  blunderbuss: {
+    id: 'blunderbuss',
+    classId: 'gunslinger',
+    tier: 2,
+    unlockLevel: 3,
+    nameRu: 'Двуствольный мушкетон «Гром»',
+    nameEn: 'Thunder Double-Barrel',
+    descRu: 'Убойная двустволка на 2 гильзы: выплёвывает шквал из 11 раскалённых картечин, сносящий целый отряд в упор.',
+    type: 'ranged',
+    isShotgun: true,
+    baseDamage: 12,
+    cooldown: 0.54,
+    range: 12.0,
+    projectileSpeed: 26,
+    pellets: 11,
+    spread: 0.50,
+    pierce: 1,
+    splashRadius: 0,
+    knockback: 10.8,
+    magSize: 2,
+    reloadTime: 1.42,
+    recoilKick: 4.5,
+    color: 0xf97316,
+    upgradeBaseCost: 85
+  },
+  gatling: {
+    id: 'gatling',
+    classId: 'gunslinger',
+    tier: 3,
+    unlockLevel: 7,
+    nameRu: 'Барабанный дробовик «Шквал»',
+    nameEn: 'Tempest Drum Shotgun',
+    descRu: 'Автоматическое ружьё с барабаном на 8 патронов и бронебойной картечью на вылет.',
+    type: 'ranged',
+    isShotgun: true,
+    baseDamage: 14,
+    cooldown: 0.36,
+    range: 15.5,
+    projectileSpeed: 30,
+    pellets: 5,
+    spread: 0.25,
+    pierce: 2,
+    splashRadius: 0,
+    knockback: 5.6,
+    magSize: 8,
+    reloadTime: 1.62,
+    recoilKick: 1.9,
+    color: 0x38bdf8,
+    upgradeBaseCost: 135
+  },
+
+  // === MAGE ===
+  spark_staff: {
+    id: 'spark_staff',
+    classId: 'mage',
+    tier: 1,
+    unlockLevel: 1,
+    nameRu: 'Посох гибельных искр',
+    nameEn: 'Spark Staff',
+    descRu: 'Выпускает астральную комету с фиолетовым взрывом по соседним врагам. Фокусирует 6 рунных зарядов.',
+    type: 'magic',
+    baseDamage: 28,
+    cooldown: 0.50,
+    range: 16.5,
+    projectileSpeed: 21,
+    pellets: 1,
+    spread: 0.02,
+    pierce: 1,
+    splashRadius: 2.4,
+    knockback: 3.4,
+    magSize: 6,
+    reloadTime: 1.12,
+    recoilKick: 0.8,
+    color: 0xc084fc,
+    upgradeBaseCost: 45
+  },
+  cinder_tome: {
+    id: 'cinder_tome',
+    classId: 'mage',
+    tier: 2,
+    unlockLevel: 3,
+    nameRu: 'Посох багрового пепла',
+    nameEn: 'Crimson Cinder Staff',
+    descRu: 'Запускает парные пиромантические кометы с широким огненным взрывом.',
+    type: 'magic',
+    baseDamage: 34,
+    cooldown: 0.62,
+    range: 17.5,
+    projectileSpeed: 20,
+    pellets: 2,
+    spread: 0.17,
+    pierce: 1,
+    splashRadius: 3.4,
+    knockback: 4.8,
+    magSize: 5,
+    reloadTime: 1.24,
+    recoilKick: 1.2,
+    color: 0xf43f5e,
+    upgradeBaseCost: 85
+  },
+  void_orb: {
+    id: 'void_orb',
+    classId: 'mage',
+    tier: 3,
+    unlockLevel: 7,
+    nameRu: 'Скипетр пустотного разлома',
+    nameEn: 'Void Rift Scepter',
+    descRu: 'Высшая магия: пробивная комета пустоты, вызывающая гравитационную сверхновую.',
+    type: 'magic',
+    baseDamage: 58,
+    cooldown: 0.70,
+    range: 18.5,
+    projectileSpeed: 23,
+    pellets: 1,
+    spread: 0,
+    pierce: 2,
+    splashRadius: 4.5,
+    knockback: 6.8,
+    magSize: 4,
+    reloadTime: 1.32,
+    recoilKick: 1.7,
+    color: 0x818cf8,
+    upgradeBaseCost: 135
+  }
+};
+
+// 9-Archetype Dark-Fantasy Villain Roster (Each specialist has ONE fair, readable signature mechanic!)
+export const ENEMY_TYPES = {
+  skeleton: {
+    id: 'skeleton',
+    nameRu: 'Костяной ходок',
+    roleHintRu: 'Пехота погоста',
+    hp: 50,
+    speed: 4.2,
+    damage: 13,
+    xp: 10,
+    gold: 3,
+    scale: 0.94,
+    color: 0x84cc16
+  },
+  hound: {
+    id: 'hound',
+    nameRu: 'Кровавый налётчик',
+    roleHintRu: 'Стремительный рывок',
+    hp: 40,
+    speed: 6.6,
+    damage: 12,
+    xp: 12,
+    gold: 4,
+    scale: 0.84,
+    canDash: true,       // Short speed burst when closing distance
+    color: 0xef4444
+  },
+  archer: {
+    id: 'archer',
+    nameRu: 'Проклятый стрелок',
+    roleHintRu: 'Дальний выстрел из арбалета',
+    hp: 46,
+    speed: 3.8,
+    damage: 14,
+    ranged: true,
+    keepDistance: 9.2,   // Keeps distance & fires 1 clean bone bolt
+    xp: 14,
+    gold: 5,
+    scale: 0.90,
+    color: 0x22d3ee
+  },
+  shieldbearer: {
+    id: 'shieldbearer',
+    nameRu: 'Щитоносец склепа',
+    roleHintRu: 'Стальной щит спереди',
+    hp: 110,
+    speed: 3.1,
+    damage: 16,
+    frontArmor: 0.45,    // Blocks 45% frontal projectile damage with sparks
+    xp: 18,
+    gold: 7,
+    scale: 1.06,
+    color: 0x60a5fa
+  },
+  bomber: {
+    id: 'bomber',
+    nameRu: 'Чумной подрывник',
+    roleHintRu: 'Взрыв бочки после гибели',
+    hp: 44,
+    speed: 5.6,
+    damage: 22,
+    explodesOnDeath: true, // Leaves 0.85s telegraphed blast circle hurting player AND nearby enemies!
+    xp: 16,
+    gold: 6,
+    scale: 0.88,
+    color: 0xf97316
+  },
+  necromancer: {
+    id: 'necromancer',
+    nameRu: 'Призыватель могил',
+    roleHintRu: 'Поднимает 2 скелетов из земли',
+    hp: 76,
+    speed: 3.2,
+    damage: 14,
+    summoner: true,      // Periodically raises 2 skeleton walkers from a rune circle
+    keepDistance: 10.8,
+    xp: 22,
+    gold: 9,
+    scale: 0.98,
+    color: 0x10b981
+  },
+  cultist: {
+    id: 'cultist',
+    nameRu: 'Тёмный культист',
+    roleHintRu: 'Веер из 3 теневых копий',
+    hp: 72,
+    speed: 3.4,
+    damage: 16,
+    ranged: true,
+    burstCount: 3,       // Fires 3-spear shadow fan
+    keepDistance: 10.2,
+    xp: 20,
+    gold: 8,
+    scale: 0.98,
+    color: 0xa855f7
+  },
+  brute: {
+    id: 'brute',
+    nameRu: 'Павший палач',
+    roleHintRu: 'Тяжёлый таранный разбег',
+    hp: 195,
+    speed: 2.9,
+    damage: 26,
+    canCharge: true,
+    xp: 30,
+    gold: 14,
+    scale: 1.36,
+    color: 0x475569
+  },
+
+  // === 5 DISTINCT ACT BOSSES (Appear on 5, 10, 15, 20, 25 -> then return as Mini-Bosses in later Acts!) ===
+  boss_butcher: {
+    id: 'boss_butcher',
+    nameRu: 'Костяной Мясник',
+    roleHintRu: 'Босс I Акта • Прыжок и двойные топоры',
+    isBoss: true,
+    bossAct: 1,
+    hp: 920,
+    speed: 4.9,
+    damage: 26,
+    xp: 120,
+    gold: 95,
+    scale: 1.85,
+    color: 0x991b1b
+  },
+  boss_warden: {
+    id: 'boss_warden',
+    nameRu: 'Железный Инквизитор',
+    roleHintRu: 'Босс II Акта • Таран и раскол земли',
+    isBoss: true,
+    bossAct: 2,
+    hp: 1380,
+    speed: 4.4,
+    damage: 30,
+    xp: 150,
+    gold: 125,
+    scale: 1.98,
+    color: 0x1e3a8a
+  },
+  boss_archlich: {
+    id: 'boss_archlich',
+    nameRu: 'Архилич Мора',
+    roleHintRu: 'Босс III Акта • Кольцо проклятий и призыв',
+    isBoss: true,
+    bossAct: 3,
+    hp: 1750,
+    speed: 4.2,
+    damage: 32,
+    xp: 180,
+    gold: 155,
+    scale: 2.05,
+    color: 0x065f46
+  },
+  reaper: {
+    id: 'reaper',
+    nameRu: 'Древний Жнец Душ',
+    roleHintRu: 'Босс IV Акта • Рывок косой и тёмное пламя',
+    isBoss: true,
+    bossAct: 4,
+    hp: 2150,
+    speed: 5.0,
+    damage: 35,
+    xp: 220,
+    gold: 190,
+    scale: 2.15,
+    color: 0x0f172a
+  },
+  boss_ashlord: {
+    id: 'boss_ashlord',
+    nameRu: 'Владыка Вечного Пепла',
+    roleHintRu: 'Финальный Ультра-Босс • Король Мрака',
+    isBoss: true,
+    bossAct: 5,
+    hp: 3100,
+    speed: 5.2,
+    damage: 40,
+    xp: 350,
+    gold: 320,
+    scale: 2.48,
+    color: 0x7f1d1d
+  }
+};
+
+// 25-Chapter Dark-Fantasy Campaign (5 Acts × 5 Chapters, Bosses on 5, 10, 15, 20, 25!)
+const CHAPTER_METADATA = [
+  // ACT I: Погост Проклятых (Levels 1-5)
+  ['Окраина Погоста', 'Первая вылазка у железных врат: ходячие кости и быстрые налётчики проверяют твой хват.', 'stage_1.jpg', ['skeleton', 'hound']],
+  ['Сторожевой Костёр', 'Из тумана выходят проклятые арбалетчики — не стой на одной линии огня.', 'stage_2.jpg', ['skeleton', 'hound', 'archer']],
+  ['Пороховой Схрон', 'Чумные подрывники несут бочки: взрывай их прямо в толпе мертвецов и открой оружие II ранга!', 'stage_2.jpg', ['skeleton', 'hound', 'archer', 'bomber']],
+  ['Висельная Роща', 'Под сухими ветвями строятся щитоносцы склепа — обходи сбоку или бей картечью в упор.', 'stage_3.jpg', ['skeleton', 'hound', 'archer', 'shieldbearer']],
+  ['Врата Первого Жнеца', 'Конец I Акта: сокруши Стража Погоста — Древнего Жнеца у расколотой усыпальницы!', 'stage_5.jpg', ['skeleton', 'hound', 'archer', 'shieldbearer', 'bomber']],
+
+  // ACT II: Осквернённый Лагерь (Levels 6-10)
+  ['Пепельный Редут', 'Призыватели могил поднимают свежих скелетов из-под брусчатки — устраняй их первыми.', 'stage_4.jpg', ['skeleton', 'hound', 'archer', 'necromancer']],
+  ['Оружейная Инквизиции', 'Найди среди руин легендарный Рунный Сундук с оружием III ранга под обстрелом культистов!', 'stage_4.jpg', ['skeleton', 'archer', 'shieldbearer', 'bomber', 'cultist']],
+  ['Тропа Мародёров', 'Стремительные стаи налётчиков и подрывников атакуют с четырёх сторон двора.', 'stage_2.jpg', ['hound', 'archer', 'bomber', 'cultist']],
+  ['Железный Заслон', 'Тяжёлые павшие палачи идут на таран сквозь ряды щитоносцев.', 'stage_1.jpg', ['skeleton', 'shieldbearer', 'cultist', 'brute']],
+  ['Судилище Палача', 'Конец II Акта: переживи осаду элитной гвардии и одолей Жнеца Кровавой Луны!', 'stage_5.jpg', ['hound', 'archer', 'shieldbearer', 'cultist', 'brute']],
+
+  // ACT III: Мёртвая Чаща (Levels 11-15)
+  ['Шёпот Корней', 'Некроманты и арбалетчики держат дистанцию за спинами костяной пехоты.', 'stage_3.jpg', ['skeleton', 'hound', 'archer', 'necromancer', 'shieldbearer']],
+  ['Костяной Бурелом', 'Узкие манёвры между алтарями под залпами теневых копий.', 'stage_3.jpg', ['hound', 'bomber', 'necromancer', 'cultist']],
+  ['Лагерь Алхимиков', 'Цепные взрывы чумных бочек способны очистить половину двора при метком выстреле.', 'stage_2.jpg', ['skeleton', 'archer', 'bomber', 'shieldbearer', 'brute']],
+  ['Курган Безмолвных', 'Бронированная фаланга склепа наступает под прикрытием тёмных чародеев.', 'stage_4.jpg', ['shieldbearer', 'necromancer', 'cultist', 'brute']],
+  ['Алтарь Лесного Мора', 'Конец III Акта: битва с Повелителем Мёртвой Чащи в кольце тёмного пламени!', 'stage_5.jpg', ['hound', 'bomber', 'necromancer', 'cultist', 'brute']],
+
+  // ACT IV: Катакомбы Королей (Levels 16-20)
+  ['Ступени Бездны', 'Здесь выживает только закалённое оружие — рядовая нежить сменяется ветеранами склепа.', 'stage_1.jpg', ['skeleton', 'hound', 'archer', 'shieldbearer', 'cultist']],
+  ['Зал Разбитых Щитов', 'Двойные волны щитоносцев и таранных палачей проверяют твою мощь.', 'stage_1.jpg', ['hound', 'shieldbearer', 'bomber', 'brute']],
+  ['Багровый Ковен', 'Кольцо культистов и некромантов заливает арену магическим огнём.', 'stage_4.jpg', ['archer', 'necromancer', 'cultist', 'brute']],
+  ['Караул Бессмертных', 'Непрерывный штурм элитных охотников, подрывников и латников.', 'stage_3.jpg', ['hound', 'archer', 'shieldbearer', 'bomber', 'necromancer', 'brute']],
+  ['Чертог Павших Королей', 'Конец IV Акта: сойдись один на один с Архи-Жнецом Королевской Усыпальницы!', 'stage_5.jpg', ['archer', 'shieldbearer', 'necromancer', 'cultist', 'brute']],
+
+  // ACT V: Престол Пепла (Levels 21-25)
+  ['Разлом Пустоты', 'Небо багровеет: высшая нечисть атакует в максимальном темпе.', 'stage_5.jpg', ['hound', 'archer', 'bomber', 'necromancer', 'cultist']],
+  ['Пепельный Бастион', 'Железная поступь палачей и щитоносцев не оставляет права на промах.', 'stage_1.jpg', ['shieldbearer', 'bomber', 'cultist', 'brute']],
+  ['Жатва Обречённых', 'Все виды проклятых тварей выходят на охоту одновременно.', 'stage_2.jpg', ['hound', 'archer', 'shieldbearer', 'bomber', 'necromancer', 'cultist', 'brute']],
+  ['Преддверие Вечной Ночи', 'Предпоследний рубеж перед троном: испытание предельной прокачки твоего класса.', 'stage_4.jpg', ['archer', 'shieldbearer', 'bomber', 'necromancer', 'cultist', 'brute']],
+  ['Трон Владыки Мрака', 'Финал кампании (Глава 25): сокруши Изначального Владыку Жнецов и очисти земли навсегда!', 'stage_5.jpg', ['hound', 'archer', 'shieldbearer', 'bomber', 'necromancer', 'cultist', 'brute']]
+];
+
+const ROMAN = [
+  'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X',
+  'XI', 'XII', 'XIII', 'XIV', 'XV', 'XVI', 'XVII', 'XVIII', 'XIX', 'XX',
+  'XXI', 'XXII', 'XXIII', 'XXIV', 'XXV'
+];
+
+const ACT_BOSS_ORDER = ['boss_butcher', 'boss_warden', 'boss_archlich', 'reaper', 'boss_ashlord'];
+
+export const LEVELS = CHAPTER_METADATA.map(([titleRu, subRu, bannerFile, pool], idx) => {
+  const lvl = idx + 1;
+  const act = Math.ceil(lvl / 5);
+  const isBossLevel = lvl % 5 === 0;
+  const bossId = isBossLevel ? ACT_BOSS_ORDER[act - 1] : null;
+  // Previous Acts' bosses become Mini-Bosses in subsequent Acts! (Act 1 levels 1-4 have NO bosses, only small elite mobs!)
+  const miniBossPool = act > 1 ? ACT_BOSS_ORDER.slice(0, act - 1) : [];
+  const recWeaponLevel = Math.min(WEAPON_MAX_LEVEL, Math.max(1, Math.ceil(lvl * 0.48)));
+  return {
+    level: lvl,
+    act,
+    roman: ROMAN[idx],
+    shortTitleRu: titleRu,
+    nameRu: `Глава ${ROMAN[idx]}: ${titleRu}`,
+    nameEn: `Chapter ${ROMAN[idx]}`,
+    subtitleRu: subRu,
+    bannerImg: `./assets/ui/${bannerFile}`,
+    recWeaponLevel,
+    durationSec: Math.min(115, 62 + lvl * 2),
+    spawnInterval: +(Math.max(0.46, 1.08 - lvl * 0.024)).toFixed(3),
+    hpScale: +(1 + (lvl - 1) * 0.18 + Math.pow(Math.max(0, lvl - 1), 1.25) * 0.045).toFixed(2),
+    dmgScale: +(1 + (lvl - 1) * 0.075).toFixed(2),
+    enemyPool: pool,
+    miniBossPool,
+    bossId,
+    unlockWeaponTier: lvl === 3 ? 2 : lvl === 7 ? 3 : null,
+    hasBoss: isBossLevel,
+    hasEliteFinale: !isBossLevel
+  };
+});
+
+// Balanced, Mechanically Diverse Blessings of Souls (Max 3 stacks each, tight tactical numbers!)
+export const RUN_UPGRADES = [
+  {
+    id: 'wpn_power',
+    nameRu: 'Руна Закалки',
+    categoryRu: 'ОРУЖИЕ',
+    statBadgeRu: '+10% УРОН • +15% ОТБРОС',
+    descRu: 'Утяжеляет удары и свинец: +10% к урону оружия и мощнее отталкивание нежити.',
+    theme: 'amber',
+    maxStacks: 3,
+    icon: '⚔️'
+  },
+  {
+    id: 'wpn_haste',
+    nameRu: 'Хладный Темп',
+    categoryRu: 'ТЕМП БОЯ',
+    statBadgeRu: '+10% ТЕМП • +18% ЗАРЯДКА',
+    descRu: 'Ускоряет темп стрельбы и взмахов на 10%, а перезарядку патронов — на 18%.',
+    theme: 'cyan',
+    maxStacks: 3,
+    icon: '⚡'
+  },
+  {
+    id: 'ammo_pouch',
+    nameRu: 'Патронташ Охотника',
+    categoryRu: 'БОЕЗАПАС',
+    statBadgeRu: '+2 ПАТРОНА • МГНОВЕННАЯ ЗАРЯДКА',
+    descRu: 'Добавляет +2 патрона в обойму (для меча +12% размах) и мгновенно перезаряжает оружие.',
+    theme: 'gold',
+    maxStacks: 3,
+    icon: '🎯'
+  },
+  {
+    id: 'crit_fang',
+    nameRu: 'Метка Палача',
+    categoryRu: 'СМЕРТОНОСНОСТЬ',
+    statBadgeRu: '+14% ШАНС КРИТА ×1.75',
+    descRu: 'Даёт +14% шанс нанести критический удар (×1.75 урона), пробивающий щиты спереди.',
+    theme: 'crimson',
+    maxStacks: 3,
+    icon: '🗡️'
+  },
+  {
+    id: 'frost_touch',
+    nameRu: 'Морозный Пепел',
+    categoryRu: 'КОНТРОЛЬ',
+    statBadgeRu: 'ЗАМЕДЛЕНИЕ 30% НА 2 СЕК',
+    descRu: 'Попадания покрывают чудовищ инеем, замедляя их бег и натиск на 30% на 2 секунды.',
+    theme: 'ice',
+    maxStacks: 2,
+    icon: '❄️'
+  },
+  {
+    id: 'burn_cinder',
+    nameRu: 'Тлеющее Клеймо',
+    categoryRu: 'ПИРОМАНТИЯ',
+    statBadgeRu: 'ПОДЖОГ ВРАГОВ НА 2.5 СЕК',
+    descRu: 'Атаки поджигают цель багровым огнём, выжигая здоровье в течение 2.5 секунд.',
+    theme: 'flame',
+    maxStacks: 3,
+    icon: '🔥'
+  },
+  {
+    id: 'chain_soul',
+    nameRu: 'Цепная Искра Душ',
+    categoryRu: 'АСТРАЛ',
+    statBadgeRu: '35% ШАНС МОЛНИИ ДУШ',
+    descRu: 'При попадании с шансом 35% перебрасывает дугу молнии в соседнего врага на 45% урона.',
+    theme: 'violet',
+    maxStacks: 3,
+    icon: '🔮'
+  },
+  {
+    id: 'soul_nova',
+    nameRu: 'Кольцо Возмездия',
+    categoryRu: 'ОБЕРЕГ ДУШ',
+    statBadgeRu: 'ВЗРЫВ КОЛЬЦА РАЗ В 9 СЕК',
+    descRu: 'Раз в 9 секунд вокруг героя вспыхивает рунное кольцо, ранящее и отбрасывающее тварей.',
+    theme: 'violet',
+    maxStacks: 3,
+    icon: '💫'
+  },
+  {
+    id: 'vampiric',
+    nameRu: 'Жатва Крови',
+    categoryRu: 'ВЫЖИВАНИЕ',
+    statBadgeRu: '+8 HP ЗА КАЖДЫЕ 16 УБИЙСТВ',
+    descRu: 'Поглощает жизненную искру павших: каждые 16 убитых врагов восстанавливают 8 HP.',
+    theme: 'crimson',
+    maxStacks: 3,
+    icon: '🩸'
+  },
+  {
+    id: 'iron_ward',
+    nameRu: 'Костяной Доспех',
+    categoryRu: 'ЗАЩИТА',
+    statBadgeRu: '+16 МАКС. HP • +4% БЛОК',
+    descRu: 'Укрепляет кости и латы: +16 к макс. здоровью (с лечением) и +4% к поглощению урона.',
+    theme: 'steel',
+    maxStacks: 3,
+    icon: '🛡️'
+  },
+  {
+    id: 'swift_boots',
+    nameRu: 'Поступь Призрака',
+    categoryRu: 'МАНЁВР',
+    statBadgeRu: '+9% БЕГ • +8% УКЛОНЕНИЕ',
+    descRu: 'Повышает скорость манёвра на 9% и даёт +8% шанс призрачно уклониться от удара.',
+    theme: 'emerald',
+    maxStacks: 3,
+    icon: '👢'
+  },
+  {
+    id: 'greed_contract',
+    nameRu: 'Печать Алчности',
+    categoryRu: 'ТРОФЕИ',
+    statBadgeRu: '+30% К ДОБЫЧЕ ЗОЛОТА',
+    descRu: 'Увеличивает прямое начисление монет за убийства на 30% для прокачки оружия в Арсенале.',
+    theme: 'gold',
+    maxStacks: 3,
+    icon: '🪙'
+  }
+];

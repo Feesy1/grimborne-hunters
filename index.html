@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="format-detection" content="telephone=no" />
+  <meta name="theme-color" content="#0b0a10" />
+  <title>Охотники Мрака — Grimborne Hunters</title>
+  <link rel="icon" type="image/x-icon" href="./assets/grimborne_icon.ico" />
+  <link rel="stylesheet" href="./css/style.css" />
+  <script src="https://yandex.ru/games/sdk/v2" async onerror="window.__yaSdkUnavailable=true"></script>
+</head>
+<body>
+  <!-- Стартовый экран загрузки с полным ключевым артом и тонкой золотой шкалой прогресса -->
+  <div id="splash-screen" role="status" aria-live="polite">
+    <div class="splash-art"></div>
+    <div class="splash-vignette"></div>
+    <div class="splash-bottom-box">
+      <div class="splash-ornament">✦ &nbsp; ОХОТНИКИ МРАКА &nbsp; ✦</div>
+      <div class="splash-bar-track">
+        <div id="splash-bar-fill" class="splash-bar-fill"></div>
+      </div>
+      <div class="splash-status-row">
+        <span id="splash-status-text">Пробуждение проклятого погоста…</span>
+        <span id="splash-percent">0%</span>
+      </div>
+    </div>
+  </div>
+
+  <canvas id="game-canvas" aria-label="Игровая арена Охотники Мрака"></canvas>
+  <div id="ui-root"></div>
+
+  <script>
+    // Failsafe immediate splash progress ticker: starts moving at 0ms and finishes cleanly at ~3.0s
+    (function () {
+      var splashEl = document.getElementById('splash-screen');
+      var fillEl = document.getElementById('splash-bar-fill');
+      var pctEl = document.getElementById('splash-percent');
+      var txtEl = document.getElementById('splash-status-text');
+      var start = performance.now();
+      var duration = 3000;
+      var engineReady = false;
+      var closed = false;
+
+      function closeSplash() {
+        if (closed || !splashEl) return;
+        closed = true;
+        if (fillEl) fillEl.style.width = '100%';
+        if (pctEl) pctEl.textContent = '100%';
+        if (txtEl) txtEl.textContent = 'Готово к охоте!';
+        splashEl.classList.add('is-hidden');
+        setTimeout(function () {
+          if (splashEl && splashEl.parentNode) splashEl.parentNode.removeChild(splashEl);
+        }, 650);
+      }
+
+      window.__notifyEngineReady = function () {
+        engineReady = true;
+      };
+
+      function tick(now) {
+        if (closed) return;
+        var elapsed = now - start;
+        var t = Math.min(1, elapsed / duration);
+        var cap = engineReady ? 100 : 92;
+        var eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+        var pct = Math.min(cap, Math.round(eased * 100));
+        if (fillEl) fillEl.style.width = pct + '%';
+        if (pctEl) pctEl.textContent = pct + '%';
+        if (txtEl) {
+          if (pct >= 95) txtEl.textContent = 'Готово к охоте!';
+          else if (pct >= 68) txtEl.textContent = 'Сбор орды и призыв Жнеца…';
+          else if (pct >= 34) txtEl.textContent = 'Ковка оружия и рунных сундуков…';
+        }
+        if ((t >= 1 && engineReady) || elapsed >= 4500) {
+          closeSplash();
+        } else {
+          requestAnimationFrame(tick);
+        }
+      }
+      // Prevent iOS Safari pinch-zoom & gesture bounce during gameplay
+      document.addEventListener('gesturestart', function (e) { e.preventDefault(); }, { passive: false });
+      document.addEventListener('gesturechange', function (e) { e.preventDefault(); }, { passive: false });
+
+      requestAnimationFrame(tick);
+    })();
+  </script>
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>
