@@ -109,6 +109,19 @@ const DEFAULT_MASTERY_DEFS = [
     baseCost: 40,
     costScale: 1.42,
     maxLevel: 6
+  },
+  {
+    keyCandidates: ['mana_flow', 'manaRegen', 'mana'],
+    defaultKey: 'mana_flow',
+    onlyClass: 'mage',
+    runeType: 'blk',
+    nameRu: 'Поток маны',
+    nameEn: 'Mana Flow',
+    bonusRu: '+20% к регену маны и +15 к мане за ур.',
+    bonusEn: '+20% Mana Regen & +15 Mana / lv',
+    baseCost: 40,
+    costScale: 1.38,
+    maxLevel: 8
   }
 ];
 
@@ -751,7 +764,7 @@ function resolveMasteryList(state, storeRef, callbacks, classId, lang) {
     state?.mastery ||
     {};
 
-  return DEFAULT_MASTERY_DEFS.map((def) => {
+  return DEFAULT_MASTERY_DEFS.filter((def) => !def.onlyClass || def.onlyClass === classId).map((def) => {
     let matchedKey = def.defaultKey;
     for (const candidate of def.keyCandidates) {
       if (Object.prototype.hasOwnProperty.call(rawMap, candidate)) {
@@ -1077,7 +1090,7 @@ export function createUIManager(initialCallbacks = {}) {
   const ammoNumericLabel = el('span', 'ammo-numeric-label', '5/5');
   weaponAmmoRow.append(ammoPipsWrap, ammoNumericLabel);
 
-  // Animated Glowing Golden Reload Progress Bar
+  // Animated Glowing Golden Reload Progress Bar (Shotguns) + Continuous Arcane Mana Bar (Mage)
   const reloadBarWrap = el('div', 'hud-reload-wrap hidden');
   const reloadBarHead = el('div', 'hud-reload-head');
   const reloadBarLabel = el('span', 'hud-reload-label', 'ПЕРЕЗАРЯДКА...');
@@ -1087,7 +1100,17 @@ export function createUIManager(initialCallbacks = {}) {
   reloadBarTrack.appendChild(reloadBarFill);
   reloadBarWrap.append(reloadBarHead, reloadBarTrack);
 
-  weaponHudCol.append(weaponHudMain, weaponAmmoRow, reloadBarWrap);
+  const manaBarWrap = el('div', 'hud-mana-wrap hidden');
+  const manaBarHead = el('div', 'hud-mana-head');
+  const manaBarLabel = el('span', 'hud-mana-label', '💧 МАНА: 120 / 120');
+  const manaRegenTag = el('span', 'hud-mana-regen', '+9.5/с');
+  manaBarHead.append(manaBarLabel, manaRegenTag);
+  const manaBarTrack = el('div', 'hud-mana-track');
+  const manaBarFill = el('div', 'hud-mana-fill');
+  manaBarTrack.appendChild(manaBarFill);
+  manaBarWrap.append(manaBarHead, manaBarTrack);
+
+  weaponHudCol.append(weaponHudMain, weaponAmmoRow, reloadBarWrap, manaBarWrap);
 
   const overdriveBox = el('div', 'overdrive-box hidden');
   const overdriveLabel = el('span', 'overdrive-label', 'ОВЕРДРАЙВ');
@@ -1159,19 +1182,24 @@ export function createUIManager(initialCallbacks = {}) {
     let originX = 0;
     let originY = 0;
 
-    const placeBaseAtFinger = (clientX, clientY) => {
-      originX = clientX;
-      originY = clientY;
-      baseEl.style.left = `${Math.round(clientX)}px`;
-      baseEl.style.top = `${Math.round(clientY)}px`;
+    const mapPt = (cx, cy) =>
+      window.__toGameCoords ? window.__toGameCoords(cx, cy) : { x: cx, y: cy };
+
+    const placeBaseAtFinger = (rawClientX, rawClientY) => {
+      const pt = mapPt(rawClientX, rawClientY);
+      originX = pt.x;
+      originY = pt.y;
+      baseEl.style.left = `${Math.round(pt.x)}px`;
+      baseEl.style.top = `${Math.round(pt.y)}px`;
       baseEl.style.bottom = 'auto';
       baseEl.style.transform = 'translate3d(-50%, -50%, 0)';
       baseEl.classList.add('is-active');
     };
 
-    const updateStickVector = (clientX, clientY) => {
-      const dx = clientX - originX;
-      const dy = clientY - originY;
+    const updateStickVector = (rawClientX, rawClientY) => {
+      const pt = mapPt(rawClientX, rawClientY);
+      const dx = pt.x - originX;
+      const dy = pt.y - originY;
       const dist = Math.hypot(dx, dy);
       const clamped = Math.min(dist, MAX_STICK_RADIUS);
       const angle = dist > 0.0001 ? Math.atan2(dy, dx) : 0;
@@ -2617,7 +2645,15 @@ export function createUIManager(initialCallbacks = {}) {
       const wDesc = el('p', 'weapon-desc', wDef.descRu);
       const scaledDmg = Math.round(wDef.baseDamage * (1 + (shopLevel - 1) * 0.24));
       const rateStr = (1 / wDef.cooldown).toFixed(1);
-      const magInfo = wDef.magSize ? (isEn ? ` • Mag: ${wDef.magSize}` : ` • Обойма: ${wDef.magSize}`) : '';
+      const magInfo = wDef.magSize
+        ? isEn
+          ? ` • Mag: ${wDef.magSize}`
+          : ` • Обойма: ${wDef.magSize}`
+        : wDef.manaCost
+          ? isEn
+            ? ` • Mana: ${wDef.manaCost}`
+            : ` • Мана: ${wDef.manaCost}`
+          : '';
       const metrics = el(
         'div',
         'weapon-metrics',
@@ -2967,17 +3003,40 @@ export function createUIManager(initialCallbacks = {}) {
       weaponHudLvl.textContent = `Ранг боя ${wRunLvl}`;
     }
 
-    const rawMaxAmmo = Number(snapshot.maxAmmo ?? snapshot.magSize ?? snapshot.clipSize ?? wDef?.magSize ?? 0);
+    const usesMana = Boolean(snapshot.usesMana && Number(snapshot.maxMana) > 0);
+    const rawMaxAmmo = usesMana ? 0 : Number(snapshot.maxAmmo ?? snapshot.magSize ?? snapshot.clipSize ?? wDef?.magSize ?? 0);
     const maxAmmo = Number.isFinite(rawMaxAmmo) && rawMaxAmmo > 0 ? Math.round(rawMaxAmmo) : 0;
     const rawAmmo = Number(snapshot.ammo ?? snapshot.currentAmmo ?? snapshot.clipAmmo ?? maxAmmo);
     const ammo = maxAmmo > 0 ? Math.max(0, Math.min(maxAmmo, Math.round(rawAmmo))) : 0;
 
     const reloadRem = Number(snapshot.reloadTimer ?? snapshot.reloadTimeLeft ?? 0);
-    const isReloading = Boolean(snapshot.isReloading || snapshot.reloading || reloadRem > 0);
+    const isReloading = !usesMana && Boolean(snapshot.isReloading || snapshot.reloading || reloadRem > 0);
     const ammoKind = wDef?.type === 'magic' ? 'mana' : 'shell';
 
-    const hasMagazine = maxAmmo > 0;
+    const hasMagazine = maxAmmo > 0 && !usesMana;
     hudReloadBtn.classList.toggle('hidden', !hasMagazine);
+    manaBarWrap.classList.toggle('hidden', !usesMana);
+    if (usesMana) {
+      const curMana = Math.max(0, Number(snapshot.mana) || 0);
+      const maxMana = Math.max(1, Number(snapshot.maxMana) || 120);
+      const regen = Number(snapshot.manaRegen) || 9.5;
+      const mText = `💧 ${Math.floor(curMana)} / ${Math.round(maxMana)}`;
+      if (mText !== hudCache.manaText) {
+        hudCache.manaText = mText;
+        manaBarLabel.textContent = mText;
+      }
+      const rText = `+${regen.toFixed(1)}/с`;
+      if (rText !== hudCache.manaRegenText) {
+        hudCache.manaRegenText = rText;
+        manaRegenTag.textContent = rText;
+      }
+      const mRatio = Math.max(0, Math.min(1, curMana / maxMana));
+      const mQuant = Math.round(mRatio * 500);
+      if (mQuant !== hudCache.manaQuant) {
+        hudCache.manaQuant = mQuant;
+        manaBarFill.style.transform = `scaleX(${mRatio.toFixed(3)})`;
+      }
+    }
     if (hasMagazine) {
       const canManualReload = !isReloading && ammo < maxAmmo;
       hudReloadBtn.disabled = !canManualReload;

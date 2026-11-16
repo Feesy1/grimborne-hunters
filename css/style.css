@@ -56,9 +56,7 @@ body {
   margin: 0;
   padding: 0;
   width: 100%;
-  width: var(--app-vw, 100%);
   height: 100%;
-  height: var(--app-vh, 100dvh);
   overflow: hidden;
   background-color: var(--bg-obsidian);
   color: var(--text-main);
@@ -68,27 +66,43 @@ body {
   -webkit-text-size-adjust: 100%;
 }
 
-#game-canvas {
+#app-viewport {
   position: fixed;
   top: 0;
   left: 0;
-  width: 100%;
-  width: var(--app-vw, 100%);
-  height: 100%;
+  width: var(--app-vw, 100vw);
   height: var(--app-vh, 100dvh);
+  overflow: hidden;
+}
+
+/* Auto-Horizontal Landscape Mode on Mobile even if iOS Portrait Lock is ON! */
+html.forced-landscape #app-viewport {
+  position: fixed;
+  top: 0;
+  left: 100%;
+  width: var(--app-vw, 100vh);
+  height: var(--app-vh, 100vw);
+  transform-origin: 0 0;
+  transform: rotate(90deg);
+}
+
+#game-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
   display: block;
   z-index: 1;
   touch-action: none;
 }
 
 #ui-root {
-  position: fixed;
+  position: absolute;
   top: 0;
   left: 0;
   width: 100%;
-  width: var(--app-vw, 100%);
   height: 100%;
-  height: var(--app-vh, 100dvh);
   z-index: 10;
   pointer-events: none;
   overflow: hidden;
@@ -96,7 +110,7 @@ body {
 
 /* Crisp High-Contrast White 120 FPS Corner Badge */
 #fps-badge {
-  position: fixed;
+  position: absolute;
   bottom: calc(6px + var(--safe-bottom));
   right: calc(10px + var(--safe-right));
   z-index: 9500;
@@ -220,17 +234,17 @@ img {
    ========================================================================== */
 
 .hub-screen {
-  position: fixed;
+  position: absolute;
   top: 0;
   left: 0;
   width: 100%;
-  width: var(--app-vw, 100%);
   height: 100%;
-  height: var(--app-vh, 100dvh);
   z-index: 40;
-  pointer-events: none;
+  pointer-events: auto;
   overflow-x: hidden;
-  overflow-y: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
   padding:
     calc(12px + var(--safe-top))
     calc(18px + var(--safe-right))
@@ -2963,6 +2977,53 @@ img {
   will-change: transform;
 }
 
+/* Continuous Arcane Mana Bar (Mage HUD) */
+.hud-mana-wrap {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 2px;
+}
+
+.hud-mana-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-mana-label {
+  color: #93c5fd;
+}
+
+.hud-mana-regen {
+  color: #c4b5fd;
+  font-size: 10.5px;
+}
+
+.hud-mana-track {
+  width: 100%;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(96, 165, 250, 0.45);
+  overflow: hidden;
+}
+
+.hud-mana-fill {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, #2563eb 0%, #60a5fa 55%, #c084fc 100%);
+  box-shadow: 0 0 10px rgba(96, 165, 250, 0.75);
+  transform-origin: left center;
+  will-change: transform;
+  transition: transform 0.08s linear;
+}
+
 /* Soul XP Bar */
 .soul-xp-wrap {
   width: 100%;
@@ -3006,25 +3067,25 @@ img {
    ========================================================================== */
 
 .touch-layer {
-  position: fixed;
+  position: absolute;
   inset: 0;
   z-index: 24;
   pointer-events: none;
 }
 
 .touch-zone-left {
-  position: fixed;
+  position: absolute;
   left: 0;
   bottom: 0;
-  width: 52vw;
-  height: 62vh;
+  width: 52%;
+  height: 62%;
   pointer-events: auto;
   touch-action: none;
   -webkit-touch-callout: none;
 }
 
 .joystick-base {
-  position: fixed;
+  position: absolute;
   left: calc(32px + var(--safe-left));
   bottom: calc(96px + var(--safe-bottom));
   width: 112px;
@@ -4214,14 +4275,99 @@ img {
 /* ==========================================================================
    SPLASH LOADING SCREEN (Full Cover Art + Slim Gothic Gold Progress Bar)
    ========================================================================== */
+/* Default Mobile Horizontal Landscape Mode (applies in BOTH native landscape & forced-landscape!) */
+html.is-mobile-landscape .hub-screen {
+  pointer-events: auto;
+  overflow-y: auto;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+  padding: 6px 14px 10px;
+}
+
+html.is-mobile-landscape .hub-shell {
+  height: auto;
+  min-height: 100%;
+  gap: 6px;
+  pointer-events: auto;
+}
+
+html.is-mobile-landscape .hub-topbar {
+  grid-template-columns: auto 1fr auto;
+  padding: 5px 10px;
+  gap: 8px;
+}
+
+html.is-mobile-landscape .hub-nav-tabs {
+  grid-column: auto;
+  order: 0;
+  width: auto;
+  justify-content: center;
+}
+
+html.is-mobile-landscape .hub-tab-btn {
+  flex: 0 0 auto;
+  padding: 5px 10px;
+  font-size: 11.5px;
+}
+
+html.is-mobile-landscape .hero-stage-area {
+  min-height: 92px;
+  pointer-events: auto;
+  touch-action: pan-y;
+}
+
+html.is-mobile-landscape .stage-center-window {
+  min-height: 64px;
+}
+
+html.is-mobile-landscape .stage-carousel-btn {
+  width: 38px;
+  height: 38px;
+  font-size: 23px;
+}
+
+html.is-mobile-landscape .hero-showcase-docks {
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 10px;
+  pointer-events: auto;
+  touch-action: pan-y;
+}
+
+html.is-mobile-landscape .hero-info-card,
+html.is-mobile-landscape .hero-launch-dock {
+  width: min(305px, 46%);
+  padding: 8px 11px;
+  gap: 5px;
+}
+
+html.is-mobile-landscape .hero-lore-line {
+  display: none;
+}
+
+html.is-mobile-landscape .hero-portrait-frame {
+  width: 44px;
+  height: 44px;
+}
+
+html.is-mobile-landscape .hero-class-name {
+  font-size: 16px;
+}
+
+html.is-mobile-landscape .chapter-mini-card {
+  min-height: 54px;
+}
+
+html.is-mobile-landscape .launch-battle-btn {
+  padding: 9px 14px;
+}
+
 #splash-screen {
-  position: fixed;
+  position: absolute;
   top: 0;
   left: 0;
   width: 100%;
-  width: var(--app-vw, 100%);
   height: 100%;
-  height: var(--app-vh, 100dvh);
   z-index: 9999;
   display: flex;
   flex-direction: column;

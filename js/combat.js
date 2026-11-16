@@ -604,9 +604,12 @@ export function createCombatController({
 
   let goldRun = 0;
   let kills = 0;
+  let targetKills = 30;
   let nextEntityUid = 1;
   let critFloaterCooldown = 0;
   let shieldSparkCooldown = 0;
+  let hitSoundCooldown = 0;
+  let manaEmptyHintCooldown = 0;
 
   let player = {
     x: 0,
@@ -619,6 +622,8 @@ export function createCombatController({
     recoilVz: 0,
     ammo: 0,
     maxAmmo: 0,
+    mana: 0,
+    maxMana: 0,
     reloadTimer: 0,
     reloadDuration: 0,
     isReloading: false,
@@ -653,6 +658,15 @@ export function createCombatController({
     player.maxHp = stats.maxHp;
     if (player.hp > player.maxHp) {
       player.hp = player.maxHp;
+    }
+
+    const prevMaxMana = player.maxMana || 0;
+    player.maxMana = stats.usesMana ? (stats.maxMana || 120) : 0;
+    if (player.maxMana <= 0) {
+      player.mana = 0;
+    } else {
+      const manaGain = Math.max(0, player.maxMana - prevMaxMana);
+      player.mana = Math.min(player.maxMana, (player.mana || 0) + manaGain);
     }
 
     player.maxAmmo = stats.magSize || 0;
@@ -769,6 +783,8 @@ export function createCombatController({
 
     const startSpot = resolveObstaclesAndBounds(0, 0, 0.75, ARENA_PLAYER_LIMIT);
     const initialMag = stats.magSize || 0;
+    const initialMana = stats.usesMana ? (stats.maxMana || 120) : 0;
+    targetKills = currentLevelDef.targetKills || (26 + currentLevelNumber * 4);
     player = {
       x: startSpot.x,
       z: startSpot.z,
@@ -780,6 +796,8 @@ export function createCombatController({
       recoilVz: 0,
       ammo: initialMag,
       maxAmmo: initialMag,
+      mana: initialMana,
+      maxMana: initialMana,
       reloadTimer: 0,
       reloadDuration: stats.reloadTime || 0,
       isReloading: false,
@@ -1299,6 +1317,9 @@ export function createCombatController({
     if (player.maxAmmo > 0) {
       player.ammo = player.maxAmmo;
     }
+    if (player.maxMana > 0) {
+      player.mana = player.maxMana;
+    }
     if (player.isReloading) {
       player.isReloading = false;
       player.reloadTimer = 0;
@@ -1372,15 +1393,19 @@ export function createCombatController({
 
     recomputeStats();
 
-    // Choosing ammo_pouch immediately tops up magazine and cancels reload!
-    if (choiceId === 'ammo_pouch' && player.maxAmmo > 0) {
-      player.ammo = player.maxAmmo;
-      if (player.isReloading) {
-        player.isReloading = false;
-        player.reloadTimer = 0;
-        syncHeroReloadModel(false);
+    // Choosing ammo_pouch immediately tops up magazine (or surges Mana!) and cancels reload!
+    if (choiceId === 'ammo_pouch') {
+      if (player.maxAmmo > 0) {
+        player.ammo = player.maxAmmo;
+        if (player.isReloading) {
+          player.isReloading = false;
+          player.reloadTimer = 0;
+          syncHeroReloadModel(false);
+        }
+        audio?.playReloadReady?.();
+      } else if (player.maxMana > 0) {
+        player.mana = player.maxMana;
       }
-      audio?.playReloadReady?.();
     }
 
     const hpGainFromMax = Math.max(0, stats.maxHp - prevMaxHp);
@@ -1398,6 +1423,9 @@ export function createCombatController({
     player.invulnTimer = 2.5;
     if (player.maxAmmo > 0) {
       player.ammo = player.maxAmmo;
+    }
+    if (player.maxMana > 0) {
+      player.mana = player.maxMana;
     }
     if (player.isReloading) {
       player.isReloading = false;
@@ -1488,7 +1516,10 @@ export function createCombatController({
 
     if (!isDoT) {
       triggerModelHitFlash(enemy.model);
-      audio?.playHit?.();
+      if (hitSoundCooldown <= 0) {
+        hitSoundCooldown = 0.045;
+        audio?.playHit?.();
+      }
 
       if (isCrit) {
         emitParticles(enemy.x, 0.85, enemy.z, 0xfef08a, 7, 5.8, 0.15);
@@ -1843,10 +1874,24 @@ export function createCombatController({
     return null;
   }
 
-  function performHeroAttack(aimAngle) {
+  function performHeroAttack(aimAngle, isManualTrigger = false) {
     const wpn = WEAPONS[currentWeaponId] || WEAPONS.club;
     const isOverdrive = player.overdriveAmmo > 0;
+    const isBeastFree = player.beastTimeLeft > 0;
     const usesMag = (stats.magSize || 0) > 0;
+    const usesMana = Boolean(stats.usesMana && player.maxMana > 0);
+
+    if (!isOverdrive && !isBeastFree && usesMana) {
+      const mCost = stats.manaCost || 8;
+      if (player.mana < mCost) {
+        if (isManualTrigger && manaEmptyHintCooldown <= 0) {
+          manaEmptyHintCooldown = 0.85;
+          floatText('💧 Мало маны!', player.x, player.z, '#60a5fa');
+        }
+        return;
+      }
+      player.mana = Math.max(0, player.mana - mCost);
+    }
 
     if (!isOverdrive && usesMag) {
       if (player.isReloading) return;
@@ -2745,6 +2790,15 @@ export function createCombatController({
     if (player.relicBumpTimer > 0) player.relicBumpTimer = Math.max(0, player.relicBumpTimer - dt);
     if (critFloaterCooldown > 0) critFloaterCooldown = Math.max(0, critFloaterCooldown - dt);
     if (shieldSparkCooldown > 0) shieldSparkCooldown = Math.max(0, shieldSparkCooldown - dt);
+    if (hitSoundCooldown > 0) hitSoundCooldown = Math.max(0, hitSoundCooldown - dt);
+    if (manaEmptyHintCooldown > 0) manaEmptyHintCooldown = Math.max(0, manaEmptyHintCooldown - dt);
+
+    // Continuous Mana Regeneration for Mage (regenerates at all times, faster after brief cast pause!)
+    if (stats?.usesMana && player.maxMana > 0 && player.mana < player.maxMana) {
+      const calmBoost = player.attackAnimTimer <= 0 && player.attackCooldown <= 0 ? 1.28 : 1.0;
+      const beastBoost = player.beastTimeLeft > 0 ? 2.5 : 1.0;
+      player.mana = Math.min(player.maxMana, player.mana + (stats.manaRegen || 9.5) * calmBoost * beastBoost * dt);
+    }
 
     // Beast Mode countdown & exit
     const wasBeast = player.beastTimeLeft > 0;
@@ -2857,14 +2911,14 @@ export function createCombatController({
           engagedAimAngle = moveMag > 0.05 ? Math.atan2(mx, mz) : player.facing;
         }
         if (canShootNow && player.attackCooldown <= 0) {
-          performHeroAttack(engagedAimAngle);
+          performHeroAttack(engagedAimAngle, true);
         }
       } else if (autoAim) {
         const target = findAutoAimTarget(stats.range * 1.06);
         if (target) {
           engagedAimAngle = Math.atan2(target.x - player.x, target.z - player.z);
           if (canShootNow && player.attackCooldown <= 0) {
-            performHeroAttack(engagedAimAngle);
+            performHeroAttack(engagedAimAngle, false);
           }
         }
       }
@@ -2959,28 +3013,31 @@ export function createCombatController({
       animateEntityModel(companion.model, dt, moveMag > 0.05, speedRatio, false, false, elapsedTime);
     }
 
-    // 4. Wave Spawner, Relic Crate, Mid-Run Mini-Boss & Finale Trigger
-    if (!relicCrateSpawned && currentLevelDef.unlockWeaponTier && elapsedRunTime >= 18.0) {
+    // 4. Kill-Quota Wave Spawner, Relic Crate, Mid-Quota Mini-Boss & Mandatory Boss Finale!
+    if (!relicCrateSpawned && currentLevelDef.unlockWeaponTier && (kills >= Math.max(8, Math.floor(targetKills * 0.28)) || elapsedRunTime >= 18.0)) {
       relicCrateSpawned = true;
       spawnRelicWeaponEvent();
     }
 
-    // Mid-run Mini-Boss at ~50% chapter timer on Acts II–V non-boss chapters!
+    // Mid-run Mini-Boss at 50% monster kill quota on Acts II–V non-boss chapters!
     if (
       !midMiniBossSpawned &&
       !finaleStarted &&
       !currentLevelDef.hasBoss &&
       currentLevelDef.miniBossPool?.length > 0 &&
-      elapsedRunTime >= currentLevelDef.durationSec * 0.50
+      kills >= Math.floor(targetKills * 0.50)
     ) {
       midMiniBossSpawned = true;
       spawnMiniBossFromPool(false);
     }
 
+    // Mandatory Kill Quota: running away never completes the wave — player MUST slay targetKills monsters to summon the Boss!
     if (!finaleStarted) {
-      timeLeft = Math.max(0, timeLeft - dt);
-      if (timeLeft <= 0) {
+      if (kills >= targetKills) {
+        timeLeft = 0;
         startWaveFinale();
+      } else {
+        timeLeft = Math.max(1, targetKills - kills);
       }
     }
 
@@ -3603,9 +3660,14 @@ export function createCombatController({
       weaponDef: wpnDef,
       ammo: player.ammo,
       maxAmmo: player.maxAmmo,
+      usesMana: Boolean(stats?.usesMana && player.maxMana > 0),
+      mana: +(player.mana || 0).toFixed(1),
+      maxMana: player.maxMana || 0,
+      manaRegen: stats?.manaRegen || 0,
+      manaCost: stats?.manaCost || 0,
       isReloading: Boolean(player.isReloading),
       reloadProgress,
-      activePerks: { ...perks },
+      activePerks: perks,
       overdriveAmmo: player.overdriveAmmo,
       overdriveMaxAmmo: player.overdriveMax,
       goldTotal,
@@ -3613,6 +3675,11 @@ export function createCombatController({
       goldRun,
       runGold: goldRun,
       kills,
+      targetKills,
+      finaleStarted,
+      phaseText: finaleStarted
+        ? '💀 УБЕЙ БОССА!'
+        : `☠️ Орда: ${Math.min(kills, targetKills)} / ${targetKills}`,
       seals: player.seals,
       beastTimeLeft: +Math.max(0, player.beastTimeLeft).toFixed(2),
       beastDuration: 10,

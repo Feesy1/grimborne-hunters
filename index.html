@@ -13,47 +13,78 @@
   <meta http-equiv="Expires" content="0" />
   <title>Охотники Мрака — Grimborne Hunters</title>
   <link rel="icon" type="image/x-icon" href="./assets/grimborne_icon.ico" />
-  <link rel="stylesheet" href="./css/style.css?v=20261116d" />
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="stylesheet" href="./css/style.css?v=20261116e" />
   <script>
     (function syncViewportVars() {
+      var curVp = { w: 1280, h: 720, forcedRotate: false, rawW: 1280, rawH: 720 };
+      window.__getGameViewportSize = function () { return curVp; };
+      window.__toGameCoords = function (cx, cy) {
+        if (curVp.forcedRotate) {
+          return { x: cy, y: curVp.rawW - cx };
+        }
+        return { x: cx, y: cy };
+      };
       function updateVv() {
         var vv = window.visualViewport;
-        var w = Math.round((vv && vv.width) || document.documentElement.clientWidth || window.innerWidth || 390);
-        var h = Math.round((vv && vv.height) || document.documentElement.clientHeight || window.innerHeight || 844);
-        document.documentElement.style.setProperty('--app-vw', w + 'px');
-        document.documentElement.style.setProperty('--app-vh', h + 'px');
+        var rawW = Math.round((vv && vv.width) || document.documentElement.clientWidth || window.innerWidth || 844);
+        var rawH = Math.round((vv && vv.height) || document.documentElement.clientHeight || window.innerHeight || 390);
+        var isPhoneTouch =
+          /iPhone|iPod|Android/i.test(navigator.userAgent || '') ||
+          ((navigator.maxTouchPoints || 0) > 0 && Math.min(rawW, rawH) <= 560);
+        var forceRotate = isPhoneTouch && rawW < rawH;
+        var gameW = forceRotate ? rawH : rawW;
+        var gameH = forceRotate ? rawW : rawH;
+        curVp = { w: gameW, h: gameH, forcedRotate: forceRotate, rawW: rawW, rawH: rawH };
+
+        var docEl = document.documentElement;
+        docEl.classList.toggle('forced-landscape', forceRotate);
+        docEl.classList.toggle('is-mobile-landscape', isPhoneTouch);
+        docEl.style.setProperty('--app-vw', gameW + 'px');
+        docEl.style.setProperty('--app-vh', gameH + 'px');
+        window.dispatchEvent(new Event('grimborne-viewport'));
       }
       updateVv();
       window.addEventListener('resize', updateVv);
-      window.addEventListener('orientationchange', function () { setTimeout(updateVv, 80); setTimeout(updateVv, 280); });
+      window.addEventListener('orientationchange', function () {
+        setTimeout(updateVv, 60);
+        setTimeout(updateVv, 260);
+      });
       if (window.visualViewport) {
         window.visualViewport.addEventListener('resize', updateVv);
         window.visualViewport.addEventListener('scroll', updateVv);
       }
+      document.addEventListener('pointerdown', function tryLockLandscape() {
+        if (screen.orientation && screen.orientation.lock) {
+          screen.orientation.lock('landscape').catch(function () {});
+        }
+      }, { once: true, passive: true });
     })();
   </script>
   <script src="https://yandex.ru/games/sdk/v2" async onerror="window.__yaSdkUnavailable=true"></script>
 </head>
 <body>
-  <div id="fps-badge" aria-label="Счётчик кадров">120 FPS</div>
-  <!-- Стартовый экран загрузки с полным ключевым артом и тонкой золотой шкалой прогресса -->
-  <div id="splash-screen" role="status" aria-live="polite">
-    <div class="splash-art"></div>
-    <div class="splash-vignette"></div>
-    <div class="splash-bottom-box">
-      <div class="splash-ornament">✦ &nbsp; ОХОТНИКИ МРАКА &nbsp; ✦</div>
-      <div class="splash-bar-track">
-        <div id="splash-bar-fill" class="splash-bar-fill"></div>
-      </div>
-      <div class="splash-status-row">
-        <span id="splash-status-text">Пробуждение проклятого погоста…</span>
-        <span id="splash-percent">0%</span>
+  <div id="app-viewport">
+    <div id="fps-badge" aria-label="Счётчик кадров">120 FPS</div>
+    <!-- Стартовый экран загрузки с полным ключевым артом и тонкой золотой шкалой прогресса -->
+    <div id="splash-screen" role="status" aria-live="polite">
+      <div class="splash-art"></div>
+      <div class="splash-vignette"></div>
+      <div class="splash-bottom-box">
+        <div class="splash-ornament">✦ &nbsp; ОХОТНИКИ МРАКА &nbsp; ✦</div>
+        <div class="splash-bar-track">
+          <div id="splash-bar-fill" class="splash-bar-fill"></div>
+        </div>
+        <div class="splash-status-row">
+          <span id="splash-status-text">Пробуждение проклятого погоста…</span>
+          <span id="splash-percent">0%</span>
+        </div>
       </div>
     </div>
-  </div>
 
-  <canvas id="game-canvas" aria-label="Игровая арена Охотники Мрака"></canvas>
-  <div id="ui-root"></div>
+    <canvas id="game-canvas" aria-label="Игровая арена Охотники Мрака"></canvas>
+    <div id="ui-root"></div>
+  </div>
 
   <script>
     // Failsafe immediate splash progress ticker: starts moving at 0ms and finishes cleanly at ~3.0s
@@ -110,6 +141,6 @@
       requestAnimationFrame(tick);
     })();
   </script>
-  <script type="module" src="./js/main.js?v=20261116d"></script>
+  <script type="module" src="./js/main.js?v=20261116e"></script>
 </body>
 </html>

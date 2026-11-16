@@ -47,6 +47,17 @@ export const HERO_UPGRADE_DEFS = {
     maxLevel: 6,
     baseCost: 40,
     costScale: 1.42
+  },
+  mana_flow: {
+    key: 'mana_flow',
+    nameRu: 'Поток маны',
+    nameEn: 'Mana Flow',
+    descRu: '+20% к регенерации маны и +15 к запасу маны',
+    descEn: '+20% Mana Regen & +15 Max Mana per level',
+    icon: '💧',
+    maxLevel: 8,
+    baseCost: 40,
+    costScale: 1.38
   }
 };
 
@@ -55,7 +66,8 @@ function createDefaultHeroUpgradeBucket() {
     vitality: 0,
     might: 0,
     agility: 0,
-    ward: 0
+    ward: 0,
+    mana_flow: 0
   };
 }
 
@@ -382,6 +394,7 @@ export function createProgressionStore(initialSave = null) {
     const mightLvl = getHeroUpgradeLevel('might', cls.id);
     const agilityLvl = getHeroUpgradeLevel('agility', cls.id);
     const wardLvl = getHeroUpgradeLevel('ward', cls.id);
+    const manaFlowLvl = getHeroUpgradeLevel('mana_flow', cls.id);
 
     // All 12 balanced in-run blessing stacks
     const wpnPowerStacks = getPerkStacks(perks, 'wpn_power');
@@ -464,14 +477,27 @@ export function createProgressionStore(initialSave = null) {
     const projectileSpeed = wpn.projectileSpeed ? +wpn.projectileSpeed.toFixed(2) : 0;
     const pickupRadius = +(3.8 * perkMoveMult).toFixed(3);
 
-    // Magazine & Reload metrics
-    const baseMag = wpn.magSize || 0;
+    // Magazine & Reload metrics (Gunslinger) + Continuous Mana Pool & Regen (Mage)
+    const usesMana = cls.id === 'mage' || wpn.type === 'magic';
+    const baseMag = usesMana ? 0 : (wpn.magSize || 0);
     const magSize = baseMag > 0 ? baseMag + ammoPouchStacks * 2 : 0;
     const reloadSpeedMult = +(shopReloadMult * heroAgilityMult * perkReloadMult).toFixed(4);
     const reloadTime =
       baseMag > 0 && wpn.reloadTime
         ? Math.max(0.26, +(wpn.reloadTime / reloadSpeedMult).toFixed(3))
         : 0;
+
+    const maxMana = usesMana
+      ? Math.round((cls.maxMana || 120) + manaFlowLvl * 15 + ammoPouchStacks * 25)
+      : 0;
+    const manaRegen = usesMana
+      ? +(
+          (cls.manaRegen || 9.5) *
+          (1 + manaFlowLvl * 0.20 + ammoPouchStacks * 0.24 + shopLevelsAbove * 0.03) *
+          perkHasteMult
+        ).toFixed(2)
+      : 0;
+    const manaCost = usesMana ? +(wpn.manaCost || 8).toFixed(2) : 0;
 
     // Crit, Elemental, Astral & Economy Blessing stats
     const critChance = Math.min(0.85, +(0.04 + critFangStacks * 0.14).toFixed(4));
@@ -517,6 +543,10 @@ export function createProgressionStore(initialSave = null) {
       magSize,
       reloadTime,
       reloadSpeedMult,
+      usesMana,
+      maxMana,
+      manaRegen,
+      manaCost,
       recoilKick: wpn.recoilKick || 0,
       isShotgun: Boolean(wpn.isShotgun),
       critChance,

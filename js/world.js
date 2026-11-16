@@ -179,20 +179,17 @@ function getSlashCrescentGeo(arcAngle = Math.PI * 0.8) {
 // Main 3D Arena World Factory
 // ============================================================================
 export function createArenaWorld(canvas) {
-  const isMobileGPU =
-    /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || '') ||
-    (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
-  const maxDpr = isMobileGPU ? 1.65 : 2;
+  const maxDpr = 2;
 
   const renderer = new THREE.WebGLRenderer({
     canvas: canvas || undefined,
-    antialias: !isMobileGPU || (window.devicePixelRatio || 1) < 2,
+    antialias: true,
     powerPreference: 'high-performance'
   });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxDpr));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = isMobileGPU ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.48;
@@ -248,16 +245,15 @@ export function createArenaWorld(canvas) {
   const dirLight = new THREE.DirectionalLight(PALETTE_NORMAL.dir.getHex(), 2.45);
   dirLight.position.set(14, 28, 16);
   dirLight.castShadow = true;
-  const shadowMapRes = isMobileGPU ? 1024 : 1536;
-  dirLight.shadow.mapSize.set(shadowMapRes, shadowMapRes);
+  dirLight.shadow.mapSize.set(2048, 2048);
   dirLight.shadow.camera.near = 4;
-  dirLight.shadow.camera.far = 68;
-  const shadowExtent = isMobileGPU ? 21 : 26;
+  dirLight.shadow.camera.far = 75;
+  const shadowExtent = 28;
   dirLight.shadow.camera.left = -shadowExtent;
   dirLight.shadow.camera.right = shadowExtent;
   dirLight.shadow.camera.top = shadowExtent;
   dirLight.shadow.camera.bottom = -shadowExtent;
-  dirLight.shadow.bias = -0.0005;
+  dirLight.shadow.bias = -0.0004;
   scene.add(dirLight);
   scene.add(dirLight.target);
 
@@ -356,27 +352,9 @@ export function createArenaWorld(canvas) {
   const lanterns = [];
 
   function addFlickerLight(x, y, z, colorHex, intensity, distance, phase = 0, withFireCone = false) {
-    // Keep real PointLight on the main campfire (and all on Desktop); on mobile TBDR GPUs use soft volumetric glow sprites on secondary shrines to cut 70% PBR shader heat with identical visual glow!
-    let pl = null;
-    if (!isMobileGPU || withFireCone) {
-      pl = new THREE.PointLight(colorHex, intensity, distance, 1.45);
-      pl.position.set(x, y, z);
-      arenaGroup.add(pl);
-    } else {
-      const aura = new THREE.Sprite(
-        new THREE.SpriteMaterial({
-          map: softGlowTex,
-          color: colorHex,
-          transparent: true,
-          opacity: 0.42,
-          blending: THREE.AdditiveBlending,
-          depthWrite: false
-        })
-      );
-      aura.position.set(x, 1.35, z);
-      aura.scale.set(5.4, 5.4, 1);
-      arenaGroup.add(aura);
-    }
+    const pl = new THREE.PointLight(colorHex, intensity, distance, 1.45);
+    pl.position.set(x, y, z);
+    arenaGroup.add(pl);
 
     let flameGrp = null;
     if (withFireCone) {
@@ -566,11 +544,8 @@ export function createArenaWorld(canvas) {
       inst.position.set(x, y, z);
       inst.rotation.y = rotY;
       inst.scale.setScalar(scale);
-      inst.updateMatrixWorld(true);
-      inst.traverse((c) => {
-        c.matrixAutoUpdate = false;
-      });
       parent.add(inst);
+      inst.updateMatrixWorld(true);
       return inst;
     }
 
@@ -848,43 +823,40 @@ export function createArenaWorld(canvas) {
     return g;
   })();
 
+  // Pooled VFX (Muzzle Flashes, Shockwaves & Danger Zones — ZERO mid-combat Material allocate/dispose stutters!)
+  const freeMuzzleFlashes = [];
+  const freeShockwaves = [];
+
   function spawnMuzzleFlash({ x = 0, y = 0.82, z = 0, angle = 0, color = 0xfbbf24, scale = 1.0 } = {}) {
-    const group = new THREE.Group();
-    group.position.set(x, y, z);
-    group.rotation.y = angle;
-    group.scale.setScalar(scale);
-
     const vividColor = new THREE.Color(color).offsetHSL(0, 0.16, -0.06);
-    const coreMat = new THREE.MeshBasicMaterial({
-      color: 0xfff8dc,
-      transparent: true,
-      opacity: 0.9,
-      depthWrite: false,
-      toneMapped: false
-    });
-    const outerMat = new THREE.MeshBasicMaterial({
-      color: vividColor,
-      transparent: true,
-      opacity: 0.85,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      toneMapped: false
-    });
-
-    const mainJet = new THREE.Mesh(muzzleConeGeo, outerMat);
-    const coreJet = new THREE.Mesh(muzzleConeGeo, coreMat);
-    coreJet.scale.set(0.42, 0.42, 0.58);
-
-    const sideJetL = new THREE.Mesh(muzzleConeGeo, outerMat);
-    sideJetL.scale.set(0.5, 0.5, 0.48);
-    sideJetL.rotation.y = 0.52;
-
-    const sideJetR = new THREE.Mesh(muzzleConeGeo, outerMat);
-    sideJetR.scale.set(0.5, 0.5, 0.48);
-    sideJetR.rotation.y = -0.52;
-
-    const flashSprite = new THREE.Sprite(
-      new THREE.SpriteMaterial({
+    let mf = freeMuzzleFlashes.pop();
+    if (!mf) {
+      const group = new THREE.Group();
+      const coreMat = new THREE.MeshBasicMaterial({
+        color: 0xfff8dc,
+        transparent: true,
+        opacity: 0.9,
+        depthWrite: false,
+        toneMapped: false
+      });
+      const outerMat = new THREE.MeshBasicMaterial({
+        color: vividColor,
+        transparent: true,
+        opacity: 0.85,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        toneMapped: false
+      });
+      const mainJet = new THREE.Mesh(muzzleConeGeo, outerMat);
+      const coreJet = new THREE.Mesh(muzzleConeGeo, coreMat);
+      coreJet.scale.set(0.42, 0.42, 0.58);
+      const sideJetL = new THREE.Mesh(muzzleConeGeo, outerMat);
+      sideJetL.scale.set(0.5, 0.5, 0.48);
+      sideJetL.rotation.y = 0.52;
+      const sideJetR = new THREE.Mesh(muzzleConeGeo, outerMat);
+      sideJetR.scale.set(0.5, 0.5, 0.48);
+      sideJetR.rotation.y = -0.52;
+      const spriteMat = new THREE.SpriteMaterial({
         map: softGlowTex,
         color: vividColor,
         transparent: true,
@@ -892,22 +864,27 @@ export function createArenaWorld(canvas) {
         blending: THREE.AdditiveBlending,
         depthWrite: false,
         toneMapped: false
-      })
-    );
-    flashSprite.scale.set(1.25, 1.25, 1);
-
-    group.add(mainJet, coreJet, sideJetL, sideJetR, flashSprite);
-    scene.add(group);
-
-    activeMuzzleFlashes.push({
-      group,
-      coreMat,
-      outerMat,
-      spriteMat: flashSprite.material,
-      baseScale: scale,
-      age: 0,
-      duration: 0.075
-    });
+      });
+      const flashSprite = new THREE.Sprite(spriteMat);
+      flashSprite.scale.set(1.25, 1.25, 1);
+      group.add(mainJet, coreJet, sideJetL, sideJetR, flashSprite);
+      scene.add(group);
+      mf = { group, coreMat, outerMat, spriteMat, baseScale: scale, age: 0, duration: 0.075 };
+    } else {
+      mf.outerMat.color.copy(vividColor);
+      mf.spriteMat.color.copy(vividColor);
+      mf.coreMat.opacity = 0.9;
+      mf.outerMat.opacity = 0.85;
+      mf.spriteMat.opacity = 0.72;
+      mf.group.visible = true;
+    }
+    mf.group.position.set(x, y, z);
+    mf.group.rotation.y = angle;
+    mf.group.scale.setScalar(scale);
+    mf.baseScale = scale;
+    mf.age = 0;
+    mf.duration = 0.075;
+    activeMuzzleFlashes.push(mf);
   }
 
   function spawnSlashArc({
@@ -978,44 +955,46 @@ export function createArenaWorld(canvas) {
     color = 0xc084fc,
     duration = 0.34
   } = {}) {
-    const group = new THREE.Group();
-    group.position.set(x, 0.07, z);
-
-    const ringMat = new THREE.MeshBasicMaterial({
-      color,
-      transparent: true,
-      opacity: 0.95,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      side: THREE.DoubleSide
-    });
-    const fillMat = new THREE.MeshBasicMaterial({
-      map: arcaneCircleTex,
-      color,
-      transparent: true,
-      opacity: 0.42,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      side: THREE.DoubleSide
-    });
-
-    const ringMesh = new THREE.Mesh(unitShockRingGeo, ringMat);
-    const fillMesh = new THREE.Mesh(unitShockDiscGeo, fillMat);
-    fillMesh.position.y = -0.01;
-    group.add(ringMesh, fillMesh);
-
+    let sw = freeShockwaves.pop();
+    if (!sw) {
+      const group = new THREE.Group();
+      const ringMat = new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.95,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide
+      });
+      const fillMat = new THREE.MeshBasicMaterial({
+        map: arcaneCircleTex,
+        color,
+        transparent: true,
+        opacity: 0.42,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide
+      });
+      const ringMesh = new THREE.Mesh(unitShockRingGeo, ringMat);
+      const fillMesh = new THREE.Mesh(unitShockDiscGeo, fillMat);
+      fillMesh.position.y = -0.01;
+      group.add(ringMesh, fillMesh);
+      scene.add(group);
+      sw = { group, ringMat, fillMat, radius: 1, age: 0, duration: 0.34 };
+    } else {
+      sw.ringMat.color.setHex(color);
+      sw.fillMat.color.setHex(color);
+      sw.ringMat.opacity = 0.95;
+      sw.fillMat.opacity = 0.42;
+      sw.group.visible = true;
+    }
+    sw.group.position.set(x, 0.07, z);
     const initR = Math.max(0.2, radius * 0.18);
-    group.scale.set(initR, 1, initR);
-    scene.add(group);
-
-    activeShockwaves.push({
-      group,
-      ringMat,
-      fillMat,
-      radius: Math.max(0.5, radius),
-      age: 0,
-      duration: Math.max(0.1, duration)
-    });
+    sw.group.scale.set(initR, 1, initR);
+    sw.radius = Math.max(0.5, radius);
+    sw.age = 0;
+    sw.duration = Math.max(0.1, duration);
+    activeShockwaves.push(sw);
   }
 
   const dangerBorderGeo = (() => {
@@ -1406,13 +1385,13 @@ export function createArenaWorld(canvas) {
   const aimHit = new THREE.Vector3();
 
   function getAimPointOnGround(clientX, clientY) {
-    const dom = renderer.domElement;
-    const rect = dom.getBoundingClientRect();
-    const w = Math.max(rect.width || window.innerWidth, 1);
-    const h = Math.max(rect.height || window.innerHeight, 1);
+    const vp = window.__getGameViewportSize?.();
+    const mapped = window.__toGameCoords ? window.__toGameCoords(clientX, clientY) : { x: clientX, y: clientY };
+    const w = Math.max(vp?.w || window.innerWidth, 1);
+    const h = Math.max(vp?.h || window.innerHeight, 1);
 
-    ndcMouse.x = ((clientX - rect.left) / w) * 2 - 1;
-    ndcMouse.y = -((clientY - rect.top) / h) * 2 + 1;
+    ndcMouse.x = (mapped.x / w) * 2 - 1;
+    ndcMouse.y = -(mapped.y / h) * 2 + 1;
 
     raycaster.setFromCamera(ndcMouse, camera);
     const hit = raycaster.ray.intersectPlane(aimPlane, aimHit);
@@ -1510,11 +1489,9 @@ export function createArenaWorld(canvas) {
       const mf = activeMuzzleFlashes[i];
       mf.age += safeDt;
       if (mf.age >= mf.duration) {
-        scene.remove(mf.group);
-        mf.coreMat.dispose();
-        mf.outerMat.dispose();
-        mf.spriteMat.dispose();
+        mf.group.visible = false;
         activeMuzzleFlashes.splice(i, 1);
+        freeMuzzleFlashes.push(mf);
         continue;
       }
       const p = 1 - mf.age / mf.duration;
@@ -1591,10 +1568,9 @@ export function createArenaWorld(canvas) {
       const sw = activeShockwaves[i];
       sw.age += safeDt;
       if (sw.age >= sw.duration) {
-        scene.remove(sw.group);
-        sw.ringMat.dispose();
-        sw.fillMat.dispose();
+        sw.group.visible = false;
         activeShockwaves.splice(i, 1);
+        freeShockwaves.push(sw);
         continue;
       }
       const p = sw.age / sw.duration;
@@ -1629,9 +1605,10 @@ export function createArenaWorld(canvas) {
   }
 
   function resize() {
+    const vp = window.__getGameViewportSize?.();
     const vv = window.visualViewport;
-    const w = Math.max(Math.round(vv?.width || document.documentElement.clientWidth || window.innerWidth), 1);
-    const h = Math.max(Math.round(vv?.height || document.documentElement.clientHeight || window.innerHeight), 1);
+    const w = Math.max(Math.round(vp?.w || vv?.width || document.documentElement.clientWidth || window.innerWidth), 1);
+    const h = Math.max(Math.round(vp?.h || vv?.height || document.documentElement.clientHeight || window.innerHeight), 1);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxDpr));
     renderer.setSize(w, h, true);
     const aspect = w / h;
@@ -1639,7 +1616,6 @@ export function createArenaWorld(canvas) {
     if (cameraMode === 'hub') {
       camera.fov = aspect < 0.92 ? 52 : 44;
     } else {
-      // Widen vertical FOV on portrait phones (e.g. iPhone 13 Pro 390x844) so full arena width stays visible
       camera.fov = aspect < 1.0 ? Math.min(64, 44 + (1.0 - aspect) * 34) : 44;
     }
     camera.updateProjectionMatrix();
@@ -1663,10 +1639,8 @@ export function createArenaWorld(canvas) {
 
     while (activeMuzzleFlashes.length > 0) {
       const mf = activeMuzzleFlashes.pop();
-      scene.remove(mf.group);
-      mf.coreMat.dispose();
-      mf.outerMat.dispose();
-      mf.spriteMat.dispose();
+      mf.group.visible = false;
+      freeMuzzleFlashes.push(mf);
     }
     while (activeSlashArcs.length > 0) {
       const sa = activeSlashArcs.pop();
@@ -1676,9 +1650,8 @@ export function createArenaWorld(canvas) {
     }
     while (activeShockwaves.length > 0) {
       const sw = activeShockwaves.pop();
-      scene.remove(sw.group);
-      sw.ringMat.dispose();
-      sw.fillMat.dispose();
+      sw.group.visible = false;
+      freeShockwaves.push(sw);
     }
     while (activeDangerZones.length > 0) {
       const dz = activeDangerZones.pop();

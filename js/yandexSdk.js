@@ -129,16 +129,11 @@ function installModerationGuards() {
   window.addEventListener('gesturestart', (e) => e.preventDefault(), { passive: false });
   window.addEventListener('gesturechange', (e) => e.preventDefault(), { passive: false });
 
-  // 4. Prevent pinch-zoom & overscroll bounce while allowing scroll inside designated UI panels
+  // 4. Prevent multi-finger pinch-zoom while allowing natural single-finger touch scroll across UI screens
   document.addEventListener(
     'touchmove',
     (e) => {
       if (e.touches && e.touches.length > 1) {
-        e.preventDefault();
-        return;
-      }
-      const scrollable = e.target && e.target.closest ? e.target.closest('.allow-touch-scroll') : null;
-      if (!scrollable) {
         e.preventDefault();
       }
     },

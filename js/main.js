@@ -2,14 +2,14 @@
 // Arsenal Progression, Procedural Web Audio, Gothic UI, and Yandex Games SDK v2.
 
 import * as THREE from '../vendor/three.module.js';
-import { LEVELS } from './config.js?v=20261116d';
-import { createArenaWorld } from './world.js?v=20261116d';
-import * as models from './models.js?v=20261116d';
-import { createProgressionStore } from './progression.js?v=20261116d';
-import { createCombatController } from './combat.js?v=20261116d';
-import { createAudioEngine } from './audio.js?v=20261116d';
-import { initYandexSdk } from './yandexSdk.js?v=20261116d';
-import { createUIManager } from './ui.js?v=20261116d';
+import { LEVELS } from './config.js?v=20261116e';
+import { createArenaWorld } from './world.js?v=20261116e';
+import * as models from './models.js?v=20261116e';
+import { createProgressionStore } from './progression.js?v=20261116e';
+import { createCombatController } from './combat.js?v=20261116e';
+import { createAudioEngine } from './audio.js?v=20261116e';
+import { initYandexSdk } from './yandexSdk.js?v=20261116e';
+import { createUIManager } from './ui.js?v=20261116e';
 
 async function bootstrap() {
   const canvas = document.getElementById('game-canvas');
@@ -55,6 +55,7 @@ async function bootstrap() {
     setTimeout(handleViewportResize, 80);
     setTimeout(handleViewportResize, 280);
   });
+  window.addEventListener('grimborne-viewport', handleViewportResize);
   window.visualViewport?.addEventListener('resize', handleViewportResize);
   handleViewportResize();
   await Promise.all([models.preloadModels(), world.ready]);
@@ -92,8 +93,11 @@ async function bootstrap() {
     projVec.set(wx, wy, wz);
     projVec.project(world.camera);
     if (projVec.z > 1) return null;
-    const x = (projVec.x * 0.5 + 0.5) * window.innerWidth;
-    const y = (-projVec.y * 0.5 + 0.5) * window.innerHeight;
+    const vp = window.__getGameViewportSize?.();
+    const w = vp?.w || window.innerWidth;
+    const h = vp?.h || window.innerHeight;
+    const x = (projVec.x * 0.5 + 0.5) * w;
+    const y = (-projVec.y * 0.5 + 0.5) * h;
     return { x, y };
   }
 

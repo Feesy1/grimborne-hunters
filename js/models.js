@@ -1694,6 +1694,8 @@ const ENEMY_MODEL_CFG = {
   }
 };
 
+const enemyMeshPool = new Map();
+
 export function createEnemyMesh(typeId = 'skeleton', eliteVariant = null, customScaleMult = 1.0) {
   if (typeId && typeof typeId === 'object') {
     const opts = typeId;
@@ -1703,14 +1705,24 @@ export function createEnemyMesh(typeId = 'skeleton', eliteVariant = null, custom
   }
 
   const cfg = ENEMY_MODEL_CFG[typeId] || ENEMY_MODEL_CFG.skeleton;
-  const asset = gltfCache.get(cfg.key);
-  const root = new THREE.Group();
-
   const rawMult = Number(customScaleMult);
   const validMult = Number.isFinite(rawMult) && rawMult > 0 ? rawMult : 1.0;
-  // Support 0.72x scaling when a previous Act boss spawns as a Mini-Boss!
   const effectiveScaleMult =
     eliteVariant === 'miniboss' && Math.abs(validMult - 1.0) < 0.001 ? 0.72 : validMult;
+
+  const canPool = eliteVariant !== 'warden' && !cfg.isBossVisual;
+  const poolKey = `${typeId}|${eliteVariant || 'std'}|${effectiveScaleMult.toFixed(2)}`;
+  if (canPool) {
+    const bucket = enemyMeshPool.get(poolKey);
+    if (bucket && bucket.length > 0) {
+      const reused = bucket.pop();
+      reused._markActive();
+      return reused;
+    }
+  }
+
+  const asset = gltfCache.get(cfg.key);
+  const root = new THREE.Group();
 
   let animCtrl = null;
   const instanceMats = [];
@@ -1997,8 +2009,19 @@ export function createEnemyMesh(typeId = 'skeleton', eliteVariant = null, custom
     }
   }
 
-  return {
+  let inPool = false;
+  const handle = {
     root,
+    _markActive() {
+      inPool = false;
+      flashTimer = 0;
+      root.visible = true;
+      root.scale.set(1, 1, 1);
+      root.rotation.set(0, 0, 0);
+      for (let i = 0; i < flashMeshSlots.length; i++) {
+        flashMeshSlots[i].mesh.material = flashMeshSlots[i].origMat;
+      }
+    },
     playAttackAnim() {
       animCtrl?.triggerOneShot(cfg.atkClip, cfg.isBossVisual ? 1.42 : 1.65);
     },
@@ -2015,6 +2038,24 @@ export function createEnemyMesh(typeId = 'skeleton', eliteVariant = null, custom
       }
     },
     dispose() {
+      if (inPool) return;
+      flashTimer = 0;
+      for (let i = 0; i < flashMeshSlots.length; i++) {
+        flashMeshSlots[i].mesh.material = flashMeshSlots[i].origMat;
+      }
+      if (canPool) {
+        let bucket = enemyMeshPool.get(poolKey);
+        if (!bucket) {
+          bucket = [];
+          enemyMeshPool.set(poolKey, bucket);
+        }
+        if (bucket.length < 18) {
+          inPool = true;
+          root.visible = false;
+          bucket.push(handle);
+          return;
+        }
+      }
       if (animCtrl?.mixer && spawnedInst) {
         animCtrl.mixer.stopAllAction();
         animCtrl.mixer.uncacheRoot(spawnedInst);
@@ -2100,6 +2141,7 @@ export function createEnemyMesh(typeId = 'skeleton', eliteVariant = null, custom
       }
     }
   };
+  return handle;
 }
 
 // ============================================================================
