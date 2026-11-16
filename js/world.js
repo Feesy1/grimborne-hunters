@@ -3,7 +3,7 @@
 
 import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
-import { ARENA_HALF_SIZE } from './config.js?v=20261116h';
+import { ARENA_HALF_SIZE } from './config.js?v=20261116j';
 
 // ============================================================================
 // Procedural Textures: Gothic Slate Cobblestone Floor & Soft Radial Glow Sprite
@@ -1285,46 +1285,240 @@ export function createArenaWorld(canvas) {
     activeDebris.push(d);
   }
 
-  // 💧 3D Reference-Matched Water Prison Sphere (Matches user's 9-stage concept art 1-to-1!):
-  //    1) Glowing concentric base puddle ripple + splash crown on the ground (y = 0.03)
-  //    2) Twisting tapered water vortex stem connecting ground puddle to floating bubble
-  //    3) Glossy translucent sapphire-aqua 3D water bubble + specular highlight + 3 helical water ribbons
-  //    4) 10 orbiting glossy 3D water droplets/bubbles + explosive droplet burst on slam!
-  const waterSphereShellGeo = new THREE.SphereGeometry(1.0, 24, 18);
-  const waterDropletGeo = new THREE.SphereGeometry(0.085, 8, 8);
+  // 💧 3D Reference-Matched Water Prison Sphere (Matches media_1794830656604_3654e5bb.jpg 1-to-1!):
+  //    1) Crystal-clear deep-sapphire core + luminous electric-cyan Fresnel outer rim + curved crescent specular highlight
+  //    2) Flowing 3D caustic swirl shell + 3 tapered spiraling liquid water tendrils curling upward
+  //    3) Glowing concentric ground puddle rings + 8-point flared splash crown + twisting water vortex stem
+  //    4) 12 orbiting glossy mini-bubbles (each with Fresnel rim & specular dot) + explosive droplet fountain on slam!
+  const waterBubbleTex = (() => {
+    const size = 512;
+    const c = document.createElement('canvas');
+    c.width = size;
+    c.height = size;
+    const ctx = c.getContext('2d');
+    const cx = size * 0.5;
+    const cy = size * 0.5;
+    const R = size * 0.465;
+
+    // 1. Soft outer atmospheric cyan bloom
+    const outerGlow = ctx.createRadialGradient(cx, cy, R * 0.82, cx, cy, size * 0.5);
+    outerGlow.addColorStop(0.0, 'rgba(56, 189, 248, 0.0)');
+    outerGlow.addColorStop(0.55, 'rgba(56, 189, 248, 0.34)');
+    outerGlow.addColorStop(0.78, 'rgba(96, 165, 250, 0.14)');
+    outerGlow.addColorStop(1.0, 'rgba(14, 116, 144, 0.0)');
+    ctx.fillStyle = outerGlow;
+    ctx.fillRect(0, 0, size, size);
+
+    // 2. Refractive liquid-glass body: crystal-clear center so skeleton inside stays sharp, vivid Fresnel rim!
+    const bodyGrad = ctx.createRadialGradient(cx - R * 0.12, cy - R * 0.14, R * 0.06, cx, cy, R);
+    bodyGrad.addColorStop(0.0, 'rgba(30, 64, 175, 0.10)');
+    bodyGrad.addColorStop(0.48, 'rgba(37, 99, 235, 0.16)');
+    bodyGrad.addColorStop(0.72, 'rgba(59, 130, 246, 0.32)');
+    bodyGrad.addColorStop(0.86, 'rgba(56, 189, 248, 0.64)');
+    bodyGrad.addColorStop(0.95, 'rgba(186, 230, 253, 0.92)');
+    bodyGrad.addColorStop(0.985, 'rgba(224, 242, 254, 0.96)');
+    bodyGrad.addColorStop(1.0, 'rgba(56, 189, 248, 0.0)');
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, Math.PI * 2);
+    ctx.fillStyle = bodyGrad;
+    ctx.fill();
+
+    // 3. Internal subtle aqua-violet liquid refraction arcs
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, R * 0.96, 0, Math.PI * 2);
+    ctx.clip();
+
+    // Lower-right turquoise-cyan bounce light crescent
+    ctx.strokeStyle = 'rgba(125, 211, 252, 0.52)';
+    ctx.lineWidth = R * 0.09;
+    ctx.lineCap = 'round';
+    ctx.filter = 'blur(6px)';
+    ctx.beginPath();
+    ctx.arc(cx, cy, R * 0.83, Math.PI * 0.08, Math.PI * 0.56);
+    ctx.stroke();
+
+    // Internal diagonal swirling water current wisps
+    ctx.strokeStyle = 'rgba(147, 197, 253, 0.28)';
+    ctx.lineWidth = R * 0.065;
+    ctx.beginPath();
+    ctx.bezierCurveTo
+      ? (ctx.moveTo(cx - R * 0.65, cy + R * 0.28),
+        ctx.bezierCurveTo(cx - R * 0.2, cy + R * 0.55, cx + R * 0.35, cy + R * 0.18, cx + R * 0.68, cy - R * 0.26))
+      : null;
+    ctx.stroke();
+
+    // 4. Primary upper-left curved glossy crescent specular highlight
+    ctx.filter = 'blur(4px)';
+    ctx.strokeStyle = 'rgba(240, 249, 255, 0.88)';
+    ctx.lineWidth = R * 0.095;
+    ctx.beginPath();
+    ctx.arc(cx, cy, R * 0.78, Math.PI * 1.06, Math.PI * 1.48);
+    ctx.stroke();
+
+    ctx.filter = 'none';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+    ctx.lineWidth = R * 0.042;
+    ctx.beginPath();
+    ctx.arc(cx, cy, R * 0.79, Math.PI * 1.11, Math.PI * 1.43);
+    ctx.stroke();
+
+    // Secondary crisp specular droplet shine dot below crescent
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.90)';
+    ctx.beginPath();
+    ctx.ellipse(cx - R * 0.66, cy - R * 0.14, R * 0.048, R * 0.082, 0.28, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Top-right delicate rim glint
+    ctx.strokeStyle = 'rgba(224, 242, 254, 0.72)';
+    ctx.lineWidth = R * 0.028;
+    ctx.beginPath();
+    ctx.arc(cx, cy, R * 0.91, Math.PI * 1.62, Math.PI * 1.88);
+    ctx.stroke();
+
+    ctx.restore();
+
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  })();
+
+  const waterSwirlTex = (() => {
+    const size = 256;
+    const c = document.createElement('canvas');
+    c.width = size;
+    c.height = size;
+    const ctx = c.getContext('2d');
+    ctx.clearRect(0, 0, size, size);
+
+    for (let i = 0; i < 7; i++) {
+      const yBase = (i / 7) * size;
+      const grad = ctx.createLinearGradient(0, yBase, size, yBase + 48);
+      grad.addColorStop(0.0, 'rgba(56, 189, 248, 0.0)');
+      grad.addColorStop(0.35, 'rgba(96, 165, 250, 0.34)');
+      grad.addColorStop(0.55, 'rgba(224, 242, 254, 0.62)');
+      grad.addColorStop(0.8, 'rgba(56, 189, 248, 0.25)');
+      grad.addColorStop(1.0, 'rgba(56, 189, 248, 0.0)');
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 6 + (i % 3) * 3;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(8, yBase + 14);
+      ctx.bezierCurveTo(size * 0.33, yBase - 18, size * 0.66, yBase + 44, size - 8, yBase + 10);
+      ctx.stroke();
+    }
+
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  })();
+
+  const waterSphereShellGeo = new THREE.SphereGeometry(1.0, 28, 20);
   const waterBaseRingOuterGeo = (() => {
-    const g = new THREE.RingGeometry(0.72, 0.92, 28);
+    const g = new THREE.RingGeometry(0.76, 0.94, 36);
     g.rotateX(-Math.PI / 2);
     return g;
   })();
   const waterBaseRingInnerGeo = (() => {
-    const g = new THREE.RingGeometry(0.32, 0.50, 24);
+    const g = new THREE.RingGeometry(0.36, 0.54, 32);
     g.rotateX(-Math.PI / 2);
     return g;
   })();
   const waterSplashCrownGeo = (() => {
-    const g = new THREE.ConeGeometry(0.68, 0.42, 10, 1, true);
-    g.rotateX(Math.PI);
-    g.translate(0, 0.21, 0);
+    // 10-point jagged liquid splash crown rising from the puddle
+    const radialSegs = 20;
+    const g = new THREE.CylinderGeometry(0.74, 0.34, 0.44, radialSegs, 1, true);
+    const pos = g.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const vy = pos.getY(i);
+      if (vy > 0) {
+        const vx = pos.getX(i);
+        const vz = pos.getZ(i);
+        const ang = Math.atan2(vz, vx);
+        const wave = 0.58 + 0.42 * Math.max(0, Math.sin(ang * 7));
+        pos.setY(i, 0.08 + 0.38 * wave);
+        pos.setX(i, vx * (0.85 + 0.25 * wave));
+        pos.setZ(i, vz * (0.85 + 0.25 * wave));
+      } else {
+        pos.setY(i, 0.02);
+      }
+    }
+    g.computeVertexNormals();
     return g;
   })();
   const waterStemGeo = (() => {
-    const g = new THREE.CylinderGeometry(0.15, 0.44, 0.72, 12, 1, true);
-    g.translate(0, 0.36, 0);
+    // Curved funnel-shaped twisting water stem connecting puddle to bottom of bubble
+    const g = new THREE.CylinderGeometry(0.16, 0.46, 0.78, 16, 6, true);
+    const pos = g.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const vy = pos.getY(i) + 0.39; // 0 .. 0.78
+      const f = vy / 0.78;
+      const pinch = 1.0 - Math.sin(f * Math.PI) * 0.36;
+      const twist = f * 1.15;
+      const ox = pos.getX(i) * pinch;
+      const oz = pos.getZ(i) * pinch;
+      const sway = Math.sin(f * Math.PI) * 0.08;
+      pos.setX(i, ox * Math.cos(twist) - oz * Math.sin(twist) + sway);
+      pos.setY(i, vy);
+      pos.setZ(i, ox * Math.sin(twist) + oz * Math.cos(twist));
+    }
+    g.computeVertexNormals();
     return g;
   })();
   const waterHelixRibbonGeo = (() => {
+    // Tapered 3D liquid water tendril spiraling gracefully around the sphere surface
+    const segs = 26;
+    const radSegs = 6;
+    const positions = [];
+    const uvs = [];
+    const indices = [];
     const pts = [];
-    const steps = 16;
-    for (let s = 0; s <= steps; s++) {
-      const f = s / steps;
-      const theta = f * Math.PI * 1.85;
-      const phi = (f - 0.5) * Math.PI * 0.86;
-      const rad = Math.cos(phi) * 1.04;
+    for (let s = 0; s <= segs; s++) {
+      const f = s / segs;
+      const theta = f * Math.PI * 1.55;
+      const phi = -0.44 * Math.PI + f * Math.PI * 0.84;
+      const rad = Math.cos(phi) * 1.045 + (1 - f) * 0.08;
       pts.push(new THREE.Vector3(Math.cos(theta) * rad, Math.sin(phi) * 1.02, Math.sin(theta) * rad));
     }
     const curve = new THREE.CatmullRomCurve3(pts);
-    return new THREE.TubeGeometry(curve, 18, 0.055, 6, false);
+    const frames = curve.computeFrenetFrames(segs, false);
+    for (let i = 0; i <= segs; i++) {
+      const f = i / segs;
+      const p = curve.getPointAt(f);
+      const N = frames.normals[i];
+      const B = frames.binormals[i];
+      // Taper sharply at tip and base, thicker glossy belly in middle
+      const rTube = 0.072 * Math.sin(Math.pow(f, 0.78) * Math.PI);
+      for (let j = 0; j <= radSegs; j++) {
+        const v = (j / radSegs) * Math.PI * 2;
+        const cx = Math.cos(v) * rTube;
+        const cy = Math.sin(v) * rTube * 0.52; // flattened ribbon cross-section
+        positions.push(
+          p.x + N.x * cx + B.x * cy,
+          p.y + N.y * cx + B.y * cy,
+          p.z + N.z * cx + B.z * cy
+        );
+        uvs.push(f, j / radSegs);
+      }
+    }
+    const stride = radSegs + 1;
+    for (let i = 0; i < segs; i++) {
+      for (let j = 0; j < radSegs; j++) {
+        const a = i * stride + j;
+        const b = (i + 1) * stride + j;
+        const c = (i + 1) * stride + (j + 1);
+        const d = i * stride + (j + 1);
+        indices.push(a, b, d, b, c, d);
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    geo.setIndex(indices);
+    geo.computeVertexNormals();
+    return geo;
   })();
 
   const activeWaterSpheres = [];
@@ -1337,80 +1531,102 @@ export function createArenaWorld(canvas) {
       const baseGroup = new THREE.Group();
       const bubbleGroup = new THREE.Group();
 
-      const deepWaterMat = new THREE.MeshBasicMaterial({
-        color: 0x0284c7,
+      const swirlShellMat = new THREE.MeshBasicMaterial({
+        map: waterSwirlTex,
+        color: 0x60a5fa,
         transparent: true,
-        opacity: 0.30,
-        side: THREE.BackSide,
+        opacity: 0.48,
+        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide,
         depthWrite: false,
         toneMapped: false
       });
-      const shellMat = new THREE.MeshBasicMaterial({
+      const bubbleSpriteMat = new THREE.SpriteMaterial({
+        map: waterBubbleTex,
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.96,
+        depthWrite: false,
+        toneMapped: false
+      });
+      const stemMat = new THREE.MeshBasicMaterial({
+        map: waterSwirlTex,
         color: 0x38bdf8,
         transparent: true,
-        opacity: 0.36,
+        opacity: 0.68,
         blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide,
         depthWrite: false,
         toneMapped: false
       });
       const ribbonMat = new THREE.MeshBasicMaterial({
         color: 0x7dd3fc,
         transparent: true,
-        opacity: 0.82,
+        opacity: 0.86,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
         toneMapped: false
       });
       const specMat = new THREE.MeshBasicMaterial({
-        color: 0xf0f9ff,
+        color: 0xe0f2fe,
         transparent: true,
-        opacity: 0.78,
+        opacity: 0.90,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
         toneMapped: false
       });
+      const dropletSpriteMat = new THREE.SpriteMaterial({
+        map: waterBubbleTex,
+        color: 0xe0f2fe,
+        transparent: true,
+        opacity: 0.92,
+        depthWrite: false,
+        toneMapped: false
+      });
 
-      // 1. Ground ripple rings + base splash crown + twisting water stem
+      // 1. Concentric glowing ground ripple rings + 10-point splash crown + twisting water funnel stem
       const ringOut = new THREE.Mesh(waterBaseRingOuterGeo, ribbonMat);
       ringOut.position.y = 0.03;
       const ringIn = new THREE.Mesh(waterBaseRingInnerGeo, specMat);
-      ringIn.position.y = 0.035;
-      const crown = new THREE.Mesh(waterSplashCrownGeo, shellMat);
-      const stem = new THREE.Mesh(waterStemGeo, shellMat);
+      ringIn.position.y = 0.036;
+      const crown = new THREE.Mesh(waterSplashCrownGeo, stemMat);
+      const stem = new THREE.Mesh(waterStemGeo, stemMat);
       baseGroup.add(ringOut, ringIn, crown, stem);
 
-      // 2. Main levitating 3D spherical water bubble + glossy highlight + 3 spiraling water ribbons
-      const backSphere = new THREE.Mesh(waterSphereShellGeo, deepWaterMat);
-      const frontSphere = new THREE.Mesh(waterSphereShellGeo, shellMat);
-      frontSphere.scale.setScalar(1.015);
-      const specHighlight = new THREE.Mesh(waterDropletGeo, specMat);
-      specHighlight.scale.set(2.8, 1.4, 0.7);
-      specHighlight.position.set(-0.46, 0.56, 0.66);
-      specHighlight.rotation.set(-0.45, -0.45, 0.35);
+      // 2. Camera-facing refractive Fresnel + Crescent-Highlight Bubble Sprite + 3D Caustic Swirl Sphere
+      const bubbleSprite = new THREE.Sprite(bubbleSpriteMat);
+      bubbleSprite.scale.set(2.24, 2.24, 1);
+      bubbleSprite.renderOrder = 14;
+
+      const swirlSphere = new THREE.Mesh(waterSphereShellGeo, swirlShellMat);
+      swirlSphere.scale.setScalar(0.985);
+      swirlSphere.renderOrder = 13;
 
       const ribbons = new THREE.Group();
       for (let r = 0; r < 3; r++) {
         const rib = new THREE.Mesh(waterHelixRibbonGeo, r === 0 ? specMat : ribbonMat);
         rib.rotation.y = (r / 3) * Math.PI * 2;
+        rib.renderOrder = 15;
         ribbons.add(rib);
       }
 
-      // 3. 10 orbiting glossy water droplets around the sphere
+      // 3. 12 orbiting glossy mini-bubbles (each with Fresnel rim & white specular dot!)
       const dropletsGroup = new THREE.Group();
       const droplets = [];
-      for (let d = 0; d < 10; d++) {
-        const dm = new THREE.Mesh(waterDropletGeo, d % 3 === 0 ? specMat : ribbonMat);
-        const ang = (d / 10) * Math.PI * 2;
+      for (let d = 0; d < 12; d++) {
+        const dm = new THREE.Sprite(dropletSpriteMat);
+        const ang = (d / 12) * Math.PI * 2;
         const yOff = ((d % 5) - 2) * 0.34;
-        const distR = 1.18 + (d % 3) * 0.14;
-        const dScale = 0.65 + (d % 4) * 0.32;
-        dm.scale.setScalar(dScale);
+        const distR = 1.18 + (d % 3) * 0.16;
+        const dScale = 0.14 + (d % 4) * 0.065;
+        dm.scale.set(dScale, dScale, 1);
         dm.position.set(Math.cos(ang) * distR, yOff, Math.sin(ang) * distR);
+        dm.renderOrder = 16;
         dropletsGroup.add(dm);
-        droplets.push({ mesh: dm, baseY: yOff, phase: d * 1.1 });
+        droplets.push({ mesh: dm, baseY: yOff, phase: d * 0.95 });
       }
 
-      bubbleGroup.add(backSphere, frontSphere, specHighlight, ribbons, dropletsGroup);
+      bubbleGroup.add(swirlSphere, bubbleSprite, ribbons, dropletsGroup);
       rootGroup.add(baseGroup, bubbleGroup);
       scene.add(rootGroup);
 
@@ -1418,15 +1634,18 @@ export function createArenaWorld(canvas) {
         group: rootGroup,
         baseGroup,
         bubbleGroup,
+        swirlSphere,
         stem,
         crown,
         ribbons,
         dropletsGroup,
         droplets,
-        deepWaterMat,
-        shellMat,
+        swirlShellMat,
+        bubbleSpriteMat,
+        stemMat,
         ribbonMat,
         specMat,
+        dropletSpriteMat,
         x: 0,
         z: 0,
         radius: 2.65,
@@ -1444,6 +1663,149 @@ export function createArenaWorld(canvas) {
     ws.bubbleGroup.scale.setScalar(0.15);
     ws.group.visible = true;
     activeWaterSpheres.push(ws);
+  }
+
+  // 🩸⚔️ Visceral Critical Strike Blood Splatter & Crossed Execution Flash (ZERO flat red rings!)
+  const bloodSplatterTex = (() => {
+    const size = 192;
+    const c = document.createElement('canvas');
+    c.width = size;
+    c.height = size;
+    const ctx = c.getContext('2d');
+    const cx = size * 0.5;
+    const cy = size * 0.5;
+
+    // Irregular dark-crimson splatter pool + directional droplets on cobblestones
+    ctx.fillStyle = 'rgba(136, 14, 24, 0.86)';
+    for (let i = 0; i < 11; i++) {
+      const a = (i / 11) * Math.PI * 2 + (i % 3) * 0.25;
+      const d = (i % 4) * 11;
+      const rx = 24 - (i % 3) * 5;
+      const ry = 17 + (i % 2) * 7;
+      ctx.beginPath();
+      ctx.ellipse(cx + Math.cos(a) * d, cy + Math.sin(a) * d, rx, ry, a, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = 'rgba(220, 38, 38, 0.72)';
+    for (let i = 0; i < 14; i++) {
+      const a = i * 1.68;
+      const d = 30 + (i % 5) * 11;
+      const r = 3.5 + (i % 4) * 2.4;
+      ctx.beginPath();
+      ctx.ellipse(cx + Math.cos(a) * d, cy + Math.sin(a) * d, r * 1.45, r * 0.85, a, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  })();
+
+  const critDecalGeo = (() => {
+    const g = new THREE.PlaneGeometry(1.55, 1.55);
+    g.rotateX(-Math.PI / 2);
+    return g;
+  })();
+  const critCrossSlashGeo = new THREE.BoxGeometry(0.065, 0.065, 1.45);
+  const activeCritBursts = [];
+  const freeCritBursts = [];
+
+  function spawnCritBloodBurst({ x = 0, z = 0, dirX = 0, dirZ = 1 } = {}) {
+    // 1. Directional arterial crimson & dark-blood droplet spray!
+    const sprayX = x + dirX * 0.22;
+    const sprayZ = z + dirZ * 0.22;
+    spawnParticles({
+      x: sprayX,
+      y: 0.86,
+      z: sprayZ,
+      color: 0xdc2626,
+      count: 16,
+      speed: 7.8,
+      size: 0.17,
+      life: 0.44,
+      gravity: 16.5
+    });
+    spawnParticles({
+      x: sprayX,
+      y: 0.92,
+      z: sprayZ,
+      color: 0x7f1d1d,
+      count: 11,
+      speed: 6.2,
+      size: 0.20,
+      life: 0.50,
+      gravity: 17.5
+    });
+    spawnParticles({
+      x,
+      y: 0.95,
+      z,
+      color: 0xfef08a,
+      count: 6,
+      speed: 6.5,
+      size: 0.13,
+      life: 0.28,
+      gravity: 6.0
+    });
+
+    // 2. Pooled crossed crimson-gold X-execution flash at chest + cobblestone blood splatter stain!
+    let cb = freeCritBursts.pop();
+    if (!cb) {
+      const group = new THREE.Group();
+      const decalMat = new THREE.MeshBasicMaterial({
+        map: bloodSplatterTex,
+        transparent: true,
+        opacity: 0.82,
+        depthWrite: false
+      });
+      const slashMat = new THREE.MeshBasicMaterial({
+        color: 0xfef08a,
+        transparent: true,
+        opacity: 0.96,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        toneMapped: false
+      });
+      const crimsonMat = new THREE.MeshBasicMaterial({
+        color: 0xef4444,
+        transparent: true,
+        opacity: 0.92,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        toneMapped: false
+      });
+
+      const decal = new THREE.Mesh(critDecalGeo, decalMat);
+      decal.position.y = 0.024;
+
+      const crossWrap = new THREE.Group();
+      crossWrap.position.y = 0.88;
+      const barA = new THREE.Mesh(critCrossSlashGeo, slashMat);
+      barA.rotation.z = Math.PI * 0.25;
+      barA.rotation.x = Math.PI * 0.22;
+      const barB = new THREE.Mesh(critCrossSlashGeo, crimsonMat);
+      barB.scale.set(1.5, 1.5, 1.15);
+      barB.rotation.z = -Math.PI * 0.25;
+      barB.rotation.x = -Math.PI * 0.22;
+      crossWrap.add(barA, barB);
+
+      group.add(decal, crossWrap);
+      scene.add(group);
+      cb = { group, decal, crossWrap, decalMat, slashMat, crimsonMat, age: 0, duration: 1.15 };
+    }
+    cb.age = 0;
+    cb.duration = 1.15;
+    cb.group.position.set(x, 0, z);
+    cb.decal.rotation.y = Math.atan2(dirX, dirZ) + (Math.random() - 0.5) * 0.8;
+    const dScale = 0.85 + Math.random() * 0.35;
+    cb.decal.scale.setScalar(dScale);
+    cb.crossWrap.visible = true;
+    cb.crossWrap.scale.setScalar(0.55);
+    cb.crossWrap.rotation.y = Math.atan2(dirX, dirZ);
+    cb.decalMat.opacity = 0.82;
+    cb.slashMat.opacity = 0.96;
+    cb.crimsonMat.opacity = 0.92;
+    cb.group.visible = true;
+    activeCritBursts.push(cb);
   }
 
   // 🔥🌪️⚡💧 Pooled 3D Elemental Impacts (Tornado Vortex, Burning Magma Patch, Vertical Sky-Bolt) & Falling Meteors!
@@ -1836,19 +2198,21 @@ export function createArenaWorld(canvas) {
   function applyHubCameraPose(dt, snapNow = false) {
     const aspect = camera.aspect || 1;
     const isPortrait = aspect < 0.92;
-    const targetFov = isPortrait ? 52 : 44;
+    const targetFov = isPortrait ? 52 : 43;
     if (Math.abs(camera.fov - targetFov) > 0.05) {
       camera.fov = targetFov;
       camera.updateProjectionMatrix();
     }
-    const camZ = isPortrait ? 6.15 : HUB_CAM_POS.z;
-    const camY = isPortrait ? 2.32 : HUB_CAM_POS.y;
-    const lookY = isPortrait ? 0.36 : HUB_LOOK_TARGET.y;
+    // Frame full-height 3D Hero + Stone Pedestal cleanly in the open window between Left Roster Rail and Right Hero Card!
+    const stageShiftX = isPortrait ? 0 : 0.56 * Math.min(Math.max(aspect, 1.25), 2.22);
+    const camZ = isPortrait ? 6.35 : 5.68;
+    const camY = isPortrait ? 2.35 : 2.36;
+    const lookY = isPortrait ? 0.42 : 0.92;
 
-    const swayX = Math.sin(internalTime * 0.42) * 0.14;
-    const swayY = Math.sin(internalTime * 0.68) * 0.03;
-    const swayZ = Math.cos(internalTime * 0.42) * 0.06;
-    hubCamGoal.set(HUB_CAM_POS.x + swayX, camY + swayY, camZ + swayZ);
+    const swayX = Math.sin(internalTime * 0.42) * 0.10;
+    const swayY = Math.sin(internalTime * 0.68) * 0.025;
+    const swayZ = Math.cos(internalTime * 0.42) * 0.05;
+    hubCamGoal.set(stageShiftX + swayX, camY + swayY, camZ + swayZ);
 
     if (snapNow || !dt || dt <= 0) {
       camera.position.copy(hubCamGoal);
@@ -1856,7 +2220,7 @@ export function createArenaWorld(canvas) {
       const lerpFactor = 1 - Math.exp(-7.5 * Math.min(dt, 0.1));
       camera.position.lerp(hubCamGoal, lerpFactor);
     }
-    camera.lookAt(0, lookY, 0);
+    camera.lookAt(stageShiftX, lookY, 0);
 
     heroAuraLight.position.set(0, 2.85, 1.4);
     dirLight.position.set(8, 16, 12);
@@ -2240,32 +2604,44 @@ export function createArenaWorld(canvas) {
       d.mesh.scale.setScalar(sc);
     }
 
-    // Update 3D Water Prison Spheres (9-stage rise -> levitating bubble + droplets -> explosive splash burst!)
+    // Update 3D Water Prison Spheres (9-stage rise -> glossy Fresnel bubble + tendrils + droplets -> splash burst!)
+    if (activeWaterSpheres.length > 0) {
+      waterSwirlTex.offset.x = (waterSwirlTex.offset.x + safeDt * 0.52) % 1;
+      waterSwirlTex.offset.y = (waterSwirlTex.offset.y - safeDt * 0.34) % 1;
+    }
     for (let i = activeWaterSpheres.length - 1; i >= 0; i--) {
       const ws = activeWaterSpheres[i];
       ws.age += safeDt;
       if (ws.age >= ws.duration) {
-        // Frame 9 burst: explosive fountain of glossy water droplets & splash arcs!
+        // Frame 9 burst: explosive fountain of glossy water droplets & concentric splash ring!
+        spawnShockwaveRing({
+          x: ws.x,
+          y: 0.06,
+          z: ws.z,
+          radius: ws.radius * 0.92,
+          color: 0x38bdf8,
+          duration: 0.36
+        });
         spawnParticles({
           x: ws.x,
-          y: 1.45,
+          y: 1.48,
           z: ws.z,
           color: 0x38bdf8,
-          count: 22,
-          speed: 8.8,
-          size: 0.19,
-          life: 0.48,
+          count: 26,
+          speed: 9.2,
+          size: 0.20,
+          life: 0.50,
           gravity: 16.5
         });
         spawnParticles({
           x: ws.x,
-          y: 1.55,
+          y: 1.58,
           z: ws.z,
           color: 0xe0f2fe,
-          count: 14,
-          speed: 7.2,
+          count: 16,
+          speed: 7.6,
           size: 0.14,
-          life: 0.42,
+          life: 0.44,
           gravity: 15.0
         });
         ws.group.visible = false;
@@ -2278,28 +2654,54 @@ export function createArenaWorld(canvas) {
       const popScale = p < 0.20 ? 0.25 + 0.75 * (p / 0.20) : p > 0.92 ? 1 + (p - 0.92) * 2.2 : 1.0;
       const alphaFade = p > 0.92 ? (1 - p) / 0.08 : 1.0;
       const sphereR = ws.radius * 0.56 * popScale;
-      const wobble = 1 + Math.sin(ws.age * 14) * 0.035;
+      const wobble = 1 + Math.sin(ws.age * 13) * 0.032;
 
-      // Ground ripple & water stem connecting ground to bottom of sphere
-      const baseR = ws.radius * 0.58 * (0.6 + 0.4 * riseEase);
-      ws.baseGroup.scale.set(baseR, 0.5 + 0.75 * riseEase, baseR);
-      ws.baseGroup.rotation.y += safeDt * 3.2;
+      // Ground ripple & twisting water funnel stem connecting ground puddle to bottom of sphere
+      const baseR = ws.radius * 0.58 * (0.62 + 0.38 * riseEase);
+      ws.baseGroup.scale.set(baseR, 0.52 + 0.76 * riseEase, baseR);
+      ws.baseGroup.rotation.y += safeDt * 3.4;
 
-      // Levitating spherical bubble at y = 1.62
-      ws.bubbleGroup.position.y = 0.45 + 1.18 * riseEase + Math.sin(ws.age * 9) * 0.05;
+      // Levitating refractive spherical bubble at y = 1.62
+      ws.bubbleGroup.position.y = 0.45 + 1.18 * riseEase + Math.sin(ws.age * 8.5) * 0.048;
       ws.bubbleGroup.scale.set(sphereR * wobble, (sphereR / wobble) * 1.02, sphereR * wobble);
-      ws.ribbons.rotation.y += safeDt * 5.6;
-      ws.ribbons.rotation.z = Math.sin(ws.age * 4) * 0.18;
-      ws.dropletsGroup.rotation.y -= safeDt * 2.8;
+      ws.swirlSphere.rotation.y -= safeDt * 2.6;
+      ws.swirlSphere.rotation.x = Math.sin(ws.age * 3.2) * 0.22;
+      ws.ribbons.rotation.y += safeDt * 5.4;
+      ws.ribbons.rotation.z = Math.sin(ws.age * 4.2) * 0.16;
+      ws.dropletsGroup.rotation.y -= safeDt * 2.6;
       for (let d = 0; d < ws.droplets.length; d++) {
         const dr = ws.droplets[d];
-        dr.mesh.position.y = dr.baseY + Math.sin(ws.age * 7 + dr.phase) * 0.12;
+        dr.mesh.position.y = dr.baseY + Math.sin(ws.age * 7.2 + dr.phase) * 0.12;
       }
 
-      ws.deepWaterMat.opacity = 0.32 * alphaFade;
-      ws.shellMat.opacity = 0.38 * alphaFade;
-      ws.ribbonMat.opacity = 0.85 * alphaFade;
-      ws.specMat.opacity = 0.82 * alphaFade;
+      ws.bubbleSpriteMat.opacity = 0.96 * alphaFade;
+      ws.swirlShellMat.opacity = 0.48 * alphaFade;
+      ws.stemMat.opacity = 0.72 * alphaFade;
+      ws.ribbonMat.opacity = 0.88 * alphaFade;
+      ws.specMat.opacity = 0.92 * alphaFade;
+      ws.dropletSpriteMat.opacity = 0.94 * alphaFade;
+    }
+
+    // Update Critical Strike X-Execution Flash & Cobblestone Blood Splatter
+    for (let i = activeCritBursts.length - 1; i >= 0; i--) {
+      const cb = activeCritBursts[i];
+      cb.age += safeDt;
+      if (cb.age >= cb.duration) {
+        cb.group.visible = false;
+        activeCritBursts.splice(i, 1);
+        freeCritBursts.push(cb);
+        continue;
+      }
+      if (cb.age < 0.18) {
+        const sp = cb.age / 0.18;
+        cb.crossWrap.scale.setScalar(0.55 + sp * 0.85);
+        cb.slashMat.opacity = (1 - sp) * 0.98;
+        cb.crimsonMat.opacity = (1 - sp) * 0.94;
+      } else {
+        cb.crossWrap.visible = false;
+      }
+      const fade = cb.age > 0.55 ? 1 - (cb.age - 0.55) / (cb.duration - 0.55) : 1.0;
+      cb.decalMat.opacity = 0.82 * Math.max(0, fade);
     }
 
     // Update Elemental Impacts (Tornadoes, Fire Patches, Sky-Bolts & Meteors)
@@ -2441,6 +2843,11 @@ export function createArenaWorld(canvas) {
       ws.group.visible = false;
       freeWaterSpheres.push(ws);
     }
+    while (activeCritBursts.length > 0) {
+      const cb = activeCritBursts.pop();
+      cb.group.visible = false;
+      freeCritBursts.push(cb);
+    }
     while (activeElemVfx.length > 0) {
       const ev = activeElemVfx.pop();
       scene.remove(ev.group);
@@ -2476,6 +2883,7 @@ export function createArenaWorld(canvas) {
     spawnBoneShatter,
     spawnArmorBreakPiece,
     spawnWaterPrisonSphere,
+    spawnCritBloodBurst,
     spawnElementalImpact,
     spawnMeteorStrike,
     spawnDangerZone,

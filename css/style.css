@@ -444,21 +444,130 @@ img {
 }
 
 /* ==========================================================================
-   TAB 1: ⚔️ ГЕРОИ (3D Stage + HD Portrait Info Card + Mini-Banner Launch Dock)
+   TAB 1: ⚔️ ГЕРОИ (3-Column Native Game Layout: Left Portrait Rail + 3D Stage + Right Hero Card & Giant В БОЙ!)
    ========================================================================== */
 
+.gothic-card-clasp {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #fde093;
+  pointer-events: none;
+  z-index: 4;
+  box-shadow: 0 0 8px rgba(250, 204, 21, 0.35);
+}
+.gothic-card-clasp.tl {
+  top: -2px;
+  left: -2px;
+  border-right: none;
+  border-bottom: none;
+  border-top-left-radius: 5px;
+}
+.gothic-card-clasp.tr {
+  top: -2px;
+  right: -2px;
+  border-left: none;
+  border-bottom: none;
+  border-top-right-radius: 5px;
+}
+.gothic-card-clasp.bl {
+  bottom: -2px;
+  left: -2px;
+  border-right: none;
+  border-top: none;
+  border-bottom-left-radius: 5px;
+}
+.gothic-card-clasp.br {
+  bottom: -2px;
+  right: -2px;
+  border-left: none;
+  border-top: none;
+  border-bottom-right-radius: 5px;
+}
+
 .hub-panel-heroes {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: auto minmax(180px, 1fr) minmax(320px, 428px);
+  align-items: center;
+  gap: 14px;
+  height: 100%;
+  min-height: 0;
   pointer-events: none;
 }
 
-.hero-stage-area {
-  flex: 1 1 auto;
-  min-height: 155px;
+/* Column 1: Left Vertical 4-Slot Portrait Roster Rail */
+.hero-roster-rail {
+  pointer-events: auto;
   display: flex;
   flex-direction: column;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 8px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(26, 20, 38, 0.92) 0%, rgba(12, 10, 20, 0.96) 100%);
+  border: 1.5px solid rgba(229, 184, 92, 0.44);
+  box-shadow:
+    0 14px 32px rgba(0, 0, 0, 0.75),
+    inset 0 1px 0 rgba(255, 240, 195, 0.16);
+}
+
+.roster-portrait-slot {
+  position: relative;
+  width: 62px;
+  height: 62px;
+  padding: 2px;
+  border-radius: 11px;
+  overflow: hidden;
+  background: linear-gradient(135deg, rgba(84, 66, 38, 0.85), rgba(24, 19, 36, 0.95));
+  border: 1.5px solid rgba(229, 184, 92, 0.34);
+  opacity: 0.76;
+  cursor: pointer;
+  transition: transform 0.15s ease, opacity 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.roster-portrait-slot .stage-dot-portrait {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 8px;
+  display: block;
+}
+
+.roster-portrait-slot:hover:not(.is-locked-slot) {
+  opacity: 0.96;
+  transform: translateX(2px);
+  border-color: rgba(253, 224, 147, 0.78);
+}
+
+.roster-portrait-slot.is-active {
+  opacity: 1;
+  transform: scale(1.06);
+  background: linear-gradient(135deg, #fde093 0%, #b45309 50%, #fde093 100%);
+  border: 2px solid #fffbeb;
+  box-shadow:
+    0 0 18px rgba(245, 158, 11, 0.72),
+    0 6px 16px rgba(0, 0, 0, 0.75);
+}
+
+.roster-portrait-slot.is-locked-slot {
+  background: rgba(15, 13, 24, 0.88);
+  border: 1.5px dashed rgba(148, 163, 184, 0.32);
+  opacity: 0.62;
+}
+
+.roster-portrait-slot.is-locked-slot:hover {
+  opacity: 0.88;
+  border-color: rgba(229, 184, 92, 0.48);
+}
+
+/* Column 2: Center-Left 3D Hero Pedestal Stage */
+.hero-stage-area {
+  height: 100%;
+  min-height: 140px;
+  display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
@@ -466,34 +575,32 @@ img {
 }
 
 .hero-stage-controls {
-  width: min(650px, 94vw);
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding: 0 6px;
   pointer-events: none;
-  margin: auto 0;
 }
 
 .stage-center-window {
   flex: 1 1 auto;
-  min-height: 155px;
+  min-height: 140px;
   pointer-events: none;
 }
 
 .stage-carousel-btn {
   pointer-events: auto;
-  width: 52px;
-  height: 52px;
+  width: 46px;
+  height: 46px;
   border-radius: 50%;
-  background: radial-gradient(circle at 50% 35%, rgba(34, 27, 52, 0.85) 0%, rgba(12, 10, 20, 0.92) 100%);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1.5px solid rgba(229, 184, 92, 0.56);
+  background: radial-gradient(circle at 50% 35%, rgba(38, 30, 58, 0.90) 0%, rgba(12, 10, 20, 0.95) 100%);
+  border: 1.5px solid rgba(229, 184, 92, 0.58);
   box-shadow:
-    0 8px 24px rgba(0, 0, 0, 0.65),
+    0 8px 22px rgba(0, 0, 0, 0.68),
     inset 0 1px 0 rgba(255, 240, 195, 0.24);
   color: var(--gold-bright);
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 600;
   line-height: 1;
   padding-bottom: 3px;
@@ -504,10 +611,10 @@ img {
 }
 
 .stage-carousel-btn:hover {
-  transform: scale(1.09);
+  transform: scale(1.08);
   border-color: var(--gold-bright);
   box-shadow:
-    0 0 22px rgba(229, 184, 92, 0.45),
+    0 0 20px rgba(229, 184, 92, 0.45),
     0 10px 26px rgba(0, 0, 0, 0.75);
 }
 
@@ -515,93 +622,44 @@ img {
   transform: scale(0.95);
 }
 
-/* 3 Class Portrait Medallion Dots */
-.stage-emblem-dots {
+/* Column 3: Right Hero Info Card + Giant Beveled Crimson-Gold «⚔️ В БОЙ!» Plaque */
+.hero-right-dock {
   pointer-events: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  padding: 5px 11px;
-  margin-bottom: 8px;
-  border-radius: 999px;
-  background: rgba(11, 9, 19, 0.76);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(229, 184, 92, 0.32);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.6);
-}
-
-.stage-emblem-dot {
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  border-radius: 50%;
-  overflow: hidden;
-  background: #141122;
-  border: 1.5px solid rgba(255, 255, 255, 0.2);
-  opacity: 0.62;
-  transition: transform 0.16s ease, opacity 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
-}
-
-.stage-dot-portrait {
   width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.stage-emblem-dot:hover {
-  opacity: 0.95;
-  transform: translateY(-1px);
-  border-color: rgba(229, 184, 92, 0.65);
-}
-
-.stage-emblem-dot.is-active {
-  opacity: 1;
-  transform: scale(1.14);
-  border-color: var(--gold-bright);
-  box-shadow: 0 0 14px rgba(229, 184, 92, 0.6);
-}
-
-/* Lower Showcase Docks */
-.hero-showcase-docks {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 18px;
-  width: 100%;
-  pointer-events: none;
-}
-
-/* --- Bottom-Left Hero Info Card --- */
-.hero-info-card {
-  --hero-accent: #ef4444;
-  --hero-glow: rgba(239, 68, 68, 0.36);
-  pointer-events: auto;
-  width: min(418px, 100%);
-  padding: 14px 16px;
-  border-radius: 16px;
-  background: linear-gradient(165deg, rgba(24, 19, 38, 0.90) 0%, rgba(11, 9, 19, 0.94) 100%);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1.5px solid rgba(229, 184, 92, 0.42);
-  box-shadow:
-    0 16px 36px rgba(0, 0, 0, 0.72),
-    0 0 26px var(--hero-glow),
-    inset 0 1px 0 rgba(255, 240, 195, 0.14);
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 10px;
+  min-height: 0;
+}
+
+.hero-info-card {
+  --hero-accent: #ef4444;
+  --hero-glow: rgba(239, 68, 68, 0.28);
+  position: relative;
+  pointer-events: auto;
+  width: 100%;
+  padding: 13px 15px;
+  border-radius: 14px;
+  background: linear-gradient(170deg, rgba(28, 22, 42, 0.94) 0%, rgba(12, 10, 21, 0.97) 100%);
+  border: 1.5px solid rgba(229, 184, 92, 0.56);
+  box-shadow:
+    0 16px 38px rgba(0, 0, 0, 0.78),
+    0 0 24px var(--hero-glow),
+    inset 0 1px 0 rgba(255, 240, 195, 0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .hero-info-card.hero-switch-pulse {
-  animation: heroCardRefresh 0.24s ease-out;
+  animation: heroCardRefresh 0.22s ease-out;
 }
 
 @keyframes heroCardRefresh {
   0% {
-    transform: translateY(4px);
-    opacity: 0.82;
+    transform: translateY(3px);
+    opacity: 0.84;
   }
   100% {
     transform: translateY(0);
@@ -612,29 +670,28 @@ img {
 .hero-card-header {
   display: flex;
   align-items: center;
-  gap: 13px;
+  gap: 12px;
 }
 
-/* Ornate Golden-Gothic Beveled Portrait Frame + Animated Corner Aura */
 .hero-portrait-frame {
-  --portrait-glow: rgba(239, 68, 68, 0.45);
+  --portrait-glow: rgba(239, 68, 68, 0.42);
   --portrait-border: #f87171;
   position: relative;
-  width: 68px;
-  height: 68px;
-  border-radius: 13px;
-  padding: 3px;
+  width: 60px;
+  height: 60px;
+  border-radius: 12px;
+  padding: 2.5px;
   background: linear-gradient(135deg, #fde093 0%, #9f7325 50%, #fde093 100%);
   box-shadow:
-    0 6px 18px rgba(0, 0, 0, 0.75),
-    0 0 20px var(--portrait-glow);
+    0 6px 16px rgba(0, 0, 0, 0.75),
+    0 0 16px var(--portrait-glow);
   flex-shrink: 0;
 }
 
 .hero-portrait-aura {
   position: absolute;
-  inset: -4px;
-  border-radius: 16px;
+  inset: -3px;
+  border-radius: 14px;
   background: conic-gradient(
     from 0deg,
     transparent 0deg,
@@ -644,26 +701,17 @@ img {
     var(--portrait-border) 290deg,
     transparent 360deg
   );
-  opacity: 0.65;
-  filter: blur(5px);
+  opacity: 0.58;
+  filter: blur(4px);
   z-index: 0;
   animation: portraitAuraPulse 4s linear infinite;
   pointer-events: none;
 }
 
 @keyframes portraitAuraPulse {
-  0% {
-    opacity: 0.45;
-    transform: scale(0.97);
-  }
-  50% {
-    opacity: 0.82;
-    transform: scale(1.03);
-  }
-  100% {
-    opacity: 0.45;
-    transform: scale(0.97);
-  }
+  0% { opacity: 0.42; transform: scale(0.97); }
+  50% { opacity: 0.78; transform: scale(1.03); }
+  100% { opacity: 0.42; transform: scale(0.97); }
 }
 
 .hero-portrait-img {
@@ -672,52 +720,23 @@ img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 10px;
+  border-radius: 9px;
   display: block;
   border: 1px solid rgba(15, 11, 24, 0.9);
-  box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.65);
 }
 
 .portrait-corner {
   position: absolute;
   z-index: 2;
-  width: 9px;
-  height: 9px;
+  width: 8px;
+  height: 8px;
   border: 2px solid #fff7d6;
   pointer-events: none;
 }
-
-.portrait-corner.tl {
-  top: -2px;
-  left: -2px;
-  border-right: none;
-  border-bottom: none;
-  border-top-left-radius: 4px;
-}
-
-.portrait-corner.tr {
-  top: -2px;
-  right: -2px;
-  border-left: none;
-  border-bottom: none;
-  border-top-right-radius: 4px;
-}
-
-.portrait-corner.bl {
-  bottom: -2px;
-  left: -2px;
-  border-right: none;
-  border-top: none;
-  border-bottom-left-radius: 4px;
-}
-
-.portrait-corner.br {
-  bottom: -2px;
-  right: -2px;
-  border-left: none;
-  border-top: none;
-  border-bottom-right-radius: 4px;
-}
+.portrait-corner.tl { top: -2px; left: -2px; border-right: none; border-bottom: none; border-top-left-radius: 4px; }
+.portrait-corner.tr { top: -2px; right: -2px; border-left: none; border-bottom: none; border-top-right-radius: 4px; }
+.portrait-corner.bl { bottom: -2px; left: -2px; border-right: none; border-top: none; border-bottom-left-radius: 4px; }
+.portrait-corner.br { bottom: -2px; right: -2px; border-left: none; border-top: none; border-bottom-right-radius: 4px; }
 
 .hero-title-wrap {
   display: flex;
@@ -725,49 +744,81 @@ img {
   align-items: flex-start;
   gap: 5px;
   min-width: 0;
+  flex: 1 1 auto;
 }
 
 .hero-class-name {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 21px;
+  font-size: 20px;
   font-weight: 900;
   letter-spacing: 0.02em;
-  color: var(--gold-bright);
+  color: #fff6dc;
   line-height: 1.1;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.85);
+}
+
+.hero-role-pills-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
 }
 
 .hero-role-pill {
   display: inline-block;
-  padding: 3px 9px;
+  padding: 2.5px 8px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
-  letter-spacing: 0.02em;
-  background: rgba(229, 184, 92, 0.14);
+  background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(229, 184, 92, 0.36);
-  color: #fef3c7;
+  color: #e8dfca;
+  max-width: 215px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.btn-change-chapter {
+  padding: 2.5px 9px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(84, 52, 16, 0.72), rgba(44, 28, 10, 0.85));
+  border: 1px solid rgba(253, 224, 147, 0.62);
+  font-size: 10.5px;
+  font-weight: 800;
+  color: var(--gold-bright);
+  white-space: nowrap;
+  transition: filter 0.14s ease, transform 0.12s ease;
+}
+
+.btn-change-chapter:hover {
+  filter: brightness(1.16);
+  transform: translateY(-1px);
 }
 
 .hero-lore-line {
   margin: 0;
-  font-size: 12px;
-  line-height: 1.36;
+  font-size: 11.8px;
+  line-height: 1.34;
   color: var(--text-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 /* Stylized RPG 10-Segment Beveled Crystal Rune Bars */
 .hero-stats-bars {
   display: flex;
   flex-direction: column;
-  gap: 7px;
-  padding: 4px 0 2px;
+  gap: 5px;
+  padding: 2px 0;
 }
 
 .stat-bar-row {
   display: grid;
-  grid-template-columns: 94px 1fr 44px;
+  grid-template-columns: 88px 1fr 42px;
   align-items: center;
   gap: 8px;
   font-size: 11.5px;
@@ -797,35 +848,34 @@ img {
   gap: 3px;
   padding: 2px 3px;
   border-radius: 6px;
-  background: rgba(6, 5, 12, 0.78);
+  background: rgba(6, 5, 12, 0.82);
   border: 1px solid rgba(255, 255, 255, 0.10);
   box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.85);
 }
 
 .rune-seg {
-  height: 9px;
+  height: 8px;
   border-radius: 2px;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.05);
-  transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.16s ease;
 }
 
 .gauge-hp .rune-seg.is-filled {
-  background: linear-gradient(180deg, #fca5a5 0%, #ef4444 45%, #991b1b 100%);
+  background: linear-gradient(180deg, #fde047 0%, #ef4444 52%, #991b1b 100%);
   border-color: rgba(254, 202, 202, 0.55);
-  box-shadow: 0 0 7px rgba(239, 68, 68, 0.55);
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.5);
 }
 
 .gauge-spd .rune-seg.is-filled {
   background: linear-gradient(180deg, #fef08a 0%, #f59e0b 48%, #92400e 100%);
   border-color: rgba(254, 240, 138, 0.6);
-  box-shadow: 0 0 7px rgba(245, 158, 11, 0.5);
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.45);
 }
 
 .gauge-blk .rune-seg.is-filled {
   background: linear-gradient(180deg, #e9d5ff 0%, #a855f7 48%, #581c87 100%);
   border-color: rgba(233, 213, 255, 0.6);
-  box-shadow: 0 0 7px rgba(168, 85, 247, 0.55);
+  box-shadow: 0 0 6px rgba(168, 85, 247, 0.5);
 }
 
 .rune-seg.is-tip {
@@ -835,27 +885,26 @@ img {
 .stat-bar-val {
   text-align: right;
   font-weight: 800;
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--gold-bright);
   font-variant-numeric: tabular-nums;
 }
 
-/* Equipped Weapon Card (Custom Vector Weapon Art) */
+/* Equipped Weapon Inset Box inside Hero Card */
 .hero-weapon-chip {
   width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 8px 11px;
-  border-radius: 11px;
-  background: linear-gradient(90deg, rgba(38, 29, 18, 0.56) 0%, rgba(22, 18, 36, 0.72) 100%);
-  border: 1px solid rgba(229, 184, 92, 0.36);
-  transition: background 0.16s ease, border-color 0.16s ease, transform 0.12s ease;
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: linear-gradient(90deg, rgba(16, 13, 26, 0.90) 0%, rgba(28, 22, 42, 0.88) 100%);
+  border: 1px solid rgba(229, 184, 92, 0.42);
+  transition: border-color 0.16s ease, transform 0.12s ease;
 }
 
 .hero-weapon-chip:hover {
-  background: linear-gradient(90deg, rgba(64, 46, 20, 0.75) 0%, rgba(30, 24, 48, 0.85) 100%);
   border-color: var(--gold-bright);
   transform: translateY(-1px);
 }
@@ -863,15 +912,15 @@ img {
 .hero-weapon-chip-left {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
   min-width: 0;
 }
 
 .hero-weapon-chip-icon {
-  width: 38px;
-  height: 38px;
-  border-radius: 9px;
-  background: radial-gradient(circle, rgba(229, 184, 92, 0.18) 0%, rgba(11, 9, 18, 0.85) 100%);
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: radial-gradient(circle, rgba(229, 184, 92, 0.20) 0%, rgba(11, 9, 18, 0.88) 100%);
   border: 1px solid rgba(229, 184, 92, 0.45);
   display: inline-flex;
   align-items: center;
@@ -880,26 +929,26 @@ img {
 }
 
 .hero-weapon-chip-icon svg {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
 }
 
 .hero-weapon-chip-text {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
+  gap: 1px;
   min-width: 0;
 }
 
 .hero-weapon-chip-name {
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 800;
   color: var(--text-main);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 205px;
+  max-width: 185px;
 }
 
 .hero-weapon-chip-lvl {
@@ -912,8 +961,12 @@ img {
 .hero-weapon-chip-cta {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(64, 48, 24, 0.72), rgba(32, 24, 14, 0.90));
+  border: 1px solid rgba(229, 184, 92, 0.55);
+  font-size: 11.5px;
   font-weight: 800;
   color: var(--gold-bright);
   white-space: nowrap;
@@ -927,228 +980,84 @@ img {
   box-shadow: 0 0 8px rgba(251, 191, 36, 0.95);
 }
 
-/* --- Bottom-Right Launch Dock (Selected Chapter Mini-Banner + Warning + Battle Button) --- */
-.hero-launch-dock {
-  pointer-events: auto;
-  width: min(398px, 100%);
-  padding: 13px 15px;
-  border-radius: 16px;
-  background: linear-gradient(165deg, rgba(24, 19, 38, 0.90) 0%, rgba(11, 9, 19, 0.94) 100%);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1.5px solid rgba(229, 184, 92, 0.42);
-  box-shadow:
-    0 16px 36px rgba(0, 0, 0, 0.72),
-    inset 0 1px 0 rgba(255, 240, 195, 0.12);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.chapter-mini-card {
-  position: relative;
-  border-radius: 12px;
-  overflow: hidden;
-  border: 1px solid rgba(229, 184, 92, 0.42);
-  min-height: 94px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  cursor: pointer;
-  transition: border-color 0.16s ease, transform 0.14s ease, box-shadow 0.16s ease;
-}
-
-.chapter-mini-card:hover {
-  border-color: var(--gold-bright);
-  transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.65);
-}
-
-.chapter-mini-thumb-wrap {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-}
-
-.chapter-mini-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center 35%;
-  display: block;
-  transition: transform 0.35s ease;
-}
-
-.chapter-mini-card:hover .chapter-mini-img {
-  transform: scale(1.04);
-}
-
-.chapter-mini-vignette {
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(90deg, rgba(10, 8, 18, 0.92) 0%, rgba(10, 8, 18, 0.65) 58%, rgba(10, 8, 18, 0.80) 100%),
-    linear-gradient(180deg, rgba(10, 8, 18, 0.35) 0%, rgba(10, 8, 18, 0.88) 100%);
-}
-
-.chapter-mini-content {
-  position: relative;
-  z-index: 1;
-  padding: 9px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.chapter-mini-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.chapter-mini-act-badge {
-  padding: 2px 8px;
-  border-radius: 6px;
-  background: rgba(229, 184, 92, 0.2);
-  border: 1px solid rgba(229, 184, 92, 0.48);
-  font-size: 10.5px;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--gold-bright);
-}
-
-.chapter-mini-feature {
-  padding: 2px 8px;
-  border-radius: 6px;
-  background: rgba(15, 12, 24, 0.78);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  font-size: 10.5px;
-  font-weight: 800;
-  color: #e2e8f0;
-}
-
-.chapter-mini-feature.is-boss {
-  background: rgba(153, 27, 27, 0.75);
-  border-color: #f87171;
-  color: #fecaca;
-}
-
-.chapter-mini-feature.is-weapon {
-  background: rgba(109, 40, 217, 0.72);
-  border-color: #fde047;
-  color: #fef08a;
-}
-
-.chapter-mini-title {
-  font-family: var(--font-display);
-  font-size: 15.5px;
-  font-weight: 900;
-  color: #fff8e7;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.95);
-  line-height: 1.2;
-}
-
-.chapter-mini-bottom {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.btn-change-chapter {
-  padding: 4px 10px;
-  border-radius: 7px;
-  background: rgba(229, 184, 92, 0.18);
-  border: 1px solid rgba(229, 184, 92, 0.5);
-  font-size: 11.5px;
-  font-weight: 800;
-  color: var(--gold-bright);
-  transition: background 0.14s ease, border-color 0.14s ease;
-}
-
-.btn-change-chapter:hover {
-  background: rgba(229, 184, 92, 0.32);
-  border-color: #fff3c4;
-}
-
 .launch-weapon-warn {
   width: 100%;
-  padding: 6px 10px;
+  padding: 5px 10px;
   border-radius: 8px;
-  background: linear-gradient(90deg, rgba(146, 64, 14, 0.42) 0%, rgba(127, 29, 29, 0.48) 100%);
-  border: 1px solid rgba(251, 191, 36, 0.65);
+  background: linear-gradient(90deg, rgba(146, 64, 14, 0.48) 0%, rgba(127, 29, 29, 0.54) 100%);
+  border: 1px solid rgba(251, 191, 36, 0.68);
   color: #fde68a;
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 800;
   text-align: center;
-  transition: filter 0.14s ease;
 }
 
-.launch-weapon-warn:hover {
-  filter: brightness(1.15);
-}
-
+/* Giant Beveled Crimson-Gold «⚔️ В БОЙ!» Plaque Button (Shared across Герои, Арсенал, Мастерская) */
+.gothic-plaque-battle-btn,
 .launch-battle-btn {
   position: relative;
   overflow: hidden;
-  width: 100%;
-  padding: 13px 18px;
-  border-radius: 12px;
-  background: linear-gradient(180deg, #e11d48 0%, #b91c1c 52%, #7f1d1d 100%);
-  border: 2px solid var(--gold-bright);
+  border-radius: 13px;
+  background: linear-gradient(180deg, #ef4444 0%, #b91c1c 48%, #7f1d1d 100%);
+  border: 2px solid #fde093;
   box-shadow:
-    0 0 28px rgba(220, 38, 38, 0.58),
-    0 8px 20px rgba(0, 0, 0, 0.72),
-    inset 0 1px 0 rgba(255, 244, 204, 0.5);
+    0 0 26px rgba(220, 38, 38, 0.55),
+    0 8px 20px rgba(0, 0, 0, 0.78),
+    inset 0 2px 0 rgba(255, 248, 220, 0.55),
+    inset 0 -3px 6px rgba(69, 10, 10, 0.85);
+  transition: transform 0.14s ease, filter 0.14s ease, box-shadow 0.14s ease;
+}
+
+.launch-battle-btn {
+  width: 100%;
+  padding: 12px 18px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 2px;
-  transition: transform 0.14s ease, filter 0.14s ease, box-shadow 0.14s ease;
 }
 
-.launch-battle-btn::after {
+.launch-battle-btn::after,
+.subpanel-battle-btn::after {
   content: '';
   position: absolute;
   top: 0;
   left: -120%;
   width: 65%;
   height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 248, 220, 0.24), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255, 248, 220, 0.25), transparent);
   transform: skewX(-24deg);
   animation: battleSheen 3.8s ease-in-out infinite;
   pointer-events: none;
 }
 
 @keyframes battleSheen {
-  0%, 62% {
-    left: -120%;
-  }
-  100% {
-    left: 165%;
-  }
+  0%, 62% { left: -120%; }
+  100% { left: 165%; }
 }
 
-.launch-battle-btn:hover {
+.launch-battle-btn:hover,
+.subpanel-battle-btn:hover {
   filter: brightness(1.1);
   transform: translateY(-2px);
   box-shadow:
-    0 0 36px rgba(239, 68, 68, 0.78),
-    0 10px 24px rgba(0, 0, 0, 0.78);
+    0 0 34px rgba(239, 68, 68, 0.78),
+    0 10px 24px rgba(0, 0, 0, 0.8);
 }
 
-.launch-battle-btn:active {
+.launch-battle-btn:active,
+.subpanel-battle-btn:active {
   transform: translateY(1px) scale(0.99);
 }
 
 .launch-main-text {
   font-family: var(--font-display);
-  font-size: 22px;
+  font-size: 23px;
   font-weight: 900;
-  letter-spacing: 0.09em;
-  color: #fff9e6;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.85);
+  letter-spacing: 0.08em;
+  color: #fff9eb;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9);
 }
 
 .launch-sub-text {
@@ -1159,55 +1068,50 @@ img {
 }
 
 /* ==========================================================================
-   TAB 2: 🗺️ ПОХОД — ILLUSTRATED 25-CHAPTER CAMPAIGN SCREEN (5 Acts × 5 Chapters)
+   TAB 2: 📖 ПОХОД — SINGLE-SCREEN PANORAMIC 25-CHAPTER CAMPAIGN MAP
    ========================================================================== */
 
 .hub-panel-sub {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 4px 0 12px;
+  padding: 2px 0 6px;
+  min-height: 0;
   pointer-events: auto;
 }
 
 .hub-subpanel-card {
   width: 100%;
-  padding: 16px 20px;
+  max-height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 13px 18px;
   border-radius: 16px;
-  background: linear-gradient(180deg, rgba(20, 16, 32, 0.93) 0%, rgba(11, 9, 19, 0.96) 100%);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--gold-border);
+  background: linear-gradient(180deg, rgba(22, 17, 34, 0.95) 0%, rgba(11, 9, 19, 0.98) 100%);
+  border: 1.5px solid rgba(229, 184, 92, 0.48);
   box-shadow:
-    0 20px 50px rgba(0, 0, 0, 0.78),
-    inset 0 1px 0 rgba(255, 240, 195, 0.14);
+    0 20px 50px rgba(0, 0, 0, 0.82),
+    inset 0 1px 0 rgba(255, 240, 195, 0.16);
   display: flex;
   flex-direction: column;
-  gap: 13px;
+  gap: 10px;
   animation: subpanelIn 0.18s ease-out;
 }
 
 @keyframes subpanelIn {
-  from {
-    opacity: 0;
-    transform: translateY(8px) scale(0.99);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
+  from { opacity: 0; transform: translateY(6px) scale(0.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .campaign-subpanel {
-  max-width: 1120px;
+  max-width: 1140px;
 }
 
 .campaign-header-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
+  gap: 10px;
 }
 
 /* 5 Act Selector Bar */
@@ -1215,16 +1119,17 @@ img {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 6px;
-  padding: 5px;
-  border-radius: 12px;
-  background: rgba(7, 6, 13, 0.72);
+  padding: 4px;
+  border-radius: 11px;
+  background: rgba(7, 6, 13, 0.76);
   border: 1px solid rgba(255, 255, 255, 0.09);
+  flex-shrink: 0;
 }
 
 .campaign-act-tab {
-  padding: 8px 10px;
-  border-radius: 9px;
-  font-size: 12px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  font-size: 11.5px;
   font-weight: 800;
   color: var(--text-muted);
   border: 1px solid transparent;
@@ -1233,7 +1138,7 @@ img {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 .campaign-act-tab:hover:not(.is-active) {
@@ -1242,44 +1147,44 @@ img {
 }
 
 .campaign-act-tab.is-active {
-  background: linear-gradient(180deg, rgba(153, 27, 27, 0.58) 0%, rgba(56, 36, 16, 0.82) 100%);
+  background: linear-gradient(180deg, rgba(153, 27, 27, 0.62) 0%, rgba(56, 36, 16, 0.85) 100%);
   border-color: var(--gold-bright);
   color: var(--gold-bright);
-  box-shadow: 0 0 14px rgba(229, 184, 92, 0.25);
+  box-shadow: 0 0 14px rgba(229, 184, 92, 0.28);
 }
 
 .campaign-act-tab.is-locked:not(.is-active) {
-  opacity: 0.52;
+  opacity: 0.54;
 }
 
-/* Center Featured Chapter Showcase Stage */
+/* Center Panoramic Chapter Showcase Stage */
 .campaign-showcase-stage {
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) 48px;
+  grid-template-columns: 42px minmax(0, 1fr) 42px;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .campaign-nav-arrow {
-  width: 48px;
-  height: 68px;
-  border-radius: 12px;
-  background: linear-gradient(180deg, rgba(34, 27, 52, 0.88) 0%, rgba(14, 11, 24, 0.94) 100%);
-  border: 1.5px solid rgba(229, 184, 92, 0.45);
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(38, 30, 58, 0.90) 0%, rgba(14, 11, 24, 0.95) 100%);
+  border: 1.5px solid rgba(229, 184, 92, 0.52);
   color: var(--gold-bright);
-  font-size: 32px;
+  font-size: 26px;
   font-weight: 700;
   line-height: 1;
+  padding-bottom: 2px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
+  transition: transform 0.14s ease, border-color 0.14s ease;
 }
 
 .campaign-nav-arrow:hover:not(:disabled) {
-  transform: scale(1.06);
+  transform: scale(1.07);
   border-color: var(--gold-bright);
-  box-shadow: 0 0 18px rgba(229, 184, 92, 0.36);
 }
 
 .campaign-nav-arrow:disabled {
@@ -1287,56 +1192,56 @@ img {
 }
 
 .campaign-showcase-card {
-  border-radius: 15px;
+  border-radius: 14px;
   overflow: hidden;
-  background: linear-gradient(180deg, rgba(25, 20, 38, 0.96) 0%, rgba(13, 11, 22, 0.98) 100%);
-  border: 1.5px solid rgba(229, 184, 92, 0.42);
-  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.72);
-  display: flex;
-  flex-direction: column;
+  background: #0d0b16;
+  border: 1.5px solid rgba(229, 184, 92, 0.46);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.74);
 }
 
 .campaign-showcase-card.is-boss-chapter {
   border-color: #f87171;
-  box-shadow:
-    0 14px 38px rgba(0, 0, 0, 0.78),
-    0 0 26px rgba(220, 38, 38, 0.28);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.78), 0 0 22px rgba(220, 38, 38, 0.28);
 }
 
-/* Panoramic Banner */
+/* Panoramic Banner with Integrated Bottom Gradient Overlay (Matches Reference Top-Right!) */
 .campaign-banner-wrap {
   position: relative;
   width: 100%;
-  height: clamp(148px, 23vh, 215px);
+  min-height: clamp(195px, 34vh, 278px);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
   overflow: hidden;
   background: #09070f;
 }
 
 .campaign-banner-img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center 36%;
+  object-position: center 30%;
   display: block;
 }
 
 .campaign-showcase-card.is-locked-chapter .campaign-banner-img {
-  filter: grayscale(0.68) brightness(0.48);
+  filter: grayscale(0.68) brightness(0.45);
 }
 
 .campaign-banner-vignette {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at 50% 35%, rgba(10, 8, 18, 0.05) 35%, rgba(10, 8, 18, 0.72) 100%),
-    linear-gradient(180deg, rgba(10, 8, 18, 0.42) 0%, rgba(10, 8, 18, 0.1) 45%, rgba(13, 11, 22, 0.98) 100%);
+    linear-gradient(180deg, rgba(10, 8, 18, 0.45) 0%, rgba(10, 8, 18, 0.12) 32%, rgba(11, 9, 19, 0.88) 68%, rgba(11, 9, 19, 0.97) 100%);
   pointer-events: none;
 }
 
 .campaign-banner-badges-left {
   position: absolute;
-  top: 11px;
-  left: 13px;
+  top: 10px;
+  left: 12px;
   z-index: 2;
   display: flex;
   align-items: center;
@@ -1345,57 +1250,50 @@ img {
 }
 
 .campaign-meta-pill {
-  padding: 4px 10px;
+  padding: 3.5px 10px;
   border-radius: 999px;
-  background: rgba(11, 9, 19, 0.82);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  border: 1px solid rgba(229, 184, 92, 0.45);
+  background: rgba(11, 9, 19, 0.85);
+  border: 1px solid rgba(229, 184, 92, 0.48);
   font-size: 11px;
   font-weight: 800;
-  letter-spacing: 0.05em;
   color: var(--gold-bright);
 }
 
 .campaign-special-badge {
   position: absolute;
-  top: 11px;
-  right: 13px;
+  top: 10px;
+  right: 12px;
   z-index: 2;
-  padding: 5px 12px;
+  padding: 4px 11px;
   border-radius: 999px;
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 900;
-  letter-spacing: 0.05em;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.65);
+  letter-spacing: 0.04em;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.65);
 }
 
 .campaign-special-badge.is-boss {
   background: linear-gradient(90deg, rgba(153, 27, 27, 0.94), rgba(88, 14, 22, 0.96));
   border: 1.5px solid #fca5a5;
   color: #fef2f2;
-  box-shadow: 0 0 18px rgba(239, 68, 68, 0.55);
 }
 
 .campaign-special-badge.is-weapon {
   background: linear-gradient(90deg, rgba(91, 33, 182, 0.94), rgba(66, 42, 12, 0.95));
   border: 1.5px solid var(--gold-bright);
   color: #fef9c3;
-  box-shadow: 0 0 18px rgba(250, 204, 21, 0.48);
 }
 
 .campaign-lock-overlay {
   position: absolute;
   inset: 0;
-  z-index: 3;
-  background: rgba(8, 6, 14, 0.62);
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
+  z-index: 4;
+  background: rgba(8, 6, 14, 0.68);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 4px;
   text-align: center;
   padding: 12px;
 }
@@ -1413,71 +1311,83 @@ img {
   color: #d6cfe6;
 }
 
-/* Showcase Body */
+/* Integrated Bottom Content Bar inside Panoramic Banner */
 .campaign-card-body {
-  padding: 12px 18px 15px;
+  position: relative;
+  z-index: 3;
+  padding: 44px 16px 13px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.campaign-body-left {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 5px;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .campaign-chapter-title {
   margin: 0;
   font-family: var(--font-display);
-  font-size: clamp(18px, 2vw, 24px);
+  font-size: clamp(17px, 2vw, 23px);
   font-weight: 900;
-  color: var(--gold-bright);
-  letter-spacing: 0.02em;
+  color: #fff6dc;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.95);
 }
 
 .campaign-chapter-lore {
   margin: 0;
-  font-size: 13px;
-  line-height: 1.42;
-  color: #d4cce5;
+  font-size: 12.2px;
+  line-height: 1.35;
+  color: #dad3eb;
 }
 
 .campaign-threats-wrap {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
+  margin-top: 2px;
 }
 
 .campaign-threats-label {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 800;
-  letter-spacing: 0.08em;
-  color: var(--text-muted);
+  color: var(--gold);
+  margin-right: 2px;
 }
 
 .campaign-threats-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 5px;
 }
 
 .threat-pill {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  font-size: 11.5px;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(16, 13, 26, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  font-size: 11px;
 }
 
 .threat-pill.is-boss-threat {
-  background: rgba(153, 27, 27, 0.32);
+  background: rgba(153, 27, 27, 0.45);
   border-color: rgba(248, 113, 113, 0.65);
 }
 
 .threat-dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   flex-shrink: 0;
-  box-shadow: 0 0 6px currentColor;
 }
 
 .threat-name {
@@ -1487,76 +1397,71 @@ img {
 
 .threat-role {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 10.5px;
 }
 
 .threat-role::before {
-  content: '• ';
-  opacity: 0.6;
+  content: '— ';
+  opacity: 0.65;
 }
 
 .campaign-action-row {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding-top: 6px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .campaign-wpn-check {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 13px;
-  border-radius: 10px;
-  font-size: 12.5px;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 11px;
   font-weight: 800;
-  transition: filter 0.14s ease, transform 0.12s ease;
-}
-
-.campaign-wpn-check:hover {
-  filter: brightness(1.12);
-  transform: translateY(-1px);
 }
 
 .campaign-wpn-check.is-ready {
-  background: rgba(16, 185, 129, 0.16);
-  border: 1px solid rgba(52, 211, 153, 0.62);
+  background: rgba(16, 185, 129, 0.18);
+  border: 1px solid rgba(52, 211, 153, 0.58);
   color: #a7f3d0;
 }
 
 .campaign-wpn-check.is-warn {
-  background: rgba(180, 83, 9, 0.28);
+  background: rgba(180, 83, 9, 0.34);
   border: 1px solid rgba(251, 191, 36, 0.72);
   color: #fde68a;
 }
 
 .campaign-wpn-check-icon {
-  width: 24px;
-  height: 24px;
+  width: 18px;
+  height: 18px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 
 .mini-check-wpn-svg {
-  width: 24px;
-  height: 24px;
+  width: 18px;
+  height: 18px;
 }
 
 .campaign-start-btn {
-  padding: 11px 28px;
-  border-radius: 11px;
-  background: linear-gradient(180deg, #e11d48 0%, #b91c1c 55%, #7f1d1d 100%);
+  padding: 10px 24px;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #ef4444 0%, #b91c1c 52%, #7f1d1d 100%);
   border: 2px solid var(--gold-bright);
-  box-shadow: 0 0 24px rgba(220, 38, 38, 0.5);
+  box-shadow:
+    0 0 22px rgba(220, 38, 38, 0.52),
+    inset 0 1px 0 rgba(255, 244, 204, 0.45);
   font-family: var(--font-display);
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 900;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
   color: #fff8e6;
+  white-space: nowrap;
   transition: filter 0.14s ease, transform 0.12s ease;
 }
 
@@ -1577,19 +1482,20 @@ img {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .campaign-node-btn {
-  padding: 8px 8px;
+  padding: 7px 8px;
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.12);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
+  gap: 2px;
   text-align: center;
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
 }
 
 .campaign-node-btn:hover {
@@ -1607,9 +1513,9 @@ img {
 }
 
 .campaign-node-btn.is-active {
-  background: linear-gradient(180deg, rgba(153, 27, 27, 0.52) 0%, rgba(56, 36, 16, 0.78) 100%);
-  border-color: var(--gold-bright);
-  box-shadow: 0 0 16px rgba(229, 184, 92, 0.34);
+  background: linear-gradient(180deg, rgba(160, 74, 20, 0.58) 0%, rgba(56, 36, 16, 0.85) 100%);
+  border: 1.5px solid var(--gold-bright);
+  box-shadow: 0 0 16px rgba(229, 184, 92, 0.36);
 }
 
 .campaign-node-btn.is-locked:not(.is-active) {
@@ -1638,22 +1544,22 @@ img {
 }
 
 /* ==========================================================================
-   TAB 3 & TAB 4: 🗡️ АРСЕНАЛ (1..12) & 🧪 МАСТЕРСКАЯ (Per-Class Talents)
+   TAB 3 & TAB 4: 🗡️ АРСЕНАЛ (3-Card Showcase) & 🧪 МАСТЕРСКАЯ (2-Col Talents)
    ========================================================================== */
 
 .arsenal-subpanel {
-  max-width: 1080px;
+  max-width: 1120px;
 }
 
 .shop-subpanel {
-  max-width: 980px;
+  max-width: 1060px;
 }
 
 .subpanel-header-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
@@ -1661,21 +1567,21 @@ img {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 5px;
+  gap: 4px;
 }
 
 .subpanel-title {
   margin: 0;
   font-family: var(--font-display);
-  font-size: clamp(18px, 2vw, 23px);
+  font-size: clamp(17px, 2vw, 22px);
   font-weight: 900;
-  color: var(--gold-bright);
-  letter-spacing: 0.03em;
+  color: #fff6dc;
+  letter-spacing: 0.02em;
 }
 
 .subpanel-hint {
   margin: 0;
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--text-muted);
 }
 
@@ -1683,19 +1589,18 @@ img {
 .arsenal-class-switch {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 4px;
+  gap: 4px;
+  padding: 3.5px;
   border-radius: 999px;
-  background: rgba(7, 6, 13, 0.68);
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  flex-wrap: wrap;
+  background: rgba(7, 6, 13, 0.76);
+  border: 1px solid rgba(229, 184, 92, 0.28);
 }
 
 .arsenal-class-pill {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 5px 12px 5px 6px;
+  gap: 6px;
+  padding: 4px 11px 4px 5px;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 700;
@@ -1709,7 +1614,7 @@ img {
   height: 22px;
   border-radius: 50%;
   object-fit: cover;
-  border: 1px solid rgba(229, 184, 92, 0.5);
+  border: 1px solid rgba(229, 184, 92, 0.55);
 }
 
 .arsenal-class-pill:hover:not(.is-active) {
@@ -1719,47 +1624,50 @@ img {
 
 .arsenal-class-pill.is-active {
   color: var(--gold-bright);
-  background: rgba(229, 184, 92, 0.20);
-  border-color: var(--gold);
+  background: linear-gradient(180deg, rgba(136, 78, 22, 0.55), rgba(56, 36, 16, 0.80));
+  border-color: var(--gold-bright);
 }
 
-/* Arsenal 3-Weapon Grid */
+/* Arsenal 3-Column Centered Weapon Showcase Grid */
 .arsenal-cards-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 13px;
+  gap: 12px;
 }
 
 .weapon-card {
   position: relative;
-  padding: 15px 16px;
+  padding: 13px 14px;
   border-radius: 13px;
-  background: var(--bg-card);
-  border: 1.5px solid rgba(229, 184, 92, 0.24);
+  background: linear-gradient(180deg, rgba(28, 22, 42, 0.90) 0%, rgba(14, 11, 24, 0.96) 100%);
+  border: 1.5px solid rgba(229, 184, 92, 0.28);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
   transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
 }
 
 .weapon-card:hover:not(.is-locked) {
   transform: translateY(-2px);
-  border-color: rgba(229, 184, 92, 0.52);
+  border-color: rgba(229, 184, 92, 0.62);
 }
 
 .weapon-card.is-equipped {
   border-color: var(--gold-bright);
-  background: linear-gradient(180deg, rgba(48, 36, 18, 0.92) 0%, rgba(22, 18, 34, 0.96) 100%);
-  box-shadow: 0 0 24px rgba(229, 184, 92, 0.22);
+  background: linear-gradient(180deg, rgba(54, 40, 18, 0.92) 0%, rgba(19, 15, 30, 0.97) 100%);
+  box-shadow: 0 0 24px rgba(229, 184, 92, 0.28);
 }
 
 .weapon-card.is-locked {
-  background: linear-gradient(180deg, rgba(13, 11, 20, 0.94) 0%, rgba(9, 8, 15, 0.98) 100%);
-  border: 1.5px dashed rgba(139, 92, 246, 0.38);
+  background: linear-gradient(180deg, rgba(16, 14, 26, 0.94) 0%, rgba(10, 9, 17, 0.98) 100%);
+  border: 1.5px solid rgba(148, 163, 184, 0.24);
   justify-content: space-between;
 }
 
 .weapon-card-head {
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1771,9 +1679,8 @@ img {
   border-radius: 6px;
   font-size: 11px;
   font-weight: 800;
-  letter-spacing: 0.04em;
   background: rgba(229, 184, 92, 0.15);
-  border: 1px solid rgba(229, 184, 92, 0.42);
+  border: 1px solid rgba(229, 184, 92, 0.44);
   color: var(--gold-bright);
 }
 
@@ -1784,18 +1691,20 @@ img {
   font-variant-numeric: tabular-nums;
 }
 
-.weapon-title-row {
+/* Large Centered Weapon Showcase Illustration (matches reference bottom-left) */
+.weapon-showcase-art {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 11px;
+  gap: 6px;
+  width: 100%;
 }
 
 .weapon-icon-box {
-  width: 48px;
-  height: 48px;
-  border-radius: 11px;
-  background: radial-gradient(circle, rgba(229, 184, 92, 0.16) 0%, rgba(10, 8, 18, 0.85) 100%);
-  border: 1px solid rgba(229, 184, 92, 0.42);
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(229, 184, 92, 0.24) 0%, rgba(229, 184, 92, 0.04) 58%, transparent 75%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1803,28 +1712,30 @@ img {
 }
 
 .weapon-icon-box svg {
-  width: 38px;
-  height: 38px;
+  width: 62px;
+  height: 62px;
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.78));
 }
 
 .weapon-name {
   margin: 0;
   font-family: var(--font-display);
   font-size: 16px;
-  font-weight: 800;
-  color: var(--text-main);
-  line-height: 1.2;
+  font-weight: 900;
+  color: #fff6dc;
+  line-height: 1.18;
 }
 
 /* 12-Segment Weapon Upgrade Pips */
 .weapon-pips {
+  width: 100%;
   display: grid;
   grid-template-columns: repeat(var(--wpn-max-pips, 12), 1fr);
   gap: 3px;
 }
 
 .weapon-pip {
-  height: 5px;
+  height: 4.5px;
   border-radius: 2px;
   background: rgba(255, 255, 255, 0.10);
 }
@@ -1836,32 +1747,37 @@ img {
 
 .weapon-desc {
   margin: 0;
-  font-size: 12px;
-  line-height: 1.38;
+  font-size: 11.5px;
+  line-height: 1.34;
   color: var(--text-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .weapon-metrics {
   font-size: 12px;
-  font-weight: 700;
-  color: #e8d8b5;
+  font-weight: 800;
+  color: #f3e5c3;
   font-variant-numeric: tabular-nums;
 }
 
 .weapon-actions {
+  width: 100%;
   display: flex;
   gap: 7px;
   margin-top: auto;
-  padding-top: 4px;
+  padding-top: 2px;
 }
 
 .btn-equip {
   flex: 0 0 auto;
-  padding: 8px 12px;
+  padding: 7px 11px;
   border-radius: 8px;
   font-size: 12px;
-  font-weight: 700;
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  font-weight: 800;
+  border: 1px solid rgba(255, 255, 255, 0.24);
   background: rgba(255, 255, 255, 0.07);
   color: var(--text-main);
   transition: background 0.15s ease, border-color 0.15s ease;
@@ -1873,22 +1789,22 @@ img {
 }
 
 .btn-equip.in-hands {
-  background: rgba(16, 185, 129, 0.18);
-  border-color: rgba(16, 185, 129, 0.65);
+  background: rgba(16, 185, 129, 0.20);
+  border-color: rgba(52, 211, 153, 0.68);
   color: #6ee7b7;
   cursor: default;
 }
 
 .btn-upgrade-wpn {
   flex: 1 1 auto;
-  padding: 8px 11px;
+  padding: 7px 10px;
   border-radius: 8px;
   font-size: 12px;
   font-weight: 800;
-  background: linear-gradient(180deg, #4b3413 0%, #2d1e0a 100%);
+  background: linear-gradient(180deg, #5c3f16 0%, #31200b 100%);
   border: 1px solid var(--gold);
   color: var(--gold-bright);
-  transition: filter 0.15s ease, transform 0.1s ease;
+  transition: filter 0.15s ease;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1906,44 +1822,44 @@ img {
   flex-direction: column;
   align-items: center;
   text-align: center;
-  padding: 10px 6px;
+  padding: 6px 4px;
   gap: 8px;
 }
 
 .locked-silhouette-icon {
-  width: 58px;
-  height: 58px;
+  width: 68px;
+  height: 68px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(139, 92, 246, 0.22) 0%, rgba(0, 0, 0, 0.7) 75%);
-  border: 1px solid rgba(139, 92, 246, 0.44);
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.22) 0%, rgba(0, 0, 0, 0.65) 75%);
+  border: 1px solid rgba(139, 92, 246, 0.42);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .locked-weapon-svg {
-  width: 42px;
-  height: 42px;
-  filter: brightness(0.38) contrast(1.2) drop-shadow(0 0 6px rgba(168, 85, 247, 0.55));
+  width: 50px;
+  height: 50px;
+  filter: brightness(0.55) contrast(1.15) drop-shadow(0 0 8px rgba(168, 85, 247, 0.5));
 }
 
 .locked-mystery-name {
   margin: 0;
   font-family: var(--font-display);
   font-size: 15px;
-  font-weight: 700;
-  color: #a99ec4;
+  font-weight: 800;
+  color: #cbd5e1;
 }
 
 .locked-hint-badge {
   width: 100%;
   padding: 8px 10px;
-  border-radius: 8px;
-  background: rgba(139, 92, 246, 0.12);
-  border: 1px solid rgba(139, 92, 246, 0.36);
-  color: #e0d6fc;
+  border-radius: 9px;
+  background: linear-gradient(180deg, rgba(76, 29, 149, 0.36), rgba(46, 16, 101, 0.48));
+  border: 1px solid rgba(168, 85, 247, 0.52);
+  color: #e9d5ff;
   font-size: 11.5px;
-  font-weight: 700;
+  font-weight: 800;
   text-align: center;
 }
 
@@ -1951,19 +1867,19 @@ img {
 .workshop-class-badge {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 12px 4px 5px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, rgba(153, 27, 27, 0.42), rgba(56, 36, 16, 0.58));
-  border: 1px solid var(--gold);
-  color: var(--gold-bright);
-  font-size: 12.5px;
+  gap: 7px;
+  padding: 3.5px 12px 3.5px 5px;
+  border-radius: 8px;
+  background: linear-gradient(90deg, rgba(153, 27, 27, 0.56), rgba(72, 34, 18, 0.68));
+  border: 1px solid rgba(248, 113, 113, 0.58);
+  color: #fef2f2;
+  font-size: 12px;
   font-weight: 800;
 }
 
 .workshop-badge-portrait {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   object-fit: cover;
   border: 1px solid var(--gold-bright);
@@ -1972,23 +1888,23 @@ img {
 .workshop-header-controls {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
   flex-wrap: wrap;
 }
 
 .gothic-btn {
-  padding: 8px 15px;
+  padding: 7px 14px;
   border-radius: 9px;
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 800;
   transition: filter 0.15s ease, transform 0.1s ease;
 }
 
 .btn-reward-gold {
-  background: linear-gradient(180deg, #5b21b6 0%, #3b1266 100%);
-  border: 1px solid var(--violet-bright);
-  color: #f5edff;
-  box-shadow: 0 0 16px rgba(139, 92, 246, 0.35);
+  background: linear-gradient(180deg, #7e22ce 0%, #4c1d95 100%);
+  border: 1.5px solid #d8b4fe;
+  color: #faf5ff;
+  box-shadow: 0 0 16px rgba(168, 85, 247, 0.42);
 }
 
 .btn-reward-gold:hover {
@@ -1999,30 +1915,28 @@ img {
 .mastery-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 11px;
+  gap: 10px;
 }
 
 .mastery-btn {
   text-align: left;
-  padding: 13px 15px;
+  padding: 12px 14px;
   border-radius: 12px;
-  background: var(--bg-card);
-  border: 1.5px solid rgba(229, 184, 92, 0.25);
+  background: linear-gradient(180deg, rgba(28, 22, 42, 0.90) 0%, rgba(15, 12, 26, 0.96) 100%);
+  border: 1.5px solid rgba(229, 184, 92, 0.28);
   display: flex;
   flex-direction: column;
-  gap: 9px;
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
+  gap: 8px;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
 }
 
 .mastery-btn:hover:not(:disabled) {
-  background: var(--bg-card-hover);
   border-color: var(--gold);
   transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
 }
 
 .mastery-btn:disabled {
-  opacity: 0.52;
+  opacity: 0.56;
 }
 
 .mastery-top {
@@ -2041,9 +1955,9 @@ img {
 .mastery-icon-badge {
   width: 34px;
   height: 34px;
-  border-radius: 9px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(229, 184, 92, 0.34);
+  border-radius: 8px;
+  background: rgba(12, 10, 20, 0.85);
+  border: 1px solid rgba(229, 184, 92, 0.42);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2059,7 +1973,7 @@ img {
   font-family: var(--font-display);
   font-weight: 800;
   font-size: 15.5px;
-  color: var(--text-main);
+  color: #fff6dc;
 }
 
 .mastery-lvl {
@@ -2078,7 +1992,7 @@ img {
   flex: 1 1 0;
   height: 5px;
   border-radius: 2px;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.09);
 }
 
 .mastery-pip.filled {
@@ -2099,10 +2013,10 @@ img {
 }
 
 .mastery-cost {
-  padding: 4px 10px;
-  border-radius: 7px;
-  background: rgba(229, 184, 92, 0.15);
-  border: 1px solid rgba(229, 184, 92, 0.42);
+  padding: 5px 11px;
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(78, 54, 20, 0.78), rgba(38, 26, 10, 0.90));
+  border: 1px solid rgba(229, 184, 92, 0.56);
   font-size: 12px;
   font-weight: 800;
   color: var(--gold-bright);
@@ -2117,36 +2031,33 @@ img {
   gap: 12px;
   padding-top: 6px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
 }
 
 .subpanel-back-btn {
-  padding: 9px 16px;
-  border-radius: 9px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  padding: 9px 18px;
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(36, 30, 52, 0.85), rgba(16, 13, 26, 0.95));
+  border: 1.5px solid rgba(229, 184, 92, 0.42);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 800;
   color: var(--text-main);
-  transition: background 0.15s ease, border-color 0.15s ease;
+  white-space: nowrap;
+  transition: filter 0.15s ease, border-color 0.15s ease;
 }
 
 .subpanel-back-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: var(--gold);
+  filter: brightness(1.14);
+  border-color: var(--gold-bright);
 }
 
 .subpanel-battle-btn {
-  padding: 10px 24px;
-  border-radius: 10px;
-  background: linear-gradient(180deg, #dc2626 0%, #991b1b 100%);
-  border: 1.5px solid var(--gold-bright);
-  box-shadow: 0 0 20px rgba(220, 38, 38, 0.45);
+  padding: 11px 38px;
   font-family: var(--font-display);
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 900;
-  letter-spacing: 0.06em;
-  color: #fff8e6;
-  transition: filter 0.14s ease, transform 0.12s ease;
+  letter-spacing: 0.08em;
+  color: #fff9eb;
 }
 
 .subpanel-battle-btn:hover {
@@ -3260,11 +3171,15 @@ img {
   }
 }
 
-/* --- Relic Altar Header & Spinning Sacred Mandala --- */
+/* --- Relic Altar Header & Ornate Beveled Tarot Cards (Matches media_1794831218964_863a267e.jpg) --- */
 .levelup-panel {
   position: relative;
-  overflow-x: hidden;
-  border-color: rgba(253, 224, 147, 0.68);
+  max-width: 1020px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 6px 10px 8px;
+  overflow: visible;
 }
 
 .altar-header {
@@ -3272,21 +3187,21 @@ img {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 18px;
-  padding-top: 4px;
+  gap: 4px;
+  margin-bottom: 14px;
+  padding-top: 2px;
 }
 
 .altar-mandala-wrap {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 210px;
-  height: 210px;
+  width: 180px;
+  height: 180px;
   transform: translate(-50%, -50%);
   pointer-events: none;
   z-index: 0;
-  opacity: 0.75;
+  opacity: 0.55;
 }
 
 .altar-mandala-svg {
@@ -3306,12 +3221,12 @@ img {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 4px 14px;
+  padding: 3px 13px;
   border-radius: 999px;
-  background: linear-gradient(90deg, rgba(88, 28, 135, 0.65), rgba(56, 36, 16, 0.72));
+  background: linear-gradient(90deg, rgba(88, 28, 135, 0.72), rgba(56, 36, 16, 0.80));
   border: 1px solid var(--gold-bright);
-  box-shadow: 0 0 16px rgba(192, 132, 252, 0.45);
-  font-size: 11px;
+  box-shadow: 0 0 14px rgba(192, 132, 252, 0.42);
+  font-size: 10.5px;
   font-weight: 900;
   letter-spacing: 0.12em;
   color: #fef3c7;
@@ -3322,13 +3237,13 @@ img {
   z-index: 1;
   margin: 0;
   font-family: var(--font-display);
-  font-size: clamp(22px, 2.8vw, 31px);
+  font-size: clamp(21px, 2.6vw, 30px);
   font-weight: 900;
   color: var(--gold-bright);
   letter-spacing: 0.07em;
   text-shadow:
     0 2px 12px rgba(0, 0, 0, 0.95),
-    0 0 22px rgba(229, 184, 92, 0.42);
+    0 0 22px rgba(229, 184, 92, 0.45);
 }
 
 .modal-subtitle {
@@ -3336,51 +3251,71 @@ img {
   z-index: 1;
   margin: 2px 0 0;
   font-size: 13px;
-  color: var(--text-muted);
+  color: #d6cfe8;
 }
 
-/* --- Tarot / Relic Cards Grid & 9 Elemental Card Themes --- */
+/* --- 3 Ornate Metallic Beveled Tarot Cards Grid --- */
 .blessing-cards-grid {
   position: relative;
   z-index: 1;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 15px;
+  gap: 16px;
   perspective: 1100px;
 }
 
 .tarot-relic-card {
   --t-border: #c084fc;
-  --t-glow: rgba(168, 85, 247, 0.36);
-  --t-bg-top: rgba(42, 24, 68, 0.96);
-  --t-bg-bot: rgba(15, 11, 26, 0.98);
-  --t-accent: #e9d5ff;
-  --t-pill-bg: rgba(139, 92, 246, 0.20);
+  --t-glow: rgba(168, 85, 247, 0.40);
+  --t-bg-top: rgba(46, 22, 72, 0.96);
+  --t-bg-bot: rgba(15, 10, 26, 0.99);
+  --t-accent: #f3e8ff;
+  --t-pill-bg: rgba(139, 92, 246, 0.28);
+  --t-btn-top: #7e22ce;
+  --t-btn-bot: #3b0764;
 
   position: relative;
   overflow: hidden;
-  padding: 0;
-  border-radius: 15px;
-  background: linear-gradient(180deg, var(--t-bg-top) 0%, var(--t-bg-bot) 100%);
-  border: 1.8px solid var(--t-border);
+  padding: 0 0 14px;
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 50% 34%, var(--t-glow) 0%, transparent 58%),
+    linear-gradient(180deg, var(--t-bg-top) 0%, var(--t-bg-bot) 100%);
+  border: 2px solid var(--t-border);
   box-shadow:
-    0 14px 32px rgba(0, 0, 0, 0.78),
-    0 0 22px var(--t-glow),
-    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    0 18px 38px rgba(0, 0, 0, 0.85),
+    0 0 24px var(--t-glow),
+    inset 0 0 0 3px rgba(8, 6, 15, 0.72),
+    inset 0 0 0 4px rgba(255, 255, 255, 0.12);
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
   opacity: 0;
-  animation: tarotCardEntrance 0.42s cubic-bezier(0.2, 0.88, 0.28, 1.08) forwards;
-  animation-delay: calc(var(--card-idx, 0) * 0.085s);
+  animation: tarotCardEntrance 0.40s cubic-bezier(0.2, 0.88, 0.28, 1.08) forwards;
+  animation-delay: calc(var(--card-idx, 0) * 0.08s);
   transition: transform 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.15), box-shadow 0.18s ease, border-color 0.18s ease;
 }
+
+/* Sculpted Metallic Corner Clasps on each Tarot Card */
+.tarot-corner {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: 2.5px solid #fffbeb;
+  border-color: color-mix(in srgb, var(--t-border) 65%, #ffffff);
+  z-index: 4;
+  pointer-events: none;
+}
+.tarot-corner.tl { top: 2px; left: 2px; border-right: none; border-bottom: none; border-top-left-radius: 6px; }
+.tarot-corner.tr { top: 2px; right: 2px; border-left: none; border-bottom: none; border-top-right-radius: 6px; }
+.tarot-corner.bl { bottom: 2px; left: 2px; border-right: none; border-top: none; border-bottom-left-radius: 6px; }
+.tarot-corner.br { bottom: 2px; right: 2px; border-left: none; border-top: none; border-bottom-right-radius: 6px; }
 
 @keyframes tarotCardEntrance {
   0% {
     opacity: 0;
-    transform: translateY(26px) rotateX(14deg) scale(0.93);
+    transform: translateY(22px) rotateX(12deg) scale(0.94);
   }
   100% {
     opacity: 1;
@@ -3391,74 +3326,90 @@ img {
 /* 9 Elemental Card Themes */
 .tarot-relic-card[data-theme="gold"] {
   --t-border: #fde047;
-  --t-glow: rgba(250, 204, 21, 0.44);
-  --t-bg-top: rgba(68, 46, 12, 0.96);
-  --t-bg-bot: rgba(22, 16, 9, 0.99);
+  --t-glow: rgba(250, 204, 21, 0.42);
+  --t-bg-top: rgba(68, 44, 12, 0.96);
+  --t-bg-bot: rgba(20, 14, 8, 0.99);
   --t-accent: #fef08a;
-  --t-pill-bg: rgba(234, 179, 8, 0.24);
+  --t-pill-bg: rgba(202, 138, 4, 0.34);
+  --t-btn-top: #b45309;
+  --t-btn-bot: #713f12;
 }
 
 .tarot-relic-card[data-theme="amber"] {
   --t-border: #fbbf24;
   --t-glow: rgba(245, 158, 11, 0.40);
-  --t-bg-top: rgba(64, 34, 12, 0.96);
-  --t-bg-bot: rgba(20, 13, 10, 0.99);
+  --t-bg-top: rgba(66, 36, 12, 0.96);
+  --t-bg-bot: rgba(19, 12, 9, 0.99);
   --t-accent: #fde68a;
-  --t-pill-bg: rgba(245, 158, 11, 0.22);
+  --t-pill-bg: rgba(180, 83, 9, 0.36);
+  --t-btn-top: #b45309;
+  --t-btn-bot: #78350f;
 }
 
 .tarot-relic-card[data-theme="cyan"] {
-  --t-border: #22d3ee;
-  --t-glow: rgba(34, 211, 238, 0.38);
-  --t-bg-top: rgba(12, 48, 64, 0.96);
-  --t-bg-bot: rgba(10, 18, 28, 0.99);
-  --t-accent: #a5f3fc;
-  --t-pill-bg: rgba(6, 182, 212, 0.22);
+  --t-border: #38bdf8;
+  --t-glow: rgba(56, 189, 248, 0.38);
+  --t-bg-top: rgba(14, 48, 72, 0.96);
+  --t-bg-bot: rgba(10, 17, 28, 0.99);
+  --t-accent: #bae6fd;
+  --t-pill-bg: rgba(2, 132, 199, 0.34);
+  --t-btn-top: #0369a1;
+  --t-btn-bot: #0c4a6e;
 }
 
 .tarot-relic-card[data-theme="crimson"] {
   --t-border: #f87171;
-  --t-glow: rgba(239, 68, 68, 0.42);
-  --t-bg-top: rgba(68, 14, 22, 0.96);
-  --t-bg-bot: rgba(20, 9, 14, 0.99);
+  --t-glow: rgba(239, 68, 68, 0.44);
+  --t-bg-top: rgba(74, 15, 25, 0.96);
+  --t-bg-bot: rgba(22, 9, 14, 0.99);
   --t-accent: #fecaca;
-  --t-pill-bg: rgba(220, 38, 38, 0.24);
+  --t-pill-bg: rgba(185, 28, 28, 0.38);
+  --t-btn-top: #b91c1c;
+  --t-btn-bot: #7f1d1d;
 }
 
 .tarot-relic-card[data-theme="ice"] {
   --t-border: #7dd3fc;
   --t-glow: rgba(56, 189, 248, 0.40);
-  --t-bg-top: rgba(15, 44, 72, 0.96);
-  --t-bg-bot: rgba(10, 17, 30, 0.99);
+  --t-bg-top: rgba(16, 42, 74, 0.96);
+  --t-bg-bot: rgba(10, 16, 30, 0.99);
   --t-accent: #e0f2fe;
-  --t-pill-bg: rgba(56, 189, 248, 0.22);
+  --t-pill-bg: rgba(3, 105, 161, 0.36);
+  --t-btn-top: #1d4ed8;
+  --t-btn-bot: #1e3a8a;
 }
 
 .tarot-relic-card[data-theme="flame"] {
   --t-border: #fb923c;
   --t-glow: rgba(249, 115, 22, 0.44);
-  --t-bg-top: rgba(72, 26, 12, 0.96);
+  --t-bg-top: rgba(74, 26, 12, 0.96);
   --t-bg-bot: rgba(22, 10, 10, 0.99);
   --t-accent: #fed7aa;
-  --t-pill-bg: rgba(234, 88, 12, 0.24);
+  --t-pill-bg: rgba(194, 65, 12, 0.38);
+  --t-btn-top: #c2410c;
+  --t-btn-bot: #7c2d12;
 }
 
 .tarot-relic-card[data-theme="violet"] {
   --t-border: #c084fc;
   --t-glow: rgba(168, 85, 247, 0.42);
-  --t-bg-top: rgba(46, 20, 74, 0.96);
+  --t-bg-top: rgba(48, 20, 76, 0.96);
   --t-bg-bot: rgba(15, 10, 28, 0.99);
   --t-accent: #f3e8ff;
-  --t-pill-bg: rgba(147, 51, 234, 0.24);
+  --t-pill-bg: rgba(126, 34, 206, 0.36);
+  --t-btn-top: #7e22ce;
+  --t-btn-bot: #4c1d95;
 }
 
 .tarot-relic-card[data-theme="steel"] {
-  --t-border: #cbd5e1;
-  --t-glow: rgba(148, 163, 184, 0.36);
-  --t-bg-top: rgba(34, 42, 58, 0.96);
-  --t-bg-bot: rgba(13, 16, 24, 0.99);
-  --t-accent: #f1f5f9;
-  --t-pill-bg: rgba(100, 116, 139, 0.26);
+  --t-border: #93c5fd;
+  --t-glow: rgba(96, 165, 250, 0.36);
+  --t-bg-top: rgba(28, 38, 62, 0.96);
+  --t-bg-bot: rgba(11, 15, 26, 0.99);
+  --t-accent: #e2e8f0;
+  --t-pill-bg: rgba(51, 65, 85, 0.52);
+  --t-btn-top: #334155;
+  --t-btn-bot: #1e293b;
 }
 
 .tarot-relic-card[data-theme="emerald"] {
@@ -3467,30 +3418,26 @@ img {
   --t-bg-top: rgba(12, 54, 42, 0.96);
   --t-bg-bot: rgba(9, 20, 18, 0.99);
   --t-accent: #a7f3d0;
-  --t-pill-bg: rgba(16, 185, 129, 0.22);
+  --t-pill-bg: rgba(5, 150, 105, 0.34);
+  --t-btn-top: #059669;
+  --t-btn-bot: #064e3b;
 }
 
 .tarot-relic-card:hover {
   transform: translateY(-6px) scale(1.018);
   border-color: #fffbeb;
   box-shadow:
-    0 20px 42px rgba(0, 0, 0, 0.88),
+    0 22px 44px rgba(0, 0, 0, 0.90),
     0 0 34px var(--t-glow);
 }
 
-/* Diagonal Foil Shimmer on Hover */
 .blessing-foil-shimmer {
   position: absolute;
   top: 0;
   left: -135%;
   width: 75%;
   height: 100%;
-  background: linear-gradient(
-    105deg,
-    transparent 20%,
-    rgba(255, 255, 255, 0.16) 50%,
-    transparent 80%
-  );
+  background: linear-gradient(105deg, transparent 20%, rgba(255, 255, 255, 0.16) 50%, transparent 80%);
   transform: skewX(-22deg);
   pointer-events: none;
   z-index: 3;
@@ -3501,39 +3448,38 @@ img {
   left: 155%;
 }
 
-/* Top Category + Rank Roman Numeral Ribbon */
+/* Top Category + Rank Pill Ribbon */
 .blessing-top-ribbon {
   width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  padding: 8px 13px;
-  background: rgba(0, 0, 0, 0.36);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.10);
-  font-size: 10px;
+  padding: 10px 15px 6px;
+  font-size: 10.5px;
   font-weight: 900;
   letter-spacing: 0.08em;
 }
 
 .blessing-cat-label {
   color: var(--t-accent);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
 }
 
 .blessing-rank-label {
-  padding: 2px 7px;
+  padding: 2.5px 9px;
   border-radius: 999px;
-  background: var(--t-pill-bg);
+  background: rgba(10, 8, 18, 0.72);
   border: 1px solid var(--t-border);
   color: #ffffff;
 }
 
-/* Emblem Stage + Rotating Rune Halo */
+/* Emblem Stage + Rotating Rune Halo + Craggy Altar Stones */
 .blessing-emblem-stage {
   position: relative;
-  width: 112px;
-  height: 106px;
-  margin-top: 10px;
+  width: 132px;
+  height: 114px;
+  margin-top: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3542,18 +3488,29 @@ img {
 
 .blessing-rune-halo {
   position: absolute;
-  width: 108px;
-  height: 108px;
+  width: 112px;
+  height: 112px;
   animation: mandalaSpin 18s linear infinite;
+  pointer-events: none;
+}
+
+.blessing-altar-rocks {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 128px;
+  height: 34px;
+  z-index: 1;
   pointer-events: none;
 }
 
 .blessing-relic-svg {
   position: relative;
   z-index: 2;
-  width: 88px;
-  height: 88px;
-  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.75));
+  width: 90px;
+  height: 90px;
+  filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.85));
   transition: transform 0.2s ease;
 }
 
@@ -3564,91 +3521,175 @@ img {
 .blessing-name {
   margin: 6px 14px 0;
   font-family: var(--font-display);
-  font-size: 18px;
+  font-size: 19px;
   font-weight: 900;
   color: #fff9eb;
   line-height: 1.18;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9);
 }
 
+/* Ornate Pointed Hexagonal Stat Plaque with Diamond Rivets (matches reference!) */
 .blessing-stat-pill {
-  margin: 8px 12px 0;
-  padding: 4px 11px;
-  border-radius: 999px;
-  background: var(--t-pill-bg);
+  position: relative;
+  width: calc(100% - 26px);
+  margin: 9px 13px 0;
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.55) 0%, var(--t-pill-bg) 50%, rgba(0, 0, 0, 0.55) 100%);
   border: 1px solid var(--t-border);
-  color: var(--t-accent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.stat-plaque-rivet {
+  font-size: 9px;
+  color: var(--t-border);
+  flex-shrink: 0;
+}
+
+.stat-plaque-text {
   font-size: 10.5px;
   font-weight: 900;
   letter-spacing: 0.04em;
-}
-
-.blessing-desc {
-  margin: 9px 15px 14px;
-  font-size: 12.2px;
-  line-height: 1.42;
-  color: #d0c8e2;
+  color: #fffbeb;
+  line-height: 1.25;
+  text-align: center;
   flex: 1 1 auto;
 }
 
+.blessing-desc {
+  margin: 10px 16px 14px;
+  font-size: 12.2px;
+  line-height: 1.42;
+  color: #d6cfe8;
+  flex: 1 1 auto;
+}
+
+/* Raised Beveled Metallic Pill CTA Button inside each Tarot Card */
 .blessing-cta-bar {
-  width: 100%;
-  padding: 9px 12px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.42));
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  width: calc(100% - 34px);
+  padding: 9px 14px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--t-btn-top) 0%, var(--t-btn-bot) 100%);
+  border: 1.5px solid var(--t-border);
+  box-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.68),
+    inset 0 1px 0 rgba(255, 255, 255, 0.32);
   font-family: var(--font-display);
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 900;
-  letter-spacing: 0.10em;
-  color: var(--t-accent);
-  transition: background 0.15s ease, color 0.15s ease;
+  letter-spacing: 0.08em;
+  color: #fffbeb;
+  transition: filter 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 }
 
 .tarot-relic-card:hover .blessing-cta-bar {
-  background: var(--t-pill-bg);
-  color: #ffffff;
+  filter: brightness(1.16);
+  box-shadow:
+    0 0 18px var(--t-glow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
-/* --- Result Modal --- */
+/* --- Ornate Gothic Result Modal (Matches media_1794831700387_b993e413.jpg) --- */
 .result-panel {
-  max-width: 490px;
+  position: relative;
+  max-width: 510px;
+  overflow: visible;
+  padding: 36px 26px 26px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(30, 21, 48, 0.98) 0%, rgba(13, 10, 23, 0.99) 100%);
+  border: 2px solid var(--gold-bright);
 }
 
 .result-panel.is-defeat {
-  border-color: #dc2626;
+  border-color: #ef4444;
   box-shadow:
-    0 22px 60px rgba(0, 0, 0, 0.92),
-    0 0 36px rgba(185, 28, 28, 0.38);
+    0 24px 64px rgba(0, 0, 0, 0.94),
+    0 0 38px rgba(185, 28, 28, 0.42);
 }
 
 .result-panel.is-victory {
   border-color: var(--gold-bright);
   box-shadow:
-    0 22px 60px rgba(0, 0, 0, 0.92),
-    0 0 42px rgba(229, 184, 92, 0.42);
+    0 24px 64px rgba(0, 0, 0, 0.94),
+    0 0 44px rgba(229, 184, 92, 0.42),
+    inset 0 0 0 3px rgba(10, 8, 18, 0.8),
+    inset 0 0 0 4px rgba(229, 184, 92, 0.22);
 }
 
 .result-crest {
+  position: absolute;
+  top: -42px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
   display: flex;
   justify-content: center;
-  margin-bottom: 8px;
+  pointer-events: none;
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.85));
 }
 
-.result-panel.is-defeat .modal-title {
-  color: #f87171;
+.result-main-title {
+  font-size: clamp(22px, 2.7vw, 29px);
+  color: #fde08a;
+}
+
+.result-panel.is-defeat .result-main-title {
+  color: #fca5a5;
+}
+
+.result-chapter-ribbon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 7px;
+  padding: 4px 20px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(20, 15, 34, 0.9), rgba(44, 32, 68, 0.95), rgba(20, 15, 34, 0.9));
+  border: 1px solid rgba(229, 184, 92, 0.45);
+  color: #e5dcf5;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.result-chapter-ribbon::before,
+.result-chapter-ribbon::after {
+  content: '◆';
+  font-size: 9px;
+  color: var(--gold-bright);
 }
 
 .result-stats-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
-  margin: 14px 0;
+  gap: 11px;
+  margin: 14px 0 12px;
 }
 
 .result-stat-box {
-  padding: 11px 12px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(229, 184, 92, 0.25);
+  padding: 11px 14px;
+  border-radius: 11px;
+  background: rgba(16, 12, 28, 0.82);
+  border: 1px solid rgba(229, 184, 92, 0.28);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: left;
+}
+
+.result-stat-svg {
+  flex-shrink: 0;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.7));
+}
+
+.result-stat-col {
+  display: flex;
+  flex-direction: column;
 }
 
 .result-stat-label {
@@ -3657,23 +3698,24 @@ img {
 }
 
 .result-stat-val {
-  margin-top: 3px;
+  margin-top: 2px;
   font-family: var(--font-display);
-  font-size: 22px;
+  font-size: 23px;
   font-weight: 900;
   color: var(--gold-bright);
   font-variant-numeric: tabular-nums;
+  line-height: 1.1;
 }
 
 .result-unlocked-box {
-  margin: 10px 0 14px;
-  padding: 10px 14px;
+  margin: 0 0 12px;
+  padding: 9px 14px;
   border-radius: 10px;
-  background: linear-gradient(90deg, rgba(66, 46, 12, 0.75), rgba(40, 28, 10, 0.85));
+  background: linear-gradient(90deg, rgba(72, 48, 12, 0.85), rgba(44, 30, 10, 0.92));
   border: 1.5px solid var(--gold-bright);
   color: #fff6d1;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 800;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3681,8 +3723,8 @@ img {
 }
 
 .result-wpn-svg {
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   flex-shrink: 0;
 }
 
@@ -3690,12 +3732,12 @@ img {
   display: flex;
   flex-direction: column;
   gap: 9px;
-  margin-top: 14px;
+  margin-top: 4px;
 }
 
 .result-btn {
   width: 100%;
-  padding: 12px 16px;
+  padding: 11px 16px;
   border-radius: 10px;
   font-size: 14.5px;
   font-weight: 800;
@@ -3704,544 +3746,608 @@ img {
 
 .result-btn:hover:not(:disabled) {
   filter: brightness(1.13);
+  transform: translateY(-1px);
 }
 
 .result-btn.btn-revive {
-  background: linear-gradient(180deg, #15803d 0%, #166534 100%);
+  background: linear-gradient(180deg, #16a34a 0%, #14532d 100%);
   border: 1.5px solid #86efac;
   color: #f0fdf4;
-  box-shadow: 0 0 20px rgba(34, 197, 94, 0.45);
+  box-shadow: 0 0 18px rgba(34, 197, 94, 0.42);
 }
 
 .result-btn.btn-double-gold {
-  background: linear-gradient(180deg, #b45309 0%, #78350f 100%);
+  background: linear-gradient(180deg, #d97706 0%, #78350f 100%);
   border: 1.5px solid var(--gold-bright);
   color: #fffbeb;
-  box-shadow: 0 0 20px rgba(245, 158, 11, 0.45);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 248, 220, 0.45);
 }
 
 .result-btn.btn-arsenal-primary {
-  background: linear-gradient(180deg, #3b2d54 0%, #221933 100%);
-  border: 1.5px solid var(--gold);
-  color: var(--gold-bright);
+  background: linear-gradient(180deg, #6b21a8 0%, #3b0764 100%);
+  border: 1.5px solid #d8b4fe;
+  color: #faf5ff;
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(243, 232, 255, 0.35);
 }
 
 .result-btn.btn-retry {
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  color: var(--text-main);
+  background: linear-gradient(180deg, rgba(30, 25, 44, 0.92), rgba(16, 13, 26, 0.98));
+  border: 1px solid rgba(229, 184, 92, 0.34);
+  color: #e2dcf0;
+}
+
+.result-bottom-skull {
+  position: absolute;
+  bottom: -16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  pointer-events: none;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.9));
 }
 
 /* ==========================================================================
-   6. RESPONSIVE BREAKPOINTS (iPhone Safari Portrait & Landscape, Tablets)
+   6. RESPONSIVE BREAKPOINTS
+   IMPORTANT: Desktop narrow-window rules use html:not(.is-mobile-landscape)
+   so iPhone landscape (844×390) & forced-landscape ALWAYS keep true widescreen game layouts!
    ========================================================================== */
 
-@media (max-width: 980px) {
-  .hub-topbar {
+@media (max-width: 960px) {
+  html:not(.is-mobile-landscape) .hub-topbar {
     grid-template-columns: 1fr auto;
     row-gap: 8px;
   }
 
-  .hub-nav-tabs {
+  html:not(.is-mobile-landscape) .hub-nav-tabs {
     grid-column: 1 / -1;
     order: 3;
     width: 100%;
     justify-content: space-between;
-    overflow-x: auto;
-    scrollbar-width: none;
   }
 
-  .hub-nav-tabs::-webkit-scrollbar {
-    display: none;
-  }
-
-  .hub-tab-btn {
+  html:not(.is-mobile-landscape) .hub-tab-btn {
     flex: 1 1 0;
     padding: 7px 10px;
     font-size: 12.5px;
   }
 
-  .arsenal-cards-grid {
-    grid-template-columns: 1fr;
+  html:not(.is-mobile-landscape) .hub-panel-heroes {
+    grid-template-columns: auto 1fr minmax(290px, 370px);
   }
 }
 
-@media (max-width: 860px) {
-  .hub-screen {
+@media (max-width: 720px) {
+  html:not(.is-mobile-landscape) .hub-screen {
     pointer-events: auto;
     overflow-y: auto;
-    touch-action: pan-y;
-    -webkit-overflow-scrolling: touch;
-    padding:
-      calc(8px + var(--safe-top))
-      calc(11px + var(--safe-right))
-      calc(14px + var(--safe-bottom))
-      calc(11px + var(--safe-left));
   }
 
-  .hub-shell {
+  html:not(.is-mobile-landscape) .hub-shell {
     height: auto;
     min-height: 100%;
     pointer-events: auto;
   }
 
-  .hero-stage-area {
-    min-height: 165px;
-  }
-
-  .hero-showcase-docks {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
-  }
-
-  .hero-info-card,
-  .hero-launch-dock {
-    width: 100%;
-    max-width: none;
-  }
-
-  /* Campaign Screen Mobile Adaptation */
-  .campaign-acts-bar {
-    display: flex;
-    overflow-x: auto;
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .campaign-acts-bar::-webkit-scrollbar {
-    display: none;
-  }
-
-  .campaign-act-tab {
-    flex: 0 0 auto;
-    padding: 7px 12px;
-  }
-
-  .campaign-showcase-stage {
-    grid-template-columns: 36px minmax(0, 1fr) 36px;
-    gap: 7px;
-  }
-
-  .campaign-nav-arrow {
-    width: 36px;
-    height: 56px;
-    font-size: 26px;
-  }
-
-  .campaign-nodes-strip {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 5px;
-  }
-
-  .campaign-node-btn {
-    padding: 6px 4px;
-  }
-
-  .campaign-node-title {
-    font-size: 9.5px;
-  }
-
-  .mastery-grid {
-    grid-template-columns: 1fr;
-  }
-
-  /* Tarot Relic Cards on Tablets / Phones */
-  .blessing-cards-grid {
-    grid-template-columns: 1fr;
-    gap: 10px;
-  }
-
-  .tarot-relic-card {
-    display: grid;
-    grid-template-columns: 84px 1fr;
-    grid-template-rows: auto auto auto auto auto;
-    text-align: left;
-    align-items: center;
-  }
-
-  .blessing-top-ribbon {
-    grid-column: 1 / -1;
-    padding: 6px 11px;
-  }
-
-  .blessing-emblem-stage {
-    grid-column: 1;
-    grid-row: 2 / 5;
-    width: 80px;
-    height: 80px;
-    margin: 6px 0 6px 8px;
-  }
-
-  .blessing-rune-halo {
-    width: 78px;
-    height: 78px;
-  }
-
-  .blessing-relic-svg {
-    width: 64px;
-    height: 64px;
-  }
-
-  .blessing-name {
-    grid-column: 2;
-    margin: 6px 12px 0 6px;
-    font-size: 16px;
-  }
-
-  .blessing-stat-pill {
-    grid-column: 2;
-    justify-self: start;
-    margin: 4px 12px 0 6px;
-  }
-
-  .blessing-desc {
-    grid-column: 2;
-    margin: 4px 12px 8px 6px;
-    font-size: 11.5px;
-  }
-
-  .blessing-cta-bar {
-    grid-column: 1 / -1;
-    padding: 7px 12px;
-    text-align: center;
-  }
-}
-
-/* iPhone Portrait (e.g. iPhone 13 Pro 390×844 & VK/Safari WebView 390×640) — Full Hub Fits 100% On Screen! */
-@media (max-width: 560px) {
-  .hub-screen {
-    padding:
-      calc(6px + var(--safe-top))
-      calc(9px + var(--safe-right))
-      calc(10px + var(--safe-bottom))
-      calc(9px + var(--safe-left));
-  }
-
-  .hub-shell {
-    gap: 6px;
-    justify-content: space-between;
-  }
-
-  .hub-topbar {
-    padding: 5px 9px;
-    row-gap: 5px;
-    gap: 6px;
-    border-radius: 11px;
-  }
-
-  .hub-crest {
-    width: 28px;
-    height: 28px;
-    border-radius: 8px;
-  }
-
-  .hub-crest svg {
-    width: 16px;
-    height: 16px;
-  }
-
-  .hub-title {
-    font-size: 13.5px;
-    letter-spacing: 0.04em;
-  }
-
-  .hub-nav-tabs {
-    padding: 3px;
-    gap: 2px;
-  }
-
-  .hub-tab-btn {
-    padding: 5px 5px;
-    font-size: 11px;
-    gap: 3px;
-  }
-
-  .hub-panel-heroes {
-    flex: 1 1 auto;
+  html:not(.is-mobile-landscape) .hub-panel-heroes {
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
-    gap: 6px;
-    pointer-events: auto;
-    touch-action: pan-y;
   }
 
-  .hero-stage-area,
-  .hero-stage-controls,
-  .stage-center-window,
-  .hero-showcase-docks {
-    pointer-events: auto;
-    touch-action: pan-y;
-  }
-
-  .hero-stage-area {
-    flex: 1 1 108px;
-    min-height: 108px;
-    justify-content: space-between;
-  }
-
-  .stage-center-window {
-    min-height: 82px;
-  }
-
-  .stage-carousel-btn {
-    width: 38px;
-    height: 38px;
-    font-size: 23px;
-  }
-
-  .stage-emblem-dots {
-    padding: 3px 8px;
-    gap: 7px;
-    margin-bottom: 2px;
-  }
-
-  .stage-emblem-dot {
-    width: 28px;
-    height: 28px;
-  }
-
-  .hero-showcase-docks {
-    gap: 6px;
-  }
-
-  .hero-info-card {
-    padding: 8px 10px;
-    gap: 5px;
-    border-radius: 12px;
-  }
-
-  .hero-card-header {
-    gap: 9px;
-  }
-
-  .hero-portrait-frame {
-    width: 44px;
-    height: 44px;
-    border-radius: 10px;
-    padding: 2px;
-  }
-
-  .hero-class-name {
-    font-size: 16px;
-  }
-
-  .hero-role-pill {
-    font-size: 10px;
-    padding: 2px 7px;
-  }
-
-  .hero-lore-line {
-    display: none;
-  }
-
-  .hero-stats-bars {
-    gap: 4px;
-    padding: 1px 0;
-  }
-
-  .stat-bar-row {
-    grid-template-columns: 78px 1fr 38px;
-    gap: 6px;
-    font-size: 10.5px;
-  }
-
-  .rune-seg {
-    height: 6px;
-  }
-
-  .stat-bar-val {
-    font-size: 11px;
-  }
-
-  .hero-weapon-chip {
-    padding: 5px 8px;
-    border-radius: 9px;
-  }
-
-  .hero-weapon-chip-icon {
-    width: 30px;
-    height: 30px;
-  }
-
-  .hero-weapon-chip-icon svg {
-    width: 24px;
-    height: 24px;
-  }
-
-  .hero-weapon-chip-name {
-    font-size: 12px;
-    max-width: 155px;
-  }
-
-  .hero-launch-dock {
-    padding: 8px 10px;
-    gap: 6px;
-    border-radius: 12px;
-  }
-
-  .chapter-mini-card {
-    min-height: 56px;
-    border-radius: 9px;
-  }
-
-  .chapter-mini-content {
-    padding: 6px 9px;
-    gap: 3px;
-  }
-
-  .chapter-mini-title {
-    font-size: 13px;
-  }
-
-  .btn-change-chapter {
-    padding: 3px 8px;
-    font-size: 10.5px;
-  }
-
-  .launch-weapon-warn {
-    padding: 4px 8px;
-    font-size: 10.5px;
-  }
-
-  .launch-battle-btn {
-    padding: 10px 14px;
-    border-radius: 10px;
-  }
-
-  .hud-top-row {
-    grid-template-columns: 1fr 1fr;
-    gap: 7px;
-  }
-
-  .hud-top-center {
-    grid-column: 1 / -1;
-    order: 3;
-    min-width: 0;
-    width: 100%;
-  }
-
-  .boss-bar-box {
-    width: 100%;
-  }
-
-  .autoaim-btn {
-    font-size: 10.5px;
-    padding: 5px 8px;
-  }
-
-  .hud-weapon-row {
-    justify-content: space-between;
-  }
-
-  .weapon-hud-badge {
-    flex: 1 1 auto;
-    min-width: 0;
-    padding: 5px 10px;
-  }
-
-  .weapon-hud-col {
-    min-width: 0;
-  }
-
-  .weapon-hud-name {
-    font-size: 12.5px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .joystick-base {
-    width: 98px;
-    height: 98px;
-    left: calc(20px + var(--safe-left));
-    bottom: calc(104px + var(--safe-bottom));
-  }
-
-  .joystick-knob {
-    width: 40px;
-    height: 40px;
-  }
-
-  .campaign-showcase-stage {
-    grid-template-columns: 1fr;
-    position: relative;
-  }
-
-  .campaign-nav-arrow {
-    position: absolute;
-    top: 62px;
-    z-index: 5;
-    width: 36px;
-    height: 46px;
-  }
-
-  .campaign-nav-arrow.prev {
-    left: 6px;
-  }
-
-  .campaign-nav-arrow.next {
-    right: 6px;
-  }
-
-  .campaign-action-row {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .campaign-start-btn {
-    width: 100%;
-    text-align: center;
-  }
-
-  .modal-panel {
-    padding: 15px 13px;
-  }
-}
-
-/* iPhone Landscape (e.g. 844×390, 852×393) */
-@media (max-height: 540px) and (orientation: landscape) {
-  .hub-screen {
-    pointer-events: auto;
-    overflow-y: auto;
-    touch-action: pan-y;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .hero-stage-area {
-    min-height: 120px;
-  }
-
-  .hero-showcase-docks {
+  html:not(.is-mobile-landscape) .hero-roster-rail {
     flex-direction: row;
-    align-items: flex-end;
   }
 
-  .hero-info-card,
-  .hero-launch-dock {
-    padding: 9px 12px;
-    gap: 6px;
+  html:not(.is-mobile-landscape) .arsenal-cards-grid,
+  html:not(.is-mobile-landscape) .mastery-grid,
+  html:not(.is-mobile-landscape) .blessing-cards-grid {
+    grid-template-columns: 1fr;
   }
+}
 
-  .hero-lore-line {
-    display: none;
-  }
+/* ==========================================================================
+   NATIVE MOBILE WIDESCREEN UI (iPhone 13 Pro 844×390, Android Landscape & Forced-Landscape!)
+   Fits 100% cleanly inside 844×390 with authentic game proportions & zero clipping!
+   ========================================================================== */
+html.is-mobile-landscape .hub-screen {
+  pointer-events: none;
+  overflow: hidden;
+  padding: 5px 12px 7px;
+}
 
-  .hero-portrait-frame {
-    width: 50px;
-    height: 50px;
-  }
+html.is-mobile-landscape .hub-screen.is-subtab {
+  pointer-events: auto;
+}
 
-  .campaign-banner-wrap {
-    height: 118px;
+html.is-mobile-landscape .hub-shell {
+  height: 100%;
+  min-height: 0;
+  gap: 5px;
+}
+
+html.is-mobile-landscape .hub-topbar {
+  grid-template-columns: auto 1fr auto;
+  padding: 4px 10px;
+  gap: 8px;
+  border-radius: 11px;
+}
+
+html.is-mobile-landscape .hub-crest {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+}
+
+html.is-mobile-landscape .hub-crest svg {
+  width: 18px;
+  height: 18px;
+}
+
+html.is-mobile-landscape .hub-title {
+  font-size: 13.5px;
+  letter-spacing: 0.05em;
+}
+
+html.is-mobile-landscape .hub-nav-tabs {
+  padding: 2.5px;
+  gap: 3px;
+}
+
+html.is-mobile-landscape .hub-tab-btn {
+  padding: 4.5px 11px;
+  font-size: 11.5px;
+}
+
+html.is-mobile-landscape .treasury-gold-pill {
+  padding: 4px 10px;
+  font-size: 12.5px;
+}
+
+html.is-mobile-landscape .hub-topbar .icon-btn {
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  padding: 0;
+  font-size: 14px;
+}
+
+/* Tab 1 (Герои) Mobile Widescreen */
+html.is-mobile-landscape .hub-panel-heroes {
+  display: grid;
+  grid-template-columns: auto minmax(140px, 1fr) minmax(295px, 348px);
+  align-items: center;
+  gap: 10px;
+  height: 100%;
+  min-height: 0;
+}
+
+html.is-mobile-landscape .hero-roster-rail {
+  padding: 7px 6px;
+  gap: 6px;
+  border-radius: 12px;
+}
+
+html.is-mobile-landscape .roster-portrait-slot {
+  width: 50px;
+  height: 50px;
+  border-radius: 9px;
+}
+
+html.is-mobile-landscape .stage-carousel-btn {
+  width: 36px;
+  height: 36px;
+  font-size: 22px;
+}
+
+html.is-mobile-landscape .hero-right-dock {
+  gap: 6px;
+}
+
+html.is-mobile-landscape .hero-info-card {
+  padding: 8px 11px;
+  gap: 5px;
+  border-radius: 12px;
+}
+
+html.is-mobile-landscape .hero-portrait-frame {
+  width: 44px;
+  height: 44px;
+  border-radius: 9px;
+}
+
+html.is-mobile-landscape .hero-class-name {
+  font-size: 16.5px;
+}
+
+html.is-mobile-landscape .hero-role-pill,
+html.is-mobile-landscape .btn-change-chapter {
+  font-size: 9.5px;
+  padding: 2px 7px;
+}
+
+html.is-mobile-landscape .hero-lore-line {
+  font-size: 10.5px;
+  -webkit-line-clamp: 1;
+}
+
+html.is-mobile-landscape .hero-stats-bars {
+  gap: 3px;
+  padding: 0;
+}
+
+html.is-mobile-landscape .stat-bar-row {
+  grid-template-columns: 76px 1fr 36px;
+  gap: 6px;
+  font-size: 10.5px;
+}
+
+html.is-mobile-landscape .rune-seg {
+  height: 6px;
+}
+
+html.is-mobile-landscape .stat-bar-val {
+  font-size: 11px;
+}
+
+html.is-mobile-landscape .hero-weapon-chip {
+  padding: 5px 8px;
+  border-radius: 8px;
+}
+
+html.is-mobile-landscape .hero-weapon-chip-icon {
+  width: 28px;
+  height: 28px;
+}
+
+html.is-mobile-landscape .hero-weapon-chip-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+html.is-mobile-landscape .hero-weapon-chip-name {
+  font-size: 11.5px;
+  max-width: 145px;
+}
+
+html.is-mobile-landscape .hero-weapon-chip-lvl {
+  font-size: 10px;
+}
+
+html.is-mobile-landscape .hero-weapon-chip-cta {
+  padding: 4px 8px;
+  font-size: 10.5px;
+}
+
+html.is-mobile-landscape .launch-weapon-warn {
+  padding: 3px 8px;
+  font-size: 10px;
+}
+
+html.is-mobile-landscape .launch-battle-btn {
+  padding: 7px 14px;
+  border-radius: 10px;
+}
+
+html.is-mobile-landscape .launch-main-text {
+  font-size: 18px;
+}
+
+html.is-mobile-landscape .launch-sub-text {
+  font-size: 9.5px;
+}
+
+/* Subpanels (Поход, Арсенал, Мастерская) Mobile Widescreen */
+html.is-mobile-landscape .hub-panel-sub {
+  padding: 0;
+  height: 100%;
+  min-height: 0;
+}
+
+html.is-mobile-landscape .hub-subpanel-card {
+  height: 100%;
+  max-height: 100%;
+  padding: 8px 12px;
+  gap: 6px;
+  border-radius: 12px;
+  justify-content: space-between;
+}
+
+html.is-mobile-landscape .subpanel-title {
+  font-size: 15.5px;
+}
+
+html.is-mobile-landscape .subpanel-hint {
+  font-size: 10.5px;
+}
+
+html.is-mobile-landscape .campaign-acts-bar {
+  padding: 3px;
+  gap: 4px;
+}
+
+html.is-mobile-landscape .campaign-act-tab {
+  padding: 4.5px 6px;
+  font-size: 10px;
+}
+
+html.is-mobile-landscape .campaign-showcase-stage {
+  grid-template-columns: 32px minmax(0, 1fr) 32px;
+  gap: 7px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+html.is-mobile-landscape .campaign-nav-arrow {
+  width: 32px;
+  height: 32px;
+  font-size: 21px;
+}
+
+html.is-mobile-landscape .campaign-showcase-card,
+html.is-mobile-landscape .campaign-banner-wrap {
+  height: 100%;
+  min-height: 138px;
+}
+
+html.is-mobile-landscape .campaign-banner-badges-left {
+  top: 6px;
+  left: 9px;
+}
+
+html.is-mobile-landscape .campaign-meta-pill {
+  padding: 2px 8px;
+  font-size: 9.5px;
+}
+
+html.is-mobile-landscape .campaign-card-body {
+  padding: 26px 11px 8px;
+  gap: 8px;
+}
+
+html.is-mobile-landscape .campaign-chapter-title {
+  font-size: 15px;
+}
+
+html.is-mobile-landscape .campaign-chapter-lore {
+  font-size: 10.5px;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+html.is-mobile-landscape .threat-pill {
+  padding: 2px 7px;
+  font-size: 9.5px;
+}
+
+html.is-mobile-landscape .threat-role {
+  display: none;
+}
+
+html.is-mobile-landscape .campaign-wpn-check {
+  padding: 2.5px 7px;
+  font-size: 9.5px;
+}
+
+html.is-mobile-landscape .campaign-start-btn {
+  padding: 7px 16px;
+  font-size: 13.5px;
+}
+
+html.is-mobile-landscape .campaign-nodes-strip {
+  gap: 5px;
+}
+
+html.is-mobile-landscape .campaign-node-btn {
+  padding: 4px 5px;
+  border-radius: 8px;
+}
+
+html.is-mobile-landscape .campaign-node-medallion {
+  font-size: 11px;
+}
+
+html.is-mobile-landscape .campaign-node-title {
+  font-size: 9.5px;
+}
+
+/* Arsenal & Workshop Mobile Widescreen */
+html.is-mobile-landscape .arsenal-class-pill {
+  padding: 3px 9px 3px 4px;
+  font-size: 10.5px;
+}
+
+html.is-mobile-landscape .class-pill-avatar {
+  width: 18px;
+  height: 18px;
+}
+
+html.is-mobile-landscape .arsenal-mage-elements {
+  padding: 5px 8px;
+  margin-bottom: 0;
+  gap: 4px;
+}
+
+html.is-mobile-landscape .arsenal-elem-header {
+  display: none;
+}
+
+html.is-mobile-landscape .arsenal-elem-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+}
+
+html.is-mobile-landscape .arsenal-elem-card {
+  padding: 4px 6px;
+  gap: 1px;
+}
+
+html.is-mobile-landscape .arsenal-elem-name {
+  font-size: 10.5px;
+}
+
+html.is-mobile-landscape .arsenal-elem-tag {
+  font-size: 9px;
+}
+
+html.is-mobile-landscape .arsenal-elem-desc {
+  display: none;
+}
+
+html.is-mobile-landscape .arsenal-cards-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+html.is-mobile-landscape .weapon-card {
+  padding: 7px 9px;
+  gap: 4px;
+  border-radius: 10px;
+}
+
+html.is-mobile-landscape .weapon-tier-badge,
+html.is-mobile-landscape .weapon-shop-lvl {
+  font-size: 10px;
+}
+
+html.is-mobile-landscape .weapon-icon-box {
+  width: 44px;
+  height: 44px;
+}
+
+html.is-mobile-landscape .weapon-icon-box svg {
+  width: 38px;
+  height: 38px;
+}
+
+html.is-mobile-landscape .weapon-name {
+  font-size: 13px;
+}
+
+html.is-mobile-landscape .weapon-desc {
+  font-size: 10px;
+  -webkit-line-clamp: 1;
+}
+
+html.is-mobile-landscape .weapon-metrics {
+  font-size: 10.5px;
+}
+
+html.is-mobile-landscape .btn-equip,
+html.is-mobile-landscape .btn-upgrade-wpn {
+  padding: 5px 7px;
+  font-size: 10.5px;
+}
+
+html.is-mobile-landscape .locked-silhouette-icon {
+  width: 44px;
+  height: 44px;
+}
+
+html.is-mobile-landscape .locked-weapon-svg {
+  width: 34px;
+  height: 34px;
+}
+
+html.is-mobile-landscape .locked-mystery-name {
+  font-size: 12.5px;
+}
+
+html.is-mobile-landscape .locked-hint-badge {
+  padding: 5px 7px;
+  font-size: 10px;
+}
+
+html.is-mobile-landscape .workshop-class-badge {
+  padding: 2px 9px 2px 4px;
+  font-size: 10.5px;
+}
+
+html.is-mobile-landscape .gothic-btn {
+  padding: 5px 10px;
+  font-size: 10.5px;
+}
+
+html.is-mobile-landscape .mastery-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+html.is-mobile-landscape .mastery-btn {
+  padding: 7px 10px;
+  gap: 4px;
+  border-radius: 9px;
+}
+
+html.is-mobile-landscape .mastery-icon-badge {
+  width: 26px;
+  height: 26px;
+}
+
+html.is-mobile-landscape .mastery-icon-badge svg {
+  width: 15px;
+  height: 15px;
+}
+
+html.is-mobile-landscape .mastery-name {
+  font-size: 13px;
+}
+
+html.is-mobile-landscape .mastery-lvl,
+html.is-mobile-landscape .mastery-bonus,
+html.is-mobile-landscape .mastery-cost {
+  font-size: 10.5px;
+}
+
+html.is-mobile-landscape .subpanel-footer-row {
+  padding-top: 4px;
+}
+
+html.is-mobile-landscape .subpanel-back-btn {
+  padding: 6px 13px;
+  font-size: 11.5px;
+}
+
+html.is-mobile-landscape .subpanel-battle-btn {
+  padding: 7px 26px;
+  font-size: 15px;
+}
+
+/* Blessings Tarot Altar & Result Modal on 844×390 Mobile Landscape (ZERO Clipping!) */
+@media (max-height: 520px) {
+  .modal-backdrop {
+    padding: 6px 12px;
   }
 
   .levelup-panel {
-    padding: 12px 16px;
+    padding: 2px 6px;
   }
 
   .altar-header {
-    margin-bottom: 10px;
+    gap: 2px;
+    margin-bottom: 6px;
+  }
+
+  .altar-soul-pill {
+    display: none;
+  }
+
+  .levelup-panel .modal-title {
+    font-size: 19px;
+  }
+
+  .levelup-panel .modal-subtitle {
+    font-size: 11px;
   }
 
   .blessing-cards-grid {
@@ -4250,116 +4356,118 @@ img {
   }
 
   .tarot-relic-card {
-    display: flex;
-    flex-direction: column;
-    text-align: center;
+    padding: 0 0 8px;
+  }
+
+  .blessing-top-ribbon {
+    padding: 6px 10px 3px;
+    font-size: 9px;
   }
 
   .blessing-emblem-stage {
-    width: 68px;
-    height: 64px;
-    margin-top: 4px;
+    width: 86px;
+    height: 72px;
+    margin-top: 1px;
+  }
+
+  .blessing-rune-halo {
+    width: 72px;
+    height: 72px;
+  }
+
+  .blessing-altar-rocks {
+    width: 84px;
+    height: 22px;
   }
 
   .blessing-relic-svg {
-    width: 56px;
-    height: 56px;
+    width: 58px;
+    height: 58px;
+  }
+
+  .blessing-name {
+    margin: 3px 8px 0;
+    font-size: 14.5px;
+  }
+
+  .blessing-stat-pill {
+    width: calc(100% - 16px);
+    margin: 5px 8px 0;
+    padding: 3.5px 8px;
+  }
+
+  .stat-plaque-text {
+    font-size: 9px;
   }
 
   .blessing-desc {
-    margin: 4px 10px 8px;
+    margin: 5px 10px 7px;
+    font-size: 10.2px;
+    line-height: 1.28;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .blessing-cta-bar {
+    width: calc(100% - 22px);
+    padding: 5.5px 10px;
+    font-size: 10.5px;
+  }
+
+  .result-panel {
+    max-width: 440px;
+    padding: 24px 18px 16px;
+  }
+
+  .result-crest {
+    top: -30px;
+    transform: translateX(-50%) scale(0.76);
+  }
+
+  .result-main-title {
+    font-size: 19px;
+  }
+
+  .result-chapter-ribbon {
+    margin-top: 3px;
+    padding: 2px 14px;
     font-size: 11px;
   }
-}
 
-/* ==========================================================================
-   SPLASH LOADING SCREEN (Full Cover Art + Slim Gothic Gold Progress Bar)
-   ========================================================================== */
-/* Default Mobile Horizontal Landscape Mode (applies in BOTH native landscape & forced-landscape!) */
-html.is-mobile-landscape .hub-screen {
-  pointer-events: auto;
-  overflow-y: auto;
-  touch-action: pan-y;
-  -webkit-overflow-scrolling: touch;
-  padding: 6px 14px 10px;
-}
+  .result-stats-grid {
+    margin: 8px 0;
+    gap: 8px;
+  }
 
-html.is-mobile-landscape .hub-shell {
-  height: auto;
-  min-height: 100%;
-  gap: 6px;
-  pointer-events: auto;
-}
+  .result-stat-box {
+    padding: 7px 10px;
+  }
 
-html.is-mobile-landscape .hub-topbar {
-  grid-template-columns: auto 1fr auto;
-  padding: 5px 10px;
-  gap: 8px;
-}
+  .result-stat-val {
+    font-size: 18px;
+  }
 
-html.is-mobile-landscape .hub-nav-tabs {
-  grid-column: auto;
-  order: 0;
-  width: auto;
-  justify-content: center;
-}
+  .result-unlocked-box {
+    margin: 0 0 8px;
+    padding: 6px 10px;
+    font-size: 11.5px;
+  }
 
-html.is-mobile-landscape .hub-tab-btn {
-  flex: 0 0 auto;
-  padding: 5px 10px;
-  font-size: 11.5px;
-}
+  .result-actions-col {
+    gap: 6px;
+  }
 
-html.is-mobile-landscape .hero-stage-area {
-  min-height: 92px;
-  pointer-events: auto;
-  touch-action: pan-y;
-}
+  .result-btn {
+    padding: 7.5px 12px;
+    font-size: 12.5px;
+  }
 
-html.is-mobile-landscape .stage-center-window {
-  min-height: 64px;
-}
-
-html.is-mobile-landscape .stage-carousel-btn {
-  width: 38px;
-  height: 38px;
-  font-size: 23px;
-}
-
-html.is-mobile-landscape .hero-showcase-docks {
-  flex-direction: row;
-  align-items: flex-end;
-  gap: 10px;
-  pointer-events: auto;
-  touch-action: pan-y;
-}
-
-html.is-mobile-landscape .hero-info-card,
-html.is-mobile-landscape .hero-launch-dock {
-  width: min(305px, 46%);
-  padding: 8px 11px;
-  gap: 5px;
-}
-
-html.is-mobile-landscape .hero-lore-line {
-  display: none;
-}
-
-html.is-mobile-landscape .hero-portrait-frame {
-  width: 44px;
-  height: 44px;
-}
-
-html.is-mobile-landscape .hero-class-name {
-  font-size: 16px;
-}
-
-html.is-mobile-landscape .chapter-mini-card {
-  min-height: 54px;
-}
-
-html.is-mobile-landscape .launch-battle-btn {
-  padding: 9px 14px;
+  .result-bottom-skull {
+    bottom: -13px;
+    transform: translateX(-50%) scale(0.8);
+  }
 }
 
 #splash-screen {
@@ -4490,20 +4598,23 @@ html.is-mobile-landscape .launch-battle-btn {
    ========================================================================== */
 
 .reset-progress-btn {
-  padding: 5px 10px;
-  font-size: 12px;
-  font-weight: 700;
-  color: #fecaca;
-  background: rgba(127, 29, 29, 0.42);
-  border: 1px solid rgba(248, 113, 113, 0.48);
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  font-size: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fde68a;
+  background: linear-gradient(180deg, rgba(44, 34, 68, 0.88), rgba(18, 14, 30, 0.96));
+  border: 1px solid rgba(229, 184, 92, 0.45);
   border-radius: 9px;
-  white-space: nowrap;
   cursor: pointer;
   transition: background 0.16s ease, border-color 0.16s ease, transform 0.12s ease;
 }
 
 .reset-progress-btn:hover {
-  background: rgba(185, 28, 28, 0.68);
+  background: rgba(153, 27, 27, 0.65);
   border-color: #fca5a5;
 }
 
@@ -4852,40 +4963,42 @@ html.is-mobile-landscape .launch-battle-btn {
 }
 
 @media (max-width: 820px) {
-  .arsenal-elem-grid,
-  .mage-starter-grid {
+  html:not(.is-mobile-landscape) .arsenal-elem-grid,
+  html:not(.is-mobile-landscape) .mage-starter-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 html.is-mobile-landscape .reset-progress-btn {
-  padding: 4px 8px;
-  font-size: 11px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  font-size: 13.5px;
 }
 
 html.is-mobile-landscape .mage-elements-box {
-  padding: 5px 7px;
+  padding: 4px 7px;
   gap: 3px;
 }
 
+html.is-mobile-landscape .mage-elem-head {
+  font-size: 10px;
+}
+
 html.is-mobile-landscape .mage-elem-pill {
-  padding: 3px 2px;
+  padding: 2.5px 2px;
 }
 
 html.is-mobile-landscape .mage-elem-pill-name {
-  font-size: 10px;
+  font-size: 9.5px;
 }
 
 html.is-mobile-landscape .mage-elem-pill-sub {
-  font-size: 8.5px;
+  font-size: 8px;
 }
 
 html.is-mobile-landscape .mage-elem-desc {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  font-size: 10px;
+  display: none;
 }
 
 html.is-mobile-landscape .mage-elem-modal-panel {

@@ -8,7 +8,7 @@ import {
   MAGE_ELEMENTS,
   MAGE_ELEMENT_ORDER,
   MAGE_ELEMENT_UNLOCK_COSTS
-} from './config.js?v=20261116h';
+} from './config.js?v=20261116j';
 
 export const WEAPON_MAX_SHOP_LEVEL = WEAPON_MAX_LEVEL || 12;
 

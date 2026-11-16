@@ -7,7 +7,7 @@
 import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { clone as cloneSkinned } from '../vendor/SkeletonUtils.js';
-import { WEAPONS } from './config.js?v=20261116h';
+import { WEAPONS } from './config.js?v=20261116j';
 
 const MODEL_PATHS = {
   barbarian: './assets/models/Barbarian.glb',
@@ -18,6 +18,7 @@ const MODEL_PATHS = {
   skel_rogue: './assets/models/Skeleton_Rogue.glb',
   skel_mage: './assets/models/Skeleton_Mage.glb',
   skel_warrior: './assets/models/Skeleton_Warrior.glb',
+  strelok_ai: './assets/models/Strelok_AI.glb',
   chest: './assets/env/chest.glb',
   chest_gold: './assets/env/chest_gold.glb'
 };
@@ -667,11 +668,12 @@ function createAnimController(modelRoot, clipMap, idleClipName = 'Idle', moveCli
 // ============================================================================
 const CLASS_SKELETON_ASSET = {
   warrior: 'skel_warrior',
-  gunslinger: 'skel_rogue',
+  gunslinger: 'strelok_ai',
   mage: 'skel_mage'
 };
 
 const HERO_BASE_SCALE = 0.90;
+const STRELOK_AI_BASE_SCALE = 1.35;
 const GUN_PIVOT_BASE_X = 0.06;
 const GUN_PIVOT_BASE_Y = 0.70;
 const GUN_PIVOT_BASE_Z = 0.24;
@@ -684,7 +686,14 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
     classId = opts.classId || 'warrior';
   }
   const safeClass = CLASS_SKELETON_ASSET[classId] ? classId : 'warrior';
-  const asset = gltfCache.get(CLASS_SKELETON_ASSET[safeClass]);
+  const isCustomStrelok = safeClass === 'gunslinger' && gltfCache.has('strelok_ai');
+  const assetKey = isCustomStrelok
+    ? 'strelok_ai'
+    : safeClass === 'gunslinger'
+      ? 'skel_rogue'
+      : CLASS_SKELETON_ASSET[safeClass];
+  const asset = gltfCache.get(assetKey);
+  const heroBaseScale = isCustomStrelok ? STRELOK_AI_BASE_SCALE : HERO_BASE_SCALE;
 
   const root = new THREE.Group();
   let currentWeaponId =
@@ -696,6 +705,8 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
   // Gunslinger two-handed carry pivot, recoil kick & reload tilt state
   let gunCarryPivot = null;
   let gunKickTimer = 0;
+  let aimHoldTimer = 0;
+  let aimYawBlend = 0;
   let pumpCycleTimer = 0;
   let isReloadingState = false;
   let reloadBlend = 0;
@@ -703,6 +714,7 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
   let modelInstance = null;
   let animCtrl = null;
   const instanceMats = [];
+  const aiGunMatEntries = [];
   let handR = null;
   let handL = null;
   let chestBone = null;
@@ -712,7 +724,7 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
   let lowerArmL = null;
   let mountedWeaponObj = null;
 
-  if (safeClass === 'gunslinger') {
+  if (safeClass === 'gunslinger' && !isCustomStrelok) {
     gunCarryPivot = new THREE.Group();
     gunCarryPivot.position.set(GUN_PIVOT_BASE_X, GUN_PIVOT_BASE_Y, GUN_PIVOT_BASE_Z);
     root.add(gunCarryPivot);
@@ -738,7 +750,7 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
 
   if (asset) {
     modelInstance = cloneSkinned(asset.scene);
-    modelInstance.scale.setScalar(HERO_BASE_SCALE);
+    modelInstance.scale.setScalar(heroBaseScale);
     root.add(modelInstance);
 
     let headBone = null;
@@ -756,11 +768,21 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
 
       if (node.isMesh && node.material) {
         const isEyeMesh = /Eyes/i.test(node.name);
+        const isAiGunMesh = isCustomStrelok && /Strelok_Gun/i.test(node.name);
         const isCloakOrScarf = /Cloak|Cape/i.test(node.name);
         const isRogueHood = /Skeleton_Rogue_Hood/i.test(node.name);
         const isMageHatOrRobe = /Skeleton_Mage_(Hat|Body)/i.test(node.name);
 
         if (isEyeMesh) {
+          if (isCustomStrelok) {
+            const eyeMat = node.material.clone();
+            if (eyeMat.emissive) eyeMat.emissive.setHex(0xffffff);
+            eyeMat.emissiveIntensity = 2.6;
+            eyeMat.roughness = 0.2;
+            node.material = eyeMat;
+            instanceMats.push({ mat: eyeMat, baseEmissive: 0xffffff, baseEmissiveInt: 2.6 });
+            return;
+          }
           const eyeMat = new THREE.MeshStandardMaterial({
             color: 0xffc13b,
             emissive: 0xff6a00,
@@ -779,23 +801,29 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
         const list = Array.isArray(cloned) ? cloned : [cloned];
 
         for (const m of list) {
-          if (isCloakOrScarf && (safeClass === 'warrior' || safeClass === 'gunslinger') && m.color) {
-            m.color.setHex(0x9b2226);
-          } else if (isRogueHood && m.color) {
-            m.color.lerp(new THREE.Color(0x57534e), 0.65);
-          } else if (isMageHatOrRobe && m.color) {
-            m.color.lerp(new THREE.Color(0x6b2146), 0.45);
+          if (!isCustomStrelok) {
+            if (isCloakOrScarf && (safeClass === 'warrior' || safeClass === 'gunslinger') && m.color) {
+              m.color.setHex(0x9b2226);
+            } else if (isRogueHood && m.color) {
+              m.color.lerp(new THREE.Color(0x57534e), 0.65);
+            } else if (isMageHatOrRobe && m.color) {
+              m.color.lerp(new THREE.Color(0x6b2146), 0.45);
+            }
           }
-          instanceMats.push({
+          const entry = {
             mat: m,
             baseEmissive: m.emissive ? m.emissive.getHex() : 0x000000,
             baseEmissiveInt: m.emissiveIntensity || 0
-          });
+          };
+          instanceMats.push(entry);
+          if (isAiGunMesh) {
+            aiGunMatEntries.push(entry);
+          }
         }
       }
     });
 
-    if (headBone) {
+    if (headBone && !isCustomStrelok) {
       headBone.scale.setScalar(1.14);
     }
 
@@ -803,7 +831,7 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
       if (handL) {
         handL.add(createSkullShield(false));
       }
-    } else if (safeClass === 'gunslinger') {
+    } else if (safeClass === 'gunslinger' && !isCustomStrelok) {
       if (chestBone) {
         const pack = createBackpackWithBedroll();
         pack.position.set(0, 0.22, -0.26);
@@ -815,11 +843,12 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
       }
     }
 
-    animCtrl = createAnimController(modelInstance, asset.clips, 'Idle', 'Running_A');
+    const moveClipName = isCustomStrelok ? 'Walk' : 'Running_A';
+    animCtrl = createAnimController(modelInstance, asset.clips, 'Idle', moveClipName);
   }
 
   function applyGunslingerArmPose() {
-    if (safeClass !== 'gunslinger') return;
+    if (safeClass !== 'gunslinger' || isCustomStrelok) return;
     if (upperArmL) upperArmL.quaternion.slerp(GUN_UPPER_ARM_L_Q, 0.90);
     if (lowerArmL) {
       if (reloadBlend > 0.02) {
@@ -836,6 +865,29 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
   function setWeapon(newWeaponId, nextElement = null) {
     currentWeaponId = newWeaponId || currentWeaponId;
     if (nextElement) currentMageElement = nextElement;
+    if (isCustomStrelok) {
+      const gunHex =
+        currentWeaponId === 'gatling'
+          ? 0x0284c7
+          : currentWeaponId === 'blunderbuss'
+            ? 0xea580c
+            : 0x000000;
+      const gunInt =
+        currentWeaponId === 'gatling'
+          ? 0.36
+          : currentWeaponId === 'blunderbuss'
+            ? 0.28
+            : 0.0;
+      for (const entry of aiGunMatEntries) {
+        entry.baseEmissive = gunHex;
+        entry.baseEmissiveInt = gunInt;
+        if (!isBeast && flashTimer <= 0 && entry.mat.emissive) {
+          entry.mat.emissive.setHex(gunHex);
+          entry.mat.emissiveIntensity = gunInt;
+        }
+      }
+      return;
+    }
     if (mountedWeaponObj && mountedWeaponObj.parent) {
       mountedWeaponObj.parent.remove(mountedWeaponObj);
     }
@@ -863,7 +915,7 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
     beastRing.visible = isBeast;
     const beastScale = isBeast ? 1.78 : 1.0;
     if (modelInstance) {
-      modelInstance.scale.setScalar(HERO_BASE_SCALE * beastScale);
+      modelInstance.scale.setScalar(heroBaseScale * beastScale);
     }
     if (gunCarryPivot) {
       gunCarryPivot.scale.setScalar(beastScale);
@@ -887,6 +939,12 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
   }
 
   function playAttackAnim() {
+    if (isCustomStrelok) {
+      gunKickTimer = 0.24;
+      aimHoldTimer = 0.55;
+      animCtrl?.triggerOneShot('Shoot', 1.65);
+      return;
+    }
     if (safeClass === 'gunslinger') {
       gunKickTimer = 0.22;
       pumpCycleTimer = currentWeaponId === 'pistol' ? 0.36 : 0;
@@ -920,11 +978,33 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
     const safeDt = Math.min(Math.max(dt || 0.016, 0), 0.1);
     if (animCtrl) {
       if (isMoving) {
-        animCtrl.setBaseState(isBeast ? 'Running_B' : 'Running_A', Math.max(0.85, Math.min(1.8, speedRatio * 1.18)));
+        if (isCustomStrelok) {
+          animCtrl.setBaseState('Walk', Math.max(1.05, Math.min(2.2, speedRatio * 1.55)));
+        } else {
+          animCtrl.setBaseState(isBeast ? 'Running_B' : 'Running_A', Math.max(0.85, Math.min(1.8, speedRatio * 1.18)));
+        }
       } else {
         animCtrl.setBaseState('Idle', 1.0);
       }
       animCtrl.mixer.update(safeDt);
+    }
+
+    if (isCustomStrelok && modelInstance) {
+      if (gunKickTimer > 0) gunKickTimer = Math.max(0, gunKickTimer - safeDt);
+      if (aimHoldTimer > 0) aimHoldTimer = Math.max(0, aimHoldTimer - safeDt);
+      const targetReload = isReloadingState ? 1 : 0;
+      reloadBlend += (targetReload - reloadBlend) * Math.min(1, safeDt * 12);
+      const targetAim = aimHoldTimer > 0 ? 1 : 0;
+      aimYawBlend += (targetAim - aimYawBlend) * Math.min(1, safeDt * 16);
+
+      const kickRatio = gunKickTimer > 0 ? gunKickTimer / 0.24 : 0;
+      const kickCurve = Math.sin(kickRatio * Math.PI * 0.88) * kickRatio;
+      const reloadBob = reloadBlend > 0.01 ? Math.sin(elapsedTime * 15.0) * reloadBlend : 0;
+
+      // Turn barrel along +Z firing line when shooting, relax to iconic 3/4 carry otherwise
+      modelInstance.rotation.y = -0.68 * aimYawBlend + reloadBlend * 0.18;
+      modelInstance.rotation.x = -kickCurve * 0.12 + reloadBlend * 0.14 + reloadBob * 0.05;
+      modelInstance.position.z = -kickCurve * 0.14;
     }
 
     // Two-handed shotgun carry pose, crisp recoil kick, pump rack & reload tilt!
@@ -2107,88 +2187,119 @@ export function createEnemyMesh(typeId = 'skeleton', eliteVariant = null, custom
     animCtrl.mixer.update(Math.random() * 1.2);
   }
 
-  // Ground Aura / Boss Rings (supports Elite halos, Mini-Boss 0.72x rings, and Dual Counter-Rotating Ashlord rings!)
+  // Clean Artistic Elite Indicator (ZERO flat red circles on Bosses; delicate feathered sigil + floating 3D crystal crest on Elites!)
   let halo = null;
-  let innerBossHalo = null;
+  let innerBossHalo = null; // Kept null: Bosses stand cleanly on cobblestones without plastic rings!
+  let eliteCrest = null;
+  const eliteCrestBaseY = (cfg.scale || 0.9) * effectiveScaleMult * 2.18;
 
-  if (cfg.isBossVisual || eliteVariant === 'purple' || eliteVariant === 'blue' || eliteVariant === 'miniboss') {
-    const outerColor = cfg.isBossVisual
-      ? cfg.bossRingColor
-      : eliteVariant === 'purple'
-        ? 0xa855f7
-        : 0x38bdf8;
-    const ringScale = (cfg.isBossVisual ? cfg.bossRingScale || 1.85 : 1.0) * effectiveScaleMult;
+  if (!cfg.isBossVisual && (eliteVariant === 'purple' || eliteVariant === 'blue' || eliteVariant === 'warden')) {
+    const crestColor =
+      eliteVariant === 'purple' ? 0xc084fc : eliteVariant === 'warden' ? 0xfbbf24 : 0x38bdf8;
+    const glowColor =
+      eliteVariant === 'purple' ? 0x9333ea : eliteVariant === 'warden' ? 0xd97706 : 0x0284c7;
+
+    // 1. Delicate feathered radial rune aura underfoot (soft additive glow, zero hard edges!)
+    const sigilTex = getMat('elite_feathered_sigil_tex', () => {
+      const sz = 192;
+      const cv = document.createElement('canvas');
+      cv.width = sz;
+      cv.height = sz;
+      const c2 = cv.getContext('2d');
+      const mid = sz * 0.5;
+      const rg = c2.createRadialGradient(mid, mid, sz * 0.08, mid, mid, mid * 0.94);
+      rg.addColorStop(0.0, 'rgba(255,255,255,0.10)');
+      rg.addColorStop(0.62, 'rgba(255,255,255,0.28)');
+      rg.addColorStop(0.80, 'rgba(255,255,255,0.55)');
+      rg.addColorStop(0.92, 'rgba(255,255,255,0.12)');
+      rg.addColorStop(1.0, 'rgba(255,255,255,0.0)');
+      c2.fillStyle = rg;
+      c2.fillRect(0, 0, sz, sz);
+
+      c2.strokeStyle = 'rgba(255,255,255,0.72)';
+      c2.lineWidth = 2.2;
+      c2.beginPath();
+      c2.arc(mid, mid, mid * 0.74, 0, Math.PI * 2);
+      c2.stroke();
+
+      c2.setLineDash([7, 9]);
+      c2.lineWidth = 1.5;
+      c2.beginPath();
+      c2.arc(mid, mid, mid * 0.58, 0, Math.PI * 2);
+      c2.stroke();
+      c2.setLineDash([]);
+
+      for (let k = 0; k < 4; k++) {
+        const ka = (k / 4) * Math.PI * 2;
+        const px = mid + Math.cos(ka) * mid * 0.74;
+        const py = mid + Math.sin(ka) * mid * 0.74;
+        c2.fillStyle = 'rgba(255,255,255,0.92)';
+        c2.beginPath();
+        c2.arc(px, py, 3.6, 0, Math.PI * 2);
+        c2.fill();
+      }
+      const t = new THREE.CanvasTexture(cv);
+      t.colorSpace = THREE.SRGBColorSpace;
+      return t;
+    });
 
     halo = new THREE.Mesh(
-      getGeo('elite_halo', () => {
-        const rg = new THREE.RingGeometry(0.58, 0.84, 28);
-        rg.rotateX(-Math.PI / 2);
-        return rg;
+      getGeo('elite_sigil_plane', () => {
+        const pg = new THREE.PlaneGeometry(1.62, 1.62);
+        pg.rotateX(-Math.PI / 2);
+        return pg;
       }),
-      getMat(`halo_mat_${outerColor}_${cfg.isBossVisual ? 'b' : 'e'}`, () =>
+      getMat(`elite_sigil_mat_${crestColor}`, () =>
         new THREE.MeshBasicMaterial({
-          color: outerColor,
+          map: sigilTex,
+          color: crestColor,
           transparent: true,
-          opacity: cfg.isBossVisual ? 0.82 : 0.72,
-          side: THREE.DoubleSide,
-          depthWrite: false
+          opacity: 0.44,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          toneMapped: false
         })
       )
     );
-    halo.position.y = 0.04;
-
-    // Add 4 cardinal rune diamonds on Boss outer rings so rotation is unmistakably readable!
-    if (cfg.isBossVisual) {
-      const pipGeo = getGeo('boss_ring_pip', () => {
-        const pg = new THREE.CircleGeometry(0.12, 4);
-        pg.rotateX(-Math.PI / 2);
-        return pg;
-      });
-      for (let i = 0; i < 4; i++) {
-        const a = (i / 4) * Math.PI * 2;
-        const pip = new THREE.Mesh(pipGeo, halo.material);
-        pip.position.set(Math.cos(a) * 0.78, 0.002, Math.sin(a) * 0.78);
-        halo.add(pip);
-      }
-    }
-
-    halo.scale.setScalar(ringScale);
+    halo.position.y = 0.032;
+    halo.scale.setScalar(effectiveScaleMult);
     root.add(halo);
 
-    // Sapphire-Gold (Warden) & Dual Counter-Rotating Blazing Crimson-Gold (Ashlord) inner ring!
-    if (cfg.bossInnerRingColor) {
-      innerBossHalo = new THREE.Mesh(
-        getGeo('boss_inner_halo', () => {
-          const rg = new THREE.RingGeometry(0.34, 0.50, 24);
-          rg.rotateX(-Math.PI / 2);
-          return rg;
-        }),
-        getMat(`inner_halo_mat_${cfg.bossInnerRingColor}_${typeId}`, () =>
-          new THREE.MeshBasicMaterial({
-            color: cfg.bossInnerRingColor,
-            transparent: true,
-            opacity: typeId === 'boss_ashlord' ? 0.90 : 0.78,
-            side: THREE.DoubleSide,
-            depthWrite: false
-          })
-        )
-      );
-      innerBossHalo.position.y = 0.046;
-      const spokeGeo = getGeo('boss_inner_spoke', () => {
-        const pg = new THREE.CircleGeometry(0.09, 3);
-        pg.rotateX(-Math.PI / 2);
-        return pg;
-      });
-      for (let i = 0; i < 6; i++) {
-        const a = (i / 6) * Math.PI * 2;
-        const sp = new THREE.Mesh(spokeGeo, innerBossHalo.material);
-        sp.position.set(Math.cos(a) * 0.44, 0.002, Math.sin(a) * 0.44);
-        sp.rotation.y = -a;
-        innerBossHalo.add(sp);
-      }
-      innerBossHalo.scale.setScalar(ringScale);
-      root.add(innerBossHalo);
-    }
+    // 2. Crisp floating 3D Diamond Soul-Crest above Elite's head so player immediately reads Elite status!
+    eliteCrest = new THREE.Group();
+    const gemMesh = new THREE.Mesh(
+      getGeo('elite_crest_gem', () => new THREE.OctahedronGeometry(0.135, 0)),
+      getMat(`elite_crest_mat_${crestColor}`, () =>
+        new THREE.MeshStandardMaterial({
+          color: crestColor,
+          emissive: glowColor,
+          emissiveIntensity: 2.1,
+          roughness: 0.15,
+          metalness: 0.35
+        })
+      )
+    );
+    gemMesh.scale.set(0.82, 1.48, 0.82);
+    const orbitBand = new THREE.Mesh(
+      getGeo('elite_crest_ring', () => {
+        const tg = new THREE.TorusGeometry(0.19, 0.018, 6, 16);
+        tg.rotateX(Math.PI * 0.5);
+        return tg;
+      }),
+      getMat(`elite_crest_band_${crestColor}`, () =>
+        new THREE.MeshBasicMaterial({
+          color: crestColor,
+          transparent: true,
+          opacity: 0.78,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          toneMapped: false
+        })
+      )
+    );
+    eliteCrest.add(gemMesh, orbitBand);
+    eliteCrest.position.set(0, eliteCrestBaseY, 0);
+    root.add(eliteCrest);
   }
 
   let inPool = false;
@@ -2216,6 +2327,7 @@ export function createEnemyMesh(typeId = 'skeleton', eliteVariant = null, custom
       if (stage2BreakNode) stage2BreakNode.visible = true;
       if (halo) halo.visible = true;
       if (innerBossHalo) innerBossHalo.visible = true;
+      if (eliteCrest) eliteCrest.visible = true;
       animCtrl?.resetAlive?.();
       for (let i = 0; i < flashMeshSlots.length; i++) {
         flashMeshSlots[i].mesh.material = flashMeshSlots[i].origMat;
@@ -2243,6 +2355,7 @@ export function createEnemyMesh(typeId = 'skeleton', eliteVariant = null, custom
       hitJoltTimer = 0;
       if (halo) halo.visible = false;
       if (innerBossHalo) innerBossHalo.visible = false;
+      if (eliteCrest) eliteCrest.visible = false;
       const hasClip = animCtrl?.triggerDeath?.(1.52);
       proceduralFall = !hasClip;
     },
@@ -2370,10 +2483,11 @@ export function createEnemyMesh(typeId = 'skeleton', eliteVariant = null, custom
       }
 
       if (halo) {
-        halo.rotation.y = elapsedTime * (typeId === 'boss_ashlord' ? 1.85 : 1.35);
+        halo.rotation.y = elapsedTime * 0.95;
       }
-      if (innerBossHalo) {
-        innerBossHalo.rotation.y = -elapsedTime * 2.65;
+      if (eliteCrest && !isDying) {
+        eliteCrest.rotation.y = elapsedTime * 2.4;
+        eliteCrest.position.y = eliteCrestBaseY + Math.sin(elapsedTime * 3.8) * 0.07;
       }
 
       if (flashTimer > 0) {

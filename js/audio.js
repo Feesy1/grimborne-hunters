@@ -983,6 +983,63 @@ export function createAudioEngine() {
       });
     },
 
+    playCritStrike() {
+      if (!readyToPlay() || !canTrigger('crit_strike', 65)) return;
+      const jitter = 0.95 + Math.random() * 0.10;
+      // 1. Brutal sub-chest cleaver crunch
+      playDistortedThump({
+        type: 'sawtooth',
+        freqStart: 165 * jitter,
+        freqEnd: 32,
+        duration: 0.22,
+        gainPeak: 0.44,
+        attack: 0.0015,
+        filterFreq: 780
+      });
+      // 2. Wet crimson blood-and-bone splatter tear
+      playFilteredNoise({
+        brown: false,
+        filterType: 'bandpass',
+        freqStart: 2650 * jitter,
+        freqEnd: 460,
+        q: 1.35,
+        startTime: 0.008,
+        duration: 0.19,
+        gainPeak: 0.34,
+        attack: 0.002
+      });
+      playFilteredNoise({
+        brown: true,
+        filterType: 'lowpass',
+        freqStart: 1450,
+        freqEnd: 240,
+        q: 1.2,
+        startTime: 0.02,
+        duration: 0.20,
+        gainPeak: 0.30,
+        attack: 0.003
+      });
+      // 3. Razor execution steel harmonic ring!
+      playTone({
+        type: 'triangle',
+        freqStart: 1180 * jitter,
+        freqEnd: 1090 * jitter,
+        startTime: 0.004,
+        duration: 0.24,
+        gainPeak: 0.18,
+        attack: 0.0015
+      });
+      playTone({
+        type: 'sine',
+        freqStart: 2360 * jitter,
+        freqEnd: 1980 * jitter,
+        startTime: 0.006,
+        duration: 0.17,
+        gainPeak: 0.12,
+        attack: 0.0015
+      });
+    },
+
     playBlock() {
       if (!readyToPlay() || !canTrigger('block', 45)) return;
       const jitter = 0.96 + Math.random() * 0.08;

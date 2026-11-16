@@ -16,7 +16,7 @@ import {
   ENEMY_TYPES,
   LEVELS,
   RUN_UPGRADES
-} from './config.js?v=20261116h';
+} from './config.js?v=20261116j';
 
 const CLASS_ORDER = ['warrior', 'gunslinger', 'mage'];
 
@@ -1361,11 +1361,22 @@ export function createUIManager(initialCallbacks = {}) {
   const hubScreen = el('div', 'hub-screen');
   const hubShell = el('div', 'hub-shell');
 
-  // --- Top Navigation Header Bar ---
+  // --- Top Navigation Header Bar (Matches 4-panel mobile/desktop dark-fantasy UI reference) ---
   const hubHeader = el('header', 'hub-topbar');
   const hubBrand = el('div', 'hub-brand');
   const hubCrest = el('div', 'hub-crest');
-  hubCrest.appendChild(createStatRuneSvg('might'));
+  hubCrest.appendChild(
+    makeSvgNode(
+      `<svg viewBox="0 0 36 36" width="24" height="24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M8 15 C3 11 3 5 7 3 C6 8 8 11 12 13 Z" fill="#fde093" stroke="#92400e" stroke-width="0.9"/>
+        <path d="M28 15 C33 11 33 5 29 3 C30 8 28 11 24 13 Z" fill="#fde093" stroke="#92400e" stroke-width="0.9"/>
+        <path d="M18 8 C12.2 8 9 12.2 9 17.5 C9 21.2 10.8 23.6 13 25 V30 H23 V25 C25.2 23.6 27 21.2 27 17.5 C27 12.2 23.8 8 18 8 Z" fill="#f5efe2" stroke="#d97706" stroke-width="1.2"/>
+        <circle cx="14.5" cy="18.2" r="2.3" fill="#ef4444"/>
+        <circle cx="21.5" cy="18.2" r="2.3" fill="#ef4444"/>
+        <polygon points="18,21 16.5,24 19.5,24" fill="#291d18"/>
+      </svg>`
+    )
+  );
   const hubTitle = el('h1', 'hub-title', 'ОХОТНИКИ МРАКА');
   hubBrand.append(hubCrest, hubTitle);
 
@@ -1379,7 +1390,7 @@ export function createUIManager(initialCallbacks = {}) {
 
   const tabCampaignBtn = el('button', 'hub-tab-btn');
   tabCampaignBtn.type = 'button';
-  const tabCampaignLabel = el('span', 'hub-tab-label', '🗺️ Поход');
+  const tabCampaignLabel = el('span', 'hub-tab-label', '📖 Поход');
   tabCampaignBtn.appendChild(tabCampaignLabel);
 
   const tabArsenalBtn = el('button', 'hub-tab-btn');
@@ -1404,9 +1415,10 @@ export function createUIManager(initialCallbacks = {}) {
   const hubGoldAmount = el('span', 'treasury-gold-val', '60');
   treasuryGoldPill.append(treasuryCoinSvg, hubGoldAmount);
 
-  const hubResetBtn = el('button', 'hud-btn reset-progress-btn', '🔄 Сброс');
+  const hubResetBtn = el('button', 'hud-btn icon-btn reset-progress-btn', '🔄');
   hubResetBtn.type = 'button';
   hubResetBtn.title = 'Сбросить весь прогресс до нуля';
+  hubResetBtn.setAttribute('aria-label', 'Сбросить весь прогресс');
 
   const hubMuteBtn = el('button', 'hud-btn icon-btn sound-trigger-btn', '🔊');
   hubMuteBtn.type = 'button';
@@ -1419,10 +1431,42 @@ export function createUIManager(initialCallbacks = {}) {
   const hubBody = el('div', 'hub-body');
 
   // =========================================================================
-  // TAB 1: ⚔️ ГЕРОИ (3D Hero Stage + Portrait Info Card + Mini-Banner Launch Dock)
+  // TAB 1: ⚔️ ГЕРОИ (3-Column Native Widescreen Layout: Left Portrait Rail + 3D Stage + Right Hero Card & Giant В БОЙ!)
   // =========================================================================
   const heroesPanel = el('section', 'hub-panel hub-panel-heroes');
 
+  // Column 1: Left Vertical 4-Slot Portrait Rail
+  const heroRosterRail = el('aside', 'hero-roster-rail');
+  const emblemDotButtons = {};
+  for (const cid of CLASS_ORDER) {
+    const cDef = CLASSES[cid];
+    const dotBtn = el('button', 'stage-emblem-dot roster-portrait-slot');
+    dotBtn.type = 'button';
+    dotBtn.dataset.classId = cid;
+    const dotImg = document.createElement('img');
+    dotImg.src = cDef.portrait;
+    dotImg.alt = cDef.nameRu;
+    dotImg.className = 'stage-dot-portrait';
+    dotBtn.appendChild(dotImg);
+    heroRosterRail.appendChild(dotBtn);
+    emblemDotButtons[cid] = dotBtn;
+  }
+  // 4th Locked Teaser Hunter Slot (matches reference rail)
+  const lockedRosterSlot = el('button', 'roster-portrait-slot is-locked-slot');
+  lockedRosterSlot.type = 'button';
+  lockedRosterSlot.title = 'Тайный охотник (скоро)';
+  lockedRosterSlot.appendChild(
+    makeSvgNode(
+      `<svg viewBox="0 0 28 28" width="22" height="22" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="6" y="12" width="16" height="12" rx="2.5" fill="#231f33" stroke="#9ca3af" stroke-width="1.6"/>
+        <path d="M9.5 12 V9 C9.5 6.5 11.5 4.5 14 4.5 C16.5 4.5 18.5 6.5 18.5 9 V12" stroke="#cbd5e1" stroke-width="1.8" stroke-linecap="round"/>
+        <circle cx="14" cy="17.5" r="1.8" fill="#cbd5e1"/>
+      </svg>`
+    )
+  );
+  heroRosterRail.appendChild(lockedRosterSlot);
+
+  // Column 2: Center-Left Full-Height 3D Hero Stage flanked by circular ‹ › arrows
   const heroStageArea = el('div', 'hero-stage-area');
   const heroStageControls = el('div', 'hero-stage-controls');
 
@@ -1437,34 +1481,17 @@ export function createUIManager(initialCallbacks = {}) {
   stageNextBtn.setAttribute('aria-label', 'Следующий класс');
 
   heroStageControls.append(stagePrevBtn, stageCenterSpacer, stageNextBtn);
+  heroStageArea.append(heroStageControls);
 
-  // 3 Class Portrait Medallion Dots below the 3D Pedestal
-  const stageEmblemDots = el('div', 'stage-emblem-dots');
-  const emblemDotButtons = {};
-  for (const cid of CLASS_ORDER) {
-    const cDef = CLASSES[cid];
-    const dotBtn = el('button', 'stage-emblem-dot');
-    dotBtn.type = 'button';
-    dotBtn.dataset.classId = cid;
-    const dotImg = document.createElement('img');
-    dotImg.src = cDef.portrait;
-    dotImg.alt = cDef.nameRu;
-    dotImg.className = 'stage-dot-portrait';
-    dotBtn.appendChild(dotImg);
-    stageEmblemDots.appendChild(dotBtn);
-    emblemDotButtons[cid] = dotBtn;
+  // Column 3: Right Dock (Ornate Beveled Hero Info Card + Giant Beveled Crimson-Gold «⚔️ В БОЙ!» Plaque)
+  const heroShowcaseDocks = el('div', 'hero-right-dock');
+
+  const heroInfoCard = el('div', 'hero-info-card');
+  for (const pos of ['tl', 'tr', 'bl', 'br']) {
+    heroInfoCard.appendChild(el('span', `gothic-card-clasp ${pos}`));
   }
 
-  heroStageArea.append(heroStageControls, stageEmblemDots);
-
-  // Lower Docks: Bottom-Left Hero Info Card + Bottom-Right Launch Dock
-  const heroShowcaseDocks = el('div', 'hero-showcase-docks');
-
-  // --- Bottom-Left: Ornate Gothic Hero Info Card ---
-  const heroInfoCard = el('div', 'hero-info-card');
   const heroCardHeader = el('div', 'hero-card-header');
-
-  // Real HD Character Portrait in Ornate Golden-Gothic Beveled Frame + Animated Corner Aura
   const heroPortraitFrame = el('div', 'hero-portrait-frame');
   const heroPortraitAura = el('div', 'hero-portrait-aura');
   const heroPortraitImg = document.createElement('img');
@@ -1479,8 +1506,12 @@ export function createUIManager(initialCallbacks = {}) {
 
   const heroTitleWrap = el('div', 'hero-title-wrap');
   const heroClassName = el('h2', 'hero-class-name', CLASSES.warrior.nameRu);
+  const heroPillsRow = el('div', 'hero-role-pills-row');
   const heroRolePill = el('span', 'hero-role-pill', CLASSES.warrior.roleRu);
-  heroTitleWrap.append(heroClassName, heroRolePill);
+  const changeChapterBtn = el('button', 'btn-change-chapter', '📖 Глава I ›');
+  changeChapterBtn.type = 'button';
+  heroPillsRow.append(heroRolePill, changeChapterBtn);
+  heroTitleWrap.append(heroClassName, heroPillsRow);
   heroCardHeader.append(heroPortraitFrame, heroTitleWrap);
 
   const heroLoreLine = el('p', 'hero-lore-line', CLASS_META.warrior.loreShortRu);
@@ -1511,7 +1542,7 @@ export function createUIManager(initialCallbacks = {}) {
   const statSpdBar = createSegmentedRuneBar('spd', 'Скорость');
   const statBlkBar = createSegmentedRuneBar('blk', 'Блок');
 
-  // Equipped Weapon Card with Custom Vector Weapon Silhouette
+  // Equipped Weapon Card with Custom Vector Weapon Art + Beveled «Арсенал ›» Button
   const heroWeaponChip = el('button', 'hero-weapon-chip');
   heroWeaponChip.type = 'button';
   const heroWeaponChipLeft = el('div', 'hero-weapon-chip-left');
@@ -1541,50 +1572,27 @@ export function createUIManager(initialCallbacks = {}) {
 
   heroInfoCard.append(heroCardHeader, heroLoreLine, heroStatsBars, mageElementsBox, heroWeaponChip);
 
-  // --- Bottom-Right: Sleek Launch Dock with Selected Chapter Mini-Banner Card ---
-  const heroLaunchDock = el('div', 'hero-launch-dock');
-
-  const chapterMiniCard = el('div', 'chapter-mini-card');
-  const chapterMiniThumbWrap = el('div', 'chapter-mini-thumb-wrap');
+  // Keep lightweight hidden refs for backward-compatible renderHub updates
+  const chapterMiniCard = el('div', 'hidden');
   const chapterMiniImg = document.createElement('img');
-  chapterMiniImg.className = 'chapter-mini-img';
-  chapterMiniImg.src = LEVELS[0].bannerImg;
-  chapterMiniImg.alt = LEVELS[0].nameRu;
-  const chapterMiniVignette = el('div', 'chapter-mini-vignette');
-  chapterMiniThumbWrap.append(chapterMiniImg, chapterMiniVignette);
+  const chapterMiniActBadge = el('span', '');
+  const chapterMiniFeature = el('span', '');
+  const chapterMiniTitle = el('div', '');
 
-  const chapterMiniContent = el('div', 'chapter-mini-content');
-  const chapterMiniTop = el('div', 'chapter-mini-top');
-  const chapterMiniActBadge = el('span', 'chapter-mini-act-badge', 'Акт I');
-  const chapterMiniFeature = el('span', 'chapter-mini-feature', '⏱️ 01:04');
-  chapterMiniTop.append(chapterMiniActBadge, chapterMiniFeature);
-
-  const chapterMiniTitle = el('div', 'chapter-mini-title', LEVELS[0].nameRu);
-
-  const chapterMiniBottom = el('div', 'chapter-mini-bottom');
-  const changeChapterBtn = el('button', 'btn-change-chapter', '🗺️ Сменить главу ›');
-  changeChapterBtn.type = 'button';
-  chapterMiniBottom.appendChild(changeChapterBtn);
-
-  chapterMiniContent.append(chapterMiniTop, chapterMiniTitle, chapterMiniBottom);
-  chapterMiniCard.append(chapterMiniThumbWrap, chapterMiniContent);
-
-  // Per-Class Weapon Readiness Warning Badge
   const launchWeaponWarn = el('button', 'launch-weapon-warn hidden');
   launchWeaponWarn.type = 'button';
 
-  const launchBattleBtn = el('button', 'launch-battle-btn');
+  const launchBattleBtn = el('button', 'launch-battle-btn gothic-plaque-battle-btn');
   launchBattleBtn.type = 'button';
   const launchMainText = el('span', 'launch-main-text', '⚔️ В БОЙ!');
-  const launchSubText = el('span', 'launch-sub-text', `${CLASSES.warrior.nameRu} • ${LEVELS[0].nameRu}`);
+  const launchSubText = el('span', 'launch-sub-text', `${LEVELS[0].nameRu}`);
   launchBattleBtn.append(launchMainText, launchSubText);
 
-  heroLaunchDock.append(chapterMiniCard, launchWeaponWarn, launchBattleBtn);
-  heroShowcaseDocks.append(heroInfoCard, heroLaunchDock);
-  heroesPanel.append(heroStageArea, heroShowcaseDocks);
+  heroShowcaseDocks.append(heroInfoCard, launchWeaponWarn, launchBattleBtn);
+  heroesPanel.append(heroRosterRail, heroStageArea, heroShowcaseDocks);
 
   // =========================================================================
-  // TAB 2: 🗺️ ПОХОД — DEDICATED ILLUSTRATED 25-CHAPTER CAMPAIGN SCREEN
+  // TAB 2: 📖 ПОХОД — SINGLE-SCREEN PANORAMIC 25-CHAPTER CAMPAIGN MAP
   // =========================================================================
   const campaignPanel = el('section', 'hub-panel hub-panel-sub hub-panel-campaign hidden');
   campaignPanel.id = 'campaignPanel';
@@ -1592,8 +1600,8 @@ export function createUIManager(initialCallbacks = {}) {
 
   const campaignTopBar = el('div', 'campaign-header-row');
   const campaignTitleWrap = el('div', 'subpanel-title-group');
-  const campaignHeading = el('h2', 'subpanel-title', '🗺️ Карта Похода — 25 Глав');
-  const campaignProgressHint = el('p', 'subpanel-hint', 'Пройдите 5 Актов и сокрушите Владыку Вечного Пепла');
+  const campaignHeading = el('h2', 'subpanel-title', '📖 Карта Похода — 25 Глав');
+  const campaignProgressHint = el('p', 'subpanel-hint', 'Открыто глав: 1 из 25');
   campaignTitleWrap.append(campaignHeading, campaignProgressHint);
 
   const campaignBackHeroBtn = el('button', 'subpanel-back-btn', '← К герою');
@@ -1612,7 +1620,7 @@ export function createUIManager(initialCallbacks = {}) {
     campaignActBtns[aDef.act] = aBtn;
   }
 
-  // Center Featured Chapter Showcase Stage (‹ Card ›)
+  // Center Featured Chapter Showcase Stage (‹ Panoramic Banner with Integrated Bottom Overlay ›)
   const campaignShowcaseStage = el('div', 'campaign-showcase-stage');
   const campaignPrevBtn = el('button', 'campaign-nav-arrow prev', '‹');
   campaignPrevBtn.type = 'button';
@@ -1620,7 +1628,6 @@ export function createUIManager(initialCallbacks = {}) {
 
   const campaignCard = el('div', 'campaign-showcase-card');
 
-  // Large Panoramic Illustrated Banner
   const campaignBannerWrap = el('div', 'campaign-banner-wrap');
   const campaignBannerImg = document.createElement('img');
   campaignBannerImg.className = 'campaign-banner-img';
@@ -1629,7 +1636,7 @@ export function createUIManager(initialCallbacks = {}) {
   const campaignBannerVignette = el('div', 'campaign-banner-vignette');
 
   const campaignBannerTopLeft = el('div', 'campaign-banner-badges-left');
-  const campaignActPill = el('span', 'campaign-meta-pill', 'АКТ I • ГЛАВА I');
+  const campaignActPill = el('span', 'campaign-meta-pill', 'Акт I • Глава I');
   const campaignDurationPill = el('span', 'campaign-meta-pill', '⏱️ 01:04');
   campaignBannerTopLeft.append(campaignActPill, campaignDurationPill);
 
@@ -1637,7 +1644,7 @@ export function createUIManager(initialCallbacks = {}) {
 
   const campaignLockOverlay = el('div', 'campaign-lock-overlay hidden');
   const campaignLockSvg = makeSvgNode(
-    `<svg viewBox="0 0 48 48" width="42" height="42" fill="none" xmlns="http://www.w3.org/2000/svg">
+    `<svg viewBox="0 0 48 48" width="36" height="36" fill="none" xmlns="http://www.w3.org/2000/svg">
       <rect x="10" y="21" width="28" height="21" rx="4" fill="#1e1b2e" stroke="#e5b85c" stroke-width="2.2"/>
       <path d="M16 21 V15 C16 10.5 19.6 7 24 7 C28.4 7 32 10.5 32 15 V21" stroke="#fde093" stroke-width="2.4" stroke-linecap="round"/>
       <circle cx="24" cy="30" r="3" fill="#fde093"/>
@@ -1648,23 +1655,17 @@ export function createUIManager(initialCallbacks = {}) {
   const campaignLockSub = el('div', 'campaign-lock-sub', 'Пройдите предыдущую главу похода');
   campaignLockOverlay.append(campaignLockSvg, campaignLockTitle, campaignLockSub);
 
-  campaignBannerWrap.append(
-    campaignBannerImg,
-    campaignBannerVignette,
-    campaignBannerTopLeft,
-    campaignSpecialBadge,
-    campaignLockOverlay
-  );
-
-  // Featured Chapter Details & Controls
+  // Integrated Bottom Overlay inside Panoramic Banner (matches reference top-right panel!)
   const campaignCardBody = el('div', 'campaign-card-body');
+  const campaignBodyLeft = el('div', 'campaign-body-left');
   const campaignChapterTitle = el('h3', 'campaign-chapter-title', LEVELS[0].nameRu);
   const campaignChapterLore = el('p', 'campaign-chapter-lore', LEVELS[0].subtitleRu);
 
   const campaignThreatsWrap = el('div', 'campaign-threats-wrap');
-  const campaignThreatsLabel = el('span', 'campaign-threats-label', 'УГРОЗЫ ГЛАВЫ:');
+  const campaignThreatsLabel = el('span', 'campaign-threats-label', 'Бестиарий главы:');
   const campaignThreatsList = el('div', 'campaign-threats-list');
   campaignThreatsWrap.append(campaignThreatsLabel, campaignThreatsList);
+  campaignBodyLeft.append(campaignChapterTitle, campaignChapterLore, campaignThreatsWrap);
 
   const campaignActionRow = el('div', 'campaign-action-row');
   const campaignWpnCheckBtn = el('button', 'campaign-wpn-check is-ready');
@@ -1673,17 +1674,21 @@ export function createUIManager(initialCallbacks = {}) {
   const campaignWpnCheckText = el('span', 'campaign-wpn-check-text', 'Оружие готово (Ур. 1)');
   campaignWpnCheckBtn.append(campaignWpnCheckIcon, campaignWpnCheckText);
 
-  const campaignStartBtn = el('button', 'campaign-start-btn', '⚔️ НАЧАТЬ ГЛАВУ');
+  const campaignStartBtn = el('button', 'campaign-start-btn', '⚔️ Начать главу');
   campaignStartBtn.type = 'button';
   campaignActionRow.append(campaignWpnCheckBtn, campaignStartBtn);
 
-  campaignCardBody.append(
-    campaignChapterTitle,
-    campaignChapterLore,
-    campaignThreatsWrap,
-    campaignActionRow
+  campaignCardBody.append(campaignBodyLeft, campaignActionRow);
+
+  campaignBannerWrap.append(
+    campaignBannerImg,
+    campaignBannerVignette,
+    campaignBannerTopLeft,
+    campaignSpecialBadge,
+    campaignLockOverlay,
+    campaignCardBody
   );
-  campaignCard.append(campaignBannerWrap, campaignCardBody);
+  campaignCard.append(campaignBannerWrap);
 
   const campaignNextBtn = el('button', 'campaign-nav-arrow next', '›');
   campaignNextBtn.type = 'button';
@@ -1698,7 +1703,7 @@ export function createUIManager(initialCallbacks = {}) {
   campaignPanel.appendChild(campaignBox);
 
   // =========================================================================
-  // TAB 3: 🗡️ АРСЕНАЛ (Per-Class Weapon Upgrades 1..12 + Custom Vector Art)
+  // TAB 3: 🗡️ АРСЕНАЛ (3-Card Centered Weapon Showcase + Bottom Action Bar)
   // =========================================================================
   const arsenalPanel = el('section', 'hub-panel hub-panel-sub hidden');
   const arsenalBox = el('div', 'hub-subpanel-card arsenal-subpanel');
@@ -1706,7 +1711,7 @@ export function createUIManager(initialCallbacks = {}) {
   const arsenalHeaderRow = el('div', 'subpanel-header-row');
   const arsenalTitleGroup = el('div', 'subpanel-title-group');
   const arsenalHeading = el('h2', 'subpanel-title', '🗡️ Арсенал Охотника');
-  const arsenalSubhint = el('p', 'subpanel-hint', 'Рунные Сундуки в Главах III и VII открывают новое оружие класса навсегда');
+  const arsenalSubhint = el('p', 'subpanel-hint', 'Рунные сундуки в главах III и VII открывают новое оружие класса навсегда.');
   arsenalTitleGroup.append(arsenalHeading, arsenalSubhint);
 
   const arsenalClassSwitch = el('div', 'arsenal-class-switch');
@@ -1733,7 +1738,7 @@ export function createUIManager(initialCallbacks = {}) {
   const arsenalFooterRow = el('div', 'subpanel-footer-row');
   const arsenalBackBtn = el('button', 'subpanel-back-btn', '← К герою');
   arsenalBackBtn.type = 'button';
-  const arsenalQuickPlayBtn = el('button', 'subpanel-battle-btn', '⚔️ В БОЙ!');
+  const arsenalQuickPlayBtn = el('button', 'subpanel-battle-btn gothic-plaque-battle-btn', '⚔️ В БОЙ!');
   arsenalQuickPlayBtn.type = 'button';
   arsenalFooterRow.append(arsenalBackBtn, arsenalQuickPlayBtn);
 
@@ -1741,20 +1746,20 @@ export function createUIManager(initialCallbacks = {}) {
   arsenalPanel.appendChild(arsenalBox);
 
   // =========================================================================
-  // TAB 4: 🧪 МАСТЕРСКАЯ (Per-Class Talents + Class Badge + Reward Gold)
+  // TAB 4: 🧪 МАСТЕРСКАЯ (2-Column Beveled Talent Cards + Bottom Action Bar)
   // =========================================================================
   const shopPanel = el('section', 'hub-panel hub-panel-sub hidden');
   const shopBox = el('div', 'hub-subpanel-card shop-subpanel');
 
   const shopHeaderRow = el('div', 'subpanel-header-row');
   const shopTitleGroup = el('div', 'subpanel-title-group');
-  const masteryHeading = el('h2', 'subpanel-title', '🧪 Мастерская Талантов');
+  const masteryHeading = el('h2', 'subpanel-title', '🧪 Мастерская Класса');
   const masteryClassBadge = el('div', 'workshop-class-badge');
   const masteryClassBadgeImg = document.createElement('img');
   masteryClassBadgeImg.className = 'workshop-badge-portrait';
   masteryClassBadgeImg.src = CLASSES.warrior.portrait;
   masteryClassBadgeImg.alt = '';
-  const masteryClassBadgeText = el('span', '', 'Таланты класса: Воин Клятвы');
+  const masteryClassBadgeText = el('span', '', '⚔️ Таланты класса: Воин Клятвы');
   masteryClassBadge.append(masteryClassBadgeImg, masteryClassBadgeText);
   shopTitleGroup.append(masteryHeading, masteryClassBadge);
 
@@ -1776,7 +1781,7 @@ export function createUIManager(initialCallbacks = {}) {
     shopClassBtns[cid] = b;
   }
 
-  const rewardGoldBtn = el('button', 'gothic-btn btn-reward-gold', '+80 золота (Видео)');
+  const rewardGoldBtn = el('button', 'gothic-btn btn-reward-gold', '🎁 +80 золота (Видео)');
   rewardGoldBtn.type = 'button';
   shopHeaderControls.append(shopClassSwitch, rewardGoldBtn);
   shopHeaderRow.append(shopTitleGroup, shopHeaderControls);
@@ -1786,7 +1791,7 @@ export function createUIManager(initialCallbacks = {}) {
   const shopFooterRow = el('div', 'subpanel-footer-row');
   const shopBackBtn = el('button', 'subpanel-back-btn', '← К герою');
   shopBackBtn.type = 'button';
-  const shopQuickPlayBtn = el('button', 'subpanel-battle-btn', '⚔️ В БОЙ!');
+  const shopQuickPlayBtn = el('button', 'subpanel-battle-btn gothic-plaque-battle-btn', '⚔️ В БОЙ!');
   shopQuickPlayBtn.type = 'button';
   shopFooterRow.append(shopBackBtn, shopQuickPlayBtn);
 
@@ -1893,28 +1898,82 @@ export function createUIManager(initialCallbacks = {}) {
 
   let activeLevelUpHandler = null;
 
-  // Result Modal (Victory / Defeat)
-  const resultModal = el('div', 'modal-backdrop hidden');
+  // Result Modal (Ornate Gothic Victory / Defeat Plaque matching media_1794831700387_b993e413.jpg)
+  const resultModal = el('div', 'modal-backdrop result-modal-backdrop hidden');
   const resultPanel = el('div', 'modal-panel result-panel');
+  for (const pos of ['tl', 'tr', 'bl', 'br']) {
+    resultPanel.appendChild(el('span', `gothic-card-clasp ${pos}`));
+  }
   const resultCrest = el('div', 'result-crest');
-  const resultTitle = el('h2', 'modal-title', 'Глава пройдена!');
-  const resultLevelName = el('p', 'modal-subtitle', '');
+  const resultTitle = el('h2', 'modal-title result-main-title', 'Победа! Глава очищена!');
+
+  const resultRibbonWrap = el('div', 'result-chapter-ribbon');
+  const resultLevelName = el('span', 'result-chapter-ribbon-text', '');
+  resultRibbonWrap.appendChild(resultLevelName);
+
   const resultStatsGrid = el('div', 'result-stats-grid');
 
   const resGoldBox = el('div', 'result-stat-box');
+  const resGoldIcon = makeSvgNode(
+    `<svg viewBox="0 0 38 38" width="34" height="34" fill="none" class="result-stat-svg" xmlns="http://www.w3.org/2000/svg">
+      <ellipse cx="14" cy="28" rx="9" ry="4" fill="#d97706" stroke="#fde047" stroke-width="1.2"/>
+      <ellipse cx="14" cy="24" rx="9" ry="4" fill="#f59e0b" stroke="#fef08a" stroke-width="1.2"/>
+      <ellipse cx="14" cy="20" rx="9" ry="4" fill="#facc15" stroke="#fffbeb" stroke-width="1.2"/>
+      <ellipse cx="25" cy="29" rx="8.5" ry="3.8" fill="#b45309" stroke="#fde047" stroke-width="1.2"/>
+      <ellipse cx="25" cy="25.2" rx="8.5" ry="3.8" fill="#eab308" stroke="#fef08a" stroke-width="1.2"/>
+      <ellipse cx="19" cy="14" rx="8" ry="3.6" fill="#fde047" stroke="#ffffff" stroke-width="1.2"/>
+    </svg>`
+  );
+  const resGoldTextCol = el('div', 'result-stat-col');
   const resGoldLabel = el('div', 'result-stat-label', 'Добыто золота');
   const resGoldVal = el('div', 'result-stat-val', '+0');
-  resGoldBox.append(resGoldLabel, resGoldVal);
+  resGoldTextCol.append(resGoldLabel, resGoldVal);
+  resGoldBox.append(resGoldIcon, resGoldTextCol);
 
   const resKillsBox = el('div', 'result-stat-box');
+  const resKillsIcon = makeSvgNode(
+    `<svg viewBox="0 0 38 38" width="34" height="34" fill="none" class="result-stat-svg" xmlns="http://www.w3.org/2000/svg">
+      <path d="M19 6 C11.5 6 7 11.5 7 18.2 C7 22.8 9.2 25.8 12.2 27.6 V32 H25.8 V27.6 C28.8 25.8 31 22.8 31 18.2 C31 11.5 26.5 6 19 6 Z" fill="#e2e8f0" stroke="#94a3b8" stroke-width="1.4"/>
+      <circle cx="14.5" cy="18.8" r="3.1" fill="#3b0764"/>
+      <circle cx="23.5" cy="18.8" r="3.1" fill="#3b0764"/>
+      <polygon points="19,21.5 17.3,25 20.7,25" fill="#1e1b4b"/>
+      <line x1="15.5" y1="28" x2="15.5" y2="31.5" stroke="#475569" stroke-width="1.3"/>
+      <line x1="19" y1="28" x2="19" y2="31.5" stroke="#475569" stroke-width="1.3"/>
+      <line x1="22.5" y1="28" x2="22.5" y2="31.5" stroke="#475569" stroke-width="1.3"/>
+    </svg>`
+  );
+  const resKillsTextCol = el('div', 'result-stat-col');
   const resKillsLabel = el('div', 'result-stat-label', 'Истреблено нежити');
   const resKillsVal = el('div', 'result-stat-val', '0');
-  resKillsBox.append(resKillsLabel, resKillsVal);
+  resKillsTextCol.append(resKillsLabel, resKillsVal);
+  resKillsBox.append(resKillsIcon, resKillsTextCol);
 
   resultStatsGrid.append(resGoldBox, resKillsBox);
   const resultUnlockedBox = el('div', 'result-unlocked-box hidden');
   const resultActionsCol = el('div', 'result-actions-col');
-  resultPanel.append(resultCrest, resultTitle, resultLevelName, resultStatsGrid, resultUnlockedBox, resultActionsCol);
+
+  const resultBottomSkull = el('div', 'result-bottom-skull');
+  resultBottomSkull.appendChild(
+    makeSvgNode(
+      `<svg viewBox="0 0 40 32" width="32" height="26" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M9 14 C3 10 3 4 7 2 C6 7 8 10 13 12 Z" fill="#d97706"/>
+        <path d="M31 14 C37 10 37 4 33 2 C34 7 32 10 27 12 Z" fill="#d97706"/>
+        <path d="M20 6 C14.5 6 11.5 10.2 11.5 15.5 C11.5 19.2 13.5 21.8 15.5 23.2 L17 29 H23 L24.5 23.2 C26.5 21.8 28.5 19.2 28.5 15.5 C28.5 10.2 25.5 6 20 6 Z" fill="#e5b85c" stroke="#fef08a" stroke-width="1.1"/>
+        <circle cx="16.8" cy="16" r="2.2" fill="#1c1917"/>
+        <circle cx="23.2" cy="16" r="2.2" fill="#1c1917"/>
+      </svg>`
+    )
+  );
+
+  resultPanel.append(
+    resultCrest,
+    resultTitle,
+    resultRibbonWrap,
+    resultStatsGrid,
+    resultUnlockedBox,
+    resultActionsCol,
+    resultBottomSkull
+  );
   resultModal.appendChild(resultPanel);
   root.appendChild(resultModal);
 
@@ -2120,18 +2179,17 @@ export function createUIManager(initialCallbacks = {}) {
     const isEn = lang === 'en';
     hubTitle.textContent = isEn ? 'GRIMBORNE HUNTERS' : 'ОХОТНИКИ МРАКА';
     tabHeroesLabel.textContent = isEn ? '⚔️ Heroes' : '⚔️ Герои';
-    tabCampaignLabel.textContent = isEn ? '🗺️ Campaign' : '🗺️ Поход';
+    tabCampaignLabel.textContent = isEn ? '📖 Campaign' : '📖 Поход';
     tabArsenalLabel.textContent = isEn ? '🗡️ Arsenal' : '🗡️ Арсенал';
     tabShopLabel.textContent = isEn ? '🧪 Workshop' : '🧪 Мастерская';
     heroWeaponChipArrow.textContent = isEn ? 'Arsenal ›' : 'Арсенал ›';
-    changeChapterBtn.textContent = isEn ? '🗺️ Change Chapter ›' : '🗺️ Сменить главу ›';
     launchMainText.textContent = isEn ? '⚔️ BATTLE!' : '⚔️ В БОЙ!';
     arsenalQuickPlayBtn.textContent = isEn ? '⚔️ BATTLE!' : '⚔️ В БОЙ!';
     shopQuickPlayBtn.textContent = isEn ? '⚔️ BATTLE!' : '⚔️ В БОЙ!';
     campaignBackHeroBtn.textContent = isEn ? '← Hero Stage' : '← К герою';
     arsenalBackBtn.textContent = isEn ? '← Hero Stage' : '← К герою';
     shopBackBtn.textContent = isEn ? '← Hero Stage' : '← К герою';
-    campaignHeading.textContent = isEn ? '🗺️ Dark Campaign — 25 Chapters' : '🗺️ Карта Похода — 25 Глав';
+    campaignHeading.textContent = isEn ? '📖 Dark Campaign — 25 Chapters' : '📖 Карта Похода — 25 Глав';
     arsenalSubhint.textContent = isEn
       ? 'Relic Chests in Chapters III & VII permanently unlock new class weapons'
       : 'Рунные Сундуки в Главах III и VII открывают новое оружие класса навсегда';
@@ -2712,13 +2770,17 @@ export function createUIManager(initialCallbacks = {}) {
     launchWeaponWarn.classList.toggle('hidden', !isUnderleveledForSelected);
     if (isUnderleveledForSelected) {
       launchWeaponWarn.textContent = isEn
-        ? `⚠️ Weapon below chapter rank! (Lv. ${eqShopLvl} / rec. ${selLevelDef.recWeaponLevel})`
-        : `⚠️ Оружие слабее главы! (Ур. ${eqShopLvl} / рек. ${selLevelDef.recWeaponLevel})`;
+        ? `⚠️ Weapon Lv. ${eqShopLvl} / rec. ${selLevelDef.recWeaponLevel}`
+        : `⚠️ Оружие Ур. ${eqShopLvl} / рек. ${selLevelDef.recWeaponLevel}`;
     }
 
+    changeChapterBtn.textContent = isEn
+      ? `📖 Ch. ${selLevelDef.roman} ›`
+      : `📖 Глава ${selLevelDef.roman} ›`;
+
     launchSubText.textContent = isEn
-      ? `${activeClass.nameEn} • ${eqWpnDef.nameEn} • Ch. ${selLevelDef.roman}`
-      : `${activeClass.nameRu} • ${eqWpnDef.nameRu} • Глава ${selLevelDef.roman}`;
+      ? `Ch. ${selLevelDef.roman}: ${selLevelDef.shortTitleRu}`
+      : `Глава ${selLevelDef.roman}: ${selLevelDef.shortTitleRu}`;
 
     // --- 4. Render Dedicated 25-Chapter Campaign Screen (🗺️ Поход) ---
     const viewDef = LEVELS[viewedCampaignLevel - 1] || selLevelDef;
@@ -2987,11 +3049,11 @@ export function createUIManager(initialCallbacks = {}) {
         )
       );
 
-      const titleRow = el('div', 'weapon-title-row');
+      const showcaseWrap = el('div', 'weapon-showcase-art');
       const iconBox = el('div', 'weapon-icon-box');
       iconBox.appendChild(createWeaponSvg(wId));
       const wName = el('h4', 'weapon-name', isEn ? wDef.nameEn : wDef.nameRu);
-      titleRow.append(iconBox, wName);
+      showcaseWrap.append(iconBox, wName);
 
       const pipsRow = el('div', 'weapon-pips');
       pipsRow.style.setProperty('--wpn-max-pips', String(maxWpnLvl));
@@ -3015,8 +3077,8 @@ export function createUIManager(initialCallbacks = {}) {
         'div',
         'weapon-metrics',
         isEn
-          ? `Dmg: ${scaledDmg}${wDef.pellets > 1 ? ` ×${wDef.pellets}` : ''} • ${rateStr}/s${magInfo}`
-          : `Урон: ${scaledDmg}${wDef.pellets > 1 ? ` ×${wDef.pellets}` : ''} • ${rateStr}/с${magInfo}`
+          ? `⚔️ Dmg: ${scaledDmg}${wDef.pellets > 1 ? ` ×${wDef.pellets}` : ''} • ${rateStr}/s${magInfo}`
+          : `⚔️ Урон: ${scaledDmg}${wDef.pellets > 1 ? ` ×${wDef.pellets}` : ''} • ${rateStr}/с${magInfo}`
       );
 
       const actionsRow = el('div', 'weapon-actions');
@@ -3049,7 +3111,7 @@ export function createUIManager(initialCallbacks = {}) {
       });
 
       actionsRow.append(equipBtn, upgBtn);
-      wCard.append(head, titleRow, pipsRow, wDesc, metrics, actionsRow);
+      wCard.append(head, showcaseWrap, pipsRow, wDesc, metrics, actionsRow);
       arsenalCardsGrid.appendChild(wCard);
     }
 
@@ -3585,6 +3647,10 @@ export function createUIManager(initialCallbacks = {}) {
       card.dataset.theme = theme;
       card.style.setProperty('--card-idx', String(idx));
 
+      for (const cPos of ['tl', 'tr', 'bl', 'br']) {
+        card.appendChild(el('span', `tarot-corner ${cPos}`));
+      }
+
       const foilShimmer = el('span', 'blessing-foil-shimmer');
       const topRibbon = el('div', 'blessing-top-ribbon');
       const catSpan = el('span', 'blessing-cat-label', categoryStr);
@@ -3593,10 +3659,28 @@ export function createUIManager(initialCallbacks = {}) {
 
       const emblemStage = el('div', 'blessing-emblem-stage');
       emblemStage.appendChild(createRuneHaloSvg());
+      // Subtle craggy dark-stone altar rocks flanking the base of the relic art (matches reference)
+      emblemStage.appendChild(
+        makeSvgNode(
+          `<svg viewBox="0 0 120 34" class="blessing-altar-rocks" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <polygon points="4,32 14,17 26,23 32,32" fill="rgba(18,14,28,0.88)" stroke="rgba(255,255,255,0.12)" stroke-width="0.8"/>
+            <polygon points="88,32 96,19 108,15 116,32" fill="rgba(18,14,28,0.88)" stroke="rgba(255,255,255,0.12)" stroke-width="0.8"/>
+            <ellipse cx="60" cy="31" rx="44" ry="3" fill="rgba(0,0,0,0.48)"/>
+          </svg>`
+        )
+      );
       emblemStage.appendChild(createBlessingRelicSvg(choice, 'blessing-relic-svg'));
 
       const nameEl = el('h3', 'blessing-name', choice?.nameRu || baseUpg?.nameRu || 'Дар Душ');
-      const statPill = el('div', 'blessing-stat-pill', statBadgeStr);
+
+      // Ornate pointed hexagonal stat plaque with left/right diamond rivets (matches reference!)
+      const statPill = el('div', 'blessing-stat-pill');
+      statPill.append(
+        el('span', 'stat-plaque-rivet left', '◆'),
+        el('span', 'stat-plaque-text', statBadgeStr),
+        el('span', 'stat-plaque-rivet right', '◆')
+      );
+
       const descEl = el('p', 'blessing-desc', choice?.descRu || baseUpg?.descRu || '');
 
       const ctaBar = el(
@@ -3659,23 +3743,41 @@ export function createUIManager(initialCallbacks = {}) {
     const lvlDef = LEVELS[(Number(level) || 1) - 1];
     resultCrest.innerHTML = '';
     if (victory) {
+      // Ornate Golden Crown + Laurel Wreath + Crimson Ribbon + Sunburst Crest (matches media_1794831700387_b993e413.jpg)
       resultCrest.appendChild(
         makeSvgNode(
-          `<svg viewBox="0 0 56 56" width="52" height="52" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="28" cy="28" r="25" fill="rgba(250,204,21,0.16)" stroke="#fde047" stroke-width="1.8"/>
-            <polygon points="14,38 17,20 24,27 28,15 32,27 39,20 42,38" fill="#facc15" stroke="#fffbeb" stroke-width="1.5" stroke-linejoin="round"/>
-            <rect x="15" y="40" width="26" height="4" rx="1.5" fill="#eab308"/>
+          `<svg viewBox="0 0 140 76" width="132" height="70" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <radialGradient id="vicSunGlow" cx="50%" cy="52%" r="50%">
+                <stop offset="0%" stop-color="#fef08a" stop-opacity="0.72"/>
+                <stop offset="55%" stop-color="#f59e0b" stop-opacity="0.28"/>
+                <stop offset="100%" stop-color="#f59e0b" stop-opacity="0"/>
+              </radialGradient>
+            </defs>
+            <circle cx="70" cy="40" r="36" fill="url(#vicSunGlow)"/>
+            <!-- Crimson Heraldic Ribbons -->
+            <path d="M18 56 L38 44 L48 60 L26 64 L24 58 Z" fill="#991b1b" stroke="#fca5a5" stroke-width="0.9"/>
+            <path d="M122 56 L102 44 L92 60 L114 64 L116 58 Z" fill="#991b1b" stroke="#fca5a5" stroke-width="0.9"/>
+            <!-- Golden Laurel Branches -->
+            <path d="M44 58 C33 50 30 34 38 22 C37 32 41 44 50 52 Z" fill="#eab308" stroke="#fef08a" stroke-width="1"/>
+            <path d="M96 58 C107 50 110 34 102 22 C103 32 99 44 90 52 Z" fill="#eab308" stroke="#fef08a" stroke-width="1"/>
+            <!-- Beveled Medallion Shield -->
+            <circle cx="70" cy="41" r="24" fill="#271838" stroke="#facc15" stroke-width="2.6"/>
+            <circle cx="70" cy="41" r="19.5" fill="rgba(234,179,8,0.16)" stroke="#fde047" stroke-width="1"/>
+            <!-- Royal Crown -->
+            <polygon points="54,48 57,30 64,37 70,24 76,37 83,30 86,48" fill="#facc15" stroke="#fffbeb" stroke-width="1.5" stroke-linejoin="round"/>
+            <rect x="55" y="50" width="30" height="4.2" rx="1.6" fill="#eab308"/>
           </svg>`
         )
       );
     } else {
       resultCrest.appendChild(
         makeSvgNode(
-          `<svg viewBox="0 0 56 56" width="52" height="52" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="28" cy="28" r="25" fill="rgba(239,68,68,0.16)" stroke="#f87171" stroke-width="1.8"/>
-            <path d="M28 13 C19.5 13 14 19 14 26.5 C14 31.5 16.5 35 20 37 V42 H36 V37 C39.5 35 42 31.5 42 26.5 C42 19 36.5 13 28 13 Z" fill="#e2e8f0" stroke="#fca5a5" stroke-width="1.4"/>
-            <circle cx="23" cy="27" r="3.2" fill="#7f1d1d"/>
-            <circle cx="33" cy="27" r="3.2" fill="#7f1d1d"/>
+          `<svg viewBox="0 0 120 72" width="114" height="66" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="60" cy="38" r="26" fill="#28111c" stroke="#ef4444" stroke-width="2.4"/>
+            <path d="M60 19 C50.5 19 45 25.5 45 33.5 C45 38.8 47.8 42.5 51.5 44.5 V50 H68.5 V44.5 C72.2 42.5 75 38.8 75 33.5 C75 25.5 69.5 19 60 19 Z" fill="#e2e8f0" stroke="#fca5a5" stroke-width="1.4"/>
+            <circle cx="54.5" cy="34" r="3.4" fill="#991b1b"/>
+            <circle cx="65.5" cy="34" r="3.4" fill="#991b1b"/>
           </svg>`
         )
       );
@@ -3706,7 +3808,7 @@ export function createUIManager(initialCallbacks = {}) {
 
     if (!victory) {
       if (canRevive) {
-        const reviveBtn = el('button', 'result-btn btn-revive', 'Воскреснуть с полным HP (Видео)');
+        const reviveBtn = el('button', 'result-btn btn-revive', '🎬 Воскреснуть с полным HP (Видео)');
         reviveBtn.type = 'button';
         reviveBtn.addEventListener('click', async () => {
           reviveBtn.disabled = true;
@@ -3720,7 +3822,7 @@ export function createUIManager(initialCallbacks = {}) {
         resultActionsCol.appendChild(reviveBtn);
       }
 
-      const arsenalBtn = el('button', 'result-btn btn-arsenal-primary', '🗡️ В Арсенал (Улучшить оружие)');
+      const arsenalBtn = el('button', 'result-btn btn-arsenal-primary', '⚔️ В Лагерь • Арсенал');
       arsenalBtn.type = 'button';
       arsenalBtn.addEventListener('click', () => {
         hideResultModal();
@@ -3729,7 +3831,7 @@ export function createUIManager(initialCallbacks = {}) {
       });
       resultActionsCol.appendChild(arsenalBtn);
 
-      const retryBtn = el('button', 'result-btn btn-retry', 'Повторить главу');
+      const retryBtn = el('button', 'result-btn btn-retry', '↻ Повторить главу');
       retryBtn.type = 'button';
       retryBtn.addEventListener('click', () => {
         hideResultModal();
@@ -3738,7 +3840,7 @@ export function createUIManager(initialCallbacks = {}) {
       resultActionsCol.appendChild(retryBtn);
     } else {
       if (displayedGold > 0) {
-        const doubleBtn = el('button', 'result-btn btn-double-gold', 'Удвоить добычу ×2 (Видео)');
+        const doubleBtn = el('button', 'result-btn btn-double-gold', '🎬 Удвоить добычу ×2 (Видео)');
         doubleBtn.type = 'button';
         doubleBtn.addEventListener('click', async () => {
           doubleBtn.disabled = true;
@@ -3746,7 +3848,7 @@ export function createUIManager(initialCallbacks = {}) {
           if (res !== false) {
             displayedGold *= 2;
             resGoldVal.textContent = `+${displayedGold} (×2!)`;
-            doubleBtn.textContent = 'Добыча удвоена!';
+            doubleBtn.textContent = '✨ Добыча удвоена!';
           } else {
             doubleBtn.disabled = false;
           }
@@ -3771,7 +3873,7 @@ export function createUIManager(initialCallbacks = {}) {
       resultActionsCol.appendChild(nextArsenalBtn);
 
       if (actions.onRetry || actions.onRestart) {
-        const replayBtn = el('button', 'result-btn btn-retry', 'Повторить главу');
+        const replayBtn = el('button', 'result-btn btn-retry', '↻ Повторить главу');
         replayBtn.type = 'button';
         replayBtn.addEventListener('click', () => {
           hideResultModal();
@@ -3783,6 +3885,55 @@ export function createUIManager(initialCallbacks = {}) {
 
     resultModal.classList.remove('hidden');
   }
+
+  lockedRosterSlot.addEventListener('click', () => {
+    showToast('🔒 Тайный охотник пробудится в следующем обновлении!', 2200);
+  });
+
+  // Smooth Touch-Drag Scroll Adapter when CSS 90° forced-landscape rotation is active on portrait phones
+  (function enableRotatedTouchScroll() {
+    let scrollEl = null;
+    let lastGameY = 0;
+    root.addEventListener(
+      'touchstart',
+      (e) => {
+        const vp = window.__getGameViewportSize?.();
+        if (!vp?.forcedRotate || e.touches.length !== 1) {
+          scrollEl = null;
+          return;
+        }
+        let node = e.target;
+        scrollEl = null;
+        while (node && node !== root) {
+          if (node.scrollHeight > node.clientHeight + 4) {
+            const oy = getComputedStyle(node).overflowY;
+            if (oy === 'auto' || oy === 'scroll') {
+              scrollEl = node;
+              break;
+            }
+          }
+          node = node.parentElement;
+        }
+        if (scrollEl) {
+          const t = e.touches[0];
+          lastGameY = window.__toGameCoords(t.clientX, t.clientY).y;
+        }
+      },
+      { passive: true }
+    );
+    root.addEventListener(
+      'touchmove',
+      (e) => {
+        if (!scrollEl || e.touches.length !== 1) return;
+        const t = e.touches[0];
+        const gy = window.__toGameCoords(t.clientX, t.clientY).y;
+        const dy = lastGameY - gy;
+        lastGameY = gy;
+        scrollEl.scrollTop += dy;
+      },
+      { passive: true }
+    );
+  })();
 
   // Initialize labels & default tab
   syncStaticLabels();

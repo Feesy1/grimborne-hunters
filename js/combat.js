@@ -8,7 +8,7 @@ import {
   ENEMY_TYPES,
   LEVELS,
   RUN_UPGRADES
-} from './config.js?v=20261116h';
+} from './config.js?v=20261116j';
 
 const TWO_PI = Math.PI * 2;
 const ARENA_PLAYER_LIMIT = ARENA_HALF_SIZE - 1.4;
@@ -383,13 +383,6 @@ export function createCombatController({
     handle?.setElite?.(eliteType);
     obj.userData?.setElite?.(eliteType);
 
-    if (eliteType === 'warden' && eliteMats.warden) {
-      const auraRing = new THREE.Mesh(sharedRingGeo, eliteMats.warden);
-      auraRing.position.y = 0.05;
-      auraRing.scale.setScalar(1.55);
-      obj.add(auraRing);
-    }
-
     if (world?.scene && !obj.parent) {
       world.scene.add(obj);
     }
@@ -597,7 +590,9 @@ export function createCombatController({
 
   let timeLeft = 65;
   let elapsedRunTime = 0;
-  let spawnTimer = 0.6;
+  let spawnTimer = 0.45;
+  let waveCount = 0;
+  let lastWaveSector = 0;
   let relicCrateSpawned = false;
   let midMiniBossSpawned = false;
   let finaleStarted = false;
@@ -866,7 +861,9 @@ export function createCombatController({
 
     timeLeft = currentLevelDef.durationSec;
     elapsedRunTime = 0;
-    spawnTimer = 0.55;
+    spawnTimer = 0.35;
+    waveCount = 0;
+    lastWaveSector = Math.floor(Math.random() * 4);
     relicCrateSpawned = false;
     midMiniBossSpawned = false;
     finaleStarted = false;
@@ -1089,6 +1086,8 @@ export function createCombatController({
 
   function spawnWavePack() {
     if (enemies.length >= MAX_ACTIVE_ENEMIES) return;
+    waveCount += 1;
+
     const pool = currentLevelDef.enemyPool || ['skeleton'];
     const meleePool = pool.filter((id) => id !== 'archer' && id !== 'cultist');
     const rangedPool = pool.filter((id) => id === 'archer' || id === 'cultist');
@@ -1101,36 +1100,82 @@ export function createCombatController({
       }
     }
 
-    const progress = clamp(elapsedRunTime / Math.max(1, currentLevelDef.durationSec), 0, 1);
-    const packCount = finaleStarted
-      ? 2
-      : progress > 0.55
-        ? 3 + (Math.random() < 0.5 ? 1 : 0)
-        : 2 + (Math.random() < 0.55 ? 1 : 0);
+    // Minigore-2 Authentic Directional Horde Waves:
+    // Distinct surging waves from a single clear flank/gate (or 2-flank pincer later in chapter),
+    // escalating wave size over time so pressure mounts steadily without 360° random spawns!
+    const timePressure = clamp(elapsedRunTime / 55, 0, 1.35);
+    const totalWaveSize = finaleStarted
+      ? 5
+      : Math.min(
+          11,
+          Math.round(5 + timePressure * 4.2 + (waveCount >= 3 ? 1 : 0))
+        );
 
-    // Minigore-2 style cohesive directional wave sector (enemies press in waves, not 360° bullet spam!)
-    const waveBaseAngle = Math.random() * TWO_PI;
+    // Pick a distinct courtyard flank direction (rotates 90°/135° from previous wave so waves come from clear gates!)
+    lastWaveSector = (lastWaveSector + 1 + (Math.random() < 0.45 ? 1 : 0)) % 4;
+    const primarySectorAngle = lastWaveSector * (Math.PI * 0.5) + (Math.random() - 0.5) * 0.34;
+    const usePincer = !finaleStarted && waveCount >= 4 && timePressure > 0.55 && Math.random() < 0.35;
+    const secondarySectorAngle = primarySectorAngle + Math.PI * (0.72 + Math.random() * 0.35);
 
-    for (let n = 0; n < packCount; n++) {
+    let spawnedRangedInWave = false;
+
+    for (let n = 0; n < totalWaveSize; n++) {
       if (enemies.length >= MAX_ACTIVE_ENEMIES) break;
+
+      const inSecondSquad = usePincer && n >= Math.ceil(totalWaveSize * 0.62);
+      const baseAngle = inSecondSquad ? secondarySectorAngle : primarySectorAngle;
+      const localIdx = inSecondSquad ? n - Math.ceil(totalWaveSize * 0.62) : n;
+
+      // At most 1 ranged specialist at the very back of the wave, capped at 2 alive total!
+      let isRangedUnit = false;
       let chosen;
-      if (rangedPool.length > 0 && aliveRanged < 2 && n === 0 && Math.random() < 0.16) {
+      if (
+        !spawnedRangedInWave &&
+        rangedPool.length > 0 &&
+        aliveRanged < 2 &&
+        n === totalWaveSize - 1 &&
+        waveCount >= 2 &&
+        Math.random() < 0.52
+      ) {
         chosen = rangedPool[Math.floor(Math.random() * rangedPool.length)];
         aliveRanged += 1;
+        spawnedRangedInWave = true;
+        isRangedUnit = true;
       } else {
         chosen = safeMeleePool[Math.floor(Math.random() * safeMeleePool.length)];
-        if (chosen === 'brute' && Math.random() < 0.52) {
+        if (chosen === 'brute' && Math.random() < 0.55) {
           chosen = safeMeleePool[0] || 'skeleton';
-        } else if (chosen === 'necromancer' && Math.random() < 0.40) {
+        } else if (chosen === 'necromancer' && Math.random() < 0.45) {
           chosen = safeMeleePool[0] || 'skeleton';
         }
       }
 
-      const angle = waveBaseAngle + (Math.random() - 0.5) * 0.62;
-      const dist = 18.5 + n * 1.15 + Math.random() * 2.5;
-      const sx = clamp(player.x + Math.sin(angle) * dist, -ARENA_ENTITY_LIMIT, ARENA_ENTITY_LIMIT);
-      const sz = clamp(player.z + Math.cos(angle) * dist, -ARENA_ENTITY_LIMIT, ARENA_ENTITY_LIMIT);
-      spawnEnemy(chosen, sx, sz);
+      // Cohesive wedge/phalanx offsets so the wave visibly marches in together from that direction!
+      const row = Math.floor(localIdx / 3);
+      const col = (localIdx % 3) - 1; // -1, 0, +1
+      const fwdX = Math.sin(baseAngle);
+      const fwdZ = Math.cos(baseAngle);
+      const sideX = fwdZ;
+      const sideZ = -fwdX;
+
+      const baseDist = (isRangedUnit ? 22.0 : 18.5) + row * 1.65 + Math.random() * 0.7;
+      const lateralSpread = col * 1.55 + (Math.random() - 0.5) * 0.55;
+
+      const sx = clamp(
+        player.x + fwdX * baseDist + sideX * lateralSpread,
+        -ARENA_ENTITY_LIMIT,
+        ARENA_ENTITY_LIMIT
+      );
+      const sz = clamp(
+        player.z + fwdZ * baseDist + sideZ * lateralSpread,
+        -ARENA_ENTITY_LIMIT,
+        ARENA_ENTITY_LIMIT
+      );
+
+      const spawned = spawnEnemy(chosen, sx, sz);
+      if (localIdx === 0 && spawned) {
+        emitParticles(spawned.x, 0.35, spawned.z, 0xa855f7, 8, 3.6, 0.14);
+      }
     }
   }
 
@@ -1648,15 +1693,20 @@ export function createCombatController({
       }
 
       if (isCrit) {
-        emitParticles(enemy.x, 0.85, enemy.z, 0xfef08a, 7, 5.8, 0.15);
+        const hitLen = Math.hypot(kx, kz) || 1;
+        const cDirX = kx ? kx / hitLen : 0;
+        const cDirZ = kz ? kz / hitLen : 1;
+        world?.spawnCritBloodBurst?.({ x: enemy.x, z: enemy.z, dirX: cDirX, dirZ: cDirZ });
+        audio?.playCritStrike?.();
+        world?.addScreenShake?.(0.20, 0.12);
         if (critFloaterCooldown <= 0) {
-          critFloaterCooldown = 0.11;
-          floatText(`💥 ${dmg}!`, enemy.x, enemy.z, '#fde047');
+          critFloaterCooldown = 0.09;
+          floatText(`🩸 КРИТ ${dmg}!`, enemy.x, enemy.z, '#fca5a5');
         }
-        // 💀 Жнец Черепов (crit_fang): crit triggers crimson soul burst on nearby enemies!
+        // 💀 Жнец Черепов (crit_fang): crit triggers crimson blood-shrapnel burst on nearby enemies (ZERO flat red circle)!
         const critBlastStacks = stats?.critExplosionStacks || 0;
         if (critBlastStacks > 0 && allowChain) {
-          emitShockwave(enemy.x, enemy.z, 2.2, 0xef4444, 0.24);
+          emitParticles(enemy.x, 0.85, enemy.z, 0xdc2626, 12, 6.8, 0.16);
           damageEnemiesInRadius(enemy.x, enemy.z, 2.2, Math.max(2, Math.round(dmg * 0.35 * critBlastStacks)), 4.5, enemy, false);
         }
       } else {
@@ -2182,14 +2232,23 @@ export function createCombatController({
       player.recoilVz -= dirZ * wpn.recoilKick * kickScale;
     }
 
-    // 1. WARRIOR MELEE
+    // 1. WARRIOR MELEE (Visceral Execution Crit Swing with wider blazing crimson-gold arc, blood splatter & crunch — NO flat red rings!)
     if (wpn.type === 'melee') {
       player.meleeSwingCount = (player.meleeSwingCount || 0) + 1;
-      audio?.playMeleeSwing?.(wpn.id !== 'club');
-      const swingColor = isOverdrive ? 0xf97316 : wpn.color;
-      emitSlashArc(player.x, player.z, aimAngle, stats.range, stats.arcAngle, swingColor);
+      const effCritChance = Math.max(0.14, stats.critChance || 0.14);
+      const isCritSwing = Math.random() < effCritChance;
 
-      const halfArc = stats.arcAngle * 0.5 + 0.16;
+      audio?.playMeleeSwing?.(wpn.id !== 'club' || isCritSwing);
+      const swingColor = isCritSwing ? 0xdc2626 : isOverdrive ? 0xf97316 : wpn.color;
+      const effRange = isCritSwing ? stats.range * 1.14 : stats.range;
+      const effArc = isCritSwing ? Math.min(Math.PI * 1.65, stats.arcAngle * 1.24) : stats.arcAngle;
+      emitSlashArc(player.x, player.z, aimAngle, effRange, effArc, swingColor);
+      if (isCritSwing) {
+        // Double-layered golden-crimson execution crescent for distinct critical strike silhouette!
+        emitSlashArc(player.x, player.z, aimAngle, effRange * 0.92, effArc * 0.88, 0xfde047);
+      }
+
+      const halfArc = effArc * 0.5 + 0.16;
       const baseMeleeDmg = Math.round((isOverdrive ? stats.damage * 1.25 : stats.damage) * berserkBoost);
 
       // 🌋 Раскол Брусчатки (war_seismic_slam): every 3rd sword swing shatters the ground!
@@ -2197,14 +2256,14 @@ export function createCombatController({
         const slamX = player.x + dirX * 1.8;
         const slamZ = player.z + dirZ * 1.8;
         const slamDmg = Math.round(baseMeleeDmg * (0.85 + stats.warSeismicStacks * 0.35));
-        emitShockwave(slamX, slamZ, 4.6, 0xfbbf24, 0.38);
+        emitShockwave(slamX, slamZ, 4.4, 0xfbbf24, 0.34);
         emitParticles(slamX, 0.5, slamZ, 0xfde047, 16, 6.8, 0.18);
         world?.addScreenShake?.(0.28, 0.15);
         for (let si = enemies.length - 1; si >= 0; si--) {
           const se = enemies[si];
           if (!se || se.hp <= 0) continue;
           const sDist = Math.hypot(se.x - slamX, se.z - slamZ);
-          if (sDist <= 4.6 + se.radius) {
+          if (sDist <= 4.4 + se.radius) {
             se.stunTimer = Math.max(se.stunTimer || 0, se.isBoss ? 0.08 : 0.35);
             applyDamageToEnemy(se, slamDmg, (se.x - slamX) * 2.5, (se.z - slamZ) * 2.5, false, { isSplash: true });
           }
@@ -2217,24 +2276,25 @@ export function createCombatController({
         const dx = e.x - player.x;
         const dz = e.z - player.z;
         const dist = Math.hypot(dx, dz);
-        if (dist <= stats.range + e.radius) {
+        if (dist <= effRange + e.radius) {
           const angToEnemy = Math.atan2(dx, dz);
           const angDiff = Math.abs(normalizeAngle(angToEnemy - aimAngle));
           if (angDiff <= halfArc || dist <= 1.35) {
             const nx = dist > 0.001 ? dx / dist : dirX;
             const nz = dist > 0.001 ? dz / dist : dirZ;
-            const isCrit = Math.random() < (stats.critChance || 0.04);
-            const hitDmg = isCrit ? Math.round(baseMeleeDmg * (stats.critMult || 1.75)) : baseMeleeDmg;
-            applyDamageToEnemy(e, hitDmg, nx * stats.knockback, nz * stats.knockback, true, { isCrit });
+            const hitDmg = isCritSwing ? Math.round(baseMeleeDmg * (stats.critMult || 1.85)) : baseMeleeDmg;
+            const kbMult = isCritSwing ? 1.32 : 1.0;
+            applyDamageToEnemy(e, hitDmg, nx * stats.knockback * kbMult, nz * stats.knockback * kbMult, true, { isCrit: isCritSwing });
           }
         }
       }
 
+      // Cleave shock damage for Cleaver / Greatsword (sparks & screen punch ONLY — NO confusing red ground circle!)
       const smashRadius = isOverdrive ? Math.max(2.6, stats.splashRadius * 1.2) : stats.splashRadius;
       if (smashRadius > 0) {
         const smashX = player.x + dirX * Math.min(2.4, stats.range * 0.55);
         const smashZ = player.z + dirZ * Math.min(2.4, stats.range * 0.55);
-        emitShockwave(smashX, smashZ, smashRadius, swingColor, 0.3);
+        emitParticles(smashX, 0.55, smashZ, 0xfbbf24, 10, 5.8, 0.14);
         world?.addScreenShake?.(wpn.id === 'flail' ? 0.24 : 0.12, 0.12);
         damageEnemiesInRadius(smashX, smashZ, smashRadius, Math.round(baseMeleeDmg * 0.55), stats.knockback * 0.6, null, false);
       }
@@ -3482,10 +3542,16 @@ export function createCombatController({
       }
     }
 
+    // Minigore-2 Wave Pacing: Distinct rhythmic horde waves that accelerate with time pressure,
+    // plus instant wave reinforcement if player wipes the field (< 3 enemies left)!
     spawnTimer -= dt;
+    if (!finaleStarted && enemies.length <= 2 && spawnTimer > 0.55) {
+      spawnTimer = 0.55;
+    }
     if (spawnTimer <= 0) {
-      const intervalMult = finaleStarted ? 2.6 : 1.52;
-      spawnTimer = currentLevelDef.spawnInterval * intervalMult;
+      const timeRamp = clamp(elapsedRunTime / 60, 0, 1);
+      const baseWaveGap = finaleStarted ? 9.5 : 6.4 - timeRamp * 1.65;
+      spawnTimer = Math.max(4.2, baseWaveGap * clamp(currentLevelDef.spawnInterval || 1, 0.72, 1.12));
       spawnWavePack();
     }
 
@@ -3864,21 +3930,24 @@ export function createCombatController({
             }
           }
         }
-        // --- ARCHETYPE 2: ARCHER (Rare ranged sniper: pauses 0.65s with clear glint before 1 dodgeable bolt @ 11.8 spd) ---
+        // --- ARCHETYPE 2: ARCHER (Backline Sniper: holds ground, 0.85s glowing aim windup, 1 dodgeable bolt every ~4.8s) ---
         else if (e.type === 'archer') {
           if (e.windupTimer > 0) {
             e.windupTimer -= dt;
             e.facing = Math.atan2(e.aimDirX, e.aimDirZ);
+            if (Math.random() < 0.35) {
+              emitParticles(e.x + e.aimDirX * 0.5, 0.88, e.z + e.aimDirZ * 0.5, 0x22d3ee, 1, 1.8, 0.11);
+            }
             if (e.windupTimer <= 0) {
-              e.shootCooldown = 3.25 + Math.random() * 0.55;
+              e.shootCooldown = 4.55 + Math.random() * 0.75;
               triggerModelAttack(e.model);
               spawnProjectile({
                 x: e.x,
                 z: e.z,
-                vx: e.aimDirX * 11.8,
-                vz: e.aimDirZ * 11.8,
+                vx: e.aimDirX * 10.4,
+                vz: e.aimDirZ * 10.4,
                 damage: e.damage,
-                maxDist: 20,
+                maxDist: 19,
                 pierce: 1,
                 kind: 'enemy',
                 color: 0x22d3ee,
@@ -3887,39 +3956,32 @@ export function createCombatController({
             }
           } else {
             e.facing = lerpAngle(e.facing, angToPlayer, dt * 9);
-            if (dist > 9.6) {
+            if (dist > 10.4) {
               e.x += (dx / dist) * moveSpeed * dt;
               e.z += (dz / dist) * moveSpeed * dt;
-            } else if (dist < 6.8) {
-              e.x -= (dx / dist) * (moveSpeed * 0.6) * dt;
-              e.z -= (dz / dist) * (moveSpeed * 0.6) * dt;
             }
             e.shootCooldown -= dt;
-            if (e.shootCooldown <= 0 && dist <= 16.5) {
-              e.windupTimer = 0.65;
+            if (e.shootCooldown <= 0 && dist <= 15.8) {
+              e.windupTimer = 0.85;
               e.aimDirX = dx / dist;
               e.aimDirZ = dz / dist;
-              emitParticles(e.x + e.aimDirX * 0.45, 0.85, e.z + e.aimDirZ * 0.45, 0x22d3ee, 6, 3.0, 0.13);
+              emitParticles(e.x + e.aimDirX * 0.48, 0.90, e.z + e.aimDirZ * 0.48, 0x67e8f9, 8, 3.2, 0.14);
             }
           }
         }
-        // --- ARCHETYPE 3: NECROMANCER (Keeps ~10.5m, raises 2 skeletons every 6.5s with green ring) ---
+        // --- ARCHETYPE 3: NECROMANCER (Keeps ~10.5m, raises 2 skeletons every 6.8s) ---
         else if (e.type === 'necromancer') {
           e.facing = lerpAngle(e.facing, angToPlayer, dt * 8);
           if (dist > 11.2) {
             e.x += (dx / dist) * moveSpeed * dt;
             e.z += (dz / dist) * moveSpeed * dt;
-          } else if (dist < 7.8) {
-            e.x -= (dx / dist) * (moveSpeed * 0.6) * dt;
-            e.z -= (dz / dist) * (moveSpeed * 0.6) * dt;
           }
           e.specialCooldown -= dt;
           if (e.specialCooldown <= 0 && dist <= 20.0) {
-            e.specialCooldown = 6.5;
+            e.specialCooldown = 6.8;
             triggerModelAttack(e.model);
             audio?.playMagicCast?.('spark_staff');
-            emitShockwave(e.x, e.z, 3.4, 0x10b981, 0.42);
-            emitParticles(e.x, 0.75, e.z, 0x10b981, 14, 4.5, 0.15);
+            emitParticles(e.x, 0.75, e.z, 0x10b981, 16, 4.8, 0.15);
 
             for (let s = -1; s <= 1; s += 2) {
               if (enemies.length >= MAX_ACTIVE_ENEMIES + 6) break;
@@ -3932,27 +3994,22 @@ export function createCombatController({
             }
           }
         }
-        // --- ARCHETYPE 4: CULTIST (Keeps ~10.2m, fires 3-spear shadow fan spread 0.38 @ 12.5 spd every 2.8s) ---
+        // --- ARCHETYPE 4: CULTIST (Backline Caster: 0.85s violet staff charge -> 1 heavy dodgeable shadow orb every ~4.8s, NO bullet-hell fan!) ---
         else if (e.type === 'cultist') {
-          e.facing = lerpAngle(e.facing, angToPlayer, dt * 8);
-          if (dist > 11.0) {
-            e.x += (dx / dist) * moveSpeed * dt;
-            e.z += (dz / dist) * moveSpeed * dt;
-          } else if (dist < 7.0) {
-            e.x -= (dx / dist) * (moveSpeed * 0.55) * dt;
-            e.z -= (dz / dist) * (moveSpeed * 0.55) * dt;
-          }
-          e.shootCooldown -= dt;
-          if (e.shootCooldown <= 0 && dist <= 17.5) {
-            e.shootCooldown = 2.8;
-            triggerModelAttack(e.model);
-            for (let k = -1; k <= 1; k++) {
-              const fanAng = angToPlayer + k * 0.19; // Total fan spread = 0.38 rad!
+          if (e.windupTimer > 0) {
+            e.windupTimer -= dt;
+            e.facing = Math.atan2(e.aimDirX, e.aimDirZ);
+            if (Math.random() < 0.4) {
+              emitParticles(e.x + e.aimDirX * 0.45, 0.95, e.z + e.aimDirZ * 0.45, 0xc084fc, 1, 2.0, 0.12);
+            }
+            if (e.windupTimer <= 0) {
+              e.shootCooldown = 4.65 + Math.random() * 0.75;
+              triggerModelAttack(e.model);
               spawnProjectile({
                 x: e.x,
                 z: e.z,
-                vx: Math.sin(fanAng) * 12.5,
-                vz: Math.cos(fanAng) * 12.5,
+                vx: e.aimDirX * 10.6,
+                vz: e.aimDirZ * 10.6,
                 damage: e.damage,
                 maxDist: 19,
                 pierce: 1,
@@ -3960,6 +4017,19 @@ export function createCombatController({
                 color: 0xa855f7,
                 isEnemy: true
               });
+            }
+          } else {
+            e.facing = lerpAngle(e.facing, angToPlayer, dt * 8);
+            if (dist > 10.6) {
+              e.x += (dx / dist) * moveSpeed * dt;
+              e.z += (dz / dist) * moveSpeed * dt;
+            }
+            e.shootCooldown -= dt;
+            if (e.shootCooldown <= 0 && dist <= 16.2) {
+              e.windupTimer = 0.85;
+              e.aimDirX = dx / dist;
+              e.aimDirZ = dz / dist;
+              emitParticles(e.x + e.aimDirX * 0.45, 0.95, e.z + e.aimDirZ * 0.45, 0xd8b4fe, 9, 3.2, 0.14);
             }
           }
         }
