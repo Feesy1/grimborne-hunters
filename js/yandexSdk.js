@@ -181,7 +181,7 @@ async function tryObtainYaGames() {
     return window.YaGames;
   }
 
-  // If offline/local or script already errored, skip waiting immediately
+  // Skip waiting immediately when running locally, outside a Yandex iframe (e.g. GitHub Pages / mobile Safari), or if SDK errored
   const host = (window.location && window.location.hostname) || '';
   const isLocal =
     !host ||
@@ -189,8 +189,15 @@ async function tryObtainYaGames() {
     host === '127.0.0.1' ||
     host.startsWith('192.168.') ||
     window.location.protocol === 'file:';
+  let isEmbeddedIframe = false;
+  try {
+    isEmbeddedIframe = window.self !== window.top;
+  } catch {
+    isEmbeddedIframe = true;
+  }
+  const isYandexHost = /yandex\./i.test(host) || /yandex/i.test(document.referrer || '');
 
-  if (isLocal || window.__yaSdkUnavailable) {
+  if (isLocal || window.__yaSdkUnavailable || (!isEmbeddedIframe && !isYandexHost)) {
     return null;
   }
 
@@ -249,11 +256,9 @@ export async function initYandexSdk({ onPauseAudio, onResumeAudio } = {}) {
     syncAudioPauseState();
   });
 
-  window.addEventListener('blur', () => {
-    isPageHidden = true;
-    syncAudioPauseState();
-  });
-
+  // Note: Do NOT set isPageHidden=true on window 'blur' — on iOS Safari / mobile WebViews,
+  // URL-bar taps, orientation changes, and system banners fire 'blur' while document.hidden===false,
+  // which previously froze externalPaused=true on a black canvas!
   window.addEventListener('focus', () => {
     isPageHidden = document.hidden;
     syncAudioPauseState();
@@ -265,7 +270,7 @@ export async function initYandexSdk({ onPauseAudio, onResumeAudio } = {}) {
   });
 
   window.addEventListener('pageshow', () => {
-    isPageHidden = document.hidden;
+    isPageHidden = false;
     syncAudioPauseState();
   });
 

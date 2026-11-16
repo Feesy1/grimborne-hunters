@@ -2,14 +2,14 @@
 // Arsenal Progression, Procedural Web Audio, Gothic UI, and Yandex Games SDK v2.
 
 import * as THREE from '../vendor/three.module.js';
-import { LEVELS, MAGE_ELEMENTS } from './config.js?v=20261116j';
-import { createArenaWorld } from './world.js?v=20261116j';
-import * as models from './models.js?v=20261116j';
-import { createProgressionStore } from './progression.js?v=20261116j';
-import { createCombatController } from './combat.js?v=20261116j';
-import { createAudioEngine } from './audio.js?v=20261116j';
-import { initYandexSdk } from './yandexSdk.js?v=20261116j';
-import { createUIManager } from './ui.js?v=20261116j';
+import { LEVELS, MAGE_ELEMENTS } from './config.js?v=20261116m';
+import { createArenaWorld } from './world.js?v=20261116m';
+import * as models from './models.js?v=20261116m';
+import { createProgressionStore } from './progression.js?v=20261116m';
+import { createCombatController } from './combat.js?v=20261116m';
+import { createAudioEngine } from './audio.js?v=20261116m';
+import { initYandexSdk } from './yandexSdk.js?v=20261116m';
+import { createUIManager } from './ui.js?v=20261116m';
 
 async function bootstrap() {
   const canvas = document.getElementById('game-canvas');
@@ -70,7 +70,26 @@ async function bootstrap() {
   window.addEventListener('grimborne-viewport', handleViewportResize);
   window.visualViewport?.addEventListener('resize', handleViewportResize);
   handleViewportResize();
-  await Promise.all([models.preloadModels(), world.ready]);
+
+  // Safety recovery on iOS Safari / mobile WebViews: any touch or focus clears stale pause if tab is visible
+  const clearStaleExternalPause = () => {
+    if (!document.hidden && externalPaused) {
+      externalPaused = false;
+      if (!audio.isMuted()) {
+        audio.resume();
+      }
+    }
+  };
+  window.addEventListener('pointerdown', clearStaleExternalPause, { passive: true });
+  window.addEventListener('touchstart', clearStaleExternalPause, { passive: true });
+  window.addEventListener('focus', clearStaleExternalPause);
+
+  await Promise.all([
+    models.preloadModels((loaded, total) => {
+      window.__setSplashAssetProgress?.(loaded, total);
+    }),
+    world.ready
+  ]);
 
   // 3D Hero Preview in Hub Diorama
   let hubPreviewHero = null;
@@ -545,6 +564,10 @@ async function bootstrap() {
   ui.setVolumeState?.(audio.getVolume());
   ui.setMutedState?.(audio.isMuted());
   enterHub();
+  // Render initial 3D Courtyard + Hero Pedestal frame BEFORE dismissing splash so mobile never flashes black!
+  world.followTarget(0, 0, 0.016);
+  world.update(0.016, 0);
+  world.render();
   window.__notifyEngineReady?.();
   sdk.markGameReady();
 
@@ -583,7 +606,12 @@ async function bootstrap() {
 
     const dt = Math.min(0.05, Math.max(0.0005, rawDeltaSec));
 
-    if (externalPaused) return;
+    if (externalPaused) {
+      if (gameMode === 'hub') {
+        world.render();
+      }
+      return;
+    }
 
     elapsedTime += dt;
 

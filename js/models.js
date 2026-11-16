@@ -7,7 +7,7 @@
 import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { clone as cloneSkinned } from '../vendor/SkeletonUtils.js';
-import { WEAPONS } from './config.js?v=20261116j';
+import { WEAPONS } from './config.js?v=20261116m';
 
 const MODEL_PATHS = {
   barbarian: './assets/models/Barbarian.glb',
@@ -18,7 +18,6 @@ const MODEL_PATHS = {
   skel_rogue: './assets/models/Skeleton_Rogue.glb',
   skel_mage: './assets/models/Skeleton_Mage.glb',
   skel_warrior: './assets/models/Skeleton_Warrior.glb',
-  strelok_ai: './assets/models/Strelok_AI.glb',
   chest: './assets/env/chest.glb',
   chest_gold: './assets/env/chest_gold.glb'
 };
@@ -26,18 +25,41 @@ const MODEL_PATHS = {
 const gltfCache = new Map();
 let preloadPromise = null;
 
-export function preloadModels() {
+export function preloadModels(onProgress) {
   if (preloadPromise) return preloadPromise;
   const loader = new GLTFLoader();
 
   const entries = Object.entries(MODEL_PATHS);
+  let doneCount = 0;
+  const markDone = () => {
+    doneCount += 1;
+    try {
+      onProgress?.(doneCount, entries.length);
+    } catch {
+      // ignore progress callback error
+    }
+  };
+
   preloadPromise = Promise.all(
     entries.map(
       ([key, url]) =>
         new Promise((resolve) => {
+          let settled = false;
+          const finish = () => {
+            if (settled) return;
+            settled = true;
+            markDone();
+            resolve();
+          };
+          const timer = setTimeout(() => {
+            console.warn(`[models] Timeout loading ${url}, continuing with fallback`);
+            finish();
+          }, 9000);
+
           loader.load(
             url,
             (gltf) => {
+              clearTimeout(timer);
               const clipMap = new Map();
               for (const clip of gltf.animations || []) {
                 clipMap.set(clip.name, clip);
@@ -50,12 +72,13 @@ export function preloadModels() {
                 }
               });
               gltfCache.set(key, { scene: gltf.scene, clips: clipMap });
-              resolve();
+              finish();
             },
             undefined,
             (err) => {
+              clearTimeout(timer);
               console.warn(`[models] Failed to load ${url}:`, err);
-              resolve();
+              finish();
             }
           );
         })
@@ -668,7 +691,7 @@ function createAnimController(modelRoot, clipMap, idleClipName = 'Idle', moveCli
 // ============================================================================
 const CLASS_SKELETON_ASSET = {
   warrior: 'skel_warrior',
-  gunslinger: 'strelok_ai',
+  gunslinger: 'skel_rogue',
   mage: 'skel_mage'
 };
 

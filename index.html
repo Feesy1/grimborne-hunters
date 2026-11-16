@@ -14,7 +14,7 @@
   <title>Охотники Мрака — Grimborne Hunters</title>
   <link rel="icon" type="image/x-icon" href="./assets/grimborne_icon.ico" />
   <link rel="manifest" href="./manifest.json" />
-  <link rel="stylesheet" href="./css/style.css?v=20261116j" />
+  <link rel="stylesheet" href="./css/style.css?v=20261116m" />
   <script>
     (function syncViewportVars() {
       var curVp = { w: 1280, h: 720, forcedRotate: false, rawW: 1280, rawH: 720 };
@@ -94,8 +94,9 @@
       var pctEl = document.getElementById('splash-percent');
       var txtEl = document.getElementById('splash-status-text');
       var start = performance.now();
-      var duration = 3000;
+      var duration = 2400;
       var engineReady = false;
+      var assetRatio = 0;
       var closed = false;
 
       function closeSplash() {
@@ -110,6 +111,12 @@
         }, 650);
       }
 
+      window.__setSplashAssetProgress = function (loaded, total) {
+        if (total > 0) {
+          assetRatio = Math.max(assetRatio, Math.min(1, loaded / total));
+        }
+      };
+
       window.__notifyEngineReady = function () {
         engineReady = true;
       };
@@ -118,17 +125,20 @@
         if (closed) return;
         var elapsed = now - start;
         var t = Math.min(1, elapsed / duration);
-        var cap = engineReady ? 100 : 92;
+        var cap = engineReady ? 100 : 95;
         var eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-        var pct = Math.min(cap, Math.round(eased * 100));
+        var timedPct = eased * 88;
+        var realPct = assetRatio * 95;
+        var pct = engineReady ? 100 : Math.min(cap, Math.round(Math.max(timedPct, realPct)));
         if (fillEl) fillEl.style.width = pct + '%';
         if (pctEl) pctEl.textContent = pct + '%';
         if (txtEl) {
-          if (pct >= 95) txtEl.textContent = 'Готово к охоте!';
+          if (engineReady || pct >= 96) txtEl.textContent = 'Готово к охоте!';
           else if (pct >= 68) txtEl.textContent = 'Сбор орды и призыв Жнеца…';
           else if (pct >= 34) txtEl.textContent = 'Ковка оружия и рунных сундуков…';
         }
-        if ((t >= 1 && engineReady) || elapsed >= 4500) {
+        // Keep splash visible on mobile networks until 3D scene + UI have rendered their first frame (16s ceiling)
+        if ((elapsed >= 900 && engineReady) || elapsed >= 16000) {
           closeSplash();
         } else {
           requestAnimationFrame(tick);
@@ -141,6 +151,6 @@
       requestAnimationFrame(tick);
     })();
   </script>
-  <script type="module" src="./js/main.js?v=20261116j"></script>
+  <script type="module" src="./js/main.js?v=20261116m"></script>
 </body>
 </html>

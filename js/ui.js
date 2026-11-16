@@ -16,7 +16,7 @@ import {
   ENEMY_TYPES,
   LEVELS,
   RUN_UPGRADES
-} from './config.js?v=20261116j';
+} from './config.js?v=20261116m';
 
 const CLASS_ORDER = ['warrior', 'gunslinger', 'mage'];
 

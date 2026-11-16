@@ -3,7 +3,7 @@
 
 import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
-import { ARENA_HALF_SIZE } from './config.js?v=20261116j';
+import { ARENA_HALF_SIZE } from './config.js?v=20261116m';
 
 // ============================================================================
 // Procedural Textures: Gothic Slate Cobblestone Floor & Soft Radial Glow Sprite
@@ -45,7 +45,11 @@ function createCourtyardStoneTexture() {
 
       ctx.fillStyle = `rgb(${red}, ${grn}, ${blu})`;
       ctx.beginPath();
-      ctx.roundRect(x, y, w, h, 7);
+      if (typeof ctx.roundRect === 'function') {
+        ctx.roundRect(x, y, w, h, 7);
+      } else {
+        ctx.rect(x, y, w, h);
+      }
       ctx.fill();
 
       // Top-left moonlit bevel highlight
@@ -462,9 +466,17 @@ export function createArenaWorld(canvas) {
       Object.entries(envPaths).map(
         ([key, url]) =>
           new Promise((resolve) => {
+            let settled = false;
+            const finish = () => {
+              if (settled) return;
+              settled = true;
+              resolve();
+            };
+            const timer = setTimeout(finish, 8000);
             loader.load(
               url,
               (gltf) => {
+                clearTimeout(timer);
                 const isOuterOrTiny =
                   key === 'pine_large' ||
                   key === 'pine_med' ||
@@ -519,10 +531,13 @@ export function createArenaWorld(canvas) {
                   }
                 });
                 templates.set(key, gltf.scene);
-                resolve();
+                finish();
               },
               undefined,
-              () => resolve()
+              () => {
+                clearTimeout(timer);
+                finish();
+              }
             );
           })
       )
