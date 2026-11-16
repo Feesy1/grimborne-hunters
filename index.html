@@ -13,6 +13,7 @@
   <meta http-equiv="Expires" content="0" />
   <title>Охотники Мрака — Grimborne Hunters</title>
   <link rel="icon" type="image/x-icon" href="./assets/grimborne_icon.ico" />
+  <link rel="apple-touch-icon" sizes="192x192" href="./assets/icon-192.png" />
   <link rel="manifest" href="./manifest.json" />
   <link rel="stylesheet" href="./css/style.css?v=20261116m" />
   <script>
@@ -54,11 +55,18 @@
         window.visualViewport.addEventListener('resize', updateVv);
         window.visualViewport.addEventListener('scroll', updateVv);
       }
-      document.addEventListener('pointerdown', function tryLockLandscape() {
-        if (screen.orientation && screen.orientation.lock) {
-          screen.orientation.lock('landscape').catch(function () {});
+      function tryMobileFullscreen() {
+        var isPhone =
+          /iPhone|iPod|Android/i.test(navigator.userAgent || '') ||
+          ((navigator.maxTouchPoints || 0) > 0 && Math.min(window.innerWidth || 844, window.innerHeight || 390) <= 560);
+        if (isPhone && !document.fullscreenElement && !document.webkitFullscreenElement) {
+          const el = document.documentElement;
+          (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el)?.catch?.(() => {});
         }
-      }, { once: true, passive: true });
+        screen.orientation?.lock?.('landscape')?.catch?.(() => {});
+      }
+      document.addEventListener('pointerdown', tryMobileFullscreen, { once: true, passive: true });
+      document.addEventListener('touchend', tryMobileFullscreen, { once: true, passive: true });
     })();
   </script>
   <script src="https://yandex.ru/games/sdk/v2" async onerror="window.__yaSdkUnavailable=true"></script>

@@ -3,6 +3,7 @@
   "short_name": "Охотники Мрака",
   "start_url": "./index.html",
   "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
   "orientation": "landscape",
   "background_color": "#0b0a10",
   "theme_color": "#0b0a10",
@@ -11,6 +12,18 @@
       "src": "./assets/grimborne_icon.ico",
       "sizes": "64x64",
       "type": "image/x-icon"
+    },
+    {
+      "src": "./assets/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./assets/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }
