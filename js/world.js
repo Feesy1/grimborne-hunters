@@ -3,7 +3,7 @@
 
 import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
-import { ARENA_HALF_SIZE } from './config.js';
+import { ARENA_HALF_SIZE } from './config.js?v=20261116f';
 
 // ============================================================================
 // Procedural Textures: Gothic Slate Cobblestone Floor & Soft Radial Glow Sprite
@@ -1095,8 +1095,26 @@ export function createArenaWorld(canvas) {
     return g;
   })();
 
-  // 2) Arcane / Fire / Void Comet Crystal + Streaming Tail Cone + Orbiting Rings
+  // 2) Arcane / Elemental Sculpted 3D Geometries (Fire Tongues, Water Orb, Lightning Zig-Zag, Air Cyclone)
   const spellCrystalGeo = new THREE.OctahedronGeometry(0.18, 0);
+  const fireHeartGeo = new THREE.SphereGeometry(0.165, 10, 10);
+  const fireTongueGeo = (() => {
+    const g = new THREE.ConeGeometry(0.145, 0.92, 6, 1, true);
+    g.rotateX(-Math.PI / 2);
+    g.translate(0, 0, -0.34);
+    return g;
+  })();
+  const waterOrbGeo = (() => {
+    const g = new THREE.SphereGeometry(0.19, 12, 12);
+    g.scale(0.92, 0.92, 1.28);
+    return g;
+  })();
+  const lightningZigGeo = (() => {
+    const g = new THREE.OctahedronGeometry(0.085, 0);
+    g.scale(0.45, 0.45, 4.8);
+    return g;
+  })();
+  const airCutterGeo = getSlashCrescentGeo(Math.PI * 0.92);
   const spellTailGeo = (() => {
     const g = new THREE.ConeGeometry(0.22, 1.55, 8, 1, true);
     g.rotateX(-Math.PI / 2);
@@ -1104,6 +1122,82 @@ export function createArenaWorld(canvas) {
     return g;
   })();
   const spellOrbitRingGeo = new THREE.TorusGeometry(0.26, 0.025, 6, 18);
+
+  // Pooled 3D Chain-Lightning Arcs between enemies!
+  const activeLightningArcs = [];
+  const freeLightningArcs = [];
+  const unitBoltSegGeo = (() => {
+    const g = new THREE.BoxGeometry(0.055, 0.055, 1.0);
+    g.translate(0, 0, 0.5);
+    return g;
+  })();
+
+  function spawnLightningArc({ x1 = 0, z1 = 0, x2 = 1, z2 = 1, color = 0x38bdf8 } = {}) {
+    let arc = freeLightningArcs.pop();
+    if (!arc) {
+      const group = new THREE.Group();
+      const outerMat = new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.95,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        toneMapped: false
+      });
+      const innerMat = new THREE.MeshBasicMaterial({
+        color: 0xfef08a,
+        transparent: true,
+        opacity: 0.98,
+        depthWrite: false,
+        toneMapped: false
+      });
+      const segs = [];
+      for (let i = 0; i < 3; i++) {
+        const sGrp = new THREE.Group();
+        const outer = new THREE.Mesh(unitBoltSegGeo, outerMat);
+        outer.scale.set(1.6, 1.6, 1);
+        const inner = new THREE.Mesh(unitBoltSegGeo, innerMat);
+        sGrp.add(outer, inner);
+        group.add(sGrp);
+        segs.push(sGrp);
+      }
+      scene.add(group);
+      arc = { group, segs, outerMat, innerMat, age: 0, duration: 0.14 };
+    } else {
+      arc.outerMat.color.setHex(color);
+      arc.outerMat.opacity = 0.95;
+      arc.innerMat.opacity = 0.98;
+      arc.group.visible = true;
+    }
+
+    const dx = x2 - x1;
+    const dz = z2 - z1;
+    const len = Math.max(0.2, Math.hypot(dx, dz));
+    const perpX = -dz / len;
+    const perpZ = dx / len;
+    const j1 = (Math.random() - 0.5) * Math.min(0.85, len * 0.22);
+    const j2 = (Math.random() - 0.5) * Math.min(0.85, len * 0.22);
+    const pts = [
+      { x: x1, z: z1 },
+      { x: x1 + dx * 0.33 + perpX * j1, z: z1 + dz * 0.33 + perpZ * j1 },
+      { x: x1 + dx * 0.67 + perpX * j2, z: z1 + dz * 0.67 + perpZ * j2 },
+      { x: x2, z: z2 }
+    ];
+    for (let i = 0; i < 3; i++) {
+      const a = pts[i];
+      const b = pts[i + 1];
+      const sdx = b.x - a.x;
+      const sdz = b.z - a.z;
+      const slen = Math.max(0.05, Math.hypot(sdx, sdz));
+      const sg = arc.segs[i];
+      sg.position.set(a.x, 0.82, a.z);
+      sg.rotation.y = Math.atan2(sdx, sdz);
+      sg.scale.set(1, 1, slen);
+    }
+    arc.age = 0;
+    arc.duration = 0.14;
+    activeLightningArcs.push(arc);
+  }
 
   // 3) Enemy Cultist Jagged Shadow Spear (Needle diamond + dark tail)
   const enemySpearGeo = (() => {
@@ -1121,34 +1215,14 @@ export function createArenaWorld(canvas) {
   const projWhiteCoreMat = new THREE.MeshBasicMaterial({ color: 0xfffbeb, toneMapped: false });
   const projDarkCoreMat = new THREE.MeshBasicMaterial({ color: 0x3b0764, toneMapped: false });
 
-  function createProjectileVisual(type = 'ranged', color = 0xfbbf24, radius = 0.16) {
-    const mesh = new THREE.Group();
-    // Guard against legacy callers passing ~1.0 scale instead of ~0.16 radius
-    const rawR = Number(radius) || 0.16;
-    const scaleMult = rawR > 0.45 ? rawR * 0.85 : Math.max(0.75, rawR / 0.16);
-
-    const isBuckshot =
-      type === 'buckshot' ||
-      type === 'pellet' ||
-      type === 'pistol' ||
-      type === 'blunderbuss' ||
-      type === 'gatling';
-
-    const isBullet =
-      !isBuckshot &&
-      (type === 'ranged' ||
-        type === 'bullet' ||
-        type === 'bolt');
-
-    const isEnemyProj = type === 'enemy' || type === 'enemy_bolt';
-
-    const cacheKey = `${type}_${color}_${isBuckshot ? 1 : 0}_${isBullet ? 1 : 0}`;
-    if (!createProjectileVisual._matCache) createProjectileVisual._matCache = new Map();
-    let matSet = createProjectileVisual._matCache.get(cacheKey);
+  const projMatCache = new Map();
+  function getProjMatBundle(keyTag, color, isBuckshot, isBullet) {
+    const cacheKey = `${keyTag}_${color}_${isBuckshot ? 1 : 0}_${isBullet ? 1 : 0}`;
+    let matSet = projMatCache.get(cacheKey);
     if (!matSet) {
       const fallbackBulletHue = (isBullet || isBuckshot) && color === 0xe2e8f0 ? 0xfbbf24 : color;
       const baseHue = new THREE.Color(fallbackBulletHue);
-      if (isBuckshot && type !== 'gatling') {
+      if (isBuckshot && keyTag !== 'gatling') {
         baseHue.lerp(new THREE.Color(0xf59e0b), 0.25);
       }
       const richColor = baseHue.clone().offsetHSL(0, 0.2, -0.08);
@@ -1177,8 +1251,33 @@ export function createArenaWorld(canvas) {
           toneMapped: false
         })
       };
-      createProjectileVisual._matCache.set(cacheKey, matSet);
+      projMatCache.set(cacheKey, matSet);
     }
+    return matSet;
+  }
+
+  function createProjectileVisual(type = 'ranged', color = 0xfbbf24, radius = 0.16) {
+    const mesh = new THREE.Group();
+    // Guard against legacy callers passing ~1.0 scale instead of ~0.16 radius
+    const rawR = Number(radius) || 0.16;
+    const scaleMult = rawR > 0.45 ? rawR * 0.85 : Math.max(0.75, rawR / 0.16);
+
+    const isBuckshot =
+      type === 'buckshot' ||
+      type === 'pellet' ||
+      type === 'pistol' ||
+      type === 'blunderbuss' ||
+      type === 'gatling';
+
+    const isBullet =
+      !isBuckshot &&
+      (type === 'ranged' ||
+        type === 'bullet' ||
+        type === 'bolt');
+
+    const isEnemyProj = type === 'enemy' || type === 'enemy_bolt';
+
+    const matSet = getProjMatBundle(type, color, isBuckshot, isBullet);
     const { richHex, solidCoreMat, glowMat, haloSpriteMat } = matSet;
     const haloSprite = new THREE.Sprite(haloSpriteMat);
 
@@ -1210,8 +1309,98 @@ export function createArenaWorld(canvas) {
       spinCore = spear;
       mesh.add(spear, outerSpear, tail, haloSprite);
       mesh.scale.setScalar(scaleMult);
+    } else if (type === 'magic_fire') {
+      // 🔥 LIVING ROARING FIREBALL: Incandescent heart + 3 swirling jagged flame tongues + fiery wake!
+      const fireOuterMat = getProjMatBundle('mfire_out', 0xff3d00, false, false).glowMat;
+      const fireMidMat = getProjMatBundle('mfire_mid', 0xff9100, false, false).solidCoreMat;
+      const heart = new THREE.Mesh(fireHeartGeo, projWhiteCoreMat);
+      const midShell = new THREE.Mesh(fireHeartGeo, fireMidMat);
+      midShell.scale.set(1.26, 1.26, 1.55);
+
+      const flameWhirl = new THREE.Group();
+      for (let i = 0; i < 3; i++) {
+        const tongue = new THREE.Mesh(fireTongueGeo, i === 0 ? fireMidMat : fireOuterMat);
+        const ang = (i / 3) * Math.PI * 2;
+        tongue.position.set(Math.cos(ang) * 0.08, Math.sin(ang) * 0.08, 0.08);
+        tongue.rotation.z = ang;
+        tongue.scale.set(1.15, 1.15, 1.05 + i * 0.22);
+        flameWhirl.add(tongue);
+      }
+      const wake = new THREE.Mesh(spellTailGeo, fireOuterMat);
+      wake.scale.set(1.15, 1.15, 1.12);
+      haloSprite.material = getProjMatBundle('mfire_out', 0xff5722, false, false).haloSpriteMat;
+      haloSprite.scale.set(1.15, 1.15, 1);
+      orbitRingA = flameWhirl;
+      spinCore = midShell;
+      mesh.add(heart, midShell, flameWhirl, wake, haloSprite);
+      mesh.scale.setScalar(scaleMult * 1.08);
+    } else if (type === 'magic_water') {
+      // 💧 CRESTING TIDAL ORB: Glossy sapphire-aqua teardrop + 2 swirling foamy water rings + stream!
+      const aquaCoreMat = getProjMatBundle('mwat_core', 0x38bdf8, false, false).solidCoreMat;
+      const deepSeaMat = getProjMatBundle('mwat_deep', 0x0284c7, false, false).glowMat;
+      const dropCore = new THREE.Mesh(waterOrbGeo, projWhiteCoreMat);
+      dropCore.scale.setScalar(0.58);
+      const waterBody = new THREE.Mesh(waterOrbGeo, aquaCoreMat);
+      orbitRingA = new THREE.Mesh(spellOrbitRingGeo, projWhiteCoreMat);
+      orbitRingA.scale.set(1.08, 1.08, 1.08);
+      orbitRingB = new THREE.Mesh(spellOrbitRingGeo, deepSeaMat);
+      orbitRingB.rotation.x = Math.PI * 0.45;
+      orbitRingB.scale.set(1.25, 1.25, 1.25);
+      const stream = new THREE.Mesh(spellTailGeo, deepSeaMat);
+      stream.scale.set(0.95, 0.95, 0.95);
+      haloSprite.material = getProjMatBundle('mwat_deep', 0x0ea5e9, false, false).haloSpriteMat;
+      haloSprite.scale.set(1.05, 1.05, 1);
+      spinCore = waterBody;
+      mesh.add(dropCore, waterBody, orbitRingA, orbitRingB, stream, haloSprite);
+      mesh.scale.setScalar(scaleMult * 1.06);
+    } else if (type === 'magic_lightning') {
+      // ⚡ CRACKLING BALL LIGHTNING & ZIG-ZAG SPEAR: Plasma core + 3 criss-crossing electric bolts!
+      const elecCyanMat = getProjMatBundle('mlight_cy', 0x38bdf8, false, false).glowMat;
+      const elecGoldMat = getProjMatBundle('mlight_gd', 0xfef08a, false, false).solidCoreMat;
+      const plasmaCore = new THREE.Mesh(spellCrystalGeo, projWhiteCoreMat);
+      plasmaCore.scale.set(0.68, 0.68, 1.35);
+
+      const arcsCluster = new THREE.Group();
+      for (let i = 0; i < 3; i++) {
+        const bolt = new THREE.Mesh(lightningZigGeo, i === 0 ? elecGoldMat : elecCyanMat);
+        bolt.rotation.z = (i / 3) * Math.PI;
+        bolt.rotation.x = (i - 1) * 0.28;
+        bolt.rotation.y = (1 - i) * 0.24;
+        arcsCluster.add(bolt);
+      }
+      orbitRingA = arcsCluster;
+      spinCore = plasmaCore;
+      haloSprite.material = getProjMatBundle('mlight_cy', 0x38bdf8, false, false).haloSpriteMat;
+      haloSprite.scale.set(1.12, 1.12, 1);
+      mesh.add(plasmaCore, arcsCluster, haloSprite);
+      mesh.scale.setScalar(scaleMult * 1.1);
+    } else if (type === 'magic_air') {
+      // 🌪️ RAZOR WIND CUTTER & CYCLONE VORTEX: Swept crescent wind-blade + 3 stacked spinning tornado rings!
+      const windMintMat = getProjMatBundle('mair_mint', 0x5eead4, false, false).glowMat;
+      const windWhiteMat = getProjMatBundle('mair_wht', 0xf8fafc, false, false).solidCoreMat;
+      const cutter = new THREE.Mesh(airCutterGeo, windWhiteMat);
+      cutter.scale.set(0.46, 1.0, 0.46);
+
+      const cyclone = new THREE.Group();
+      for (let i = 0; i < 3; i++) {
+        const ring = new THREE.Mesh(spellOrbitRingGeo, i === 1 ? windWhiteMat : windMintMat);
+        ring.rotation.x = Math.PI * 0.5;
+        const rScale = 0.62 + i * 0.34;
+        ring.scale.set(rScale, rScale, 1);
+        ring.position.y = (i - 1) * 0.11;
+        ring.position.z = -i * 0.14;
+        cyclone.add(ring);
+      }
+      const slipstream = new THREE.Mesh(spellTailGeo, windMintMat);
+      slipstream.scale.set(0.85, 0.85, 0.85);
+      orbitRingB = cyclone;
+      spinCore = cutter;
+      haloSprite.material = getProjMatBundle('mair_mint', 0x5eead4, false, false).haloSpriteMat;
+      haloSprite.scale.set(1.0, 1.0, 1);
+      mesh.add(cutter, cyclone, slipstream, haloSprite);
+      mesh.scale.setScalar(scaleMult * 1.08);
     } else {
-      // Mage Spell Comet ('magic' / 'spark_staff' / 'cinder_tome' / 'void_orb')
+      // Fallback Mage Spell Comet
       const isVoid = type === 'void_orb';
       const core = new THREE.Mesh(spellCrystalGeo, isVoid ? projDarkCoreMat : solidCoreMat);
       const innerSpark = new THREE.Mesh(spellCrystalGeo, projWhiteCoreMat);
@@ -1231,6 +1420,7 @@ export function createArenaWorld(canvas) {
     let disposed = false;
     const handle = {
       mesh,
+      visualKind: type,
       spinCore,
       orbitRingA,
       orbitRingB,
@@ -1455,15 +1645,28 @@ export function createArenaWorld(canvas) {
       proj.prevZ = m.position.z;
 
       if (proj.spinCore) {
-        proj.spinCore.rotation.z += safeDt * 14;
-        proj.spinCore.rotation.x += safeDt * 9;
+        if (proj.visualKind !== 'magic_air') {
+          proj.spinCore.rotation.z += safeDt * 14;
+          proj.spinCore.rotation.x += safeDt * 9;
+        }
       }
       if (proj.orbitRingA) {
-        proj.orbitRingA.rotation.x += safeDt * 12;
-        proj.orbitRingA.rotation.y += safeDt * 8;
+        if (proj.visualKind === 'magic_fire') {
+          proj.orbitRingA.rotation.z += safeDt * 18;
+        } else if (proj.visualKind === 'magic_lightning') {
+          proj.orbitRingA.rotation.z += safeDt * 34;
+          proj.orbitRingA.rotation.x = Math.sin(t * 45) * 0.35;
+        } else {
+          proj.orbitRingA.rotation.x += safeDt * 12;
+          proj.orbitRingA.rotation.y += safeDt * 8;
+        }
       }
       if (proj.orbitRingB) {
-        proj.orbitRingB.rotation.z -= safeDt * 13;
+        if (proj.visualKind === 'magic_air') {
+          proj.orbitRingB.rotation.y += safeDt * 24;
+        } else {
+          proj.orbitRingB.rotation.z -= safeDt * 13;
+        }
       }
       if (proj.isMagic) {
         proj.trailAccum += safeDt;
@@ -1581,6 +1784,21 @@ export function createArenaWorld(canvas) {
       sw.fillMat.opacity = (1 - p) * 0.42;
     }
 
+    // Update 3D Chain-Lightning Arcs
+    for (let i = activeLightningArcs.length - 1; i >= 0; i--) {
+      const la = activeLightningArcs[i];
+      la.age += safeDt;
+      if (la.age >= la.duration) {
+        la.group.visible = false;
+        activeLightningArcs.splice(i, 1);
+        freeLightningArcs.push(la);
+        continue;
+      }
+      const p = 1 - la.age / la.duration;
+      la.outerMat.opacity = p * 0.95;
+      la.innerMat.opacity = p;
+    }
+
     // Update Boss Danger Zones
     for (let i = activeDangerZones.length - 1; i >= 0; i--) {
       const dz = activeDangerZones[i];
@@ -1653,6 +1871,11 @@ export function createArenaWorld(canvas) {
       sw.group.visible = false;
       freeShockwaves.push(sw);
     }
+    while (activeLightningArcs.length > 0) {
+      const la = activeLightningArcs.pop();
+      la.group.visible = false;
+      freeLightningArcs.push(la);
+    }
     while (activeDangerZones.length > 0) {
       const dz = activeDangerZones.pop();
       scene.remove(dz.group);
@@ -1678,6 +1901,7 @@ export function createArenaWorld(canvas) {
     spawnMuzzleFlash,
     spawnSlashArc,
     spawnShockwaveRing,
+    spawnLightningArc,
     spawnDangerZone,
     createProjectileVisual,
     setBossAtmosphere,

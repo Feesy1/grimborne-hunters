@@ -1,5 +1,14 @@
 // Meta-progression store, Per-Class Arsenal & Workshop upgrades, stat calculator, and Tarot blessing roller
-import { CLASSES, WEAPONS, LEVELS, RUN_UPGRADES, WEAPON_MAX_LEVEL } from './config.js';
+import {
+  CLASSES,
+  WEAPONS,
+  LEVELS,
+  RUN_UPGRADES,
+  WEAPON_MAX_LEVEL,
+  MAGE_ELEMENTS,
+  MAGE_ELEMENT_ORDER,
+  MAGE_ELEMENT_UNLOCK_COSTS
+} from './config.js?v=20261116f';
 
 export const WEAPON_MAX_SHOP_LEVEL = WEAPON_MAX_LEVEL || 12;
 
@@ -79,12 +88,15 @@ function createDefaultClassUpgrades() {
   return map;
 }
 
-function createDefaultState() {
+function createDefaultState(zeroGold = false) {
   const classUpgrades = createDefaultClassUpgrades();
   return {
-    gold: 60,
+    gold: zeroGold ? 0 : 0,
     selectedClass: 'warrior',
     maxUnlockedLevel: 1,
+    mageStarterChosen: false,
+    activeMageElement: 'fire',
+    unlockedMageElements: {},
     unlockedWeapons: {
       club: true,
       pistol: true,
@@ -148,6 +160,9 @@ export function createProgressionStore(initialSave = null) {
       gold: state.gold,
       selectedClass: activeCls,
       maxUnlockedLevel: state.maxUnlockedLevel,
+      mageStarterChosen: Boolean(state.mageStarterChosen),
+      activeMageElement: state.activeMageElement || 'fire',
+      unlockedMageElements: { ...(state.unlockedMageElements || {}) },
       unlockedWeapons: { ...state.unlockedWeapons },
       equippedWeapons: { ...state.equippedWeapons },
       weaponShopLevels: { ...state.weaponShopLevels },
@@ -170,6 +185,24 @@ export function createProgressionStore(initialSave = null) {
     }
     // Shared 25-level campaign unlock across all classes
     base.maxUnlockedLevel = clampInt(savedObj.maxUnlockedLevel, 1, LEVELS.length, 1);
+
+    if (savedObj.unlockedMageElements && typeof savedObj.unlockedMageElements === 'object') {
+      for (const elKey of MAGE_ELEMENT_ORDER) {
+        if (savedObj.unlockedMageElements[elKey]) {
+          base.unlockedMageElements[elKey] = true;
+        }
+      }
+    }
+    const unlockedElCount = Object.keys(base.unlockedMageElements).filter((k) => base.unlockedMageElements[k]).length;
+    base.mageStarterChosen = Boolean(savedObj.mageStarterChosen || unlockedElCount > 0);
+    if (savedObj.activeMageElement && MAGE_ELEMENTS[savedObj.activeMageElement]) {
+      base.activeMageElement = savedObj.activeMageElement;
+    }
+    if (base.mageStarterChosen && !base.unlockedMageElements[base.activeMageElement]) {
+      const firstUnlocked = MAGE_ELEMENT_ORDER.find((k) => base.unlockedMageElements[k]) || 'fire';
+      base.unlockedMageElements[firstUnlocked] = true;
+      base.activeMageElement = firstUnlocked;
+    }
 
     if (savedObj.unlockedWeapons && typeof savedObj.unlockedWeapons === 'object') {
       for (const wpnId of Object.keys(WEAPONS)) {
@@ -479,6 +512,11 @@ export function createProgressionStore(initialSave = null) {
 
     // Magazine & Reload metrics (Gunslinger) + Continuous Mana Pool & Regen (Mage)
     const usesMana = cls.id === 'mage' || wpn.type === 'magic';
+    const mageElement = usesMana
+      ? (MAGE_ELEMENTS[mods.mageElement || state.activeMageElement] ? (mods.mageElement || state.activeMageElement) : 'fire')
+      : null;
+    const elemDef = mageElement ? MAGE_ELEMENTS[mageElement] : null;
+    const airSpeedMult = mageElement === 'air' ? 1.08 : 1.0;
     const baseMag = usesMana ? 0 : (wpn.magSize || 0);
     const magSize = baseMag > 0 ? baseMag + ammoPouchStacks * 2 : 0;
     const reloadSpeedMult = +(shopReloadMult * heroAgilityMult * perkReloadMult).toFixed(4);
@@ -525,7 +563,7 @@ export function createProgressionStore(initialSave = null) {
 
     return {
       maxHp,
-      moveSpeed,
+      moveSpeed: +(moveSpeed * (cls.id === 'mage' && state.activeMageElement === 'air' ? 1.08 : 1.0)).toFixed(3),
       damageBlock,
       blockChance,
       dodgeChance,
@@ -533,12 +571,12 @@ export function createProgressionStore(initialSave = null) {
       cooldown,
       range,
       arcAngle,
-      splashRadius,
-      knockback,
+      splashRadius: mageElement === 'water' ? +(splashRadius * 1.25).toFixed(3) : splashRadius,
+      knockback: mageElement === 'air' ? +(knockback * 2.2).toFixed(3) : knockback,
       pellets,
       spread,
       pierce,
-      projectileSpeed,
+      projectileSpeed: mageElement === 'lightning' ? +(projectileSpeed * 1.32).toFixed(2) : projectileSpeed,
       pickupRadius,
       magSize,
       reloadTime,
@@ -547,6 +585,8 @@ export function createProgressionStore(initialSave = null) {
       maxMana,
       manaRegen,
       manaCost,
+      mageElement,
+      mageElementColor: elemDef ? elemDef.color : wpn.color,
       recoilKick: wpn.recoilKick || 0,
       isShotgun: Boolean(wpn.isShotgun),
       critChance,
@@ -649,6 +689,62 @@ export function createProgressionStore(initialSave = null) {
     return choices;
   }
 
+  function getMageElementUnlockCost() {
+    const count = MAGE_ELEMENT_ORDER.filter((k) => state.unlockedMageElements?.[k]).length;
+    if (!state.mageStarterChosen || count === 0) return 0;
+    if (count >= MAGE_ELEMENT_ORDER.length) return null;
+    return MAGE_ELEMENT_UNLOCK_COSTS[count] ?? 360;
+  }
+
+  function getMageElementState() {
+    const unlocked = {};
+    for (const k of MAGE_ELEMENT_ORDER) {
+      unlocked[k] = Boolean(state.unlockedMageElements?.[k]);
+    }
+    return {
+      starterChosen: Boolean(state.mageStarterChosen),
+      activeElement: state.activeMageElement || 'fire',
+      unlockedElements: unlocked,
+      nextUnlockCost: getMageElementUnlockCost()
+    };
+  }
+
+  function selectOrUnlockMageElement(elemId) {
+    if (!MAGE_ELEMENTS[elemId]) return { ok: false, reason: 'invalid' };
+    if (!state.unlockedMageElements) state.unlockedMageElements = {};
+
+    // Already unlocked -> switch immediately!
+    if (state.unlockedMageElements[elemId]) {
+      state.activeMageElement = elemId;
+      state.mageStarterChosen = true;
+      return { ok: true, action: 'equipped', element: elemId };
+    }
+
+    const cost = getMageElementUnlockCost();
+    if (cost === 0) {
+      // First starter element is FREE!
+      state.unlockedMageElements[elemId] = true;
+      state.activeMageElement = elemId;
+      state.mageStarterChosen = true;
+      return { ok: true, action: 'starter_unlocked', element: elemId };
+    }
+
+    if (cost !== null && state.gold >= cost) {
+      state.gold -= cost;
+      state.unlockedMageElements[elemId] = true;
+      state.activeMageElement = elemId;
+      state.mageStarterChosen = true;
+      return { ok: true, action: 'purchased', element: elemId, cost };
+    }
+
+    return { ok: false, reason: 'gold', cost };
+  }
+
+  function resetAllProgress() {
+    state = createDefaultState(true);
+    return cloneState();
+  }
+
   if (initialSave) {
     loadState(initialSave);
   }
@@ -656,8 +752,12 @@ export function createProgressionStore(initialSave = null) {
   return {
     getState,
     loadState,
+    resetAllProgress,
     addGold,
     selectClass,
+    getMageElementState,
+    getMageElementUnlockCost,
+    selectOrUnlockMageElement,
     isWeaponUnlocked,
     unlockWeapon,
     getEquippedWeaponId,

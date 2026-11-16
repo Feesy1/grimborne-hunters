@@ -9,11 +9,14 @@
 import {
   WEAPON_MAX_LEVEL,
   CLASSES,
+  MAGE_ELEMENTS,
+  MAGE_ELEMENT_ORDER,
+  MAGE_ELEMENT_UNLOCK_COSTS,
   WEAPONS,
   ENEMY_TYPES,
   LEVELS,
   RUN_UPGRADES
-} from './config.js';
+} from './config.js?v=20261116f';
 
 const CLASS_ORDER = ['warrior', 'gunslinger', 'mage'];
 
@@ -1404,10 +1407,14 @@ export function createUIManager(initialCallbacks = {}) {
   const hubGoldAmount = el('span', 'treasury-gold-val', '60');
   treasuryGoldPill.append(treasuryCoinSvg, hubGoldAmount);
 
+  const hubResetBtn = el('button', 'hud-btn reset-progress-btn', '🔄 Сброс');
+  hubResetBtn.type = 'button';
+  hubResetBtn.title = 'Сбросить весь прогресс до нуля';
+
   const hubMuteBtn = el('button', 'hud-btn icon-btn sound-trigger-btn', '🔊');
   hubMuteBtn.type = 'button';
   hubMuteBtn.title = 'Настройки звука';
-  hubTreasury.append(treasuryGoldPill, hubMuteBtn);
+  hubTreasury.append(treasuryGoldPill, hubResetBtn, hubMuteBtn);
 
   hubHeader.append(hubBrand, hubNavTabs, hubTreasury);
 
@@ -1525,7 +1532,17 @@ export function createUIManager(initialCallbacks = {}) {
   heroWeaponChipRight.append(heroWeaponChipDot, heroWeaponChipArrow);
   heroWeaponChip.append(heroWeaponChipLeft, heroWeaponChipRight);
 
-  heroInfoCard.append(heroCardHeader, heroLoreLine, heroStatsBars, heroWeaponChip);
+  // Mage 4-Element School Selector (visible when Mage is selected)
+  const mageElementsBox = el('div', 'mage-elements-box hidden');
+  const mageElemHead = el('div', 'mage-elem-head');
+  const mageElemTitle = el('span', 'mage-elem-title', '✦ Стихия посоха:');
+  const mageElemStatus = el('span', 'mage-elem-status', 'Первая — бесплатно!');
+  mageElemHead.append(mageElemTitle, mageElemStatus);
+  const mageElemRow = el('div', 'mage-elem-pills-row');
+  const mageElemDesc = el('div', 'mage-elem-desc', '');
+  mageElementsBox.append(mageElemHead, mageElemRow, mageElemDesc);
+
+  heroInfoCard.append(heroCardHeader, heroLoreLine, heroStatsBars, mageElementsBox, heroWeaponChip);
 
   // --- Bottom-Right: Sleek Launch Dock with Selected Chapter Mini-Banner Card ---
   const heroLaunchDock = el('div', 'hero-launch-dock');
@@ -1713,6 +1730,7 @@ export function createUIManager(initialCallbacks = {}) {
   }
   arsenalHeaderRow.append(arsenalTitleGroup, arsenalClassSwitch);
 
+  const arsenalMageElementsBox = el('div', 'arsenal-mage-elements hidden');
   const arsenalCardsGrid = el('div', 'arsenal-cards-grid');
 
   const arsenalFooterRow = el('div', 'subpanel-footer-row');
@@ -1722,7 +1740,7 @@ export function createUIManager(initialCallbacks = {}) {
   arsenalQuickPlayBtn.type = 'button';
   arsenalFooterRow.append(arsenalBackBtn, arsenalQuickPlayBtn);
 
-  arsenalBox.append(arsenalHeaderRow, arsenalCardsGrid, arsenalFooterRow);
+  arsenalBox.append(arsenalHeaderRow, arsenalMageElementsBox, arsenalCardsGrid, arsenalFooterRow);
   arsenalPanel.appendChild(arsenalBox);
 
   // =========================================================================
@@ -1902,6 +1920,117 @@ export function createUIManager(initialCallbacks = {}) {
   resultPanel.append(resultCrest, resultTitle, resultLevelName, resultStatsGrid, resultUnlockedBox, resultActionsCol);
   resultModal.appendChild(resultPanel);
   root.appendChild(resultModal);
+
+  // =========================================================================
+  // MAGE STARTER ELEMENT MODAL & FULL PROGRESS RESET CONFIRMATION MODAL
+  // =========================================================================
+  const mageStarterModal = el('div', 'modal-backdrop mage-elem-backdrop hidden');
+  const mageStarterPanel = el('div', 'modal-panel mage-elem-modal-panel');
+  const mageStarterTopBar = el('div', 'mage-elem-modal-topbar');
+  const mageStarterPill = el('span', 'altar-soul-pill', '✦ ШКОЛА СТИХИЙ МАГА ✦');
+  const mageStarterCloseBtn = el('button', 'mage-elem-later-btn', '✕ Позже');
+  mageStarterCloseBtn.type = 'button';
+  mageStarterTopBar.append(mageStarterPill, mageStarterCloseBtn);
+
+  const mageStarterTitle = el('h2', 'modal-title mage-elem-modal-title', 'ВЫБЕРИ ПЕРВУЮ СТИХИЮ');
+  const mageStarterSub = el(
+    'p',
+    'modal-subtitle mage-elem-modal-sub',
+    'Первая стихия открывается бесплатно! Остальные 3 стихии можно будет изучить за золото и переключать в любой момент.'
+  );
+  const mageStarterGrid = el('div', 'mage-starter-grid');
+  mageStarterPanel.append(mageStarterTopBar, mageStarterTitle, mageStarterSub, mageStarterGrid);
+  mageStarterModal.appendChild(mageStarterPanel);
+  root.appendChild(mageStarterModal);
+
+  let pendingStartAfterStarterChoice = null;
+
+  function hideMageStarterModal() {
+    mageStarterModal.classList.add('hidden');
+  }
+
+  mageStarterCloseBtn.addEventListener('click', () => {
+    pendingStartAfterStarterChoice = null;
+    hideMageStarterModal();
+  });
+
+  function openMageStarterModal(autoStartLevel = null) {
+    closeSoundPopover();
+    pendingStartAfterStarterChoice = autoStartLevel;
+    mageStarterGrid.innerHTML = '';
+
+    for (const elKey of MAGE_ELEMENT_ORDER) {
+      const eDef = MAGE_ELEMENTS[elKey];
+      if (!eDef) continue;
+      const card = el('button', `mage-starter-card elem-theme-${elKey}`);
+      card.type = 'button';
+      card.style.setProperty('--elem-color', hexNumToCss(eDef.color, '#c084fc'));
+
+      const head = el('div', 'mage-starter-card-head');
+      const iconSpan = el('span', 'mage-starter-icon', eDef.icon);
+      const freeBadge = el('span', 'mage-starter-free-tag', 'БЕСПЛАТНО');
+      head.append(iconSpan, freeBadge);
+
+      const nameEl = el('h3', 'mage-starter-name', eDef.nameRu);
+      const descEl = el('p', 'mage-starter-desc', eDef.descRu);
+      const ctaEl = el('div', 'mage-starter-cta', `Выбрать: ${eDef.shortRu}`);
+
+      card.append(head, nameEl, descEl, ctaEl);
+      card.addEventListener('click', () => {
+        const launchLvl = pendingStartAfterStarterChoice;
+        pendingStartAfterStarterChoice = null;
+        hideMageStarterModal();
+        callbacks.onSelectMageElement?.(elKey);
+        if (launchLvl !== null) {
+          (callbacks.onStartRun || callbacks.onStartGame || callbacks.onPlay)?.({
+            classId: 'mage',
+            weaponId: currentEquippedWeaponId,
+            level: launchLvl
+          });
+        }
+      });
+      mageStarterGrid.appendChild(card);
+    }
+
+    mageStarterModal.classList.remove('hidden');
+  }
+
+  // Full Reset Progress Confirmation Modal (Mobile & Desktop)
+  const resetConfirmModal = el('div', 'modal-backdrop reset-confirm-backdrop hidden');
+  const resetConfirmPanel = el('div', 'modal-panel reset-confirm-panel');
+  const resetConfirmIcon = el('div', 'reset-confirm-icon', '🔄');
+  const resetConfirmTitle = el('h2', 'modal-title reset-confirm-title', 'Сбросить весь прогресс?');
+  const resetConfirmSub = el(
+    'p',
+    'modal-subtitle reset-confirm-sub',
+    'Все пройденные главы, золото, открытое оружие, таланты и выбранные стихии мага вернутся к начальному состоянию (Глава I, 0 золота), как при первом заходе в игру.'
+  );
+  const resetConfirmActions = el('div', 'reset-confirm-actions');
+  const resetConfirmYesBtn = el('button', 'result-btn btn-confirm-reset', '🔥 Сбросить всё до нуля');
+  resetConfirmYesBtn.type = 'button';
+  const resetConfirmNoBtn = el('button', 'result-btn btn-retry', 'Отмена');
+  resetConfirmNoBtn.type = 'button';
+  resetConfirmActions.append(resetConfirmYesBtn, resetConfirmNoBtn);
+  resetConfirmPanel.append(resetConfirmIcon, resetConfirmTitle, resetConfirmSub, resetConfirmActions);
+  resetConfirmModal.appendChild(resetConfirmPanel);
+  root.appendChild(resetConfirmModal);
+
+  function hideResetConfirmModal() {
+    resetConfirmModal.classList.add('hidden');
+  }
+
+  hubResetBtn.addEventListener('click', () => {
+    closeSoundPopover();
+    resetConfirmModal.classList.remove('hidden');
+  });
+
+  resetConfirmNoBtn.addEventListener('click', () => {
+    hideResetConfirmModal();
+  });
+
+  resetConfirmModal.addEventListener('click', (e) => {
+    if (e.target === resetConfirmModal) hideResetConfirmModal();
+  });
 
   // =========================================================================
   // INTERACTIVE SOUND, HUD & HUB TAB HANDLERS
@@ -2097,6 +2226,32 @@ export function createUIManager(initialCallbacks = {}) {
   let userPickedLevel = false;
   let currentEquippedWeaponId = 'club';
 
+  function isMageStarterChosen() {
+    if (!lastHubState) return false;
+    if (typeof lastHubState?.getMageElementState === 'function') {
+      return Boolean(lastHubState.getMageElementState().starterChosen);
+    }
+    const st = typeof lastHubState?.getState === 'function' ? lastHubState.getState() : lastHubState;
+    return Boolean(st?.mageStarterChosen);
+  }
+
+  function resetLocalSelection() {
+    localSelectedClass = 'warrior';
+    localSelectedLevel = 1;
+    viewedCampaignLevel = 1;
+    cachedMaxUnlockedLevel = 1;
+    lastSeenMaxUnlockedLevel = null;
+    userPickedLevel = false;
+    currentEquippedWeaponId = 'club';
+    setActiveTab('heroes');
+  }
+
+  resetConfirmYesBtn.addEventListener('click', () => {
+    hideResetConfirmModal();
+    resetLocalSelection();
+    callbacks.onResetProgress?.();
+  });
+
   function selectHeroClass(nextClassId) {
     if (!CLASSES[nextClassId] || nextClassId === localSelectedClass) return;
     localSelectedClass = nextClassId;
@@ -2110,6 +2265,9 @@ export function createUIManager(initialCallbacks = {}) {
     if (renderSeq === beforeSeq && lastHubState) {
       const base = typeof lastHubState?.getState === 'function' ? lastHubState.getState() : lastHubState;
       renderHub({ ...base, selectedClass: nextClassId });
+    }
+    if (nextClassId === 'mage' && !isMageStarterChosen()) {
+      openMageStarterModal(null);
     }
   }
 
@@ -2161,6 +2319,10 @@ export function createUIManager(initialCallbacks = {}) {
   function triggerStartRun(explicitLevel = null) {
     closeSoundPopover();
     const chosenLvl = explicitLevel || localSelectedLevel;
+    if (localSelectedClass === 'mage' && !isMageStarterChosen()) {
+      openMageStarterModal(chosenLvl);
+      return;
+    }
     (callbacks.onStartRun || callbacks.onStartGame || callbacks.onPlay)?.({
       classId: localSelectedClass,
       weaponId: currentEquippedWeaponId,
@@ -2201,6 +2363,23 @@ export function createUIManager(initialCallbacks = {}) {
       } else if (e.code === 'Digit3' || e.code === 'Numpad3' || e.key === '3') {
         e.preventDefault();
         activeLevelUpHandler(2);
+      }
+      return;
+    }
+
+    if (!mageStarterModal.classList.contains('hidden')) {
+      if (e.code === 'Escape') {
+        e.preventDefault();
+        pendingStartAfterStarterChoice = null;
+        hideMageStarterModal();
+      }
+      return;
+    }
+
+    if (!resetConfirmModal.classList.contains('hidden')) {
+      if (e.code === 'Escape') {
+        e.preventDefault();
+        hideResetConfirmModal();
       }
       return;
     }
@@ -2379,6 +2558,70 @@ export function createUIManager(initialCallbacks = {}) {
     const eqShopLvl = resolveWeaponShopLevel(state, storeRef, eqWpnDef.id, maxWpnLvl);
     const eqUpgCost = resolveWeaponUpgradeCost(state, storeRef, callbacks, eqWpnDef, eqShopLvl, maxWpnLvl);
     const eqCanUpgrade = eqShopLvl < maxWpnLvl && typeof eqUpgCost === 'number' && gold >= eqUpgCost;
+
+    // --- 2b. Mage 4-Element Selector inside Hero Card ---
+    const mageElemState =
+      typeof storeRef?.getMageElementState === 'function'
+        ? storeRef.getMageElementState()
+        : {
+            starterChosen: Boolean(state.mageStarterChosen),
+            activeElement: state.activeMageElement || 'fire',
+            unlockedElements: { ...(state.unlockedMageElements || {}) },
+            nextUnlockCost:
+              !state.mageStarterChosen
+                ? 0
+                : MAGE_ELEMENT_UNLOCK_COSTS[
+                    MAGE_ELEMENT_ORDER.filter((k) => state.unlockedMageElements?.[k]).length
+                  ] ?? null
+          };
+
+    const isMageActive = localSelectedClass === 'mage';
+    mageElementsBox.classList.toggle('hidden', !isMageActive);
+    if (isMageActive) {
+      const curElemId = MAGE_ELEMENTS[mageElemState.activeElement] ? mageElemState.activeElement : 'fire';
+      const curElemDef = MAGE_ELEMENTS[curElemId];
+      mageElemTitle.textContent = '✦ Стихия посоха:';
+      if (!mageElemState.starterChosen) {
+        mageElemStatus.textContent = '1-я бесплатно!';
+      } else {
+        mageElemStatus.textContent = `${curElemDef.icon} ${curElemDef.nameRu}`;
+      }
+
+      mageElemRow.innerHTML = '';
+      for (const elKey of MAGE_ELEMENT_ORDER) {
+        const eDef = MAGE_ELEMENTS[elKey];
+        if (!eDef) continue;
+        const unlocked = Boolean(mageElemState.unlockedElements?.[elKey]);
+        const isCurrent = mageElemState.starterChosen && curElemId === elKey && unlocked;
+        const costVal = unlocked ? null : mageElemState.nextUnlockCost;
+        const canAffordUnlock = !unlocked && typeof costVal === 'number' && gold >= costVal;
+
+        const pillBtn = el(
+          'button',
+          `mage-elem-pill elem-theme-${elKey}${isCurrent ? ' is-active' : ''}${unlocked ? ' is-unlocked' : ' is-locked'}${canAffordUnlock ? ' is-affordable' : ''}`
+        );
+        pillBtn.type = 'button';
+        pillBtn.style.setProperty('--elem-color', hexNumToCss(eDef.color, '#c084fc'));
+
+        const topTxt = el('span', 'mage-elem-pill-name', `${eDef.icon} ${eDef.shortRu}`);
+        let subLabel = '';
+        if (isCurrent) subLabel = '✓ Выбрана';
+        else if (unlocked) subLabel = 'Взять';
+        else if (costVal === 0) subLabel = 'Бесплатно';
+        else subLabel = `🔒 ${costVal}`;
+        const subTxt = el('span', 'mage-elem-pill-sub', subLabel);
+
+        pillBtn.append(topTxt, subTxt);
+        pillBtn.addEventListener('click', () => {
+          callbacks.onSelectMageElement?.(elKey);
+        });
+        mageElemRow.appendChild(pillBtn);
+      }
+
+      mageElemDesc.textContent = mageElemState.starterChosen
+        ? curElemDef.descRu
+        : 'Нажмите на любую стихию выше, чтобы выбрать первую школу магии бесплатно!';
+    }
 
     heroWeaponChipIcon.innerHTML = '';
     heroWeaponChipIcon.appendChild(createWeaponSvg(eqWpnDef.id));
@@ -2570,13 +2813,71 @@ export function createUIManager(initialCallbacks = {}) {
       campaignNodesStrip.appendChild(nodeBtn);
     }
 
-    // --- 5. Render 🗡️ Арсенал Cards (3 Per-Class Weapons, Shop Levels 1..12) ---
+    // --- 5. Render 🗡️ Арсенал Cards (3 Per-Class Weapons, Shop Levels 1..12 + Mage Elements) ---
     arsenalHeading.textContent = isEn
       ? `🗡️ Arsenal — ${activeClass.nameEn}`
       : `🗡️ Арсенал — ${activeClass.nameRu}`;
     arsenalCardsGrid.innerHTML = '';
 
-    let anyWeaponUpgradeAffordable = false;
+    arsenalMageElementsBox.classList.toggle('hidden', localSelectedClass !== 'mage');
+    arsenalMageElementsBox.innerHTML = '';
+    let anyElemUnlockAffordable = false;
+    if (localSelectedClass === 'mage') {
+      const aHead = el('div', 'arsenal-elem-header');
+      aHead.append(
+        el('span', 'arsenal-elem-title', '✦ Школы Стихий Посоха (переключаются свободно после открытия)'),
+        el(
+          'span',
+          'arsenal-elem-hint',
+          !mageElemState.starterChosen
+            ? 'Первая стихия — БЕСПЛАТНО!'
+            : mageElemState.nextUnlockCost !== null
+              ? `Следующая стихия: ${mageElemState.nextUnlockCost} золота`
+              : 'Все 4 стихии открыты!'
+        )
+      );
+      const aGrid = el('div', 'arsenal-elem-grid');
+      for (const elKey of MAGE_ELEMENT_ORDER) {
+        const eDef = MAGE_ELEMENTS[elKey];
+        if (!eDef) continue;
+        const unlocked = Boolean(mageElemState.unlockedElements?.[elKey]);
+        const isCurrent = mageElemState.starterChosen && mageElemState.activeElement === elKey && unlocked;
+        const costVal = unlocked ? null : mageElemState.nextUnlockCost;
+        if (!unlocked && typeof costVal === 'number' && gold >= costVal) {
+          anyElemUnlockAffordable = true;
+        }
+        const eCard = el(
+          'button',
+          `arsenal-elem-card elem-theme-${elKey}${isCurrent ? ' is-active' : ''}${unlocked ? ' is-unlocked' : ' is-locked'}`
+        );
+        eCard.type = 'button';
+        eCard.style.setProperty('--elem-color', hexNumToCss(eDef.color, '#c084fc'));
+        const topRow = el('div', 'arsenal-elem-card-top');
+        topRow.append(
+          el('strong', 'arsenal-elem-name', `${eDef.icon} ${eDef.nameRu}`),
+          el(
+            'span',
+            'arsenal-elem-tag',
+            isCurrent
+              ? '✓ Активна'
+              : unlocked
+                ? 'Выбрать'
+                : costVal === 0
+                  ? 'Бесплатно'
+                  : `🔒 ${costVal} зол.`
+          )
+        );
+        const dP = el('p', 'arsenal-elem-desc', eDef.descRu);
+        eCard.append(topRow, dP);
+        eCard.addEventListener('click', () => {
+          callbacks.onSelectMageElement?.(elKey);
+        });
+        aGrid.appendChild(eCard);
+      }
+      arsenalMageElementsBox.append(aHead, aGrid);
+    }
+
+    let anyWeaponUpgradeAffordable = anyElemUnlockAffordable;
 
     for (const wId of activeClass.weapons) {
       const wDef = WEAPONS[wId];
@@ -2985,8 +3286,10 @@ export function createUIManager(initialCallbacks = {}) {
     // 7. Bottom Weapon SVG + Shotgun Shell / Mana Charge Pips + Golden Reload Bar + [R] Button
     const wId = snapshot.weaponId || snapshot.weaponDef?.id || snapshot.weapon?.id || 'club';
     const wDef = WEAPONS[wId];
-    const wName =
+    const baseWName =
       snapshot.weaponName || snapshot.weaponDef?.nameRu || snapshot.weapon?.nameRu || wDef?.nameRu || 'Клинок Клятвы';
+    const elemDef = snapshot.mageElement ? MAGE_ELEMENTS[snapshot.mageElement] : null;
+    const wName = elemDef && snapshot.usesMana ? `${elemDef.icon} ${baseWName}` : baseWName;
     const wRunLvl = Math.max(1, Number(snapshot.weaponRunLevel ?? snapshot.weaponLevel ?? snapshot.weapon?.runLevel ?? 1));
 
     if (wId !== hudCache.weaponId) {
@@ -3505,10 +3808,15 @@ export function createUIManager(initialCallbacks = {}) {
     showResultModal,
     hideResultModal,
 
+    openMageStarterModal,
+    resetLocalSelection,
+
     hideAllModals() {
       closeSoundPopover();
       hideLevelUpModal();
       hideResultModal();
+      hideMageStarterModal();
+      hideResetConfirmModal();
     }
   };
 }

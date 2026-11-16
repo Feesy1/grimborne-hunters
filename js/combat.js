@@ -8,7 +8,7 @@ import {
   ENEMY_TYPES,
   LEVELS,
   RUN_UPGRADES
-} from './config.js';
+} from './config.js?v=20261116f';
 
 const TWO_PI = Math.PI * 2;
 const ARENA_PLAYER_LIMIT = ARENA_HALF_SIZE - 1.4;
@@ -307,10 +307,11 @@ export function createCombatController({
 
   function buildHeroModel(classId, weaponId) {
     let handle = null;
+    const activeElem = progression.getState().activeMageElement || 'fire';
     if (typeof models?.createHeroMesh === 'function') {
       handle = sigHeroMesh.isObject
-        ? models.createHeroMesh({ classId, weaponId })
-        : models.createHeroMesh(classId, weaponId);
+        ? models.createHeroMesh({ classId, weaponId, mageElement: activeElem })
+        : models.createHeroMesh(classId, weaponId, activeElem);
     }
     let obj = getObj3D(handle);
     if (!obj) {
@@ -1469,9 +1470,15 @@ export function createCombatController({
     const isDoT = Boolean(hitMeta?.isDoT);
     const isProjectile = Boolean(hitMeta?.isProjectile);
     const isCrit = Boolean(hitMeta?.isCrit);
+    const hitElem = hitMeta?.mageElement || null;
     let finalAmount = amount;
     let kx = knockX;
     let kz = knockZ;
+
+    // 🔥 Fire Element (Batrider Napalm): existing Napalm stacks amplify incoming damage by +12% per stack!
+    if (!isDoT && hitElem === 'fire' && (enemy.napalmStacks || 0) > 0 && (enemy.napalmTimer || 0) > 0) {
+      finalAmount *= 1 + enemy.napalmStacks * 0.12;
+    }
 
     // Shieldbearer Frontal Steel Shield (±75° dot-product check!)
     if (isProjectile && !isCrit && enemy.frontArmor > 0) {
@@ -1539,25 +1546,51 @@ export function createCombatController({
         );
       }
 
+      // === 4 MAGE ELEMENTAL EFFECTS ===
+      if (hitElem === 'fire') {
+        enemy.napalmStacks = Math.min(8, ((enemy.napalmTimer || 0) > 0 ? (enemy.napalmStacks || 0) : 0) + 1);
+        enemy.napalmTimer = 4.2;
+        enemy.burnTimer = Math.max(enemy.burnTimer || 0, 3.0);
+        enemy.burnDps = Math.max(enemy.burnDps || 0, Math.max(4, Math.round((stats?.damage || 24) * (0.12 + enemy.napalmStacks * 0.07))));
+        emitParticles(enemy.x, 0.72, enemy.z, 0xff5722, 4, 3.6, 0.12);
+        if (enemy.napalmStacks >= 2 && enemy.napalmStacks % 2 === 0 && critFloaterCooldown <= 0) {
+          critFloaterCooldown = 0.14;
+          floatText(`🔥×${enemy.napalmStacks}`, enemy.x, enemy.z, '#fb923c');
+        }
+      } else if (hitElem === 'water') {
+        enemy.soakedTimer = 3.0;
+        enemy.frostTimer = Math.max(enemy.frostTimer || 0, 2.6);
+        enemy.frostFactor = Math.min(enemy.frostFactor || 1.0, 0.64);
+        emitParticles(enemy.x, 0.68, enemy.z, 0x38bdf8, 5, 3.4, 0.12);
+      } else if (hitElem === 'lightning' && allowChain) {
+        const extraChainStacks = perks.chain_soul || 0;
+        const bounceTargets = 1 + (extraChainStacks >= 2 ? 1 : 0);
+        const arcDmg = Math.max(2, Math.round(dmg * (0.55 + extraChainStacks * 0.10)));
+        triggerChainLightning(enemy, arcDmg, bounceTargets, 0x38bdf8);
+      } else if (hitElem === 'air') {
+        enemy.stunTimer = Math.max(enemy.stunTimer || 0, enemy.isBoss ? 0.06 : 0.22);
+        emitParticles(enemy.x, 0.72, enemy.z, 0x5eead4, 4, 4.2, 0.11);
+      }
+
       // Apply Frost Touch & Burn Cinder blessings on direct player/splash hits
       if (stats?.frostSlowDuration > 0) {
-        enemy.frostTimer = stats.frostSlowDuration;
-        enemy.frostFactor = stats.frostSlowFactor;
+        enemy.frostTimer = Math.max(enemy.frostTimer || 0, stats.frostSlowDuration);
+        enemy.frostFactor = Math.min(enemy.frostFactor || 1.0, stats.frostSlowFactor);
         if (Math.random() < 0.45) {
           emitParticles(enemy.x, 0.6, enemy.z, 0x67e8f9, 3, 2.8, 0.11);
         }
       }
       if (stats?.burnDps > 0 && stats?.burnDuration > 0) {
-        enemy.burnTimer = stats.burnDuration;
-        enemy.burnDps = stats.burnDps;
+        enemy.burnTimer = Math.max(enemy.burnTimer || 0, stats.burnDuration);
+        enemy.burnDps = Math.max(enemy.burnDps || 0, stats.burnDps);
       }
 
-      // Chain Soul lightning blessing (35% per stack up to 85%, 45% damage arc!)
+      // Chain Soul lightning blessing (for non-lightning-element weapons!)
       const chainChance = stats?.chainChance || 0;
-      if (allowChain && chainChance > 0 && Math.random() < chainChance) {
+      if (allowChain && hitElem !== 'lightning' && chainChance > 0 && Math.random() < chainChance) {
         const arcDamage = Math.max(1, Math.round(dmg * 0.45));
         const maxArcs = (perks.chain_soul || 1) >= 3 ? 2 : 1;
-        triggerChainLightning(enemy, arcDamage, maxArcs);
+        triggerChainLightning(enemy, arcDamage, maxArcs, 0xc084fc);
       }
     }
 
@@ -1566,24 +1599,35 @@ export function createCombatController({
     }
   }
 
-  function triggerChainLightning(originEnemy, chainDamage, maxBounces = 1) {
+  function triggerChainLightning(originEnemy, chainDamage, maxBounces = 1, boltColor = 0x38bdf8) {
     let bounced = 0;
-    for (let i = 0; i < enemies.length && bounced < maxBounces; i++) {
+    let bestCandidates = [];
+    for (let i = 0; i < enemies.length; i++) {
       const candidate = enemies[i];
       if (candidate === originEnemy || candidate.hp <= 0) continue;
       const dist = Math.hypot(candidate.x - originEnemy.x, candidate.z - originEnemy.z);
       if (dist <= 6.8) {
-        bounced += 1;
-        const midX = (originEnemy.x + candidate.x) * 0.5;
-        const midZ = (originEnemy.z + candidate.z) * 0.5;
-        emitParticles(midX, 0.78, midZ, 0x38bdf8, 5, 3.2, 0.13);
-        emitParticles(candidate.x, 0.78, candidate.z, 0xc084fc, 6, 4.2, 0.15);
-        applyDamageToEnemy(candidate, chainDamage, 0, 0, false);
+        bestCandidates.push({ candidate, dist });
       }
+    }
+    bestCandidates.sort((a, b) => a.dist - b.dist);
+    for (let i = 0; i < bestCandidates.length && bounced < maxBounces; i++) {
+      const { candidate } = bestCandidates[i];
+      bounced += 1;
+      world?.spawnLightningArc?.({
+        x1: originEnemy.x,
+        z1: originEnemy.z,
+        x2: candidate.x,
+        z2: candidate.z,
+        color: boltColor
+      });
+      candidate.stunTimer = Math.max(candidate.stunTimer || 0, candidate.isBoss ? 0.05 : 0.16);
+      emitParticles(candidate.x, 0.78, candidate.z, boltColor, 6, 4.2, 0.14);
+      applyDamageToEnemy(candidate, chainDamage, 0, 0, false);
     }
   }
 
-  function damageEnemiesInRadius(cx, cz, radius, damage, knockbackForce, excludeEnemy = null, canCrit = false) {
+  function damageEnemiesInRadius(cx, cz, radius, damage, knockbackForce, excludeEnemy = null, canCrit = false, mageElement = null) {
     for (let i = enemies.length - 1; i >= 0; i--) {
       const e = enemies[i];
       if (!e || e === excludeEnemy || e.hp <= 0) continue;
@@ -1595,7 +1639,7 @@ export function createCombatController({
         const nz = dist > 0.001 ? dz / dist : 1;
         const isCrit = canCrit && Math.random() < (stats?.critChance || 0.04);
         const hitDmg = isCrit ? Math.round(damage * (stats?.critMult || 1.75)) : damage;
-        applyDamageToEnemy(e, hitDmg, nx * knockbackForce, nz * knockbackForce, false, { isCrit });
+        applyDamageToEnemy(e, hitDmg, nx * knockbackForce, nz * knockbackForce, false, { isCrit, mageElement });
       }
     }
   }
@@ -1603,6 +1647,12 @@ export function createCombatController({
   function handleEnemyDeath(enemy) {
     if (enemy._deadHandled) return;
     enemy._deadHandled = true;
+
+    // 💧 Water Element Mana Siphon: slaying drenched enemies restores +3 Mana!
+    if ((enemy.soakedTimer || 0) > 0 && stats?.usesMana && player.maxMana > 0) {
+      player.mana = Math.min(player.maxMana, player.mana + 3);
+      emitParticles(enemy.x, 0.7, enemy.z, 0x38bdf8, 4, 3.2, 0.12);
+    }
     kills += 1;
 
     emitParticles(
@@ -1810,7 +1860,8 @@ export function createCombatController({
     isCrit = false,
     color = 0xfbbf24,
     isEnemy = false,
-    ignoreCrateUid = 0
+    ignoreCrateUid = 0,
+    mageElement = null
   }) {
     const scale =
       kind === 'magic' ? 1.0 : isEnemy ? 0.84 : isShotgunPellet ? 0.66 : 0.74;
@@ -1835,6 +1886,7 @@ export function createCombatController({
       color,
       isEnemy,
       ignoreCrateUid,
+      mageElement,
       hitUids: new Set(),
       trailTick: 0,
       vis
@@ -2069,16 +2121,19 @@ export function createCombatController({
       return;
     }
 
-    // 3. MAGE ARCANE STAVES (Explosive Comets + Rune Charge Reload!)
-    audio?.playMagicCast?.(wpn.id);
-    const castColor = isOverdrive ? 0xf43f5e : wpn.color;
+    // 3. MAGE ELEMENTAL STAVES (Fire, Water, Lightning, Air — Sculpted 3D Spells & Authentic Audio!)
+    const mageElem = stats.mageElement || 'fire';
+    audio?.playMagicCast?.(mageElem);
+    const castColor = isOverdrive ? 0xf43f5e : (stats.mageElementColor || wpn.color);
     world?.spawnMuzzleFlash?.({ x: muzzleX, y: 0.85, z: muzzleZ, angle: aimAngle, color: castColor, scale: 1.18 });
-    world?.addScreenShake?.(wpn.id === 'void_orb' ? 0.18 : 0.10, 0.12);
-    emitParticles(muzzleX, 0.84, muzzleZ, castColor, 8, 5.2, 0.13);
+    world?.addScreenShake?.(wpn.id === 'void_orb' ? 0.18 : 0.09, 0.11);
+    emitParticles(muzzleX, 0.84, muzzleZ, castColor, 7, 5.0, 0.13);
 
     const orbCount = stats.pellets + (isOverdrive ? 1 : 0);
     const orbSpread = stats.spread + (isOverdrive && orbCount > 1 ? 0.14 : 0);
-    const magicSplash = Math.max(2.2, stats.splashRadius * (isOverdrive ? 1.25 : 1.0));
+    const magicSplash = mageElem === 'lightning'
+      ? (wpn.tier > 1 ? stats.splashRadius * 0.65 : 0)
+      : Math.max(2.2, stats.splashRadius * (isOverdrive ? 1.25 : 1.0));
     const spellCrit = Math.random() < (stats.critChance || 0.04);
 
     for (let i = 0; i < orbCount; i++) {
@@ -2091,13 +2146,14 @@ export function createCombatController({
         vz: Math.cos(shotAngle) * stats.projectileSpeed,
         damage: stats.damage,
         maxDist: stats.range,
-        pierce: stats.pierce,
+        pierce: stats.pierce + (mageElem === 'air' ? 1 : 0),
         splashRadius: magicSplash,
         knockback: stats.knockback,
         kind: 'magic',
-        visualType: wpn.id,
+        mageElement: mageElem,
+        visualType: `magic_${mageElem}`,
         isCrit: spellCrit,
-        color: isOverdrive ? 0xf43f5e : wpn.color,
+        color: castColor,
         isEnemy: false
       });
     }
@@ -3168,24 +3224,34 @@ export function createCombatController({
               isProjectile: true,
               isShotgunPellet: proj.isShotgunPellet,
               isCrit: proj.isCrit,
+              mageElement: proj.mageElement,
               traveled: proj.traveled,
               dirX: pDirX,
               dirZ: pDirZ
             });
 
-            if (proj.kind === 'magic' || proj.splashRadius > 0) {
+            if (proj.mageElement === 'air') {
+              emitShockwave(proj.x, proj.z, 2.8, 0x5eead4, 0.24);
+              damageEnemiesInRadius(proj.x, proj.z, 2.8, Math.round(hitDamage * 0.35), proj.knockback * 0.85, e, false, 'air');
+            } else if (proj.kind === 'magic' && proj.splashRadius > 0) {
               const sRad = proj.splashRadius || 2.2;
               emitShockwave(proj.x, proj.z, sRad, proj.color, 0.28);
-              emitParticles(proj.x, 0.72, proj.z, proj.color, proj.kind === 'magic' ? 12 : 6, 5.2, 0.15);
+              emitParticles(proj.x, 0.72, proj.z, proj.color, 10, 5.0, 0.15);
               damageEnemiesInRadius(
                 proj.x,
                 proj.z,
                 sRad,
-                Math.round(hitDamage * (proj.kind === 'magic' ? 0.65 : 0.55)),
+                Math.round(hitDamage * 0.65),
                 proj.knockback * 0.7,
                 e,
-                false
+                false,
+                proj.mageElement
               );
+            } else if (proj.splashRadius > 0) {
+              const sRad = proj.splashRadius || 2.2;
+              emitShockwave(proj.x, proj.z, sRad, proj.color, 0.28);
+              emitParticles(proj.x, 0.72, proj.z, proj.color, 6, 5.2, 0.15);
+              damageEnemiesInRadius(proj.x, proj.z, sRad, Math.round(hitDamage * 0.55), proj.knockback * 0.7, e, false);
             }
 
             proj.pierceLeft -= 1;
@@ -3252,6 +3318,11 @@ export function createCombatController({
       if (e.trampleCooldown > 0) e.trampleCooldown = Math.max(0, e.trampleCooldown - dt);
       if (e.stunTimer > 0) e.stunTimer = Math.max(0, e.stunTimer - dt);
       if (e.frostTimer > 0) e.frostTimer = Math.max(0, e.frostTimer - dt);
+      if (e.soakedTimer > 0) e.soakedTimer = Math.max(0, e.soakedTimer - dt);
+      if (e.napalmTimer > 0) {
+        e.napalmTimer = Math.max(0, e.napalmTimer - dt);
+        if (e.napalmTimer <= 0) e.napalmStacks = 0;
+      }
 
       // Burn Cinder DoT tick!
       if (e.burnTimer > 0 && e.burnDps > 0) {
@@ -3665,6 +3736,7 @@ export function createCombatController({
       maxMana: player.maxMana || 0,
       manaRegen: stats?.manaRegen || 0,
       manaCost: stats?.manaCost || 0,
+      mageElement: stats?.mageElement || null,
       isReloading: Boolean(player.isReloading),
       reloadProgress,
       activePerks: perks,

@@ -72,6 +72,60 @@ export const CLASSES = {
   }
 };
 
+// 4 Elemental Schools for Mage (1st Element chosen FREE on first play; remaining 3 unlock progressively!)
+export const MAGE_ELEMENTS = {
+  fire: {
+    id: 'fire',
+    nameRu: 'Огонь',
+    nameEn: 'Fire',
+    shortRu: 'Огонь',
+    icon: '🔥',
+    color: 0xff5722,
+    coreColor: 0xfef08a,
+    staffColor: 0xff6b35,
+    staffEmissive: 0xea580c,
+    descRu: 'Жар Пепла: каждый удар накладывает стак напалма (до 8) — увеличивает весь урон по цели на +12% за стак и поджигает её.'
+  },
+  water: {
+    id: 'water',
+    nameRu: 'Вода',
+    nameEn: 'Water',
+    shortRu: 'Вода',
+    icon: '💧',
+    color: 0x0ea5e9,
+    coreColor: 0xe0f2fe,
+    staffColor: 0x38bdf8,
+    staffEmissive: 0x0284c7,
+    descRu: 'Глубинный Прилив: окатывает врагов волной (+25% радиус всплеска), замедляет их на 36% и возвращает +3 маны за убийство промокших.'
+  },
+  lightning: {
+    id: 'lightning',
+    nameRu: 'Электричество',
+    nameEn: 'Lightning',
+    shortRu: 'Молния',
+    icon: '⚡',
+    color: 0x38bdf8,
+    coreColor: 0xfef08a,
+    staffColor: 0xfde047,
+    staffEmissive: 0x06b6d4,
+    descRu: 'Цепной Разряд: стремительный разряд (+30% скорость полёта), перескакивающий дугой молнии на соседнего врага на 55% урона.'
+  },
+  air: {
+    id: 'air',
+    nameRu: 'Сила Воздуха',
+    nameEn: 'Air Force',
+    shortRu: 'Воздух',
+    icon: '🌪️',
+    color: 0x5eead4,
+    coreColor: 0xf8fafc,
+    staffColor: 0x99f6e4,
+    staffEmissive: 0x14b8a6,
+    descRu: 'Штормовой Вихрь: режущий торнадо мощно отбрасывает врагов назад (×2.2 толчок), разбрасывает соседей порывом ветра и даёт +8% к скорости шага.'
+  }
+};
+export const MAGE_ELEMENT_ORDER = ['fire', 'water', 'lightning', 'air'];
+export const MAGE_ELEMENT_UNLOCK_COSTS = [0, 140, 240, 360];
+
 export const WEAPONS = {
   // === WARRIOR ===
   club: {

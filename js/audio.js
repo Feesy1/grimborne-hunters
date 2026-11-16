@@ -592,92 +592,162 @@ export function createAudioEngine() {
       });
     },
 
-    playMagicCast(weaponId = 'spark_staff') {
+    playMagicCast(styleOrWeaponId = 'fire') {
       if (!readyToPlay() || !canTrigger('magic', 42)) return;
       const jitter = 0.95 + Math.random() * 0.1;
 
-      if (weaponId === 'cinder_tome') {
-        // Fiery skull whoosh + ember crackle
+      if (styleOrWeaponId === 'water') {
+        // Pressurized rushing hydro-surge + deep liquid swell + pure icy crystal shimmer (ZERO spring boing!)
         playFilteredNoise({
-          brown: true,
+          brown: false,
           filterType: 'bandpass',
-          freqStart: 340 * jitter,
-          freqEnd: 1180 * jitter,
-          q: 2.2,
-          duration: 0.24,
-          gainPeak: 0.36,
-          attack: 0.015
-        });
-        playTone({
-          type: 'sawtooth',
-          freqStart: 190 * jitter,
-          freqEnd: 74,
+          freqStart: 390 * jitter,
+          freqEnd: 1340 * jitter,
+          q: 1.85,
           duration: 0.22,
-          gainPeak: 0.18,
-          attack: 0.01
-        });
-        return;
-      }
-
-      if (weaponId === 'void_orb') {
-        // Deep void gravitational pulse + eerie harmonic shimmer
-        playTone({
-          type: 'sawtooth',
-          freqStart: 128 * jitter,
-          freqEnd: 36,
-          duration: 0.34,
           gainPeak: 0.34,
+          attack: 0.012
+        });
+        playTone({
+          type: 'sine',
+          freqStart: 155 * jitter,
+          freqEnd: 86,
+          duration: 0.20,
+          gainPeak: 0.24,
           attack: 0.008
         });
         playTone({
           type: 'sine',
-          freqStart: 980 * jitter,
-          freqEnd: 390 * jitter,
-          duration: 0.28,
-          gainPeak: 0.16,
-          attack: 0.01,
-          detune: 14
+          freqStart: 1340 * jitter,
+          freqEnd: 1290 * jitter,
+          startTime: 0.02,
+          duration: 0.14,
+          gainPeak: 0.09,
+          attack: 0.008
+        });
+        return;
+      }
+
+      if (styleOrWeaponId === 'lightning') {
+        // Sharp high-voltage electric arc snap + plasma crackle + low thunder punch (ZERO cartoon pew!)
+        playFilteredNoise({
+          brown: false,
+          filterType: 'highpass',
+          freqStart: 3600 * jitter,
+          freqEnd: 1850,
+          q: 1.5,
+          duration: 0.055,
+          gainPeak: 0.34,
+          attack: 0.001
+        });
+        playDistortedThump({
+          type: 'sawtooth',
+          freqStart: 182 * jitter,
+          freqEnd: 56,
+          duration: 0.14,
+          gainPeak: 0.24,
+          attack: 0.0015,
+          filterFreq: 980
+        });
+        playFilteredNoise({
+          brown: false,
+          filterType: 'bandpass',
+          freqStart: 2800 * jitter,
+          freqEnd: 4200 * jitter,
+          q: 3.2,
+          startTime: 0.038,
+          duration: 0.048,
+          gainPeak: 0.22,
+          attack: 0.001
+        });
+        return;
+      }
+
+      if (styleOrWeaponId === 'air') {
+        // Whipping razor gale-force wind vortex slash
+        playFilteredNoise({
+          brown: false,
+          filterType: 'bandpass',
+          freqStart: 480 * jitter,
+          freqEnd: 1920 * jitter,
+          q: 2.5,
+          duration: 0.21,
+          gainPeak: 0.34,
+          attack: 0.010
+        });
+        playFilteredNoise({
+          brown: false,
+          filterType: 'bandpass',
+          freqStart: 1680 * jitter,
+          freqEnd: 540 * jitter,
+          q: 2.2,
+          startTime: 0.05,
+          duration: 0.18,
+          gainPeak: 0.24,
+          attack: 0.008
+        });
+        playTone({
+          type: 'sine',
+          freqStart: 122 * jitter,
+          freqEnd: 48,
+          duration: 0.18,
+          gainPeak: 0.18,
+          attack: 0.006
+        });
+        return;
+      }
+
+      if (styleOrWeaponId === 'void_orb') {
+        // Deep void gravitational pulse + dark wind
+        playTone({
+          type: 'sawtooth',
+          freqStart: 128 * jitter,
+          freqEnd: 36,
+          duration: 0.30,
+          gainPeak: 0.32,
+          attack: 0.008
         });
         playFilteredNoise({
           brown: true,
           filterType: 'bandpass',
-          freqStart: 780,
+          freqStart: 760,
           freqEnd: 180,
-          q: 3.0,
-          duration: 0.28,
-          gainPeak: 0.22,
+          q: 2.8,
+          duration: 0.26,
+          gainPeak: 0.26,
           attack: 0.01
         });
         return;
       }
 
-      // Default / 'spark_staff': arcane crystalline zap
+      // Default / 'fire' / 'cinder_tome' / 'spark_staff': Roaring fireball whoosh + combustion thump + ember crackle!
       playTone({
         type: 'sine',
-        freqStart: 1320 * jitter,
-        freqEnd: 520 * jitter,
-        duration: 0.15,
-        gainPeak: 0.22,
-        attack: 0.003
+        freqStart: 104 * jitter,
+        freqEnd: 36,
+        duration: 0.21,
+        gainPeak: 0.30,
+        attack: 0.004
       });
-      playTone({
-        type: 'triangle',
-        freqStart: 1980 * jitter,
-        freqEnd: 740 * jitter,
-        startTime: 0.012,
-        duration: 0.13,
-        gainPeak: 0.14,
-        attack: 0.003,
-        detune: -12
+      playFilteredNoise({
+        brown: true,
+        filterType: 'bandpass',
+        freqStart: 250 * jitter,
+        freqEnd: 840 * jitter,
+        q: 1.9,
+        duration: 0.24,
+        gainPeak: 0.40,
+        attack: 0.010
       });
       playFilteredNoise({
         brown: false,
         filterType: 'highpass',
-        freqStart: 2800,
-        freqEnd: 1400,
-        q: 1.6,
-        duration: 0.075,
-        gainPeak: 0.12,
+        freqStart: 2500 * jitter,
+        freqEnd: 1350,
+        q: 1.3,
+        startTime: 0.015,
+        duration: 0.095,
+        gainPeak: 0.15,
         attack: 0.002
       });
     },

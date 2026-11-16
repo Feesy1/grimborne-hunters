@@ -2,14 +2,14 @@
 // Arsenal Progression, Procedural Web Audio, Gothic UI, and Yandex Games SDK v2.
 
 import * as THREE from '../vendor/three.module.js';
-import { LEVELS } from './config.js?v=20261116e';
-import { createArenaWorld } from './world.js?v=20261116e';
-import * as models from './models.js?v=20261116e';
-import { createProgressionStore } from './progression.js?v=20261116e';
-import { createCombatController } from './combat.js?v=20261116e';
-import { createAudioEngine } from './audio.js?v=20261116e';
-import { initYandexSdk } from './yandexSdk.js?v=20261116e';
-import { createUIManager } from './ui.js?v=20261116e';
+import { LEVELS, MAGE_ELEMENTS } from './config.js?v=20261116f';
+import { createArenaWorld } from './world.js?v=20261116f';
+import * as models from './models.js?v=20261116f';
+import { createProgressionStore } from './progression.js?v=20261116f';
+import { createCombatController } from './combat.js?v=20261116f';
+import { createAudioEngine } from './audio.js?v=20261116f';
+import { initYandexSdk } from './yandexSdk.js?v=20261116f';
+import { createUIManager } from './ui.js?v=20261116f';
 
 async function bootstrap() {
   const canvas = document.getElementById('game-canvas');
@@ -43,9 +43,21 @@ async function bootstrap() {
   }
   activeRunLevel = Math.min(LEVELS.length, Math.max(1, progression.getState().maxUnlockedLevel || 1));
 
+  let lastSavedGold = progression.getState().gold;
   const persistSave = () => {
-    sdk.saveData(progression.getState());
+    const st = progression.getState();
+    lastSavedGold = st.gold;
+    sdk.saveData(st);
   };
+
+  // Guaranteed mobile persistence on iPhone Safari / Android tab switch or close
+  window.addEventListener('pagehide', persistSave);
+  window.addEventListener('beforeunload', persistSave);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      persistSave();
+    }
+  });
 
   // Initialize 3D Arena World & preload authentic KayKit GLB characters + 3D environment props
   const world = createArenaWorld(canvas);
@@ -72,7 +84,8 @@ async function bootstrap() {
     const st = progression.getState();
     const classId = st.selectedClass || 'warrior';
     const weaponId = progression.getEquippedWeaponId(classId);
-    hubPreviewHero = models.createHeroMesh(classId, weaponId);
+    const mageElem = st.activeMageElement || 'fire';
+    hubPreviewHero = models.createHeroMesh(classId, weaponId, mageElem);
     if (hubPreviewHero?.root) {
       hubPreviewHero.root.position.set(0, 0, 0);
       hubPreviewHero.root.scale.setScalar(1.25);
@@ -271,6 +284,41 @@ async function bootstrap() {
       ui.renderHub(progression);
       refreshHubDiorama();
     },
+    onSelectMageElement: (elemId) => {
+      audio.unlock();
+      const res = progression.selectOrUnlockMageElement(elemId);
+      if (res.ok) {
+        const eName = MAGE_ELEMENTS[elemId]?.nameRu || elemId;
+        if (res.action === 'starter_unlocked') {
+          audio.playWeaponUnlock();
+          ui.showToast(`Стихия «${eName}» выбрана бесплатно!`);
+        } else if (res.action === 'purchased') {
+          audio.playLevelUp();
+          ui.showToast(`Открыта новая стихия: ${eName}!`);
+        } else {
+          audio.playMagicCast(elemId);
+        }
+        persistSave();
+        ui.renderHub(progression);
+        refreshHubDiorama();
+      } else if (res.reason === 'gold') {
+        ui.showToast(`Нужно ${res.cost} золота для открытия стихии`);
+      }
+    },
+    onResetProgress: async () => {
+      audio.unlock();
+      combat.disposeRun();
+      const freshState = progression.resetAllProgress();
+      await sdk.clearData(freshState);
+      lastSavedGold = freshState.gold;
+      activeRunLevel = 1;
+      usedReviveThisRun = false;
+      usedDoubleGoldThisRun = false;
+      ui.resetLocalSelection?.();
+      enterHub();
+      audio.playLevelUp();
+      ui.showToast('Прогресс полностью сброшен до нуля!');
+    },
     onEquipWeapon: (weaponId, classId) => {
       audio.unlock();
       const targetClass = classId || progression.getState().selectedClass;
@@ -338,6 +386,7 @@ async function bootstrap() {
       ui.setMutedState?.(audio.isMuted());
     },
     onExitToHub: () => {
+      persistSave();
       enterHub();
     }
   });
@@ -477,6 +526,7 @@ async function bootstrap() {
   let fpsFrameCount = 0;
   let smoothedFps = 60;
   let hudSyncAccum = 0;
+  let autoSaveAccum = 0;
 
   function frame(now) {
     requestAnimationFrame(frame);
@@ -511,6 +561,13 @@ async function bootstrap() {
       if (hudSyncAccum >= 0.036 || input.reload) {
         hudSyncAccum = 0;
         ui.updateHud(combat.getHudSnapshot());
+      }
+      autoSaveAccum += dt;
+      if (autoSaveAccum >= 3.0) {
+        autoSaveAccum = 0;
+        if (progression.getState().gold !== lastSavedGold) {
+          persistSave();
+        }
       }
       world.update(dt, elapsedTime);
     } else if (gameMode === 'hub') {

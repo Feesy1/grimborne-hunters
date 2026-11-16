@@ -7,7 +7,7 @@
 import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { clone as cloneSkinned } from '../vendor/SkeletonUtils.js';
-import { WEAPONS } from './config.js';
+import { WEAPONS } from './config.js?v=20261116f';
 
 const MODEL_PATHS = {
   barbarian: './assets/models/Barbarian.glb',
@@ -201,7 +201,14 @@ function createSkullShield(molten = false) {
   return grp;
 }
 
-function createHeroWeaponMesh(weaponId) {
+const ELEMENT_STAFF_COLORS = {
+  fire: { color: 0xff6b35, emissive: 0xea580c },
+  water: { color: 0x38bdf8, emissive: 0x0284c7 },
+  lightning: { color: 0xfef08a, emissive: 0x06b6d4 },
+  air: { color: 0x99f6e4, emissive: 0x14b8a6 }
+};
+
+function createHeroWeaponMesh(weaponId, mageElement = null) {
   const grp = new THREE.Group();
   const ironMat = getMat('hw_iron', () => new THREE.MeshStandardMaterial({ color: 0x9ca3af, metalness: 0.80, roughness: 0.26 }));
   const darkIronMat = getMat('hw_dark_iron', () => new THREE.MeshStandardMaterial({ color: 0x374151, metalness: 0.78, roughness: 0.32 }));
@@ -476,9 +483,22 @@ function createHeroWeaponMesh(weaponId) {
     return grp;
   }
 
-  // === MAGE WEAPONS (Purple Crystal Staff matching reference!) ===
-  const crystalColor = weaponId === 'cinder_tome' ? 0xf43f5e : weaponId === 'void_orb' ? 0x818cf8 : 0xc084fc;
-  const crystalEmissive = weaponId === 'cinder_tome' ? 0xe11d48 : weaponId === 'void_orb' ? 0x4f46e5 : 0x9333ea;
+  // === MAGE WEAPONS (Elemental Crystal Staff matching active Element!) ===
+  const elCols = mageElement && ELEMENT_STAFF_COLORS[mageElement] ? ELEMENT_STAFF_COLORS[mageElement] : null;
+  const crystalColor = elCols
+    ? elCols.color
+    : weaponId === 'cinder_tome'
+      ? 0xf43f5e
+      : weaponId === 'void_orb'
+        ? 0x818cf8
+        : 0xc084fc;
+  const crystalEmissive = elCols
+    ? elCols.emissive
+    : weaponId === 'cinder_tome'
+      ? 0xe11d48
+      : weaponId === 'void_orb'
+        ? 0x4f46e5
+        : 0x9333ea;
 
   const staffPole = new THREE.Mesh(
     getGeo('m_pole', () => new THREE.CylinderGeometry(0.042, 0.048, 1.65, 8)),
@@ -602,10 +622,11 @@ const GUN_PIVOT_BASE_X = 0.06;
 const GUN_PIVOT_BASE_Y = 0.70;
 const GUN_PIVOT_BASE_Z = 0.24;
 
-export function createHeroMesh(classId = 'warrior', weaponId = null) {
+export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement = 'fire') {
   if (classId && typeof classId === 'object') {
     const opts = classId;
     weaponId = opts.weaponId ?? null;
+    mageElement = opts.mageElement ?? 'fire';
     classId = opts.classId || 'warrior';
   }
   const safeClass = CLASS_SKELETON_ASSET[classId] ? classId : 'warrior';
@@ -614,6 +635,7 @@ export function createHeroMesh(classId = 'warrior', weaponId = null) {
   const root = new THREE.Group();
   let currentWeaponId =
     weaponId || (safeClass === 'warrior' ? 'club' : safeClass === 'gunslinger' ? 'pistol' : 'spark_staff');
+  let currentMageElement = mageElement || 'fire';
   let isBeast = false;
   let flashTimer = 0;
 
@@ -757,16 +779,25 @@ export function createHeroMesh(classId = 'warrior', weaponId = null) {
     if (lowerArmR) lowerArmR.quaternion.slerp(GUN_LOWER_ARM_R_Q, 0.90);
   }
 
-  function setWeapon(newWeaponId) {
+  function setWeapon(newWeaponId, nextElement = null) {
     currentWeaponId = newWeaponId || currentWeaponId;
+    if (nextElement) currentMageElement = nextElement;
     if (mountedWeaponObj && mountedWeaponObj.parent) {
       mountedWeaponObj.parent.remove(mountedWeaponObj);
     }
-    mountedWeaponObj = createHeroWeaponMesh(currentWeaponId);
+    mountedWeaponObj = createHeroWeaponMesh(currentWeaponId, safeClass === 'mage' ? currentMageElement : null);
     if (safeClass === 'gunslinger' && gunCarryPivot) {
       gunCarryPivot.add(mountedWeaponObj);
     } else if (handR) {
       handR.add(mountedWeaponObj);
+    }
+  }
+
+  function setElement(newElement) {
+    if (!newElement || newElement === currentMageElement) return;
+    currentMageElement = newElement;
+    if (safeClass === 'mage') {
+      setWeapon(currentWeaponId, currentMageElement);
     }
   }
 
@@ -907,6 +938,7 @@ export function createHeroMesh(classId = 'warrior', weaponId = null) {
   }
 
   root.userData.setWeapon = setWeapon;
+  root.userData.setElement = setElement;
   root.userData.setBeastMode = setBeastMode;
   root.userData.setReloading = setReloading;
   root.userData.playAttackAnim = playAttackAnim;
@@ -916,6 +948,7 @@ export function createHeroMesh(classId = 'warrior', weaponId = null) {
   return {
     root,
     setWeapon,
+    setElement,
     setBeastMode,
     setReloading,
     playAttackAnim,

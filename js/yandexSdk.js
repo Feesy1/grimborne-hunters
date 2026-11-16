@@ -507,6 +507,27 @@ export async function initYandexSdk({ onPauseAudio, onResumeAudio } = {}) {
       });
     },
 
+    async clearData(freshObj = null) {
+      if (pendingCloudSaveTimer) {
+        clearTimeout(pendingCloudSaveTimer);
+        pendingCloudSaveTimer = null;
+      }
+      try {
+        window.localStorage.removeItem(STORAGE_KEY);
+      } catch {}
+      if (freshObj && typeof freshObj === 'object') {
+        const cleanPayload = { ...freshObj, updatedAt: Date.now() };
+        safeWriteLocal(cleanPayload);
+        latestSavePayload = cleanPayload;
+        if (player && typeof player.setData === 'function') {
+          try {
+            await player.setData(cleanPayload, true);
+          } catch {}
+        }
+      }
+      return true;
+    },
+
     getLang() {
       const lang = ysdk?.environment?.i18n?.lang;
       return lang === 'en' ? 'en' : 'ru';
