@@ -56,23 +56,26 @@ body {
   margin: 0;
   padding: 0;
   width: 100%;
+  width: var(--app-vw, 100%);
   height: 100%;
-  height: 100dvh;
+  height: var(--app-vh, 100dvh);
   overflow: hidden;
   background-color: var(--bg-obsidian);
   color: var(--text-main);
   font-family: var(--font-ui);
   overscroll-behavior: none;
-  touch-action: none;
+  touch-action: manipulation;
   -webkit-text-size-adjust: 100%;
 }
 
 #game-canvas {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
   width: 100%;
+  width: var(--app-vw, 100%);
   height: 100%;
-  height: 100dvh;
+  height: var(--app-vh, 100dvh);
   display: block;
   z-index: 1;
   touch-action: none;
@@ -80,13 +83,37 @@ body {
 
 #ui-root {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
   width: 100%;
+  width: var(--app-vw, 100%);
   height: 100%;
-  height: 100dvh;
+  height: var(--app-vh, 100dvh);
   z-index: 10;
   pointer-events: none;
   overflow: hidden;
+}
+
+/* Crisp High-Contrast White 120 FPS Corner Badge */
+#fps-badge {
+  position: fixed;
+  bottom: calc(6px + var(--safe-bottom));
+  right: calc(10px + var(--safe-right));
+  z-index: 9500;
+  pointer-events: none;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(6, 6, 11, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.30);
+  color: #ffffff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.98);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.65);
 }
 
 .hidden {
@@ -194,9 +221,12 @@ img {
 
 .hub-screen {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  width: 100%;
+  width: var(--app-vw, 100%);
   height: 100%;
-  height: 100dvh;
+  height: var(--app-vh, 100dvh);
   z-index: 40;
   pointer-events: none;
   overflow-x: hidden;
@@ -241,6 +271,7 @@ img {
 .hub-screen.is-subtab .hub-shell {
   min-height: 100%;
   height: auto;
+  pointer-events: auto;
 }
 
 /* --- Top Header Bar --- */
@@ -3690,10 +3721,11 @@ img {
   .hub-shell {
     height: auto;
     min-height: 100%;
+    pointer-events: auto;
   }
 
   .hero-stage-area {
-    min-height: 30vh;
+    min-height: 165px;
   }
 
   .hero-showcase-docks {
@@ -3815,20 +3847,206 @@ img {
   }
 }
 
-/* iPhone Portrait (375px–480px) */
+/* iPhone Portrait (e.g. iPhone 13 Pro 390×844 & VK/Safari WebView 390×640) — Full Hub Fits 100% On Screen! */
 @media (max-width: 560px) {
+  .hub-screen {
+    padding:
+      calc(6px + var(--safe-top))
+      calc(9px + var(--safe-right))
+      calc(10px + var(--safe-bottom))
+      calc(9px + var(--safe-left));
+  }
+
+  .hub-shell {
+    gap: 6px;
+    justify-content: space-between;
+  }
+
+  .hub-topbar {
+    padding: 5px 9px;
+    row-gap: 5px;
+    gap: 6px;
+    border-radius: 11px;
+  }
+
+  .hub-crest {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+  }
+
+  .hub-crest svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .hub-title {
+    font-size: 13.5px;
+    letter-spacing: 0.04em;
+  }
+
+  .hub-nav-tabs {
+    padding: 3px;
+    gap: 2px;
+  }
+
   .hub-tab-btn {
-    padding: 6px 8px;
-    font-size: 11.5px;
+    padding: 5px 5px;
+    font-size: 11px;
+    gap: 3px;
+  }
+
+  .hub-panel-heroes {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 6px;
+    pointer-events: auto;
+    touch-action: pan-y;
+  }
+
+  .hero-stage-area,
+  .hero-stage-controls,
+  .stage-center-window,
+  .hero-showcase-docks {
+    pointer-events: auto;
+    touch-action: pan-y;
+  }
+
+  .hero-stage-area {
+    flex: 1 1 108px;
+    min-height: 108px;
+    justify-content: space-between;
+  }
+
+  .stage-center-window {
+    min-height: 82px;
+  }
+
+  .stage-carousel-btn {
+    width: 38px;
+    height: 38px;
+    font-size: 23px;
+  }
+
+  .stage-emblem-dots {
+    padding: 3px 8px;
+    gap: 7px;
+    margin-bottom: 2px;
+  }
+
+  .stage-emblem-dot {
+    width: 28px;
+    height: 28px;
+  }
+
+  .hero-showcase-docks {
+    gap: 6px;
+  }
+
+  .hero-info-card {
+    padding: 8px 10px;
+    gap: 5px;
+    border-radius: 12px;
+  }
+
+  .hero-card-header {
+    gap: 9px;
   }
 
   .hero-portrait-frame {
-    width: 58px;
-    height: 58px;
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    padding: 2px;
   }
 
   .hero-class-name {
-    font-size: 18.5px;
+    font-size: 16px;
+  }
+
+  .hero-role-pill {
+    font-size: 10px;
+    padding: 2px 7px;
+  }
+
+  .hero-lore-line {
+    display: none;
+  }
+
+  .hero-stats-bars {
+    gap: 4px;
+    padding: 1px 0;
+  }
+
+  .stat-bar-row {
+    grid-template-columns: 78px 1fr 38px;
+    gap: 6px;
+    font-size: 10.5px;
+  }
+
+  .rune-seg {
+    height: 6px;
+  }
+
+  .stat-bar-val {
+    font-size: 11px;
+  }
+
+  .hero-weapon-chip {
+    padding: 5px 8px;
+    border-radius: 9px;
+  }
+
+  .hero-weapon-chip-icon {
+    width: 30px;
+    height: 30px;
+  }
+
+  .hero-weapon-chip-icon svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  .hero-weapon-chip-name {
+    font-size: 12px;
+    max-width: 155px;
+  }
+
+  .hero-launch-dock {
+    padding: 8px 10px;
+    gap: 6px;
+    border-radius: 12px;
+  }
+
+  .chapter-mini-card {
+    min-height: 56px;
+    border-radius: 9px;
+  }
+
+  .chapter-mini-content {
+    padding: 6px 9px;
+    gap: 3px;
+  }
+
+  .chapter-mini-title {
+    font-size: 13px;
+  }
+
+  .btn-change-chapter {
+    padding: 3px 8px;
+    font-size: 10.5px;
+  }
+
+  .launch-weapon-warn {
+    padding: 4px 8px;
+    font-size: 10.5px;
+  }
+
+  .launch-battle-btn {
+    padding: 10px 14px;
+    border-radius: 10px;
   }
 
   .hud-top-row {
@@ -3998,9 +4216,12 @@ img {
    ========================================================================== */
 #splash-screen {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  width: 100%;
+  width: var(--app-vw, 100%);
   height: 100%;
-  height: 100dvh;
+  height: var(--app-vh, 100dvh);
   z-index: 9999;
   display: flex;
   flex-direction: column;

@@ -2,14 +2,14 @@
 // Arsenal Progression, Procedural Web Audio, Gothic UI, and Yandex Games SDK v2.
 
 import * as THREE from '../vendor/three.module.js';
-import { LEVELS } from './config.js';
-import { createArenaWorld } from './world.js';
-import * as models from './models.js';
-import { createProgressionStore } from './progression.js';
-import { createCombatController } from './combat.js';
-import { createAudioEngine } from './audio.js';
-import { initYandexSdk } from './yandexSdk.js';
-import { createUIManager } from './ui.js';
+import { LEVELS } from './config.js?v=20261116c';
+import { createArenaWorld } from './world.js?v=20261116c';
+import * as models from './models.js?v=20261116c';
+import { createProgressionStore } from './progression.js?v=20261116c';
+import { createCombatController } from './combat.js?v=20261116c';
+import { createAudioEngine } from './audio.js?v=20261116c';
+import { initYandexSdk } from './yandexSdk.js?v=20261116c';
+import { createUIManager } from './ui.js?v=20261116c';
 
 async function bootstrap() {
   const canvas = document.getElementById('game-canvas');
@@ -49,7 +49,14 @@ async function bootstrap() {
 
   // Initialize 3D Arena World & preload authentic KayKit GLB characters + 3D environment props
   const world = createArenaWorld(canvas);
-  window.addEventListener('resize', () => world.resize());
+  const handleViewportResize = () => world.resize();
+  window.addEventListener('resize', handleViewportResize);
+  window.addEventListener('orientationchange', () => {
+    setTimeout(handleViewportResize, 80);
+    setTimeout(handleViewportResize, 280);
+  });
+  window.visualViewport?.addEventListener('resize', handleViewportResize);
+  handleViewportResize();
   await Promise.all([models.preloadModels(), world.ready]);
 
   // 3D Hero Preview in Hub Diorama
@@ -458,15 +465,35 @@ async function bootstrap() {
   // Expose debug helper on window for quick testing
   window.__grimborne = { progression, combat, world, ui, enterHub, startBattle };
 
-  // === Main 60 FPS Render & Simulation Loop ===
+  // === High-Refresh Render & Simulation Loop (Up to 120 FPS ProMotion / Desktop) ===
+  const fpsBadgeEl = document.getElementById('fps-badge');
   let lastNow = performance.now();
   let elapsedTime = 0;
+  let fpsAccumTime = 0;
+  let fpsFrameCount = 0;
+  let smoothedFps = 60;
 
   function frame(now) {
     requestAnimationFrame(frame);
-    const rawDt = (now - lastNow) / 1000;
+    const rawDeltaSec = (now - lastNow) / 1000;
     lastNow = now;
-    const dt = Math.min(0.05, Math.max(0.001, rawDt));
+
+    if (rawDeltaSec > 0 && rawDeltaSec < 0.5) {
+      fpsAccumTime += rawDeltaSec;
+      fpsFrameCount += 1;
+      if (fpsAccumTime >= 0.25) {
+        const instFps = fpsFrameCount / fpsAccumTime;
+        smoothedFps = smoothedFps * 0.35 + instFps * 0.65;
+        if (fpsBadgeEl) {
+          const shownFps = Math.min(120, Math.max(1, Math.round(smoothedFps)));
+          fpsBadgeEl.textContent = `${shownFps} FPS`;
+        }
+        fpsAccumTime = 0;
+        fpsFrameCount = 0;
+      }
+    }
+
+    const dt = Math.min(0.05, Math.max(0.0005, rawDeltaSec));
 
     if (externalPaused) return;
 

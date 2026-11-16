@@ -8,12 +8,34 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="format-detection" content="telephone=no" />
   <meta name="theme-color" content="#0b0a10" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <title>Охотники Мрака — Grimborne Hunters</title>
   <link rel="icon" type="image/x-icon" href="./assets/grimborne_icon.ico" />
-  <link rel="stylesheet" href="./css/style.css" />
+  <link rel="stylesheet" href="./css/style.css?v=20261116c" />
+  <script>
+    (function syncViewportVars() {
+      function updateVv() {
+        var vv = window.visualViewport;
+        var w = Math.round((vv && vv.width) || document.documentElement.clientWidth || window.innerWidth || 390);
+        var h = Math.round((vv && vv.height) || document.documentElement.clientHeight || window.innerHeight || 844);
+        document.documentElement.style.setProperty('--app-vw', w + 'px');
+        document.documentElement.style.setProperty('--app-vh', h + 'px');
+      }
+      updateVv();
+      window.addEventListener('resize', updateVv);
+      window.addEventListener('orientationchange', function () { setTimeout(updateVv, 80); setTimeout(updateVv, 280); });
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', updateVv);
+        window.visualViewport.addEventListener('scroll', updateVv);
+      }
+    })();
+  </script>
   <script src="https://yandex.ru/games/sdk/v2" async onerror="window.__yaSdkUnavailable=true"></script>
 </head>
 <body>
+  <div id="fps-badge" aria-label="Счётчик кадров">120 FPS</div>
   <!-- Стартовый экран загрузки с полным ключевым артом и тонкой золотой шкалой прогресса -->
   <div id="splash-screen" role="status" aria-live="polite">
     <div class="splash-art"></div>
@@ -88,6 +110,6 @@
       requestAnimationFrame(tick);
     })();
   </script>
-  <script type="module" src="./js/main.js"></script>
+  <script type="module" src="./js/main.js?v=20261116c"></script>
 </body>
 </html>

@@ -1248,10 +1248,21 @@ export function createArenaWorld(canvas) {
   const hubCamGoal = new THREE.Vector3();
 
   function applyHubCameraPose(dt, snapNow = false) {
-    const swayX = Math.sin(internalTime * 0.42) * 0.16;
+    const aspect = camera.aspect || 1;
+    const isPortrait = aspect < 0.92;
+    const targetFov = isPortrait ? 52 : 44;
+    if (Math.abs(camera.fov - targetFov) > 0.05) {
+      camera.fov = targetFov;
+      camera.updateProjectionMatrix();
+    }
+    const camZ = isPortrait ? 6.15 : HUB_CAM_POS.z;
+    const camY = isPortrait ? 2.32 : HUB_CAM_POS.y;
+    const lookY = isPortrait ? 0.36 : HUB_LOOK_TARGET.y;
+
+    const swayX = Math.sin(internalTime * 0.42) * 0.14;
     const swayY = Math.sin(internalTime * 0.68) * 0.03;
-    const swayZ = Math.cos(internalTime * 0.42) * 0.07;
-    hubCamGoal.set(HUB_CAM_POS.x + swayX, HUB_CAM_POS.y + swayY, HUB_CAM_POS.z + swayZ);
+    const swayZ = Math.cos(internalTime * 0.42) * 0.06;
+    hubCamGoal.set(HUB_CAM_POS.x + swayX, camY + swayY, camZ + swayZ);
 
     if (snapNow || !dt || dt <= 0) {
       camera.position.copy(hubCamGoal);
@@ -1259,7 +1270,7 @@ export function createArenaWorld(canvas) {
       const lerpFactor = 1 - Math.exp(-7.5 * Math.min(dt, 0.1));
       camera.position.lerp(hubCamGoal, lerpFactor);
     }
-    camera.lookAt(HUB_LOOK_TARGET);
+    camera.lookAt(0, lookY, 0);
 
     heroAuraLight.position.set(0, 2.85, 1.4);
     dirLight.position.set(8, 16, 12);
@@ -1289,10 +1300,14 @@ export function createArenaWorld(canvas) {
       scene.fog.near = 48;
       scene.fog.far = 112;
       hasFollowedOnce = false;
+      const aspect = camera.aspect || 1;
+      camera.fov = aspect < 1.0 ? Math.min(64, 44 + (1.0 - aspect) * 34) : 44;
+      camera.updateProjectionMatrix();
+      const mult = aspect < 0.92 ? 1.15 : 1;
       camera.position.set(
-        targetX + COMBAT_CAM_OFFSET.x,
-        COMBAT_CAM_OFFSET.y,
-        targetZ + COMBAT_CAM_OFFSET.z
+        targetX + COMBAT_CAM_OFFSET.x * mult,
+        COMBAT_CAM_OFFSET.y * mult,
+        targetZ + COMBAT_CAM_OFFSET.z * mult
       );
       camera.lookAt(targetX, 0.5, targetZ);
       heroAuraLight.position.set(targetX, 3.2, targetZ);
@@ -1323,9 +1338,9 @@ export function createArenaWorld(canvas) {
     }
 
     camera.position.set(
-      targetX + COMBAT_CAM_OFFSET.x + sx,
-      COMBAT_CAM_OFFSET.y + sy,
-      targetZ + COMBAT_CAM_OFFSET.z + sz
+      targetX + COMBAT_CAM_OFFSET.x * (camera.aspect < 0.92 ? 1.15 : 1) + sx,
+      COMBAT_CAM_OFFSET.y * (camera.aspect < 0.92 ? 1.15 : 1) + sy,
+      targetZ + COMBAT_CAM_OFFSET.z * (camera.aspect < 0.92 ? 1.15 : 1) + sz
     );
     camera.lookAt(targetX + sx * 0.35, 0.5, targetZ + sz * 0.35);
 
@@ -1577,11 +1592,19 @@ export function createArenaWorld(canvas) {
   }
 
   function resize() {
-    const w = Math.max(window.innerWidth, 1);
-    const h = Math.max(window.innerHeight, 1);
+    const vv = window.visualViewport;
+    const w = Math.max(Math.round(vv?.width || document.documentElement.clientWidth || window.innerWidth), 1);
+    const h = Math.max(Math.round(vv?.height || document.documentElement.clientHeight || window.innerHeight), 1);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    renderer.setSize(w, h);
-    camera.aspect = w / h;
+    renderer.setSize(w, h, true);
+    const aspect = w / h;
+    camera.aspect = aspect;
+    if (cameraMode === 'hub') {
+      camera.fov = aspect < 0.92 ? 52 : 44;
+    } else {
+      // Widen vertical FOV on portrait phones (e.g. iPhone 13 Pro 390x844) so full arena width stays visible
+      camera.fov = aspect < 1.0 ? Math.min(64, 44 + (1.0 - aspect) * 34) : 44;
+    }
     camera.updateProjectionMatrix();
   }
 
