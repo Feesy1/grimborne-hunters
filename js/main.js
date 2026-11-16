@@ -2,14 +2,14 @@
 // Arsenal Progression, Procedural Web Audio, Gothic UI, and Yandex Games SDK v2.
 
 import * as THREE from '../vendor/three.module.js';
-import { LEVELS } from './config.js?v=20261116c';
-import { createArenaWorld } from './world.js?v=20261116c';
-import * as models from './models.js?v=20261116c';
-import { createProgressionStore } from './progression.js?v=20261116c';
-import { createCombatController } from './combat.js?v=20261116c';
-import { createAudioEngine } from './audio.js?v=20261116c';
-import { initYandexSdk } from './yandexSdk.js?v=20261116c';
-import { createUIManager } from './ui.js?v=20261116c';
+import { LEVELS } from './config.js?v=20261116d';
+import { createArenaWorld } from './world.js?v=20261116d';
+import * as models from './models.js?v=20261116d';
+import { createProgressionStore } from './progression.js?v=20261116d';
+import { createCombatController } from './combat.js?v=20261116d';
+import { createAudioEngine } from './audio.js?v=20261116d';
+import { initYandexSdk } from './yandexSdk.js?v=20261116d';
+import { createUIManager } from './ui.js?v=20261116d';
 
 async function bootstrap() {
   const canvas = document.getElementById('game-canvas');
@@ -472,6 +472,7 @@ async function bootstrap() {
   let fpsAccumTime = 0;
   let fpsFrameCount = 0;
   let smoothedFps = 60;
+  let hudSyncAccum = 0;
 
   function frame(now) {
     requestAnimationFrame(frame);
@@ -502,7 +503,11 @@ async function bootstrap() {
     if (gameMode === 'playing') {
       const input = gatherInput(dt);
       combat.update(dt, input, elapsedTime);
-      ui.updateHud(combat.getHudSnapshot());
+      hudSyncAccum = (hudSyncAccum || 0) + dt;
+      if (hudSyncAccum >= 0.036 || input.reload) {
+        hudSyncAccum = 0;
+        ui.updateHud(combat.getHudSnapshot());
+      }
       world.update(dt, elapsedTime);
     } else if (gameMode === 'hub') {
       // Close-up Hero Showcase camera centered on (0, 0) pedestal

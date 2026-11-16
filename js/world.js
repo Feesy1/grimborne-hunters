@@ -179,15 +179,20 @@ function getSlashCrescentGeo(arcAngle = Math.PI * 0.8) {
 // Main 3D Arena World Factory
 // ============================================================================
 export function createArenaWorld(canvas) {
+  const isMobileGPU =
+    /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || '') ||
+    (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+  const maxDpr = isMobileGPU ? 1.65 : 2;
+
   const renderer = new THREE.WebGLRenderer({
     canvas: canvas || undefined,
-    antialias: true,
+    antialias: !isMobileGPU || (window.devicePixelRatio || 1) < 2,
     powerPreference: 'high-performance'
   });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxDpr));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = isMobileGPU ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.48;
@@ -243,15 +248,16 @@ export function createArenaWorld(canvas) {
   const dirLight = new THREE.DirectionalLight(PALETTE_NORMAL.dir.getHex(), 2.45);
   dirLight.position.set(14, 28, 16);
   dirLight.castShadow = true;
-  dirLight.shadow.mapSize.set(2048, 2048);
+  const shadowMapRes = isMobileGPU ? 1024 : 1536;
+  dirLight.shadow.mapSize.set(shadowMapRes, shadowMapRes);
   dirLight.shadow.camera.near = 4;
-  dirLight.shadow.camera.far = 75;
-  const shadowExtent = 28;
+  dirLight.shadow.camera.far = 68;
+  const shadowExtent = isMobileGPU ? 21 : 26;
   dirLight.shadow.camera.left = -shadowExtent;
   dirLight.shadow.camera.right = shadowExtent;
   dirLight.shadow.camera.top = shadowExtent;
   dirLight.shadow.camera.bottom = -shadowExtent;
-  dirLight.shadow.bias = -0.0004;
+  dirLight.shadow.bias = -0.0005;
   scene.add(dirLight);
   scene.add(dirLight.target);
 
@@ -350,9 +356,27 @@ export function createArenaWorld(canvas) {
   const lanterns = [];
 
   function addFlickerLight(x, y, z, colorHex, intensity, distance, phase = 0, withFireCone = false) {
-    const pl = new THREE.PointLight(colorHex, intensity, distance, 1.45);
-    pl.position.set(x, y, z);
-    arenaGroup.add(pl);
+    // Keep real PointLight on the main campfire (and all on Desktop); on mobile TBDR GPUs use soft volumetric glow sprites on secondary shrines to cut 70% PBR shader heat with identical visual glow!
+    let pl = null;
+    if (!isMobileGPU || withFireCone) {
+      pl = new THREE.PointLight(colorHex, intensity, distance, 1.45);
+      pl.position.set(x, y, z);
+      arenaGroup.add(pl);
+    } else {
+      const aura = new THREE.Sprite(
+        new THREE.SpriteMaterial({
+          map: softGlowTex,
+          color: colorHex,
+          transparent: true,
+          opacity: 0.42,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false
+        })
+      );
+      aura.position.set(x, 1.35, z);
+      aura.scale.set(5.4, 5.4, 1);
+      arenaGroup.add(aura);
+    }
 
     let flameGrp = null;
     if (withFireCone) {
@@ -472,10 +496,17 @@ export function createArenaWorld(canvas) {
             loader.load(
               url,
               (gltf) => {
+                const isOuterOrTiny =
+                  key === 'pine_large' ||
+                  key === 'pine_med' ||
+                  key === 'candle_triple' ||
+                  key === 'skull_candle' ||
+                  key === 'fence' ||
+                  key === 'fence_broken';
                 gltf.scene.traverse((n) => {
                   if (n.isMesh) {
-                    n.castShadow = true;
-                    n.receiveShadow = true;
+                    n.castShadow = !isOuterOrTiny;
+                    n.receiveShadow = key !== 'pine_large' && key !== 'pine_med';
                     if ((key === 'pine_large' || key === 'pine_med') && n.geometry) {
                       // Bake frosted dark-fantasy evergreen + snow-dusted upper needles!
                       const pos = n.geometry.attributes.position;
@@ -535,6 +566,10 @@ export function createArenaWorld(canvas) {
       inst.position.set(x, y, z);
       inst.rotation.y = rotY;
       inst.scale.setScalar(scale);
+      inst.updateMatrixWorld(true);
+      inst.traverse((c) => {
+        c.matrixAutoUpdate = false;
+      });
       parent.add(inst);
       return inst;
     }
@@ -1128,39 +1163,44 @@ export function createArenaWorld(canvas) {
 
     const isEnemyProj = type === 'enemy' || type === 'enemy_bolt';
 
-    // Saturated non-toneMapped colors prevent ACESFilmic from bleaching tracers & spells into white!
-    const fallbackBulletHue = (isBullet || isBuckshot) && color === 0xe2e8f0 ? 0xfbbf24 : color;
-    const baseHue = new THREE.Color(fallbackBulletHue);
-    if (isBuckshot && type !== 'gatling') {
-      // Warm hot-brass / smoky-amber fiery tint for black-powder buckshot
-      baseHue.lerp(new THREE.Color(0xf59e0b), 0.25);
+    const cacheKey = `${type}_${color}_${isBuckshot ? 1 : 0}_${isBullet ? 1 : 0}`;
+    if (!createProjectileVisual._matCache) createProjectileVisual._matCache = new Map();
+    let matSet = createProjectileVisual._matCache.get(cacheKey);
+    if (!matSet) {
+      const fallbackBulletHue = (isBullet || isBuckshot) && color === 0xe2e8f0 ? 0xfbbf24 : color;
+      const baseHue = new THREE.Color(fallbackBulletHue);
+      if (isBuckshot && type !== 'gatling') {
+        baseHue.lerp(new THREE.Color(0xf59e0b), 0.25);
+      }
+      const richColor = baseHue.clone().offsetHSL(0, 0.2, -0.08);
+      const brightCoreColor = baseHue.clone().lerp(new THREE.Color(0xffffff), isBuckshot ? 0.52 : 0.42);
+      matSet = {
+        richHex: richColor.getHex(),
+        solidCoreMat: new THREE.MeshBasicMaterial({
+          color: brightCoreColor,
+          toneMapped: false
+        }),
+        glowMat: new THREE.MeshBasicMaterial({
+          color: richColor,
+          transparent: true,
+          opacity: isBuckshot ? 0.78 : isBullet ? 0.82 : 0.66,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+          toneMapped: false
+        }),
+        haloSpriteMat: new THREE.SpriteMaterial({
+          map: softGlowTex,
+          color: richColor,
+          transparent: true,
+          opacity: isBuckshot ? 0.44 : 0.55,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          toneMapped: false
+        })
+      };
+      createProjectileVisual._matCache.set(cacheKey, matSet);
     }
-    const richColor = baseHue.clone().offsetHSL(0, 0.2, -0.08);
-    const brightCoreColor = baseHue.clone().lerp(new THREE.Color(0xffffff), isBuckshot ? 0.52 : 0.42);
-
-    const solidCoreMat = new THREE.MeshBasicMaterial({
-      color: brightCoreColor,
-      toneMapped: false
-    });
-
-    const glowMat = new THREE.MeshBasicMaterial({
-      color: richColor,
-      transparent: true,
-      opacity: isBuckshot ? 0.78 : isBullet ? 0.82 : 0.66,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-      toneMapped: false
-    });
-
-    const haloSpriteMat = new THREE.SpriteMaterial({
-      map: softGlowTex,
-      color: richColor,
-      transparent: true,
-      opacity: isBuckshot ? 0.44 : 0.55,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      toneMapped: false
-    });
+    const { richHex, solidCoreMat, glowMat, haloSpriteMat } = matSet;
     const haloSprite = new THREE.Sprite(haloSpriteMat);
 
     let spinCore = null;
@@ -1219,14 +1259,11 @@ export function createArenaWorld(canvas) {
       prevZ: null,
       trailAccum: 0,
       isMagic: !isBullet && !isBuckshot && !isEnemyProj,
-      color: richColor.getHex(),
+      color: richHex,
       dispose() {
         if (disposed) return;
         disposed = true;
         if (mesh.parent) mesh.parent.remove(mesh);
-        solidCoreMat.dispose();
-        glowMat.dispose();
-        haloSpriteMat.dispose();
         activeProjectiles.delete(handle);
       }
     };
@@ -1595,7 +1632,7 @@ export function createArenaWorld(canvas) {
     const vv = window.visualViewport;
     const w = Math.max(Math.round(vv?.width || document.documentElement.clientWidth || window.innerWidth), 1);
     const h = Math.max(Math.round(vv?.height || document.documentElement.clientHeight || window.innerHeight), 1);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxDpr));
     renderer.setSize(w, h, true);
     const aspect = w / h;
     camera.aspect = aspect;

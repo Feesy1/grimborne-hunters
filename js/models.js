@@ -1714,7 +1714,17 @@ export function createEnemyMesh(typeId = 'skeleton', eliteVariant = null, custom
 
   let animCtrl = null;
   const instanceMats = [];
+  const flashMeshSlots = [];
+  const hitFlashMat = getMat('enemy_shared_hit_flash', () =>
+    new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      emissive: 0xffffff,
+      emissiveIntensity: 0.9,
+      roughness: 0.3
+    })
+  );
   let flashTimer = 0;
+  let spawnedInst = null;
 
   let upperArmL = null;
   let lowerArmL = null;
@@ -1726,6 +1736,7 @@ export function createEnemyMesh(typeId = 'skeleton', eliteVariant = null, custom
 
   if (asset) {
     const inst = cloneSkinned(asset.scene);
+    spawnedInst = inst;
     inst.scale.setScalar(cfg.scale * effectiveScaleMult);
     root.add(inst);
 
@@ -1791,37 +1802,46 @@ export function createEnemyMesh(typeId = 'skeleton', eliteVariant = null, custom
       if (n.isMesh && n.material) {
         if (/Eyes/i.test(nm)) {
           foundEyeMesh = true;
-          const eyeMat = new THREE.MeshStandardMaterial({
-            color: cfg.eye,
-            emissive: cfg.eye,
-            emissiveIntensity: cfg.isBossVisual ? 2.6 : 2.1,
-            roughness: 0.15
-          });
-          n.material = eyeMat;
+          n.material = getMat(`eye_mat_${cfg.eye}_${cfg.isBossVisual ? 'b' : 'n'}`, () =>
+            new THREE.MeshStandardMaterial({
+              color: cfg.eye,
+              emissive: cfg.eye,
+              emissiveIntensity: cfg.isBossVisual ? 2.6 : 2.1,
+              roughness: 0.15
+            })
+          );
           return;
         }
-        const cloned = Array.isArray(n.material) ? n.material.map((m) => m.clone()) : n.material.clone();
-        n.material = cloned;
-        const list = Array.isArray(cloned) ? cloned : [cloned];
-        for (const m of list) {
-          if (m.color && cfg.tint !== null) {
-            m.color.lerp(new THREE.Color(cfg.tint), cfg.tintLerp ?? 0.55);
-          }
+        const needsUniqueInstanceMat = typeId === 'boss_ashlord';
+        const mapOneMat = (srcMat) => {
           let baseEm = cfg.baseEmissive || 0x000000;
           let baseEmInt = cfg.baseEmissiveInt || 0;
           if (eliteVariant === 'purple' || eliteVariant === 'blue') {
             baseEm = eliteVariant === 'purple' ? 0x6b21a8 : 0x0369a1;
             baseEmInt = Math.max(baseEmInt, 0.28);
           }
-          if (m.emissive && baseEmInt > 0) {
-            m.emissive.setHex(baseEm);
-            m.emissiveIntensity = baseEmInt;
+          const buildTinted = () => {
+            const m = srcMat.clone();
+            if (m.color && cfg.tint !== null) {
+              m.color.lerp(new THREE.Color(cfg.tint), cfg.tintLerp ?? 0.55);
+            }
+            if (m.emissive && baseEmInt > 0) {
+              m.emissive.setHex(baseEm);
+              m.emissiveIntensity = baseEmInt;
+            }
+            return m;
+          };
+          if (needsUniqueInstanceMat) {
+            const uniqueMat = buildTinted();
+            instanceMats.push({ mat: uniqueMat, baseEmissive: baseEm, baseEmissiveInt: baseEmInt, owned: true });
+            return uniqueMat;
           }
-          instanceMats.push({
-            mat: m,
-            baseEmissive: baseEm,
-            baseEmissiveInt: baseEmInt
-          });
+          return getMat(`enemy_tint_${typeId}_${eliteVariant || 'std'}_${srcMat.uuid}`, buildTinted);
+        };
+        const mapped = Array.isArray(n.material) ? n.material.map(mapOneMat) : mapOneMat(n.material);
+        n.material = mapped;
+        if (!needsUniqueInstanceMat) {
+          flashMeshSlots.push({ mesh: n, origMat: mapped });
         }
       }
     });
@@ -1911,13 +1931,15 @@ export function createEnemyMesh(typeId = 'skeleton', eliteVariant = null, custom
         rg.rotateX(-Math.PI / 2);
         return rg;
       }),
-      new THREE.MeshBasicMaterial({
-        color: outerColor,
-        transparent: true,
-        opacity: cfg.isBossVisual ? 0.82 : 0.72,
-        side: THREE.DoubleSide,
-        depthWrite: false
-      })
+      getMat(`halo_mat_${outerColor}_${cfg.isBossVisual ? 'b' : 'e'}`, () =>
+        new THREE.MeshBasicMaterial({
+          color: outerColor,
+          transparent: true,
+          opacity: cfg.isBossVisual ? 0.82 : 0.72,
+          side: THREE.DoubleSide,
+          depthWrite: false
+        })
+      )
     );
     halo.position.y = 0.04;
 
@@ -1947,13 +1969,15 @@ export function createEnemyMesh(typeId = 'skeleton', eliteVariant = null, custom
           rg.rotateX(-Math.PI / 2);
           return rg;
         }),
-        new THREE.MeshBasicMaterial({
-          color: cfg.bossInnerRingColor,
-          transparent: true,
-          opacity: typeId === 'boss_ashlord' ? 0.90 : 0.78,
-          side: THREE.DoubleSide,
-          depthWrite: false
-        })
+        getMat(`inner_halo_mat_${cfg.bossInnerRingColor}_${typeId}`, () =>
+          new THREE.MeshBasicMaterial({
+            color: cfg.bossInnerRingColor,
+            transparent: true,
+            opacity: typeId === 'boss_ashlord' ? 0.90 : 0.78,
+            side: THREE.DoubleSide,
+            depthWrite: false
+          })
+        )
       );
       innerBossHalo.position.y = 0.046;
       const spokeGeo = getGeo('boss_inner_spoke', () => {
@@ -1979,13 +2003,34 @@ export function createEnemyMesh(typeId = 'skeleton', eliteVariant = null, custom
       animCtrl?.triggerOneShot(cfg.atkClip, cfg.isBossVisual ? 1.42 : 1.65);
     },
     flashHit() {
-      flashTimer = 0.11;
+      flashTimer = 0.10;
+      for (let i = 0; i < flashMeshSlots.length; i++) {
+        flashMeshSlots[i].mesh.material = hitFlashMat;
+      }
       for (const item of instanceMats) {
         if (item.mat.emissive) {
           item.mat.emissive.setHex(0xffffff);
           item.mat.emissiveIntensity = 0.85;
         }
       }
+    },
+    dispose() {
+      if (animCtrl?.mixer && spawnedInst) {
+        animCtrl.mixer.stopAllAction();
+        animCtrl.mixer.uncacheRoot(spawnedInst);
+      }
+      if (spawnedInst) {
+        spawnedInst.traverse((n) => {
+          if (n.isSkinnedMesh && n.skeleton) {
+            n.skeleton.dispose();
+          }
+        });
+      }
+      for (const item of instanceMats) {
+        if (item.owned && item.mat?.dispose) item.mat.dispose();
+      }
+      instanceMats.length = 0;
+      flashMeshSlots.length = 0;
     },
     update(dt, arg2, arg3) {
       const safeDt = Math.min(Math.max(dt || 0.016, 0), 0.1);
@@ -2042,6 +2087,9 @@ export function createEnemyMesh(typeId = 'skeleton', eliteVariant = null, custom
       if (flashTimer > 0) {
         flashTimer = Math.max(0, flashTimer - safeDt);
         if (flashTimer <= 0) {
+          for (let i = 0; i < flashMeshSlots.length; i++) {
+            flashMeshSlots[i].mesh.material = flashMeshSlots[i].origMat;
+          }
           for (const item of instanceMats) {
             if (item.mat.emissive) {
               item.mat.emissive.setHex(item.baseEmissive);
