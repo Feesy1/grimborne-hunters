@@ -594,105 +594,133 @@ export function createAudioEngine() {
 
     playMagicCast(styleOrWeaponId = 'fire') {
       if (!readyToPlay() || !canTrigger('magic', 42)) return;
-      const jitter = 0.95 + Math.random() * 0.1;
+      const jitter = 0.94 + Math.random() * 0.12;
 
       if (styleOrWeaponId === 'water') {
-        // Pressurized rushing hydro-surge + deep liquid swell + pure icy crystal shimmer (ZERO spring boing!)
+        // 💧 WATER: Flowing liquid wave splash + bubbling water droplets!
         playFilteredNoise({
           brown: false,
           filterType: 'bandpass',
-          freqStart: 390 * jitter,
-          freqEnd: 1340 * jitter,
-          q: 1.85,
+          freqStart: 320 * jitter,
+          freqEnd: 1580 * jitter,
+          q: 3.4,
+          duration: 0.25,
+          gainPeak: 0.42,
+          attack: 0.016
+        });
+        playFilteredNoise({
+          brown: true,
+          filterType: 'lowpass',
+          freqStart: 880 * jitter,
+          freqEnd: 290,
+          q: 2.2,
+          startTime: 0.03,
           duration: 0.22,
-          gainPeak: 0.34,
+          gainPeak: 0.28,
           attack: 0.012
         });
+        // Two crisp water-bubble pops
         playTone({
           type: 'sine',
-          freqStart: 155 * jitter,
-          freqEnd: 86,
-          duration: 0.20,
-          gainPeak: 0.24,
-          attack: 0.008
+          freqStart: 540 * jitter,
+          freqEnd: 1080 * jitter,
+          startTime: 0.018,
+          duration: 0.055,
+          gainPeak: 0.16,
+          attack: 0.004
         });
         playTone({
           type: 'sine',
-          freqStart: 1340 * jitter,
-          freqEnd: 1290 * jitter,
-          startTime: 0.02,
-          duration: 0.14,
-          gainPeak: 0.09,
-          attack: 0.008
+          freqStart: 760 * jitter,
+          freqEnd: 1380 * jitter,
+          startTime: 0.068,
+          duration: 0.05,
+          gainPeak: 0.13,
+          attack: 0.004
         });
         return;
       }
 
       if (styleOrWeaponId === 'lightning') {
-        // Sharp high-voltage electric arc snap + plasma crackle + low thunder punch (ZERO cartoon pew!)
+        // ⚡ LIGHTNING: Sharp high-voltage Tesla arc snap + triple electric crackle!
         playFilteredNoise({
           brown: false,
           filterType: 'highpass',
-          freqStart: 3600 * jitter,
-          freqEnd: 1850,
-          q: 1.5,
-          duration: 0.055,
-          gainPeak: 0.34,
+          freqStart: 4200 * jitter,
+          freqEnd: 2200,
+          q: 1.8,
+          duration: 0.05,
+          gainPeak: 0.44,
           attack: 0.001
-        });
-        playDistortedThump({
-          type: 'sawtooth',
-          freqStart: 182 * jitter,
-          freqEnd: 56,
-          duration: 0.14,
-          gainPeak: 0.24,
-          attack: 0.0015,
-          filterFreq: 980
         });
         playFilteredNoise({
           brown: false,
           filterType: 'bandpass',
-          freqStart: 2800 * jitter,
-          freqEnd: 4200 * jitter,
-          q: 3.2,
-          startTime: 0.038,
-          duration: 0.048,
-          gainPeak: 0.22,
+          freqStart: 3100 * jitter,
+          freqEnd: 5200 * jitter,
+          q: 4.0,
+          startTime: 0.026,
+          duration: 0.045,
+          gainPeak: 0.34,
           attack: 0.001
+        });
+        playFilteredNoise({
+          brown: false,
+          filterType: 'bandpass',
+          freqStart: 4600 * jitter,
+          freqEnd: 2600 * jitter,
+          q: 3.6,
+          startTime: 0.058,
+          duration: 0.042,
+          gainPeak: 0.26,
+          attack: 0.001
+        });
+        playDistortedThump({
+          type: 'sawtooth',
+          freqStart: 245 * jitter,
+          freqEnd: 92,
+          duration: 0.11,
+          gainPeak: 0.22,
+          attack: 0.001,
+          filterFreq: 1650
         });
         return;
       }
 
       if (styleOrWeaponId === 'air') {
-        // Whipping razor gale-force wind vortex slash
+        // 🌪️ AIR: Pure rushing wind gust + whistling vortex (ZERO bass thud — unmistakably rushing air!)
         playFilteredNoise({
           brown: false,
           filterType: 'bandpass',
-          freqStart: 480 * jitter,
-          freqEnd: 1920 * jitter,
-          q: 2.5,
-          duration: 0.21,
+          freqStart: 520 * jitter,
+          freqEnd: 1850 * jitter,
+          q: 2.6,
+          duration: 0.28,
+          gainPeak: 0.42,
+          attack: 0.032
+        });
+        playFilteredNoise({
+          brown: false,
+          filterType: 'bandpass',
+          freqStart: 1950 * jitter,
+          freqEnd: 680 * jitter,
+          q: 4.8,
+          startTime: 0.055,
+          duration: 0.25,
           gainPeak: 0.34,
-          attack: 0.010
+          attack: 0.025
         });
+        // Subtle whistling wind harmonic
         playFilteredNoise({
           brown: false,
           filterType: 'bandpass',
-          freqStart: 1680 * jitter,
-          freqEnd: 540 * jitter,
-          q: 2.2,
-          startTime: 0.05,
-          duration: 0.18,
-          gainPeak: 0.24,
-          attack: 0.008
-        });
-        playTone({
-          type: 'sine',
-          freqStart: 122 * jitter,
-          freqEnd: 48,
-          duration: 0.18,
-          gainPeak: 0.18,
-          attack: 0.006
+          freqStart: 1250 * jitter,
+          freqEnd: 2650 * jitter,
+          q: 8.5,
+          startTime: 0.015,
+          duration: 0.22,
+          gainPeak: 0.22,
+          attack: 0.028
         });
         return;
       }
@@ -720,35 +748,215 @@ export function createAudioEngine() {
         return;
       }
 
-      // Default / 'fire' / 'cinder_tome' / 'spark_staff': Roaring fireball whoosh + combustion thump + ember crackle!
+      // 🔥 FIRE (Default): Deep roaring flamethrower ignition whoosh + crackling embers!
       playTone({
         type: 'sine',
-        freqStart: 104 * jitter,
-        freqEnd: 36,
-        duration: 0.21,
-        gainPeak: 0.30,
-        attack: 0.004
+        freqStart: 92 * jitter,
+        freqEnd: 32,
+        duration: 0.25,
+        gainPeak: 0.36,
+        attack: 0.005
       });
       playFilteredNoise({
         brown: true,
-        filterType: 'bandpass',
-        freqStart: 250 * jitter,
-        freqEnd: 840 * jitter,
-        q: 1.9,
-        duration: 0.24,
-        gainPeak: 0.40,
-        attack: 0.010
+        filterType: 'lowpass',
+        freqStart: 920 * jitter,
+        freqEnd: 260,
+        q: 1.6,
+        duration: 0.29,
+        gainPeak: 0.50,
+        attack: 0.014
       });
       playFilteredNoise({
         brown: false,
-        filterType: 'highpass',
-        freqStart: 2500 * jitter,
-        freqEnd: 1350,
-        q: 1.3,
-        startTime: 0.015,
-        duration: 0.095,
-        gainPeak: 0.15,
-        attack: 0.002
+        filterType: 'bandpass',
+        freqStart: 320 * jitter,
+        freqEnd: 780 * jitter,
+        q: 1.8,
+        startTime: 0.02,
+        duration: 0.22,
+        gainPeak: 0.28,
+        attack: 0.012
+      });
+    },
+
+    playElementImpact(elemId = 'fire') {
+      if (!readyToPlay() || !canTrigger(`el_imp_${elemId}`, 45)) return;
+      const jitter = 0.92 + Math.random() * 0.16;
+
+      if (elemId === 'water_prison_open') {
+        // Rising swirling water sphere dome levitation!
+        playFilteredNoise({
+          brown: false,
+          filterType: 'bandpass',
+          freqStart: 280,
+          freqEnd: 1450,
+          q: 3.8,
+          duration: 0.42,
+          gainPeak: 0.46,
+          attack: 0.02
+        });
+        playTone({
+          type: 'sine',
+          freqStart: 240,
+          freqEnd: 520,
+          duration: 0.38,
+          gainPeak: 0.24,
+          attack: 0.02
+        });
+        return;
+      }
+
+      if (elemId === 'water_prison_slam') {
+        // Massive crashing tidal slam (x3 damage drop!)
+        playTone({
+          type: 'sine',
+          freqStart: 135,
+          freqEnd: 28,
+          duration: 0.42,
+          gainPeak: 0.56,
+          attack: 0.003
+        });
+        playFilteredNoise({
+          brown: false,
+          filterType: 'bandpass',
+          freqStart: 1650,
+          freqEnd: 360,
+          q: 1.5,
+          duration: 0.36,
+          gainPeak: 0.52,
+          attack: 0.003
+        });
+        return;
+      }
+
+      if (elemId === 'air') {
+        playFilteredNoise({
+          brown: false,
+          filterType: 'bandpass',
+          freqStart: 1850 * jitter,
+          freqEnd: 520,
+          q: 3.2,
+          duration: 0.22,
+          gainPeak: 0.32,
+          attack: 0.012
+        });
+        return;
+      }
+
+      if (elemId === 'water') {
+        playFilteredNoise({
+          brown: false,
+          filterType: 'bandpass',
+          freqStart: 1420 * jitter,
+          freqEnd: 420,
+          q: 2.6,
+          duration: 0.18,
+          gainPeak: 0.30,
+          attack: 0.005
+        });
+        playTone({
+          type: 'sine',
+          freqStart: 620 * jitter,
+          freqEnd: 980 * jitter,
+          duration: 0.05,
+          gainPeak: 0.14,
+          attack: 0.003
+        });
+        return;
+      }
+
+      if (elemId === 'lightning') {
+        playFilteredNoise({
+          brown: false,
+          filterType: 'highpass',
+          freqStart: 3600 * jitter,
+          freqEnd: 1900,
+          q: 2.2,
+          duration: 0.075,
+          gainPeak: 0.34,
+          attack: 0.001
+        });
+        return;
+      }
+
+      // Fire impact burst
+      playTone({
+        type: 'sine',
+        freqStart: 118 * jitter,
+        freqEnd: 40,
+        duration: 0.16,
+        gainPeak: 0.30,
+        attack: 0.003
+      });
+      playFilteredNoise({
+        brown: true,
+        filterType: 'lowpass',
+        freqStart: 1100 * jitter,
+        freqEnd: 280,
+        q: 1.4,
+        duration: 0.18,
+        gainPeak: 0.34,
+        attack: 0.004
+      });
+    },
+
+    playArmorBreak(kind = 'helmet') {
+      if (!readyToPlay() || !canTrigger(`brk_${kind}`, 45)) return;
+      const jitter = 0.94 + Math.random() * 0.12;
+      if (kind === 'bones') {
+        // Dry rattling bone clatter on cobblestones
+        for (let b = 0; b < 3; b++) {
+          playTone({
+            type: 'triangle',
+            freqStart: (820 + b * 240) * jitter,
+            freqEnd: (380 + b * 90) * jitter,
+            startTime: b * 0.038,
+            duration: 0.045,
+            gainPeak: 0.18 - b * 0.03,
+            attack: 0.001
+          });
+        }
+        return;
+      }
+      if (kind === 'shield') {
+        // Heavy shield crack + metallic clank
+        playTone({
+          type: 'triangle',
+          freqStart: 340 * jitter,
+          freqEnd: 115,
+          duration: 0.14,
+          gainPeak: 0.32,
+          attack: 0.002
+        });
+        playFilteredNoise({
+          brown: false,
+          filterType: 'bandpass',
+          freqStart: 1900 * jitter,
+          freqEnd: 680,
+          q: 2.2,
+          duration: 0.11,
+          gainPeak: 0.26,
+          attack: 0.002
+        });
+        return;
+      }
+      // Helmet flying off — crisp iron pot-helm ping!
+      playTone({
+        type: 'sine',
+        freqStart: 1180 * jitter,
+        freqEnd: 1090 * jitter,
+        duration: 0.19,
+        gainPeak: 0.24,
+        attack: 0.0015
+      });
+      playTone({
+        type: 'triangle',
+        freqStart: 1760 * jitter,
+        freqEnd: 1620 * jitter,
+        duration: 0.13,
+        gainPeak: 0.16,
+        attack: 0.0015
       });
     },
 

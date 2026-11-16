@@ -8,7 +8,7 @@ import {
   MAGE_ELEMENTS,
   MAGE_ELEMENT_ORDER,
   MAGE_ELEMENT_UNLOCK_COSTS
-} from './config.js?v=20261116f';
+} from './config.js?v=20261116h';
 
 export const WEAPON_MAX_SHOP_LEVEL = WEAPON_MAX_LEVEL || 12;
 
@@ -429,18 +429,29 @@ export function createProgressionStore(initialSave = null) {
     const wardLvl = getHeroUpgradeLevel('ward', cls.id);
     const manaFlowLvl = getHeroUpgradeLevel('mana_flow', cls.id);
 
-    // All 12 balanced in-run blessing stacks
-    const wpnPowerStacks = getPerkStacks(perks, 'wpn_power');
-    const wpnHasteStacks = getPerkStacks(perks, 'wpn_haste');
+    // Class-specific & dark relic in-run blessing stacks
+    const mageArcaneStacks = getPerkStacks(perks, 'mage_arcane_surge');
+    const mageTwinStacks = getPerkStacks(perks, 'mage_twin_cast');
+    const mageCatalystStacks = getPerkStacks(perks, 'mage_elem_catalyst');
+    const mageMeteorStacks = getPerkStacks(perks, 'mage_meteor_shower');
+    const mageWardStacks = getPerkStacks(perks, 'mage_arcane_ward');
+    const mageManaFontStacks = getPerkStacks(perks, 'mage_mana_font');
+
+    const gunHeavyStacks = getPerkStacks(perks, 'gun_heavy_buckshot');
+    const gunRicochetStacks = getPerkStacks(perks, 'gun_ricochet');
+    const gunExplosiveStacks = getPerkStacks(perks, 'gun_explosive_slugs');
+    const gunReloadStacks = getPerkStacks(perks, 'gun_tactical_reload');
     const ammoPouchStacks = getPerkStacks(perks, 'ammo_pouch');
+    const gunMineStacks = getPerkStacks(perks, 'gun_shrapnel_mine');
+
+    const warOrbitStacks = getPerkStacks(perks, 'war_orbit_blades');
+    const warSeismicStacks = getPerkStacks(perks, 'war_seismic_slam');
+    const warThornsStacks = getPerkStacks(perks, 'war_shield_thorns');
+    const warWhirlwindStacks = getPerkStacks(perks, 'war_whirlwind');
+    const warBloodStacks = getPerkStacks(perks, 'war_blood_cleave');
+    const warBannerStacks = getPerkStacks(perks, 'war_iron_banner');
+
     const critFangStacks = getPerkStacks(perks, 'crit_fang');
-    const frostTouchStacks = getPerkStacks(perks, 'frost_touch');
-    const burnCinderStacks = getPerkStacks(perks, 'burn_cinder');
-    const chainSoulStacks = getPerkStacks(perks, 'chain_soul');
-    const soulNovaStacks = getPerkStacks(perks, 'soul_nova');
-    const vampiricStacks = getPerkStacks(perks, 'vampiric');
-    const ironWardStacks = getPerkStacks(perks, 'iron_ward');
-    const swiftBootsStacks = getPerkStacks(perks, 'swift_boots');
     const greedStacks = getPerkStacks(perks, 'greed_contract');
 
     // Essential shop weapon scaling (+24% damage & +3.5% reload/attack cadence per shop level)
@@ -448,26 +459,29 @@ export function createProgressionStore(initialSave = null) {
     const shopReloadMult = 1 + shopLevelsAbove * 0.035;
     const shopSpeedMult = 1 + shopLevelsAbove * 0.03;
 
-    // Toned-down in-run weapon rank scaling (+10% damage per run weapon level)
-    const runWeaponDamageMult = 1 + runLevelsAbove * 0.10;
-    const runWeaponAreaMult = 1 + runLevelsAbove * 0.05;
+    // Meaningful in-run weapon/magic rank scaling (+16% damage per run weapon level)
+    const runWeaponDamageMult = 1 + runLevelsAbove * 0.16;
+    const runWeaponAreaMult = 1 + runLevelsAbove * 0.08;
 
     const heroDamageMult = 1 + mightLvl * 0.10;
     const heroAgilityMult = 1 + agilityLvl * 0.04;
 
-    const perkDamageMult = 1 + wpnPowerStacks * 0.10;
-    const perkHasteMult = 1 + wpnHasteStacks * 0.10;
-    const perkReloadMult = 1 + wpnHasteStacks * 0.18;
-    const perkMoveMult = 1 + swiftBootsStacks * 0.09;
+    const perkDamageMult =
+      1 +
+      mageArcaneStacks * 0.20 +
+      gunHeavyStacks * 0.14;
+    const perkHasteMult = 1 + (warWhirlwindStacks > 0 ? warWhirlwindStacks * 0.06 : 0);
+    const perkReloadMult = 1 + gunReloadStacks * 0.28;
+    const perkMoveMult = 1 + greedStacks * 0.07;
 
-    const maxHp = Math.round(cls.maxHp + vitalityLvl * 15 + ironWardStacks * 16);
+    const maxHp = Math.round(cls.maxHp + vitalityLvl * 15 + warBannerStacks * 24);
     const moveSpeed = +(cls.moveSpeed * heroAgilityMult * perkMoveMult).toFixed(3);
     const damageBlock = Math.min(
       0.78,
-      +(cls.damageBlock + wardLvl * 0.03 + ironWardStacks * 0.04).toFixed(4)
+      +(cls.damageBlock + wardLvl * 0.03 + warThornsStacks * 0.07).toFixed(4)
     );
-    const blockChance = cls.blockChance || 0;
-    const dodgeChance = Math.min(0.45, +(swiftBootsStacks * 0.08).toFixed(4));
+    const blockChance = Math.min(0.65, (cls.blockChance || 0) + warThornsStacks * 0.06);
+    const dodgeChance = 0;
 
     const damage = Math.max(
       1,
@@ -483,29 +497,28 @@ export function createProgressionStore(initialSave = null) {
     const totalAttackHaste = shopSpeedMult * heroAgilityMult * perkHasteMult;
     const cooldown = Math.max(0.06, +(wpn.cooldown / totalAttackHaste).toFixed(4));
 
-    // ammo_pouch grants +2 magSize for ranged/magic weapons, and +12% melee range & arc for Warrior!
-    const meleePouchReachMult = wpn.type === 'melee' ? 1 + ammoPouchStacks * 0.12 : 1.0;
-    const range = +(wpn.range * runWeaponAreaMult * meleePouchReachMult).toFixed(3);
+    const meleeReachMult = wpn.type === 'melee' ? 1 + warWhirlwindStacks * 0.12 : 1.0;
+    const range = +(wpn.range * runWeaponAreaMult * meleeReachMult).toFixed(3);
     const arcAngle = wpn.arcAngle
       ? Math.min(
-          Math.PI * 1.92,
-          +(wpn.arcAngle * (1 + runLevelsAbove * 0.05 + ammoPouchStacks * 0.12)).toFixed(4)
+          Math.PI * 1.96,
+          +(wpn.arcAngle * (1 + runLevelsAbove * 0.06 + warWhirlwindStacks * 0.25)).toFixed(4)
         )
       : 0;
 
     const baseSplash = wpn.splashRadius || 0;
     const splashRadius =
       baseSplash > 0
-        ? +(baseSplash * runWeaponAreaMult).toFixed(3)
+        ? +(baseSplash * runWeaponAreaMult * (1 + mageArcaneStacks * 0.15)).toFixed(3)
         : 0;
 
     const knockback = +(
       (wpn.knockback || 0) *
-      (1 + wpnPowerStacks * 0.15 + runLevelsAbove * 0.04)
+      (1 + runLevelsAbove * 0.05)
     ).toFixed(3);
 
-    const pellets = wpn.pellets || 1;
-    const spread = wpn.spread ?? 0;
+    const pellets = (wpn.pellets || 1) + (wpn.isShotgun ? gunHeavyStacks * 2 : 0);
+    const spread = (wpn.spread ?? 0) * (wpn.isShotgun && gunHeavyStacks > 0 ? 1.08 : 1.0);
     const pierce = wpn.pierce || 1;
     const projectileSpeed = wpn.projectileSpeed ? +wpn.projectileSpeed.toFixed(2) : 0;
     const pickupRadius = +(3.8 * perkMoveMult).toFixed(3);
@@ -516,50 +529,30 @@ export function createProgressionStore(initialSave = null) {
       ? (MAGE_ELEMENTS[mods.mageElement || state.activeMageElement] ? (mods.mageElement || state.activeMageElement) : 'fire')
       : null;
     const elemDef = mageElement ? MAGE_ELEMENTS[mageElement] : null;
-    const airSpeedMult = mageElement === 'air' ? 1.08 : 1.0;
     const baseMag = usesMana ? 0 : (wpn.magSize || 0);
     const magSize = baseMag > 0 ? baseMag + ammoPouchStacks * 2 : 0;
     const reloadSpeedMult = +(shopReloadMult * heroAgilityMult * perkReloadMult).toFixed(4);
     const reloadTime =
       baseMag > 0 && wpn.reloadTime
-        ? Math.max(0.26, +(wpn.reloadTime / reloadSpeedMult).toFixed(3))
+        ? Math.max(0.24, +(wpn.reloadTime / reloadSpeedMult).toFixed(3))
         : 0;
 
     const maxMana = usesMana
-      ? Math.round((cls.maxMana || 120) + manaFlowLvl * 15 + ammoPouchStacks * 25)
+      ? Math.round((cls.maxMana || 120) + manaFlowLvl * 15 + mageManaFontStacks * 18)
       : 0;
     const manaRegen = usesMana
       ? +(
           (cls.manaRegen || 9.5) *
-          (1 + manaFlowLvl * 0.20 + ammoPouchStacks * 0.24 + shopLevelsAbove * 0.03) *
-          perkHasteMult
+          (1 + manaFlowLvl * 0.20 + mageManaFontStacks * 0.15 + shopLevelsAbove * 0.03)
         ).toFixed(2)
       : 0;
-    const manaCost = usesMana ? +(wpn.manaCost || 8).toFixed(2) : 0;
+    const manaCostMult = Math.max(0.38, 1 - mageManaFontStacks * 0.18);
+    const manaCost = usesMana ? +((wpn.manaCost || 8) * manaCostMult).toFixed(2) : 0;
 
-    // Crit, Elemental, Astral & Economy Blessing stats
-    const critChance = Math.min(0.85, +(0.04 + critFangStacks * 0.14).toFixed(4));
-    const critMult = 1.75;
-
-    const frostSlowDuration = frostTouchStacks > 0 ? 2.0 : 0;
-    const frostSlowFactor =
-      frostTouchStacks > 0 ? Math.max(0.45, +(1 - frostTouchStacks * 0.25).toFixed(3)) : 1.0;
-
-    const burnDps =
-      burnCinderStacks > 0 ? burnCinderStacks * Math.max(4, Math.round(damage * 0.22)) : 0;
-    const burnDuration = burnCinderStacks > 0 ? 2.5 : 0;
-
-    const chainChance = Math.min(0.85, +(chainSoulStacks * 0.35).toFixed(4));
-    const chainDamageMult = 0.45;
-
-    const soulNovaInterval = 9.0;
-    const soulNovaDamage =
-      soulNovaStacks > 0 ? Math.round(damage * (0.85 + soulNovaStacks * 0.45)) : 0;
-    const soulNovaRadius = soulNovaStacks > 0 ? +(5.0 + soulNovaStacks * 0.65).toFixed(2) : 0;
-
-    const vampiricHeal = 8 * vampiricStacks;
-    const vampiricKillInterval = 16;
-    const goldMult = +(1 + greedStacks * 0.30).toFixed(3);
+    // Crit & Class Blessing parameters
+    const critChance = Math.min(0.85, +(0.05 + critFangStacks * 0.15).toFixed(4));
+    const critMult = 1.80;
+    const goldMult = +(1 + greedStacks * 0.35).toFixed(3);
 
     return {
       maxHp,
@@ -591,17 +584,23 @@ export function createProgressionStore(initialSave = null) {
       isShotgun: Boolean(wpn.isShotgun),
       critChance,
       critMult,
-      frostSlowDuration,
-      frostSlowFactor,
-      burnDps,
-      burnDuration,
-      chainChance,
-      chainDamageMult,
-      soulNovaInterval,
-      soulNovaDamage,
-      soulNovaRadius,
-      vampiricHeal,
-      vampiricKillInterval,
+      critExplosionStacks: critFangStacks,
+      mageTwinStacks,
+      mageCatalystStacks,
+      mageMeteorStacks,
+      mageWardStacks,
+      mageManaFontStacks,
+      gunRicochetStacks,
+      gunExplosiveStacks,
+      gunReloadStacks,
+      ammoPouchStacks,
+      gunMineStacks,
+      warOrbitStacks,
+      warSeismicStacks,
+      warThornsStacks,
+      warWhirlwindStacks,
+      warBloodStacks,
+      warBannerStacks,
       goldMult
     };
   }
@@ -612,14 +611,11 @@ export function createProgressionStore(initialSave = null) {
         ? WEAPONS[currentWeaponDef] || WEAPONS.club
         : currentWeaponDef || WEAPONS.club;
 
+    const activeClsId = resolvedWeapon.classId || state.selectedClass || 'warrior';
     const curWpnLvl = Math.max(1, Math.floor(Number(weaponRunLevel) || 1));
     const nextWpnRank = curWpnLvl + 1;
-    const wpnIcon =
-      resolvedWeapon.type === 'melee'
-        ? '⚔️'
-        : resolvedWeapon.type === 'ranged'
-          ? '🔫'
-          : '🔮';
+    const isMageWpn = activeClsId === 'mage' || resolvedWeapon.type === 'magic';
+    const isGunWpn = activeClsId === 'gunslinger' || resolvedWeapon.type === 'ranged';
 
     const weaponChoice = {
       id: 'weapon_level_up',
@@ -629,34 +625,70 @@ export function createProgressionStore(initialSave = null) {
       nextRank: nextWpnRank,
       maxStacks: 5,
       soulLevel,
-      nameRu: `${resolvedWeapon.nameRu}`,
-      statBadgeRu: '+10% УРОН • +5% ОБЛАСТЬ',
-      categoryRu: 'МАСТЕРСТВО ОРУЖИЯ',
+      nameRu: isMageWpn
+        ? `Чары: ${resolvedWeapon.nameRu}`
+        : isGunWpn
+          ? `Калибр: ${resolvedWeapon.nameRu}`
+          : `Закалка: ${resolvedWeapon.nameRu}`,
+      statBadgeRu: isMageWpn
+        ? '+16% МАГИЧЕСКИЙ УРОН • +8% ОБЛАСТЬ ЧАР'
+        : isGunWpn
+          ? '+16% УРОН ВЫСТРЕЛА • +8% ДАЛЬНОСТЬ'
+          : '+16% РУБЯЩИЙ УРОН • +8% РАЗМАХ КЛИНКА',
+      categoryRu: isMageWpn
+        ? 'ВОЗВЫШЕНИЕ ПОСОХА'
+        : isGunWpn
+          ? 'ОРУЖЕЙНОЕ МАСТЕРСТВО'
+          : 'МАСТЕРСТВО КЛИНКА',
       theme: 'gold',
-      descRu: `Закаляет оружие в бою до ${nextWpnRank}-го ранга: +10% к урону, натиску и зоне поражения.`,
-      icon: wpnIcon,
+      descRu: isMageWpn
+        ? `Усиливает магический поток посоха до ${nextWpnRank}-го ранга: +16% к магическому урону и шире радиус взрывов стихии.`
+        : isGunWpn
+          ? `Растачивает ствол до ${nextWpnRank}-го ранга: +16% к урону каждой дробины и дальше прицельный бой.`
+          : `Перековывает клинок до ${nextWpnRank}-го ранга: +16% к рубящему урону и шире дуга рассечения.`,
+      icon: isMageWpn ? '🔮' : isGunWpn ? '🔫' : '⚔️',
       isWeaponLevelUp: true
     };
 
-    // Filter out blessings that have reached maxStacks
-    const availablePerks = RUN_UPGRADES.filter((perk) => {
+    // Strictly filter by class so Mage, Gunslinger & Warrior each get their own distinct upgrades!
+    const classPerks = [];
+    const sharedPerks = [];
+    for (const perk of RUN_UPGRADES) {
+      if (perk.onlyClass && perk.onlyClass !== activeClsId) continue;
       const maxS = perk.maxStacks || 3;
       const curS = getPerkStacks(currentPerks, perk.id);
-      return curS < maxS;
-    });
-
-    // Fisher-Yates shuffle available blessings
-    for (let i = availablePerks.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      const tmp = availablePerks[i];
-      availablePerks[i] = availablePerks[j];
-      availablePerks[j] = tmp;
+      if (curS >= maxS) continue;
+      if (perk.onlyClass === activeClsId) {
+        classPerks.push(perk);
+      } else {
+        sharedPerks.push(perk);
+      }
     }
+
+    const shuffle = (arr) => {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const tmp = arr[i];
+        arr[i] = arr[j];
+        arr[j] = tmp;
+      }
+      return arr;
+    };
+    shuffle(classPerks);
+    shuffle(sharedPerks);
+
+    // Guarantee at least 2 class-exclusive blessings when available so every class feels deeply unique!
+    const availablePerks = [];
+    while (classPerks.length > 0 && availablePerks.length < 2) {
+      availablePerks.push(classPerks.shift());
+    }
+    const restPool = shuffle([...classPerks, ...sharedPerks]);
+    availablePerks.push(...restPool);
 
     const choices = [];
     const canOfferWeaponRank = curWpnLvl < 5;
     const includeWeaponRank =
-      canOfferWeaponRank && (Math.random() < 0.35 || availablePerks.length < 3);
+      canOfferWeaponRank && (Math.random() < 0.28 || availablePerks.length < 3);
 
     if (includeWeaponRank) {
       choices.push(weaponChoice);

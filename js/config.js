@@ -84,7 +84,7 @@ export const MAGE_ELEMENTS = {
     coreColor: 0xfef08a,
     staffColor: 0xff6b35,
     staffEmissive: 0xea580c,
-    descRu: 'Жар Пепла: каждый удар накладывает стак напалма (до 8) — увеличивает весь урон по цели на +12% за стак и поджигает её.'
+    descRu: 'Жар Пепла: накладывает мощное стакающееся горение (до 8 зарядов) и увеличивает урон мага по горящей цели на +12% за заряд.'
   },
   water: {
     id: 'water',
@@ -96,7 +96,7 @@ export const MAGE_ELEMENTS = {
     coreColor: 0xe0f2fe,
     staffColor: 0x38bdf8,
     staffEmissive: 0x0284c7,
-    descRu: 'Глубинный Прилив: окатывает врагов волной (+25% радиус всплеска), замедляет их на 36% и возвращает +3 маны за убийство промокших.'
+    descRu: 'Контроль Воды: замедляет врагов на 42%, а с шансом 7% поднимает группу врагов в водяном шаре в воздух и с грохотом роняет на ×3 урона!'
   },
   lightning: {
     id: 'lightning',
@@ -108,7 +108,7 @@ export const MAGE_ELEMENTS = {
     coreColor: 0xfef08a,
     staffColor: 0xfde047,
     staffEmissive: 0x06b6d4,
-    descRu: 'Цепной Разряд: стремительный разряд (+30% скорость полёта), перескакивающий дугой молнии на соседнего врага на 55% урона.'
+    descRu: 'Цепная Молния: стремительный разряд (+32% скорость), перескакивающий цепной молнией по соседним врагам с широким охватом.'
   },
   air: {
     id: 'air',
@@ -120,7 +120,7 @@ export const MAGE_ELEMENTS = {
     coreColor: 0xf8fafc,
     staffColor: 0x99f6e4,
     staffEmissive: 0x14b8a6,
-    descRu: 'Штормовой Вихрь: режущий торнадо мощно отбрасывает врагов назад (×2.2 толчок), разбрасывает соседей порывом ветра и даёт +8% к скорости шага.'
+    descRu: 'Порыв Ветра: лёгкий контроль отталкиванием, компактный вихревой сплэш вокруг цели и +8% к скорости шага мага.'
   }
 };
 export const MAGE_ELEMENT_ORDER = ['fire', 'water', 'lightning', 'air'];
@@ -204,7 +204,7 @@ export const WEAPONS = {
     splashRadius: 0,
     knockback: 7.5,
     magSize: 5,
-    reloadTime: 1.32,
+    reloadTime: 2.10,
     recoilKick: 2.8,
     color: 0xfbbf24,
     upgradeBaseCost: 45
@@ -229,7 +229,7 @@ export const WEAPONS = {
     splashRadius: 0,
     knockback: 10.8,
     magSize: 2,
-    reloadTime: 1.42,
+    reloadTime: 2.25,
     recoilKick: 4.5,
     color: 0xf97316,
     upgradeBaseCost: 85
@@ -254,7 +254,7 @@ export const WEAPONS = {
     splashRadius: 0,
     knockback: 5.6,
     magSize: 8,
-    reloadTime: 1.62,
+    reloadTime: 2.50,
     recoilKick: 1.9,
     color: 0x38bdf8,
     upgradeBaseCost: 135
@@ -343,8 +343,8 @@ export const ENEMY_TYPES = {
   skeleton: {
     id: 'skeleton',
     nameRu: 'Костяной ходок',
-    roleHintRu: 'Пехота погоста',
-    hp: 50,
+    roleHintRu: 'Каска и щит • Пехота погоста',
+    hp: 76,
     speed: 2.94,
     damage: 13,
     xp: 10,
@@ -356,7 +356,7 @@ export const ENEMY_TYPES = {
     id: 'hound',
     nameRu: 'Кровавый налётчик',
     roleHintRu: 'Стремительный рывок',
-    hp: 40,
+    hp: 62,
     speed: 4.62,
     damage: 12,
     xp: 12,
@@ -369,7 +369,7 @@ export const ENEMY_TYPES = {
     id: 'archer',
     nameRu: 'Проклятый стрелок',
     roleHintRu: 'Дальний выстрел из арбалета',
-    hp: 46,
+    hp: 66,
     speed: 2.66,
     damage: 14,
     ranged: true,
@@ -598,124 +598,237 @@ export const LEVELS = CHAPTER_METADATA.map(([titleRu, subRu, bannerFile, pool], 
   };
 });
 
-// Balanced, Mechanically Diverse Blessings of Souls (Max 3 stacks each, tight tactical numbers!)
+// Distinct Class-Specific Blessings of Souls (Unique active mechanics per Hero Class!)
 export const RUN_UPGRADES = [
+  // =========================================================================
+  // 🔮 ПЕПЕЛЬНЫЙ МАГ (6 Уникальных Магических Благословений)
+  // =========================================================================
   {
-    id: 'wpn_power',
-    nameRu: 'Руна Закалки',
-    categoryRu: 'ОРУЖИЕ',
-    statBadgeRu: '+10% УРОН • +15% ОТБРОС',
-    descRu: 'Утяжеляет удары и свинец: +10% к урону оружия и мощнее отталкивание нежити.',
-    theme: 'amber',
-    maxStacks: 3,
-    icon: '⚔️'
-  },
-  {
-    id: 'wpn_haste',
-    nameRu: 'Хладный Темп',
-    categoryRu: 'ТЕМП БОЯ',
-    statBadgeRu: '+10% ТЕМП • +18% ЗАРЯДКА',
-    descRu: 'Ускоряет темп стрельбы и взмахов на 10%, а перезарядку патронов — на 18%.',
-    theme: 'cyan',
-    maxStacks: 3,
-    icon: '⚡'
-  },
-  {
-    id: 'ammo_pouch',
-    nameRu: 'Патронташ Охотника',
-    categoryRu: 'БОЕЗАПАС',
-    statBadgeRu: '+2 ПАТРОНА • МГНОВЕННАЯ ЗАРЯДКА',
-    descRu: 'Добавляет +2 патрона в обойму (для меча +12% размах) и мгновенно перезаряжает оружие.',
-    theme: 'gold',
-    maxStacks: 3,
-    icon: '🎯'
-  },
-  {
-    id: 'crit_fang',
-    nameRu: 'Метка Палача',
-    categoryRu: 'СМЕРТОНОСНОСТЬ',
-    statBadgeRu: '+14% ШАНС КРИТА ×1.75',
-    descRu: 'Даёт +14% шанс нанести критический удар (×1.75 урона), пробивающий щиты спереди.',
-    theme: 'crimson',
-    maxStacks: 3,
-    icon: '🗡️'
-  },
-  {
-    id: 'frost_touch',
-    nameRu: 'Морозный Пепел',
-    categoryRu: 'КОНТРОЛЬ',
-    statBadgeRu: 'ЗАМЕДЛЕНИЕ 30% НА 2 СЕК',
-    descRu: 'Попадания покрывают чудовищ инеем, замедляя их бег и натиск на 30% на 2 секунды.',
-    theme: 'ice',
-    maxStacks: 2,
-    icon: '❄️'
-  },
-  {
-    id: 'burn_cinder',
-    nameRu: 'Тлеющее Клеймо',
-    categoryRu: 'ПИРОМАНТИЯ',
-    statBadgeRu: 'ПОДЖОГ ВРАГОВ НА 2.5 СЕК',
-    descRu: 'Атаки поджигают цель багровым огнём, выжигая здоровье в течение 2.5 секунд.',
-    theme: 'flame',
-    maxStacks: 3,
-    icon: '🔥'
-  },
-  {
-    id: 'chain_soul',
-    nameRu: 'Цепная Искра Душ',
-    categoryRu: 'АСТРАЛ',
-    statBadgeRu: '35% ШАНС МОЛНИИ ДУШ',
-    descRu: 'При попадании с шансом 35% перебрасывает дугу молнии в соседнего врага на 45% урона.',
+    id: 'mage_arcane_surge',
+    onlyClass: 'mage',
+    nameRu: 'Тайное Могущество',
+    categoryRu: 'ЧАРЫ ПОСОХА',
+    statBadgeRu: '+20% МАГ. УРОН • +15% ОБЛАСТЬ ЧАР',
+    descRu: 'Наполняет кристалл посоха эфиром: +20% к магическому урону заклинаний и +15% к радиусу стихийного взрыва.',
     theme: 'violet',
     maxStacks: 3,
     icon: '🔮'
   },
   {
-    id: 'soul_nova',
-    nameRu: 'Кольцо Возмездия',
-    categoryRu: 'ОБЕРЕГ ДУШ',
-    statBadgeRu: 'ВЗРЫВ КОЛЬЦА РАЗ В 9 СЕК',
-    descRu: 'Раз в 9 секунд вокруг героя вспыхивает рунное кольцо, ранящее и отбрасывающее тварей.',
+    id: 'mage_twin_cast',
+    onlyClass: 'mage',
+    nameRu: 'Раздвоение Кометы',
+    categoryRu: 'ВЫСШАЯ МАГИЯ',
+    statBadgeRu: '40% ШАНС ДВОЙНОГО ЗАЛПА БЕЗ МАНЫ',
+    descRu: 'При каждом взмахе посоха с шансом 40% (до 100%) бесплатно выпускает второй стихийный снаряд под углом.',
+    theme: 'cyan',
+    maxStacks: 3,
+    icon: '✨'
+  },
+  {
+    id: 'mage_elem_catalyst',
+    onlyClass: 'mage',
+    nameRu: 'Резонанс Стихии',
+    categoryRu: 'ВЛАСТЬ СТИХИЙ',
+    statBadgeRu: 'СВЕРХУСИЛЕНИЕ АКТИВНОЙ СТИХИИ',
+    descRu: 'Огонь: +1 доп. стак напалма за удар. Вода: +5% к шансу Водяной Сферы. Молния: +1 цель цепи. Воздух: вихрь режет врагов.',
+    theme: 'ice',
+    maxStacks: 3,
+    icon: '🌀'
+  },
+  {
+    id: 'mage_meteor_shower',
+    onlyClass: 'mage',
+    nameRu: 'Звездопад Архонта',
+    categoryRu: 'КАТАКЛИЗМ',
+    statBadgeRu: 'МЕТЕОР С НЕБЕС КАЖДЫЕ 4.2 СЕК',
+    descRu: 'Каждые 4.2 секунды с небес на гущу врагов обрушивается стихийный метеор, взрывая брусчатку в радиусе 3.8м.',
+    theme: 'flame',
+    maxStacks: 3,
+    icon: '☄️'
+  },
+  {
+    id: 'mage_arcane_ward',
+    onlyClass: 'mage',
+    nameRu: 'Сфера Отражения',
+    categoryRu: 'ОБЕРЕГ МАГА',
+    statBadgeRu: 'ЩИТ ЧАР ПОГЛОЩАЕТ УДАР И ВЗРЫВАЕТСЯ',
+    descRu: 'Раз в 8 секунд окутывает мага рунным куполом: при ударе блокирует 65% урона и отбрасывает врагов взрывом магии.',
     theme: 'violet',
     maxStacks: 3,
-    icon: '💫'
+    icon: '🛡️'
   },
   {
-    id: 'vampiric',
-    nameRu: 'Жатва Крови',
-    categoryRu: 'ВЫЖИВАНИЕ',
-    statBadgeRu: '+8 HP ЗА КАЖДЫЕ 16 УБИЙСТВ',
-    descRu: 'Поглощает жизненную искру павших: каждые 16 убитых врагов восстанавливают 8 HP.',
+    id: 'mage_mana_font',
+    onlyClass: 'mage',
+    nameRu: 'Астральный Колодец',
+    categoryRu: 'ПОТОК МАНЫ',
+    statBadgeRu: '-18% ТРАТА МАНЫ • ВОЛНА ЧАР КАЖДЫЙ 6-Й КАСТ',
+    descRu: 'Снижает стоимость заклинаний на 18%, а каждый 6-й выстрел выпускает кольцо чар вокруг мага и возвращает +16 маны.',
+    theme: 'emerald',
+    maxStacks: 3,
+    icon: '💧'
+  },
+
+  // =========================================================================
+  // 🔫 ОХОТНИК-СТРЕЛОК (6 Уникальных Оружейных Благословений)
+  // =========================================================================
+  {
+    id: 'gun_heavy_buckshot',
+    onlyClass: 'gunslinger',
+    nameRu: 'Вольфрамовая Картечь',
+    categoryRu: 'ОРУЖЕЙНИК',
+    statBadgeRu: '+2 ДРОБИНЫ В ЗАЛПЕ • +14% УРОН СТВОЛА',
+    descRu: 'Заряжает гильзы тяжёлой сечкой: каждый выстрел выпускает на +2 раскалённые дробины больше и бьёт на 14% сильнее.',
+    theme: 'amber',
+    maxStacks: 3,
+    icon: '💥'
+  },
+  {
+    id: 'gun_ricochet',
+    onlyClass: 'gunslinger',
+    nameRu: 'Рикошет Свинца',
+    categoryRu: 'МЕТКИЙ СТРЕЛОК',
+    statBadgeRu: '50% ШАНС ОТСКОКА ДРОБИ В СОСЕДА',
+    descRu: 'Попавшие картечины с шансом 50% (до 100%) с искрами рикошетят от костей в ближайшего соседнего врага на 65% урона.',
+    theme: 'cyan',
+    maxStacks: 3,
+    icon: '⚡'
+  },
+  {
+    id: 'gun_explosive_slugs',
+    onlyClass: 'gunslinger',
+    nameRu: 'Пороховая Детонация',
+    categoryRu: 'ЧЁРНЫЙ ПОРОХ',
+    statBadgeRu: 'КАЖДЫЙ 3-Й ВЫСТРЕЛ — РАЗРЫВНОЙ ЗАЛП',
+    descRu: 'Каждый 3-й выстрел из дробовика взрывается при попадании огненными осколками по площади (+40% урона).',
+    theme: 'flame',
+    maxStacks: 3,
+    icon: '🧨'
+  },
+  {
+    id: 'gun_tactical_reload',
+    onlyClass: 'gunslinger',
+    nameRu: 'Пороховой Рывок',
+    categoryRu: 'ТАКТИКА ОХОТНИКА',
+    statBadgeRu: '+28% ПЕРЕЗАРЯДКА • ВОЛНА И СПРИНТ',
+    descRu: 'Ускоряет перезарядку на 28%. Начало перезарядки отбрасывает наседающих тварей взрывом и ускоряет бег на +35%.',
+    theme: 'emerald',
+    maxStacks: 3,
+    icon: '💨'
+  },
+  {
+    id: 'ammo_pouch',
+    onlyClass: 'gunslinger',
+    nameRu: 'Последний Козырь',
+    categoryRu: 'БОЕЗАПАС',
+    statBadgeRu: '+2 ПАТРОНА • ПОСЛЕДНИЙ ВЫСТРЕЛ ×2.0',
+    descRu: 'Увеличивает магазин ружья на +2 гильзы, а последний патрон в обойме всегда наносит сокрушительный ×2.0 урон!',
+    theme: 'gold',
+    maxStacks: 3,
+    icon: '🎯'
+  },
+  {
+    id: 'gun_shrapnel_mine',
+    onlyClass: 'gunslinger',
+    nameRu: 'Шрапнельный Капкан',
+    categoryRu: 'ЛОВУШКА',
+    statBadgeRu: 'БРОСАЕТ РАЗРЫВНУЮ МИНУ КАЖДЫЕ 5 СЕК',
+    descRu: 'На бегу стрелок каждые 5 секунд оставляет за спиной пороховой капкан, разрывающий наступивших мертвецов.',
     theme: 'crimson',
     maxStacks: 3,
-    icon: '🩸'
+    icon: '💣'
+  },
+
+  // =========================================================================
+  // ⚔️ ВОИН КЛЯТВЫ (6 Уникальных Ратных Благословений)
+  // =========================================================================
+  {
+    id: 'war_orbit_blades',
+    onlyClass: 'warrior',
+    nameRu: 'Клинки Предков',
+    categoryRu: 'РЕЛИКВИЯ СКЛЕПА',
+    statBadgeRu: 'ВРАЩАЮЩИЕСЯ МЕЧИ ДУШ ВОКРУГ ВОИНА',
+    descRu: 'Призывает парящие призрачные мечи (2 / 3 / 4 клинка), которые непрерывно кружатся вокруг Воина и рубят нежить.',
+    theme: 'gold',
+    maxStacks: 3,
+    icon: '🗡️'
   },
   {
-    id: 'iron_ward',
-    nameRu: 'Костяной Доспех',
-    categoryRu: 'ЗАЩИТА',
-    statBadgeRu: '+16 МАКС. HP • +4% БЛОК',
-    descRu: 'Укрепляет кости и латы: +16 к макс. здоровью (с лечением) и +4% к поглощению урона.',
+    id: 'war_seismic_slam',
+    onlyClass: 'warrior',
+    nameRu: 'Раскол Брусчатки',
+    categoryRu: 'ЯРОСТЬ СТАЛИ',
+    statBadgeRu: 'КАЖДЫЙ 3-Й ВЗМАХ БЬЁТ РАЗЛОМОМ ЗЕМЛИ',
+    descRu: 'Каждый 3-й удар мечом раскалывает камни золотой волной в радиусе 4.6м, нанося 110% урона и оглушая врагов.',
+    theme: 'amber',
+    maxStacks: 3,
+    icon: '🌋'
+  },
+  {
+    id: 'war_shield_thorns',
+    onlyClass: 'warrior',
+    nameRu: 'Шипованный Бастион',
+    categoryRu: 'ЩИТ КЛЯТВЫ',
+    statBadgeRu: '+7% БЛОК • ОТВЕТНЫЙ ВЗРЫВ ОСКОЛКОВ',
+    descRu: 'Укрепляет щит (+7% к блоку), а каждый отражённый или принятый удар бьёт всех врагов вокруг стальной волной!',
     theme: 'steel',
     maxStacks: 3,
     icon: '🛡️'
   },
   {
-    id: 'swift_boots',
-    nameRu: 'Поступь Призрака',
-    categoryRu: 'МАНЁВР',
-    statBadgeRu: '+9% БЕГ • +8% УКЛОНЕНИЕ',
-    descRu: 'Повышает скорость манёвра на 9% и даёт +8% шанс призрачно уклониться от удара.',
-    theme: 'emerald',
+    id: 'war_whirlwind',
+    onlyClass: 'warrior',
+    nameRu: 'Вихрь Жнеца',
+    categoryRu: 'МАСТЕР МЕЧА',
+    statBadgeRu: '+25% ДУГА УДАРА • ВИХРЬ 360° РАЗ В 4.5 СЕК',
+    descRu: 'Расширяет дугу меча на 25%, а каждые 4.5 секунды Воин автоматически проводит круговой разрубающий вихрь на 360°!',
+    theme: 'crimson',
     maxStacks: 3,
-    icon: '👢'
+    icon: '🌪️'
+  },
+  {
+    id: 'war_blood_cleave',
+    onlyClass: 'warrior',
+    nameRu: 'Казнь Кровопийцы',
+    categoryRu: 'КЛЯТВА КРОВИ',
+    statBadgeRu: '+50% ПО РАНЕНЫМ • ЛЕЧЕНИЕ ОТ КАЗНЕЙ',
+    descRu: 'Наносит +50% урона врагам с менее 45% здоровья, а каждые 9 разрубленных тварей исцеляют Воина на +12 HP.',
+    theme: 'crimson',
+    maxStacks: 3,
+    icon: '🩸'
+  },
+  {
+    id: 'war_iron_banner',
+    onlyClass: 'warrior',
+    nameRu: 'Гнев Несокрушимого',
+    categoryRu: 'БЕРСЕРК',
+    statBadgeRu: '+24 МАКС. HP • ДО +45% ЯРОСТИ ПРИ РАНЕНИИ',
+    descRu: 'Даёт +24 к макс. здоровью. Чем сильнее изранен Воин, тем быстрее и мощнее он рубит мечом (до +45% за ранг)!',
+    theme: 'flame',
+    maxStacks: 3,
+    icon: '🔥'
+  },
+
+  // =========================================================================
+  // 💀 РЕДКИЕ ОБЩИЕ ТЁМНЫЕ РЕЛИКВИИ (С Активным Эффектом!)
+  // =========================================================================
+  {
+    id: 'crit_fang',
+    nameRu: 'Жнец Черепов',
+    categoryRu: 'СМЕРТОНОСНОСТЬ',
+    statBadgeRu: '+15% КРИТ • ВЗРЫВ ДУШИ ПРИ КРИТЕ',
+    descRu: 'Повышает шанс крита на 15%. Каждый критический удар взрывает цель астральной вспышкой, ранящей соседей!',
+    theme: 'crimson',
+    maxStacks: 3,
+    icon: '💀'
   },
   {
     id: 'greed_contract',
     nameRu: 'Печать Алчности',
-    categoryRu: 'ТРОФЕИ',
-    statBadgeRu: '+30% К ДОБЫЧЕ ЗОЛОТА',
-    descRu: 'Увеличивает прямое начисление монет за убийства на 30% для прокачки оружия в Арсенале.',
+    categoryRu: 'ТРОФЕИ ОХОТЫ',
+    statBadgeRu: '+35% ЗОЛОТА • УСКОРЕНИЕ ОТ ТРОФЕЕВ',
+    descRu: 'Увеличивает добычу золота за каждого убитого монстра на 35% и даёт +7% к скорости движения.',
     theme: 'gold',
     maxStacks: 3,
     icon: '🪙'

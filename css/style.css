@@ -4920,3 +4920,27 @@ html.is-mobile-landscape .mage-starter-cta {
   padding: 5px 6px;
   font-size: 10.5px;
 }
+
+/* Pause Modal */
+.pause-modal-panel {
+  max-width: 420px;
+  width: min(420px, 90vw);
+  text-align: center;
+  padding: 22px 24px;
+  gap: 12px;
+}
+
+.pause-modal-title {
+  font-size: 24px;
+  letter-spacing: 0.08em;
+}
+
+.pause-modal-sub {
+  font-size: 13.5px;
+  color: rgba(245, 239, 226, 0.88);
+}
+
+.pause-actions-col {
+  width: 100%;
+  margin-top: 6px;
+}

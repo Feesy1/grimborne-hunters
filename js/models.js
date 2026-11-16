@@ -7,7 +7,7 @@
 import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { clone as cloneSkinned } from '../vendor/SkeletonUtils.js';
-import { WEAPONS } from './config.js?v=20261116f';
+import { WEAPONS } from './config.js?v=20261116h';
 
 const MODEL_PATHS = {
   barbarian: './assets/models/Barbarian.glb',
@@ -584,7 +584,10 @@ function createAnimController(modelRoot, clipMap, idleClipName = 'Idle', moveCli
     currentBase = next;
   }
 
+  let activeDeathAction = null;
+
   function triggerOneShot(clipName, speed = 1.5) {
+    if (activeDeathAction) return;
     const act = getAction(clipName);
     if (!act) return;
     if (activeAttackAction && activeAttackAction !== act) {
@@ -599,10 +602,61 @@ function createAnimController(modelRoot, clipMap, idleClipName = 'Idle', moveCli
     activeAttackAction = act;
   }
 
+  function triggerHit(speed = 1.85) {
+    if (activeDeathAction) return false;
+    const act = getAction('Hit_A') || getAction('Hit_B');
+    if (!act) return false;
+    act.reset();
+    act.setLoop(THREE.LoopOnce, 1);
+    act.clampWhenFinished = false;
+    act.timeScale = speed;
+    act.weight = 0.85;
+    act.fadeIn(0.03).play();
+    return true;
+  }
+
+  function triggerDeath(speed = 1.48) {
+    const act =
+      getAction('Death_A') ||
+      getAction('Death_B') ||
+      getAction('Skeletons_Death_Resurrect');
+    if (!act) return false;
+    if (currentBase) {
+      currentBase.fadeOut(0.08);
+      currentBase = null;
+    }
+    if (activeAttackAction) {
+      activeAttackAction.fadeOut(0.06);
+      activeAttackAction = null;
+    }
+    act.reset();
+    act.setLoop(THREE.LoopOnce, 1);
+    act.clampWhenFinished = true;
+    act.timeScale = speed;
+    act.weight = 1.0;
+    act.fadeIn(0.05).play();
+    activeDeathAction = act;
+    return true;
+  }
+
+  function resetAlive() {
+    if (activeDeathAction) {
+      activeDeathAction.stop();
+      activeDeathAction = null;
+    }
+    if (activeAttackAction) {
+      activeAttackAction.stop();
+      activeAttackAction = null;
+    }
+    currentBase = null;
+    setBaseState(idleClipName, 1.0);
+    mixer.update(0.016);
+  }
+
   setBaseState(idleClipName, 1.0);
   mixer.update(0.016);
 
-  return { mixer, setBaseState, triggerOneShot };
+  return { mixer, setBaseState, triggerOneShot, triggerHit, triggerDeath, resetAlive };
 }
 
 // ============================================================================
@@ -1222,6 +1276,64 @@ function createButcherHornedHelm() {
   return grp;
 }
 
+function createRustedPotHelm() {
+  const grp = new THREE.Group();
+  const ironMat = getMat('skel_pothelm_iron', () =>
+    new THREE.MeshStandardMaterial({ color: 0x4b5563, metalness: 0.72, roughness: 0.38 })
+  );
+  const brassMat = getMat('skel_pothelm_brass', () =>
+    new THREE.MeshStandardMaterial({ color: 0xb45309, metalness: 0.68, roughness: 0.42 })
+  );
+  const dome = new THREE.Mesh(
+    getGeo('skel_pothelm_dome', () => new THREE.SphereGeometry(0.41, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.52)),
+    ironMat
+  );
+  dome.position.y = 0.64;
+  const brim = new THREE.Mesh(
+    getGeo('skel_pothelm_brim', () => new THREE.CylinderGeometry(0.43, 0.52, 0.08, 14)),
+    ironMat
+  );
+  brim.position.y = 0.64;
+  const band = new THREE.Mesh(
+    getGeo('skel_pothelm_band', () => new THREE.CylinderGeometry(0.42, 0.43, 0.06, 12)),
+    brassMat
+  );
+  band.position.y = 0.68;
+  grp.add(dome, brim, band);
+  return grp;
+}
+
+function createRustedBuckler() {
+  const grp = new THREE.Group();
+  const woodMat = getMat('skel_buckler_wood', () =>
+    new THREE.MeshStandardMaterial({ color: 0x5c3a21, roughness: 0.82, metalness: 0.08 })
+  );
+  const rimMat = getMat('skel_buckler_rim', () =>
+    new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.75, roughness: 0.36 })
+  );
+  const disc = new THREE.Mesh(
+    getGeo('skel_buckler_disc', () => {
+      const cg = new THREE.CylinderGeometry(0.32, 0.32, 0.06, 12);
+      cg.rotateX(Math.PI / 2);
+      return cg;
+    }),
+    woodMat
+  );
+  const boss = new THREE.Mesh(
+    getGeo('skel_buckler_boss', () => new THREE.SphereGeometry(0.10, 8, 8)),
+    rimMat
+  );
+  boss.position.z = 0.04;
+  const rim = new THREE.Mesh(
+    getGeo('skel_buckler_torus', () => new THREE.TorusGeometry(0.32, 0.036, 6, 14)),
+    rimMat
+  );
+  grp.add(disc, boss, rim);
+  grp.position.set(0.06, 0.04, 0.11);
+  grp.rotation.y = 0.25;
+  return grp;
+}
+
 function createAshlordCrown() {
   const grp = new THREE.Group();
   const crownGoldMat = getMat('ash_crown_gold', () =>
@@ -1778,6 +1890,8 @@ export function createEnemyMesh(typeId = 'skeleton', eliteVariant = null, custom
   let bomberBarrel = null;
   let archlichOrbit = null;
   const archlichCrystals = [];
+  let stage1BreakNode = null; // ≤ 66% HP: Shield / Buckler / Offhand / Cloak detaches!
+  let stage2BreakNode = null; // ≤ 33% HP: Helmet / Pot-Helm / Hood / Hat pops off!
 
   if (asset) {
     const inst = cloneSkinned(asset.scene);
@@ -1801,6 +1915,28 @@ export function createEnemyMesh(typeId = 'skeleton', eliteVariant = null, custom
       if (/^lowerarm\.?l$/i.test(nm)) lowerArmL = n;
       if (/^upperarm\.?r$/i.test(nm)) upperArmR = n;
       if (/^lowerarm\.?r$/i.test(nm)) lowerArmR = n;
+
+      // Capture detachable Stage 1 (Cloak / Offhand) & Stage 2 (Helmet / Hat / Hood) meshes on non-bosses!
+      if (!cfg.isBossVisual) {
+        if (
+          nm === 'Skeleton_Warrior_Helmet' ||
+          nm === 'Barbarian_Hat' ||
+          nm === 'Skeleton_Rogue_Hood' ||
+          nm === 'Skeleton_Mage_Hat' ||
+          nm === 'Mage_Hat' ||
+          nm === 'Knight_Helmet'
+        ) {
+          stage2BreakNode = n;
+        }
+        if (
+          (typeId === 'hound' && nm === '1H_Axe_Offhand') ||
+          (typeId === 'archer' && nm === 'Skeleton_Rogue_Cape') ||
+          (typeId === 'cultist' && nm === 'Mage_Cape') ||
+          (typeId === 'brute' && nm === 'Knight_Cape')
+        ) {
+          stage1BreakNode = n;
+        }
+      }
 
       // Clean up extra built-in KayKit props per villain/boss archetype
       if (nm === 'Mug' || nm === 'Spellbook_open' || nm === '1H_Wand') {
@@ -1906,13 +2042,26 @@ export function createEnemyMesh(typeId = 'skeleton', eliteVariant = null, custom
     }
 
     // Archetype & Boss Signature Equipment
-    if (typeId === 'archer') {
+    if (typeId === 'skeleton') {
+      if (handL) {
+        const buckler = createRustedBuckler();
+        handL.add(buckler);
+        stage1BreakNode = buckler;
+      }
+      if (headBone) {
+        const potHelm = createRustedPotHelm();
+        headBone.add(potHelm);
+        stage2BreakNode = potHelm;
+      }
+    } else if (typeId === 'archer') {
       const crossbow = createEnemyCrossbow();
       crossbow.position.set(0, 0.72 * effectiveScaleMult, 0.25 * effectiveScaleMult);
       crossbow.scale.setScalar(effectiveScaleMult);
       root.add(crossbow);
     } else if (typeId === 'shieldbearer' && handL) {
-      handL.add(createIronTowerShield());
+      const towerShield = createIronTowerShield();
+      handL.add(towerShield);
+      stage1BreakNode = towerShield;
     } else if (typeId === 'bomber') {
       bomberBarrel = createVolatilePowderBarrel();
       bomberBarrel.position.set(0, 0.78 * effectiveScaleMult, 0.30 * effectiveScaleMult);
@@ -2043,19 +2192,82 @@ export function createEnemyMesh(typeId = 'skeleton', eliteVariant = null, custom
   }
 
   let inPool = false;
+  let isDying = false;
+  let proceduralFall = false;
+  let hitJoltTimer = 0;
+
   const handle = {
     root,
     _markActive() {
       inPool = false;
+      isDying = false;
+      proceduralFall = false;
+      hitJoltTimer = 0;
       flashTimer = 0;
       root.visible = true;
+      root.position.y = 0;
       root.scale.set(1, 1, 1);
       root.rotation.set(0, 0, 0);
+      if (spawnedInst) {
+        spawnedInst.rotation.set(0, 0, 0);
+        spawnedInst.position.set(0, 0, 0);
+      }
+      if (stage1BreakNode) stage1BreakNode.visible = true;
+      if (stage2BreakNode) stage2BreakNode.visible = true;
+      if (halo) halo.visible = true;
+      if (innerBossHalo) innerBossHalo.visible = true;
+      animCtrl?.resetAlive?.();
       for (let i = 0; i < flashMeshSlots.length; i++) {
         flashMeshSlots[i].mesh.material = flashMeshSlots[i].origMat;
       }
     },
+    setDamageStage(stage) {
+      if (stage >= 1 && stage1BreakNode && stage1BreakNode.visible) {
+        stage1BreakNode.visible = false;
+        return 'shield';
+      }
+      if (stage >= 2 && stage2BreakNode && stage2BreakNode.visible) {
+        stage2BreakNode.visible = false;
+        return 'helmet';
+      }
+      return null;
+    },
+    playHitFlinch() {
+      if (isDying) return;
+      hitJoltTimer = 0.12;
+      animCtrl?.triggerHit?.(1.9);
+    },
+    playDeathCollapse() {
+      if (isDying) return;
+      isDying = true;
+      hitJoltTimer = 0;
+      if (halo) halo.visible = false;
+      if (innerBossHalo) innerBossHalo.visible = false;
+      const hasClip = animCtrl?.triggerDeath?.(1.52);
+      proceduralFall = !hasClip;
+    },
+    updateDying(dt, sinkRatio = 0) {
+      const safeDt = Math.min(Math.max(dt || 0.016, 0), 0.1);
+      if (animCtrl) {
+        animCtrl.mixer.update(safeDt);
+      }
+      if (proceduralFall && spawnedInst) {
+        spawnedInst.rotation.x = Math.max(-Math.PI * 0.48, spawnedInst.rotation.x - safeDt * 4.2);
+      }
+      if (sinkRatio > 0) {
+        root.position.y = -sinkRatio * 0.45;
+      }
+      if (flashTimer > 0) {
+        flashTimer = Math.max(0, flashTimer - safeDt);
+        if (flashTimer <= 0) {
+          for (let i = 0; i < flashMeshSlots.length; i++) {
+            flashMeshSlots[i].mesh.material = flashMeshSlots[i].origMat;
+          }
+        }
+      }
+    },
     playAttackAnim() {
+      if (isDying) return;
       animCtrl?.triggerOneShot(cfg.atkClip, cfg.isBossVisual ? 1.42 : 1.65);
     },
     flashHit() {
@@ -2109,9 +2321,15 @@ export function createEnemyMesh(typeId = 'skeleton', eliteVariant = null, custom
     update(dt, arg2, arg3) {
       const safeDt = Math.min(Math.max(dt || 0.016, 0), 0.1);
       const elapsedTime = typeof arg2 === 'boolean' ? (arg3 || 0) : (arg2 || 0);
-      if (animCtrl) {
+      if (animCtrl && !isDying) {
         animCtrl.setBaseState(cfg.moveClip, cfg.moveSpeedAnim || 1.1);
         animCtrl.mixer.update(safeDt);
+      }
+      if (hitJoltTimer > 0 && spawnedInst && !isDying) {
+        hitJoltTimer = Math.max(0, hitJoltTimer - safeDt);
+        spawnedInst.rotation.x = -Math.sin((hitJoltTimer / 0.12) * Math.PI) * 0.24;
+      } else if (spawnedInst && !isDying && spawnedInst.rotation.x !== 0) {
+        spawnedInst.rotation.x = 0;
       }
 
       // Forward arm overrides for Crossbow Archer & Barrel-Carrying Bomber

@@ -16,7 +16,7 @@ import {
   ENEMY_TYPES,
   LEVELS,
   RUN_UPGRADES
-} from './config.js?v=20261116f';
+} from './config.js?v=20261116h';
 
 const CLASS_ORDER = ['warrior', 'gunslinger', 'mage'];
 
@@ -440,203 +440,200 @@ export function createBlessingRelicSvg(choice, className = 'blessing-relic-svg')
       <polygon points="44,16 46.5,22 53,22.5 48,26.8 49.5,33 44,29.5 38.5,33 40,26.8 35,22.5 41.5,22" fill="#fffbeb"/>`;
   } else {
     switch (id) {
-      case 'wpn_power': // Руна Закалки — Molten Forged Blade & Anvil Sparks
-        defs = `
-          <radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stop-color="#fbbf24" stop-opacity="0.45"/>
-            <stop offset="100%" stop-color="#78350f" stop-opacity="0"/>
-          </radialGradient>
-          <linearGradient id="${u}_b" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stop-color="#fef3c7"/>
-            <stop offset="52%" stop-color="#f59e0b"/>
-            <stop offset="100%" stop-color="#9a3412"/>
-          </linearGradient>`;
+      // ==================== MAGE EXCLUSIVE BLESSINGS ====================
+      case 'mage_arcane_surge': // Тайное Могущество — Radiant Violet Arcane Crystal Staff Head & Rune Ring
+        defs = `<radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#d8b4fe" stop-opacity="0.55"/><stop offset="100%" stop-color="#3b0764" stop-opacity="0"/></radialGradient>`;
         art = `
           <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
-          <polygon points="44,13 52,25 52,55 36,55 36,25" fill="url(#${u}_b)" stroke="#fef08a" stroke-width="1.5"/>
-          <line x1="44" y1="19" x2="44" y2="52" stroke="#fffbeb" stroke-width="2" stroke-linecap="round"/>
-          <rect x="26" y="54" width="36" height="6" rx="2.5" fill="#d97706" stroke="#fef08a" stroke-width="1.2"/>
-          <rect x="40" y="60" width="8" height="12" rx="1.5" fill="#78350f" stroke="#fbbf24" stroke-width="1"/>
-          <circle cx="44" cy="74" r="3.6" fill="#fde047"/>
-          <circle cx="24" cy="30" r="2.2" fill="#fde047"/><circle cx="64" cy="28" r="2.4" fill="#fb923c"/><circle cx="61" cy="42" r="1.8" fill="#fef08a"/>`;
+          <circle cx="44" cy="36" r="22" stroke="#e9d5ff" stroke-width="1.5" stroke-dasharray="5 3"/>
+          <line x1="44" y1="48" x2="44" y2="76" stroke="#b45309" stroke-width="5" stroke-linecap="round"/>
+          <path d="M30 44 C30 28 38 18 44 14 C50 18 58 28 58 44" fill="none" stroke="#fde047" stroke-width="2.2"/>
+          <polygon points="44,16 54,34 44,50 34,34" fill="#a855f7" stroke="#faf5ff" stroke-width="1.6"/>
+          <polygon points="44,23 49,34 44,43 39,34" fill="#f3e8ff"/>`;
         break;
 
-      case 'wpn_haste': // Хладный Темп — Quicksilver Twin Blades & Lightning Arcs
-        defs = `
-          <radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stop-color="#22d3ee" stop-opacity="0.45"/>
-            <stop offset="100%" stop-color="#083344" stop-opacity="0"/>
-          </radialGradient>
-          <linearGradient id="${u}_c" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#ecfeff"/>
-            <stop offset="55%" stop-color="#22d3ee"/>
-            <stop offset="100%" stop-color="#0284c7"/>
-          </linearGradient>`;
+      case 'mage_twin_cast': // Раздвоение Кометы — Twin Diverging Cyan-Violet Shooting Comets
+        defs = `<radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#38bdf8" stop-opacity="0.5"/><stop offset="100%" stop-color="#082f49" stop-opacity="0"/></radialGradient>`;
         art = `
           <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
-          <circle cx="44" cy="44" r="29" stroke="#67e8f9" stroke-opacity="0.45" stroke-width="1.3" stroke-dasharray="6 4"/>
-          <polygon points="48,12 31,45 43,45 38,76 59,39 46,39" fill="url(#${u}_c)" stroke="#cffafe" stroke-width="1.4" stroke-linejoin="round"/>
-          <path d="M18 34 C24 22 36 16 48 16 M70 54 C64 66 52 72 40 72" stroke="#a5f3fc" stroke-width="2" stroke-linecap="round"/>`;
+          <path d="M18 68 Q32 52 30 24" fill="none" stroke="#67e8f9" stroke-width="4" stroke-linecap="round"/>
+          <path d="M22 70 Q42 54 64 28" fill="none" stroke="#c084fc" stroke-width="4" stroke-linecap="round"/>
+          <polygon points="30,13 36,24 30,31 24,24" fill="#ecfeff" stroke="#22d3ee" stroke-width="1.5"/>
+          <polygon points="67,18 72,29 63,34 59,24" fill="#faf5ff" stroke="#a855f7" stroke-width="1.5"/>
+          <circle cx="20" cy="69" r="5" fill="#fef08a"/>`;
         break;
 
-      case 'ammo_pouch': // Патронташ Охотника — Trio of Brass 12-Gauge Buckshot Shells
-        defs = `
-          <radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stop-color="#facc15" stop-opacity="0.44"/>
-            <stop offset="100%" stop-color="#713f12" stop-opacity="0"/>
-          </radialGradient>
-          <linearGradient id="${u}_sh" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stop-color="#dc2626"/>
-            <stop offset="48%" stop-color="#f87171"/>
-            <stop offset="100%" stop-color="#7f1d1d"/>
-          </linearGradient>
-          <linearGradient id="${u}_br" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stop-color="#ca8a04"/>
-            <stop offset="50%" stop-color="#fef08a"/>
-            <stop offset="100%" stop-color="#854d0e"/>
-          </linearGradient>`;
+      case 'mage_elem_catalyst': // Резонанс Стихии — 4-Elemental Spiral Vortex (Fire, Water, Lightning, Air)
+        defs = `<radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#ffffff" stop-opacity="0.45"/><stop offset="100%" stop-color="#1e1b4b" stop-opacity="0"/></radialGradient>`;
         art = `
           <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
-          <g transform="rotate(-12 26 46)">
-            <rect x="20" y="26" width="12" height="25" rx="2" fill="url(#${u}_sh)" stroke="#fca5a5" stroke-width="1"/>
-            <rect x="19.5" y="50" width="13" height="12" rx="1.5" fill="url(#${u}_br)" stroke="#fef08a" stroke-width="1"/>
-          </g>
-          <g transform="rotate(12 62 46)">
-            <rect x="56" y="26" width="12" height="25" rx="2" fill="url(#${u}_sh)" stroke="#fca5a5" stroke-width="1"/>
-            <rect x="55.5" y="50" width="13" height="12" rx="1.5" fill="url(#${u}_br)" stroke="#fef08a" stroke-width="1"/>
-          </g>
-          <rect x="36.5" y="19" width="15" height="30" rx="2.4" fill="url(#${u}_sh)" stroke="#fecaca" stroke-width="1.3"/>
-          <rect x="35.5" y="48" width="17" height="15" rx="2" fill="url(#${u}_br)" stroke="#fffbeb" stroke-width="1.3"/>
-          <line x1="36.5" y1="24" x2="51.5" y2="24" stroke="#fde047" stroke-width="1.4"/>`;
+          <path d="M44 14 A30 30 0 0 1 74 44" fill="none" stroke="#ff5722" stroke-width="4.2" stroke-linecap="round"/>
+          <path d="M74 44 A30 30 0 0 1 44 74" fill="none" stroke="#38bdf8" stroke-width="4.2" stroke-linecap="round"/>
+          <path d="M44 74 A30 30 0 0 1 14 44" fill="none" stroke="#5eead4" stroke-width="4.2" stroke-linecap="round"/>
+          <path d="M14 44 A30 30 0 0 1 44 14" fill="none" stroke="#fde047" stroke-width="4.2" stroke-linecap="round"/>
+          <polygon points="44,26 52,38 62,44 52,50 44,62 36,50 26,44 36,38" fill="#e0f2fe" stroke="#ffffff" stroke-width="1.4"/>`;
         break;
 
-      case 'crit_fang': // Метка Палача — Executioner Crossed Crimson Daggers & Reticle
-        defs = `
-          <radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stop-color="#ef4444" stop-opacity="0.48"/>
-            <stop offset="100%" stop-color="#450a0a" stop-opacity="0"/>
-          </radialGradient>`;
+      case 'mage_meteor_shower': // Звездопад Архонта — Blazing Diagonal Falling Meteor & Impact Crater
+        defs = `<radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#f97316" stop-opacity="0.55"/><stop offset="100%" stop-color="#431407" stop-opacity="0"/></radialGradient>`;
         art = `
           <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
-          <circle cx="44" cy="44" r="24" stroke="#f87171" stroke-width="1.4" stroke-dasharray="5 4"/>
-          <polygon points="18,16 30,22 66,58 62,62 26,26" fill="#fecaca" stroke="#ef4444" stroke-width="1.2"/>
-          <polygon points="70,16 58,22 22,58 26,62 62,26" fill="#fecaca" stroke="#ef4444" stroke-width="1.2"/>
-          <line x1="58" y1="54" x2="68" y2="64" stroke="#fbbf24" stroke-width="3.2" stroke-linecap="round"/>
-          <line x1="30" y1="54" x2="20" y2="64" stroke="#fbbf24" stroke-width="3.2" stroke-linecap="round"/>
-          <polygon points="44,32 49,44 44,56 39,44" fill="#ef4444" stroke="#fff1f2" stroke-width="1.3"/>`;
+          <path d="M68 14 L38 46 M74 24 L46 54 M58 12 L32 38" stroke="#fb923c" stroke-width="3.5" stroke-linecap="round"/>
+          <circle cx="34" cy="52" r="14" fill="#ea580c" stroke="#fef08a" stroke-width="2"/>
+          <circle cx="31" cy="54" r="7" fill="#fffbeb"/>
+          <ellipse cx="34" cy="70" rx="22" ry="5" fill="none" stroke="#fde047" stroke-width="1.8"/>`;
         break;
 
-      case 'frost_touch': // Морозный Пепел — Glacial Six-Pointed Frost Crystal
-        defs = `
-          <radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stop-color="#bae6fd" stop-opacity="0.5"/>
-            <stop offset="100%" stop-color="#0c4a6e" stop-opacity="0"/>
-          </radialGradient>`;
+      case 'mage_arcane_ward': // Сфера Отражения — Glowing Hexagonal Rune Barrier Dome
+        defs = `<radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#c084fc" stop-opacity="0.52"/><stop offset="100%" stop-color="#2e1065" stop-opacity="0"/></radialGradient>`;
         art = `
           <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
-          <polygon points="44,12 51,32 72,28 56,44 72,60 51,56 44,76 37,56 16,60 32,44 16,28 37,32" fill="rgba(125,211,252,0.32)" stroke="#e0f2fe" stroke-width="1.5" stroke-linejoin="round"/>
-          <polygon points="44,24 52,44 44,64 36,44" fill="#7dd3fc" stroke="#ffffff" stroke-width="1.3"/>
-          <circle cx="44" cy="44" r="4.5" fill="#ffffff"/>`;
+          <circle cx="44" cy="44" r="27" fill="rgba(168,85,247,0.22)" stroke="#f3e8ff" stroke-width="2.2"/>
+          <polygon points="44,20 65,32 65,56 44,68 23,56 23,32" fill="none" stroke="#e879f9" stroke-width="1.6"/>
+          <path d="M16 28 L24 34 M72 28 L64 34" stroke="#fde047" stroke-width="2.4" stroke-linecap="round"/>
+          <circle cx="44" cy="44" r="7" fill="#faf5ff"/>`;
         break;
 
-      case 'burn_cinder': // Тлеющее Клеймо — Pyromancer Flame Brand
-        defs = `
-          <radialGradient id="${u}_rg" cx="50%" cy="55%" r="50%">
-            <stop offset="0%" stop-color="#fb923c" stop-opacity="0.52"/>
-            <stop offset="100%" stop-color="#7c2d12" stop-opacity="0"/>
-          </radialGradient>
-          <linearGradient id="${u}_fl" x1="0" y1="1" x2="0" y2="0">
-            <stop offset="0%" stop-color="#be123c"/>
-            <stop offset="52%" stop-color="#f97316"/>
-            <stop offset="100%" stop-color="#fef08a"/>
-          </linearGradient>`;
+      case 'mage_mana_font': // Астральный Колодец — Levitating Sapphire Mana Tear & Expanding Ripples
+        defs = `<radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#38bdf8" stop-opacity="0.55"/><stop offset="100%" stop-color="#082f49" stop-opacity="0"/></radialGradient>`;
         art = `
           <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
-          <path d="M44 12 C54 24 67 34 65 51 C63 65 53 74 44 74 C35 74 23 65 23 50 C23 38 31 30 35 23 C35 31 40 33 44 12 Z" fill="url(#${u}_fl)" stroke="#fef08a" stroke-width="1.4"/>
-          <path d="M44 33 C50 41 54 47 52 56 C50 63 46 67 44 67 C41 67 36 62 36 55 C36 48 40 43 44 33 Z" fill="#fffbeb"/>
-          <circle cx="29" cy="24" r="2.2" fill="#fde047"/><circle cx="60" cy="23" r="2" fill="#fb923c"/>`;
+          <path d="M44 15 C44 15 60 33 60 44 C60 53 53 60 44 60 C35 60 28 53 28 44 C28 33 44 15 44 15 Z" fill="#0ea5e9" stroke="#e0f2fe" stroke-width="1.8"/>
+          <path d="M44 26 C44 26 52 37 52 44 C52 49 48.5 52 44 52" fill="#bae6fd"/>
+          <ellipse cx="44" cy="69" rx="24" ry="5.5" fill="none" stroke="#7dd3fc" stroke-width="1.8"/>`;
         break;
 
-      case 'chain_soul': // Цепная Искра Душ — Astral Forking Lightning Nodes
-        defs = `
-          <radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stop-color="#c084fc" stop-opacity="0.5"/>
-            <stop offset="100%" stop-color="#3b0764" stop-opacity="0"/>
-          </radialGradient>`;
+      // ==================== GUNSLINGER EXCLUSIVE BLESSINGS ====================
+      case 'gun_heavy_buckshot': // Вольфрамовая Картечь — Fanning Muzzle Blast & 7 Molten Pellets
+        defs = `<radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#fbbf24" stop-opacity="0.52"/><stop offset="100%" stop-color="#78350f" stop-opacity="0"/></radialGradient>`;
         art = `
           <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
-          <polyline points="22,64 35,44 29,39 46,20 53,38 67,26" fill="none" stroke="#f3e8ff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-          <polyline points="35,44 52,52 64,66" fill="none" stroke="#d8b4fe" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
-          <circle cx="22" cy="64" r="5.5" fill="#a855f7" stroke="#faf5ff" stroke-width="1.5"/>
-          <circle cx="46" cy="20" r="6" fill="#c084fc" stroke="#ffffff" stroke-width="1.6"/>
-          <circle cx="64" cy="66" r="5" fill="#9333ea" stroke="#f3e8ff" stroke-width="1.4"/>
-          <circle cx="67" cy="26" r="4.5" fill="#e879f9" stroke="#ffffff" stroke-width="1.3"/>`;
+          <path d="M18 66 L38 20 M18 66 L54 24 M18 66 L68 38 M18 66 L70 56" stroke="#f59e0b" stroke-width="2.2" stroke-dasharray="4 3"/>
+          <circle cx="38" cy="19" r="4.2" fill="#fffbeb" stroke="#f97316" stroke-width="1.4"/>
+          <circle cx="55" cy="23" r="4.5" fill="#fffbeb" stroke="#f97316" stroke-width="1.4"/>
+          <circle cx="68" cy="37" r="4.2" fill="#fffbeb" stroke="#f97316" stroke-width="1.4"/>
+          <circle cx="70" cy="55" r="4" fill="#fffbeb" stroke="#f97316" stroke-width="1.4"/>
+          <circle cx="48" cy="41" r="3.8" fill="#fde047"/>
+          <polygon points="14,72 28,68 24,58 12,62" fill="#f97316" stroke="#fef08a" stroke-width="1.3"/>`;
         break;
 
-      case 'soul_nova': // Кольцо Возмездия — Concentric Astral Shockwave Ring
-        defs = `
-          <radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stop-color="#e879f9" stop-opacity="0.52"/>
-            <stop offset="100%" stop-color="#2e1065" stop-opacity="0"/>
-          </radialGradient>`;
+      case 'gun_ricochet': // Рикошет Свинца — Sharp Zig-Zag Bullet Ricochet Sparking Off Steel
+        defs = `<radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#22d3ee" stop-opacity="0.5"/><stop offset="100%" stop-color="#083344" stop-opacity="0"/></radialGradient>`;
         art = `
           <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
-          <circle cx="44" cy="44" r="30" stroke="#e9d5ff" stroke-width="2" stroke-dasharray="8 4"/>
-          <circle cx="44" cy="44" r="21" stroke="#c084fc" stroke-width="2.4"/>
-          <polygon points="44,15 49,39 73,44 49,49 44,73 39,49 15,44 39,39" fill="#d8b4fe" stroke="#ffffff" stroke-width="1.2"/>
-          <circle cx="44" cy="44" r="6.5" fill="#ffffff"/>`;
+          <polyline points="16,66 42,24 68,54" fill="none" stroke="#fef08a" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <polygon points="42,14 46,23 55,24 47,29 49,38 42,32 35,38 37,29 29,24 38,23" fill="#22d3ee" stroke="#ffffff" stroke-width="1.2"/>
+          <polygon points="73,59 63,56 69,48" fill="#ffffff"/>`;
         break;
 
-      case 'vampiric': // Жатва Крови — Ornate Gothic Blood Chalice & Levitating Ruby Drop
-        defs = `
-          <radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stop-color="#ef4444" stop-opacity="0.48"/>
-            <stop offset="100%" stop-color="#450a0a" stop-opacity="0"/>
-          </radialGradient>
-          <linearGradient id="${u}_g" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stop-color="#fef08a"/>
-            <stop offset="100%" stop-color="#b45309"/>
-          </linearGradient>`;
+      case 'gun_explosive_slugs': // Пороховая Детонация — Crimson Shell Exploding in Fiery Starburst
+        defs = `<radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#ef4444" stop-opacity="0.55"/><stop offset="100%" stop-color="#450a0a" stop-opacity="0"/></radialGradient>`;
         art = `
           <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
-          <path d="M44 13 C44 13 53 24 53 29.5 C53 34.5 49 38.5 44 38.5 C39 38.5 35 34.5 35 29.5 C35 24 44 13 44 13 Z" fill="#dc2626" stroke="#fecaca" stroke-width="1.4"/>
-          <path d="M26 40 H62 C61 53 53 59 44 59 C35 59 27 53 26 40 Z" fill="url(#${u}_g)" stroke="#fef08a" stroke-width="1.3"/>
-          <path d="M29 42 H59" stroke="#ef4444" stroke-width="3" stroke-linecap="round"/>
-          <rect x="41" y="59" width="6" height="11" fill="#d97706"/>
-          <path d="M31 72 H57" stroke="#fef08a" stroke-width="3.5" stroke-linecap="round"/>`;
+          <polygon points="44,11 52,29 72,24 59,41 74,56 54,56 48,75 39,58 19,64 30,46 15,31 35,31" fill="#f97316" stroke="#fef08a" stroke-width="1.5"/>
+          <rect x="37" y="31" width="14" height="22" rx="2" fill="#dc2626" stroke="#fffbeb" stroke-width="1.4"/>
+          <rect x="36" y="52" width="16" height="9" rx="1.5" fill="#facc15" stroke="#ffffff" stroke-width="1.2"/>`;
         break;
 
-      case 'iron_ward': // Костяной Доспех — Horned Gothic Bone & Steel Tower Shield
-        defs = `
-          <radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stop-color="#cbd5e1" stop-opacity="0.42"/>
-            <stop offset="100%" stop-color="#0f172a" stop-opacity="0"/>
-          </radialGradient>
-          <linearGradient id="${u}_st" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stop-color="#f8fafc"/>
-            <stop offset="52%" stop-color="#94a3b8"/>
-            <stop offset="100%" stop-color="#334155"/>
-          </linearGradient>`;
+      case 'gun_tactical_reload': // Пороховой Рывок — Revolving Cylinder + Emerald Wind Dash
+        defs = `<radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#34d399" stop-opacity="0.5"/><stop offset="100%" stop-color="#064e3b" stop-opacity="0"/></radialGradient>`;
         art = `
           <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
-          <path d="M44 14 L67 23 V44 C67 59 57 69 44 75 C31 69 21 59 21 44 V23 L44 14 Z" fill="url(#${u}_st)" stroke="#f1f5f9" stroke-width="1.8"/>
-          <path d="M44 20 L61 27 V43 C61 55 53 63 44 68 C35 63 27 55 27 43 V27 L44 20 Z" fill="none" stroke="#fde047" stroke-width="1.3"/>
-          <path d="M44 24 V64 M29 41 H59" stroke="#e2e8f0" stroke-width="2.2" stroke-linecap="round"/>
-          <circle cx="44" cy="41" r="5.5" fill="#fbbf24" stroke="#ffffff" stroke-width="1.2"/>`;
+          <path d="M12 34 H36 M8 46 H30 M14 58 H38" stroke="#6ee7b7" stroke-width="3" stroke-linecap="round"/>
+          <circle cx="50" cy="44" r="19" fill="#1e293b" stroke="#fde047" stroke-width="2"/>
+          <circle cx="50" cy="32" r="4" fill="#facc15"/><circle cx="60" cy="39" r="4" fill="#facc15"/>
+          <circle cx="57" cy="51" r="4" fill="#facc15"/><circle cx="43" cy="51" r="4" fill="#facc15"/>
+          <circle cx="40" cy="39" r="4" fill="#facc15"/>`;
         break;
 
-      case 'swift_boots': // Поступь Призрака — Winged Emerald Spectral Greaves
-        defs = `
-          <radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stop-color="#34d399" stop-opacity="0.46"/>
-            <stop offset="100%" stop-color="#064e3b" stop-opacity="0"/>
-          </radialGradient>`;
+      case 'ammo_pouch': // Последний Козырь — Golden Crowned Ace Shotgun Shell
+        defs = `<radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#facc15" stop-opacity="0.52"/><stop offset="100%" stop-color="#713f12" stop-opacity="0"/></radialGradient>`;
         art = `
           <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
-          <path d="M35 22 H50 L47 50 L64 56 C67 57 68 62 65 65 H29 L35 22 Z" fill="#10b981" stroke="#d1fae5" stroke-width="1.6" stroke-linejoin="round"/>
-          <path d="M29 65 H66" stroke="#fde047" stroke-width="3" stroke-linecap="round"/>
-          <path d="M34 33 C22 30 16 22 18 16 C24 20 30 22 36 25" fill="#6ee7b7" stroke="#ecfdf5" stroke-width="1.2"/>
-          <path d="M32 43 C21 42 15 36 16 30 C22 33 28 35 34 37" fill="#34d399" stroke="#ecfdf5" stroke-width="1.2"/>`;
+          <rect x="34" y="22" width="20" height="32" rx="3" fill="#dc2626" stroke="#fef08a" stroke-width="1.8"/>
+          <rect x="32" y="52" width="24" height="16" rx="2" fill="#eab308" stroke="#fffbeb" stroke-width="1.6"/>
+          <polygon points="35,19 38,11 44,16 50,11 53,19" fill="#fde047" stroke="#ffffff" stroke-width="1.1"/>`;
+        break;
+
+      case 'gun_shrapnel_mine': // Шрапнельный Капкан — Spiked Iron Powder Mine & Red Detonator Core
+        defs = `<radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#f87171" stop-opacity="0.5"/><stop offset="100%" stop-color="#450a0a" stop-opacity="0"/></radialGradient>`;
+        art = `
+          <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
+          <line x1="44" y1="14" x2="44" y2="74" stroke="#cbd5e1" stroke-width="4" stroke-linecap="round"/>
+          <line x1="14" y1="44" x2="74" y2="44" stroke="#cbd5e1" stroke-width="4" stroke-linecap="round"/>
+          <line x1="23" y1="23" x2="65" y2="65" stroke="#cbd5e1" stroke-width="4" stroke-linecap="round"/>
+          <line x1="65" y1="23" x2="23" y2="65" stroke="#cbd5e1" stroke-width="4" stroke-linecap="round"/>
+          <circle cx="44" cy="44" r="18" fill="#334155" stroke="#f1f5f9" stroke-width="2"/>
+          <circle cx="44" cy="44" r="7.5" fill="#ef4444" stroke="#fef08a" stroke-width="1.5"/>`;
+        break;
+
+      // ==================== WARRIOR EXCLUSIVE BLESSINGS ====================
+      case 'war_orbit_blades': // Клинки Предков — Three Golden Spectral Swords Orbiting in a Ring
+        defs = `<radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#fde047" stop-opacity="0.5"/><stop offset="100%" stop-color="#78350f" stop-opacity="0"/></radialGradient>`;
+        art = `
+          <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
+          <circle cx="44" cy="44" r="24" fill="none" stroke="#fde047" stroke-width="1.5" stroke-dasharray="5 4"/>
+          <polygon points="44,9 48,24 40,24" fill="#fffbeb" stroke="#f59e0b" stroke-width="1.3"/>
+          <polygon points="73,60 58,59 62,52" fill="#fffbeb" stroke="#f59e0b" stroke-width="1.3"/>
+          <polygon points="15,60 26,52 30,59" fill="#fffbeb" stroke="#f59e0b" stroke-width="1.3"/>
+          <circle cx="44" cy="44" r="7" fill="#f59e0b" stroke="#fffbeb" stroke-width="1.4"/>`;
+        break;
+
+      case 'war_seismic_slam': // Раскол Брусчатки — Greatsword Plunging Into Shattered Golden Fissure
+        defs = `<radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#f59e0b" stop-opacity="0.52"/><stop offset="100%" stop-color="#451a03" stop-opacity="0"/></radialGradient>`;
+        art = `
+          <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
+          <polygon points="40,14 48,14 47,54 44,61 41,54" fill="#f8fafc" stroke="#fbbf24" stroke-width="1.4"/>
+          <rect x="33" y="22" width="22" height="5" rx="2" fill="#eab308"/>
+          <polyline points="14,66 30,59 44,65 58,58 74,67" fill="none" stroke="#fde047" stroke-width="3" stroke-linecap="round"/>
+          <polyline points="24,73 44,65 63,74" fill="none" stroke="#f97316" stroke-width="2.2" stroke-linecap="round"/>`;
+        break;
+
+      case 'war_shield_thorns': // Шипованный Бастион — Steel Tower Shield Radiating Spikes
+        defs = `<radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#cbd5e1" stop-opacity="0.48"/><stop offset="100%" stop-color="#0f172a" stop-opacity="0"/></radialGradient>`;
+        art = `
+          <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
+          <path d="M12 34 L22 38 M12 52 L22 48 M76 34 L66 38 M76 52 L66 48" stroke="#fde047" stroke-width="3" stroke-linecap="round"/>
+          <path d="M44 15 L65 24 V44 C65 58 55 68 44 74 C33 68 23 58 23 44 V24 L44 15 Z" fill="#475569" stroke="#f8fafc" stroke-width="2"/>
+          <polygon points="44,32 50,44 44,56 38,44" fill="#fbbf24" stroke="#ffffff" stroke-width="1.3"/>`;
+        break;
+
+      case 'war_whirlwind': // Вихрь Жнеца — Crimson 360° Spinning Dual Crescent Blades
+        defs = `<radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#ef4444" stop-opacity="0.52"/><stop offset="100%" stop-color="#450a0a" stop-opacity="0"/></radialGradient>`;
+        art = `
+          <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
+          <path d="M44 14 A30 30 0 1 1 16 54" fill="none" stroke="#f87171" stroke-width="5" stroke-linecap="round"/>
+          <path d="M44 23 A21 21 0 1 0 64 36" fill="none" stroke="#fef08a" stroke-width="3.2" stroke-linecap="round"/>
+          <circle cx="44" cy="44" r="6" fill="#ffffff"/>`;
+        break;
+
+      case 'war_blood_cleave': // Казнь Кровопийцы — Heavy Crimson Executioner Axe & Blood Drop
+        defs = `<radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#dc2626" stop-opacity="0.54"/><stop offset="100%" stop-color="#450a0a" stop-opacity="0"/></radialGradient>`;
+        art = `
+          <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
+          <line x1="22" y1="70" x2="58" y2="20" stroke="#cbd5e1" stroke-width="4.5" stroke-linecap="round"/>
+          <path d="M46 18 L69 29 C67 44 56 53 41 53 L37 36 Z" fill="#dc2626" stroke="#fecaca" stroke-width="1.8"/>
+          <path d="M62 56 C62 56 69 65 69 69 C69 73 66 76 62 76 C58 76 55 73 55 69 C55 65 62 56 62 56 Z" fill="#ef4444" stroke="#fff1f2" stroke-width="1.2"/>`;
+        break;
+
+      case 'war_iron_banner': // Гнев Несокрушимого — Horned Berserker Helm Wreathed in Rage Flames
+        defs = `<radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#fb923c" stop-opacity="0.55"/><stop offset="100%" stop-color="#431407" stop-opacity="0"/></radialGradient>`;
+        art = `
+          <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
+          <path d="M29 36 C17 32 14 20 20 14 C23 22 28 26 33 28" fill="#fde047" stroke="#ffffff" stroke-width="1.4"/>
+          <path d="M59 36 C71 32 74 20 68 14 C65 22 60 26 55 28" fill="#fde047" stroke="#ffffff" stroke-width="1.4"/>
+          <path d="M29 34 C29 24 59 24 59 34 V58 L44 68 L29 58 Z" fill="#334155" stroke="#f8fafc" stroke-width="1.8"/>
+          <circle cx="38" cy="45" r="3.2" fill="#ef4444"/><circle cx="50" cy="45" r="3.2" fill="#ef4444"/>`;
+        break;
+
+      // ==================== SHARED RELICS ====================
+      case 'crit_fang': // Жнец Черепов — Blazing Reaper Skull & Crossed Scythes
+        defs = `<radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#ef4444" stop-opacity="0.5"/><stop offset="100%" stop-color="#450a0a" stop-opacity="0"/></radialGradient>`;
+        art = `
+          <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
+          <path d="M44 18 C31 18 24 27 24 39 C24 47 28 52 33 55 V65 H55 V55 C60 52 64 47 64 39 C64 27 57 18 44 18 Z" fill="#f1f5f9" stroke="#fca5a5" stroke-width="1.8"/>
+          <circle cx="36" cy="39" r="5" fill="#dc2626"/><circle cx="52" cy="39" r="5" fill="#dc2626"/>
+          <polygon points="44,45 41,51 47,51" fill="#1e293b"/>`;
         break;
 
       case 'greed_contract': // Печать Алчности — Golden Sovereign Coins & Crown Seal
@@ -932,7 +929,7 @@ export function createUIManager(initialCallbacks = {}) {
   const sealSlotsWrap = el('div', 'seal-slots');
   const sealLabel = el('span', 'seal-slots-label', 'Печати Зверя:');
   sealSlotsWrap.appendChild(sealLabel);
-  const sealSlotNodes = [0, 1, 2].map(() => {
+  const sealSlotNodes = [0, 1, 2, 3, 4].map(() => {
     const s = el('span', 'seal-slot');
     s.appendChild(
       makeSvgNode(
@@ -1020,12 +1017,12 @@ export function createUIManager(initialCallbacks = {}) {
   hudMuteBtn.type = 'button';
   hudMuteBtn.title = 'Настройки звука';
 
-  const hudHomeBtn = el('button', 'hud-btn icon-btn');
+  const hudHomeBtn = el('button', 'hud-btn icon-btn hud-pause-btn');
   hudHomeBtn.type = 'button';
-  hudHomeBtn.title = 'Выйти в лагерь';
+  hudHomeBtn.title = 'Пауза [Esc]';
   hudHomeBtn.appendChild(
     makeSvgNode(
-      `<svg viewBox="0 0 20 20" width="16" height="16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 9.5 L10 3.5 L17 9.5 V16.5 H12.2 V11.8 H7.8 V16.5 H3 V9.5 Z" fill="#f5efe2"/></svg>`
+      `<svg viewBox="0 0 20 20" width="16" height="16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="4" width="3.6" height="12" rx="1.2" fill="#fde093"/><rect x="11.4" y="4" width="3.6" height="12" rx="1.2" fill="#fde093"/></svg>`
     )
   );
 
@@ -2032,6 +2029,61 @@ export function createUIManager(initialCallbacks = {}) {
     if (e.target === resetConfirmModal) hideResetConfirmModal();
   });
 
+  // In-Game Pause Modal (⏸ Button or Escape Key)
+  const pauseModal = el('div', 'modal-backdrop pause-modal-backdrop hidden');
+  const pausePanel = el('div', 'modal-panel pause-modal-panel');
+  const pauseTitle = el('h2', 'modal-title pause-modal-title', '⏸ ПАУЗА');
+  const pauseSub = el('p', 'modal-subtitle pause-modal-sub', 'Охота приостановлена');
+  const pauseActions = el('div', 'result-actions-col pause-actions-col');
+
+  const pauseResumeBtn = el('button', 'result-btn btn-arsenal-primary', '▶ Продолжить бой');
+  pauseResumeBtn.type = 'button';
+  const pauseRestartBtn = el('button', 'result-btn btn-retry', '🔄 Начать главу заново');
+  pauseRestartBtn.type = 'button';
+  const pauseExitBtn = el('button', 'result-btn btn-confirm-reset', '🏕️ Выйти в главное меню');
+  pauseExitBtn.type = 'button';
+
+  pauseActions.append(pauseResumeBtn, pauseRestartBtn, pauseExitBtn);
+  pausePanel.append(pauseTitle, pauseSub, pauseActions);
+  pauseModal.appendChild(pausePanel);
+  root.appendChild(pauseModal);
+
+  let activePauseHandlers = {};
+
+  function hidePauseModal() {
+    pauseModal.classList.add('hidden');
+    activePauseHandlers = {};
+  }
+
+  function showPauseModal(info = {}, handlers = {}) {
+    closeSoundPopover();
+    activePauseHandlers = handlers || {};
+    const chName = info.levelNameRu || `Глава ${info.level || 1}`;
+    const phaseStr = info.phaseText || '';
+    const goldEarned = Math.floor(Number(info.goldRun) || 0);
+    pauseSub.textContent = `${chName}${phaseStr ? ` • ${phaseStr}` : ''} • Добыто: +${goldEarned} зол.`;
+    pauseModal.classList.remove('hidden');
+  }
+
+  pauseResumeBtn.addEventListener('click', () => {
+    const fn = activePauseHandlers.onResume;
+    hidePauseModal();
+    fn?.();
+  });
+
+  pauseRestartBtn.addEventListener('click', () => {
+    const fn = activePauseHandlers.onRestart;
+    hidePauseModal();
+    fn?.();
+  });
+
+  pauseExitBtn.addEventListener('click', () => {
+    const fn = activePauseHandlers.onExit;
+    hidePauseModal();
+    setActiveTab('heroes');
+    fn?.();
+  });
+
   // =========================================================================
   // INTERACTIVE SOUND, HUD & HUB TAB HANDLERS
   // =========================================================================
@@ -2206,8 +2258,12 @@ export function createUIManager(initialCallbacks = {}) {
 
   hudHomeBtn.addEventListener('click', () => {
     closeSoundPopover();
-    setActiveTab('heroes');
-    (callbacks.onExitToHub || callbacks.onReturnToHub || callbacks.onQuitRun)?.();
+    if (callbacks.onTogglePause) {
+      callbacks.onTogglePause();
+    } else {
+      setActiveTab('heroes');
+      (callbacks.onExitToHub || callbacks.onReturnToHub || callbacks.onQuitRun)?.();
+    }
   });
 
   rewardGoldBtn.addEventListener('click', () => {
@@ -3150,10 +3206,10 @@ export function createUIManager(initialCallbacks = {}) {
         beastBarTimer.textContent = bTimeStr;
       }
     } else {
-      const seals = Math.max(0, Math.min(3, Number(snapshot.beastSeals ?? snapshot.seals ?? snapshot.clovers ?? 0)));
+      const seals = Math.max(0, Math.min(5, Number(snapshot.beastSeals ?? snapshot.seals ?? snapshot.clovers ?? 0)));
       if (seals !== hudCache.sealsCount) {
         hudCache.sealsCount = seals;
-        for (let i = 0; i < 3; i++) {
+        for (let i = 0; i < 5; i++) {
           sealSlotNodes[i].classList.toggle('filled', i < seals);
         }
       }
@@ -3808,6 +3864,12 @@ export function createUIManager(initialCallbacks = {}) {
     showResultModal,
     hideResultModal,
 
+    showPauseModal,
+    hidePauseModal,
+    isPauseModalOpen() {
+      return !pauseModal.classList.contains('hidden');
+    },
+
     openMageStarterModal,
     resetLocalSelection,
 
@@ -3815,6 +3877,7 @@ export function createUIManager(initialCallbacks = {}) {
       closeSoundPopover();
       hideLevelUpModal();
       hideResultModal();
+      hidePauseModal();
       hideMageStarterModal();
       hideResetConfirmModal();
     }

@@ -8,7 +8,7 @@ import {
   ENEMY_TYPES,
   LEVELS,
   RUN_UPGRADES
-} from './config.js?v=20261116f';
+} from './config.js?v=20261116h';
 
 const TWO_PI = Math.PI * 2;
 const ARENA_PLAYER_LIMIT = ARENA_HALF_SIZE - 1.4;
@@ -650,6 +650,12 @@ export function createCombatController({
   let bossHazards = [];
   let bomberHazards = [];
   let bossEntity = null;
+  let dyingCorpses = [];
+  let activeWaterPrisons = [];
+  let pendingMeteors = [];
+  let shrapnelMines = [];
+  let orbitBladesGroup = null;
+  let orbitBladeMeshes = [];
 
   function recomputeStats() {
     stats = progression.computeCombatStats(currentClassId, currentWeaponId, {
@@ -704,6 +710,16 @@ export function createCombatController({
 
     audio?.playReloadShell?.();
     syncHeroReloadModel(true);
+
+    // Пороховой Рывок (gun_tactical_reload): blast nearby enemies away & grant +35% sprint!
+    const tacReloadStacks = stats.gunReloadStacks || 0;
+    if (tacReloadStacks > 0) {
+      player.sprintTimer = 1.6;
+      const blastDmg = Math.round(stats.damage * (0.85 + tacReloadStacks * 0.45));
+      emitShockwave(player.x, player.z, 3.6, 0x34d399, 0.30);
+      emitParticles(player.x, 0.7, player.z, 0xfbbf24, 12, 6.0, 0.14);
+      damageEnemiesInRadius(player.x, player.z, 3.6, blastDmg, 13.5, null, false);
+    }
     return true;
   }
 
@@ -754,6 +770,24 @@ export function createCombatController({
     bossHazards = [];
     bomberHazards = [];
     bossEntity = null;
+    activeWaterPrisons = [];
+    pendingMeteors = [];
+
+    for (let i = 0; i < dyingCorpses.length; i++) {
+      removeSceneObject(dyingCorpses[i].model.obj, dyingCorpses[i].model.handle);
+    }
+    dyingCorpses = [];
+
+    for (let i = 0; i < shrapnelMines.length; i++) {
+      if (shrapnelMines[i].mesh?.parent) shrapnelMines[i].mesh.parent.remove(shrapnelMines[i].mesh);
+    }
+    shrapnelMines = [];
+
+    if (orbitBladesGroup) {
+      if (orbitBladesGroup.parent) orbitBladesGroup.parent.remove(orbitBladesGroup);
+      orbitBladesGroup = null;
+      orbitBladeMeshes = [];
+    }
   }
 
   // === Start Run ===
@@ -812,7 +846,17 @@ export function createCombatController({
       overdriveMax: 35,
       vampiricKills: 0,
       soulNovaTimer: 9.0,
-      relicBumpTimer: 0
+      relicBumpTimer: 0,
+      sprintTimer: 0,
+      meleeSwingCount: 0,
+      gunShotCount: 0,
+      mageCastCount: 0,
+      whirlwindTimer: 4.5,
+      meteorTimer: 3.2,
+      mineTimer: 4.2,
+      arcaneWardReady: false,
+      arcaneWardTimer: 2.0,
+      orbitHitTimers: new Map()
     };
 
     heroModel = buildHeroModel(currentClassId, currentWeaponId);
@@ -1021,6 +1065,9 @@ export function createCombatController({
       burnTimer: 0,
       burnDps: 0,
       burnTickTimer: 0,
+      fireVfxTick: 0,
+      damageStage: 0,
+      waterLiftTimer: 0,
       contactCooldown: 0,
       trampleCooldown: 0,
       stunTimer: 0,
@@ -1043,24 +1090,44 @@ export function createCombatController({
   function spawnWavePack() {
     if (enemies.length >= MAX_ACTIVE_ENEMIES) return;
     const pool = currentLevelDef.enemyPool || ['skeleton'];
+    const meleePool = pool.filter((id) => id !== 'archer' && id !== 'cultist');
+    const rangedPool = pool.filter((id) => id === 'archer' || id === 'cultist');
+    const safeMeleePool = meleePool.length > 0 ? meleePool : ['skeleton'];
+
+    let aliveRanged = 0;
+    for (let i = 0; i < enemies.length; i++) {
+      if (enemies[i]?.hp > 0 && (enemies[i].type === 'archer' || enemies[i].type === 'cultist')) {
+        aliveRanged += 1;
+      }
+    }
+
     const progress = clamp(elapsedRunTime / Math.max(1, currentLevelDef.durationSec), 0, 1);
     const packCount = finaleStarted
-      ? 1
-      : progress > 0.6
-        ? 2 + (Math.random() < 0.35 ? 1 : 0)
-        : 1 + (Math.random() < 0.45 ? 1 : 0);
+      ? 2
+      : progress > 0.55
+        ? 3 + (Math.random() < 0.5 ? 1 : 0)
+        : 2 + (Math.random() < 0.55 ? 1 : 0);
+
+    // Minigore-2 style cohesive directional wave sector (enemies press in waves, not 360° bullet spam!)
+    const waveBaseAngle = Math.random() * TWO_PI;
 
     for (let n = 0; n < packCount; n++) {
       if (enemies.length >= MAX_ACTIVE_ENEMIES) break;
-      let chosen = pool[Math.floor(Math.random() * pool.length)];
-      if (chosen === 'brute' && Math.random() < 0.52) {
-        chosen = pool[0] || 'skeleton';
-      } else if (chosen === 'necromancer' && Math.random() < 0.35) {
-        chosen = pool[0] || 'skeleton';
+      let chosen;
+      if (rangedPool.length > 0 && aliveRanged < 2 && n === 0 && Math.random() < 0.16) {
+        chosen = rangedPool[Math.floor(Math.random() * rangedPool.length)];
+        aliveRanged += 1;
+      } else {
+        chosen = safeMeleePool[Math.floor(Math.random() * safeMeleePool.length)];
+        if (chosen === 'brute' && Math.random() < 0.52) {
+          chosen = safeMeleePool[0] || 'skeleton';
+        } else if (chosen === 'necromancer' && Math.random() < 0.40) {
+          chosen = safeMeleePool[0] || 'skeleton';
+        }
       }
 
-      const angle = Math.random() * TWO_PI;
-      const dist = 19 + Math.random() * 6;
+      const angle = waveBaseAngle + (Math.random() - 0.5) * 0.62;
+      const dist = 18.5 + n * 1.15 + Math.random() * 2.5;
       const sx = clamp(player.x + Math.sin(angle) * dist, -ARENA_ENTITY_LIMIT, ARENA_ENTITY_LIMIT);
       const sz = clamp(player.z + Math.cos(angle) * dist, -ARENA_ENTITY_LIMIT, ARENA_ENTITY_LIMIT);
       spawnEnemy(chosen, sx, sz);
@@ -1410,8 +1477,15 @@ export function createCombatController({
     }
 
     const hpGainFromMax = Math.max(0, stats.maxHp - prevMaxHp);
-    const bonusHeal = choiceId === 'iron_ward' ? 16 : 6;
+    const bonusHeal = choiceId === 'war_iron_banner' ? 24 : 8;
     player.hp = Math.min(stats.maxHp, player.hp + hpGainFromMax + bonusHeal);
+    if (choiceId === 'mage_arcane_ward') {
+      player.arcaneWardReady = true;
+    } else if (choiceId === 'mage_meteor_shower') {
+      player.meteorTimer = 0.6;
+    } else if (choiceId === 'war_whirlwind') {
+      player.whirlwindTimer = 0.7;
+    }
 
     awaitingLevelUpChoice = false;
     triggerNextLevelUpIfReady();
@@ -1470,10 +1544,17 @@ export function createCombatController({
     const isDoT = Boolean(hitMeta?.isDoT);
     const isProjectile = Boolean(hitMeta?.isProjectile);
     const isCrit = Boolean(hitMeta?.isCrit);
+    const isWaterSlam = Boolean(hitMeta?.isWaterSlam);
+    const isSplash = Boolean(hitMeta?.isSplash);
     const hitElem = hitMeta?.mageElement || null;
     let finalAmount = amount;
     let kx = knockX;
     let kz = knockZ;
+
+    // 🩸 Казнь Кровопийцы (war_blood_cleave): +50% execution damage against wounded enemies (<45% HP)!
+    if (!isDoT && (stats?.warBloodStacks || 0) > 0 && enemy.hp < enemy.maxHp * 0.45) {
+      finalAmount *= 1 + stats.warBloodStacks * 0.50;
+    }
 
     // 🔥 Fire Element (Batrider Napalm): existing Napalm stacks amplify incoming damage by +12% per stack!
     if (!isDoT && hitElem === 'fire' && (enemy.napalmStacks || 0) > 0 && (enemy.napalmTimer || 0) > 0) {
@@ -1523,9 +1604,47 @@ export function createCombatController({
 
     if (!isDoT) {
       triggerModelHitFlash(enemy.model);
+      enemy.model?.handle?.playHitFlinch?.();
+      // Bone-splinter chip particles when hitting skeletons!
+      emitParticles(enemy.x, 0.78, enemy.z, 0xe7e0d0, 2, 3.6, 0.09);
+
       if (hitSoundCooldown <= 0) {
         hitSoundCooldown = 0.045;
-        audio?.playHit?.();
+        if (hitElem) {
+          audio?.playElementImpact?.(hitElem);
+        } else {
+          audio?.playHit?.();
+        }
+      }
+
+      // 🛡️🪖 3-Stage Progressive Shield (≤67% HP) & Helmet (≤34% HP) Break-Off!
+      if (!enemy.isBoss && enemy.hp > 0) {
+        const hitDirAng = Math.atan2(kx || 0.1, kz || 0.1);
+        if (enemy.hp <= enemy.maxHp * 0.67 && (enemy.damageStage || 0) < 1) {
+          enemy.damageStage = 1;
+          const brokenPart = enemy.model?.handle?.setDamageStage?.(1);
+          if (brokenPart) {
+            enemy.frontArmor = 0;
+            world?.spawnArmorBreakPiece?.('shield', enemy.x, enemy.z, hitDirAng);
+            audio?.playArmorBreak?.('shield');
+            if (critFloaterCooldown <= 0) {
+              critFloaterCooldown = 0.08;
+              floatText('🛡️ ЩИТ СБИТ!', enemy.x, enemy.z, '#93c5fd');
+            }
+          }
+        }
+        if (enemy.hp <= enemy.maxHp * 0.34 && (enemy.damageStage || 0) < 2) {
+          enemy.damageStage = 2;
+          const brokenHelm = enemy.model?.handle?.setDamageStage?.(2);
+          if (brokenHelm) {
+            world?.spawnArmorBreakPiece?.('helmet', enemy.x, enemy.z, hitDirAng);
+            audio?.playArmorBreak?.('helmet');
+            if (critFloaterCooldown <= 0) {
+              critFloaterCooldown = 0.08;
+              floatText('🪖 КАСКА СЛЕТЕЛА!', enemy.x, enemy.z, '#cbd5e1');
+            }
+          }
+        }
       }
 
       if (isCrit) {
@@ -1533,6 +1652,12 @@ export function createCombatController({
         if (critFloaterCooldown <= 0) {
           critFloaterCooldown = 0.11;
           floatText(`💥 ${dmg}!`, enemy.x, enemy.z, '#fde047');
+        }
+        // 💀 Жнец Черепов (crit_fang): crit triggers crimson soul burst on nearby enemies!
+        const critBlastStacks = stats?.critExplosionStacks || 0;
+        if (critBlastStacks > 0 && allowChain) {
+          emitShockwave(enemy.x, enemy.z, 2.2, 0xef4444, 0.24);
+          damageEnemiesInRadius(enemy.x, enemy.z, 2.2, Math.max(2, Math.round(dmg * 0.35 * critBlastStacks)), 4.5, enemy, false);
         }
       } else {
         emitParticles(
@@ -1546,13 +1671,25 @@ export function createCombatController({
         );
       }
 
+      // 🔫 Рикошет Свинца (gun_ricochet): buckshot pellets bounce to a nearby enemy!
+      const ricochetStacks = stats?.gunRicochetStacks || 0;
+      if (allowChain && hitMeta?.isShotgunPellet && ricochetStacks > 0) {
+        const ricChance = Math.min(1.0, 0.25 + ricochetStacks * 0.25);
+        if (Math.random() < ricChance) {
+          triggerChainLightning(enemy, Math.max(2, Math.round(dmg * 0.65)), 1, 0xfbbf24);
+        }
+      }
+
       // === 4 MAGE ELEMENTAL EFFECTS ===
+      const catStacks = stats?.mageCatalystStacks || 0;
       if (hitElem === 'fire') {
-        enemy.napalmStacks = Math.min(8, ((enemy.napalmTimer || 0) > 0 ? (enemy.napalmStacks || 0) : 0) + 1);
+        const addStacks = 1 + (catStacks > 0 ? 1 : 0);
+        const maxNapalm = 8 + catStacks * 2;
+        enemy.napalmStacks = Math.min(maxNapalm, ((enemy.napalmTimer || 0) > 0 ? (enemy.napalmStacks || 0) : 0) + addStacks);
         enemy.napalmTimer = 4.2;
         enemy.burnTimer = Math.max(enemy.burnTimer || 0, 3.0);
-        enemy.burnDps = Math.max(enemy.burnDps || 0, Math.max(4, Math.round((stats?.damage || 24) * (0.12 + enemy.napalmStacks * 0.07))));
-        emitParticles(enemy.x, 0.72, enemy.z, 0xff5722, 4, 3.6, 0.12);
+        enemy.burnDps = Math.max(enemy.burnDps || 0, Math.max(4, Math.round((stats?.damage || 24) * (0.14 + enemy.napalmStacks * 0.08))));
+        emitParticles(enemy.x, 0.72, enemy.z, 0xff5722, 5, 3.8, 0.13);
         if (enemy.napalmStacks >= 2 && enemy.napalmStacks % 2 === 0 && critFloaterCooldown <= 0) {
           critFloaterCooldown = 0.14;
           floatText(`🔥×${enemy.napalmStacks}`, enemy.x, enemy.z, '#fb923c');
@@ -1560,37 +1697,58 @@ export function createCombatController({
       } else if (hitElem === 'water') {
         enemy.soakedTimer = 3.0;
         enemy.frostTimer = Math.max(enemy.frostTimer || 0, 2.6);
-        enemy.frostFactor = Math.min(enemy.frostFactor || 1.0, 0.64);
+        enemy.frostFactor = Math.min(enemy.frostFactor || 1.0, 0.58);
         emitParticles(enemy.x, 0.68, enemy.z, 0x38bdf8, 5, 3.4, 0.12);
+
+        // 💧 STRICTLY FOR MAGE + WATER ELEMENT: 7% chance (+5% per Резонанс Стихии stack) to spawn Avatar-style levitating Water Sphere!
+        // Lifts enemies in small radius into the air for 1.1s, then slams them down for 3x normal attack damage!
+        if (
+          currentClassId === 'mage' &&
+          !isWaterSlam &&
+          !isSplash &&
+          (enemy.waterLiftTimer || 0) <= 0 &&
+          activeWaterPrisons.length < 4
+        ) {
+          const waterSphereChance = 0.07 + catStacks * 0.05;
+          if (Math.random() < waterSphereChance) {
+            const sphereRad = 2.65;
+            const sphereDur = 1.1;
+            const captured = [];
+            for (let ci = 0; ci < enemies.length; ci++) {
+              const ce = enemies[ci];
+              if (!ce || ce.hp <= 0) continue;
+              if (Math.hypot(ce.x - enemy.x, ce.z - enemy.z) <= sphereRad + ce.radius * 0.5) {
+                ce.waterLiftTimer = sphereDur;
+                ce.stunTimer = Math.max(ce.stunTimer || 0, sphereDur + 0.15);
+                ce.vx = 0;
+                ce.vz = 0;
+                captured.push(ce);
+              }
+            }
+            if (captured.length > 0) {
+              const normalAttackDmg = stats?.damage || 28;
+              world?.spawnWaterPrisonSphere?.({ x: enemy.x, z: enemy.z, radius: sphereRad, duration: sphereDur });
+              audio?.playElementImpact?.('water_prison_open');
+              floatText('🌊 ВОДЯНОЙ ШАР!', enemy.x, enemy.z, '#38bdf8');
+              activeWaterPrisons.push({
+                x: enemy.x,
+                z: enemy.z,
+                radius: sphereRad,
+                timer: sphereDur,
+                duration: sphereDur,
+                slamDamage: Math.max(3, Math.round(normalAttackDmg * 3.0)),
+                targets: captured
+              });
+            }
+          }
+        }
       } else if (hitElem === 'lightning' && allowChain) {
-        const extraChainStacks = perks.chain_soul || 0;
-        const bounceTargets = 1 + (extraChainStacks >= 2 ? 1 : 0);
-        const arcDmg = Math.max(2, Math.round(dmg * (0.55 + extraChainStacks * 0.10)));
+        const bounceTargets = 1 + catStacks;
+        const arcDmg = Math.max(2, Math.round(dmg * (0.58 + catStacks * 0.12)));
         triggerChainLightning(enemy, arcDmg, bounceTargets, 0x38bdf8);
       } else if (hitElem === 'air') {
-        enemy.stunTimer = Math.max(enemy.stunTimer || 0, enemy.isBoss ? 0.06 : 0.22);
-        emitParticles(enemy.x, 0.72, enemy.z, 0x5eead4, 4, 4.2, 0.11);
-      }
-
-      // Apply Frost Touch & Burn Cinder blessings on direct player/splash hits
-      if (stats?.frostSlowDuration > 0) {
-        enemy.frostTimer = Math.max(enemy.frostTimer || 0, stats.frostSlowDuration);
-        enemy.frostFactor = Math.min(enemy.frostFactor || 1.0, stats.frostSlowFactor);
-        if (Math.random() < 0.45) {
-          emitParticles(enemy.x, 0.6, enemy.z, 0x67e8f9, 3, 2.8, 0.11);
-        }
-      }
-      if (stats?.burnDps > 0 && stats?.burnDuration > 0) {
-        enemy.burnTimer = Math.max(enemy.burnTimer || 0, stats.burnDuration);
-        enemy.burnDps = Math.max(enemy.burnDps || 0, stats.burnDps);
-      }
-
-      // Chain Soul lightning blessing (for non-lightning-element weapons!)
-      const chainChance = stats?.chainChance || 0;
-      if (allowChain && hitElem !== 'lightning' && chainChance > 0 && Math.random() < chainChance) {
-        const arcDamage = Math.max(1, Math.round(dmg * 0.45));
-        const maxArcs = (perks.chain_soul || 1) >= 3 ? 2 : 1;
-        triggerChainLightning(enemy, arcDamage, maxArcs, 0xc084fc);
+        enemy.stunTimer = Math.max(enemy.stunTimer || 0, enemy.isBoss ? 0.06 : 0.24);
+        emitParticles(enemy.x, 0.72, enemy.z, 0x5eead4, 5, 4.4, 0.12);
       }
     }
 
@@ -1639,7 +1797,7 @@ export function createCombatController({
         const nz = dist > 0.001 ? dz / dist : 1;
         const isCrit = canCrit && Math.random() < (stats?.critChance || 0.04);
         const hitDmg = isCrit ? Math.round(damage * (stats?.critMult || 1.75)) : damage;
-        applyDamageToEnemy(e, hitDmg, nx * knockbackForce, nz * knockbackForce, false, { isCrit, mageElement });
+        applyDamageToEnemy(e, hitDmg, nx * knockbackForce, nz * knockbackForce, false, { isCrit, isSplash: true, mageElement });
       }
     }
   }
@@ -1669,27 +1827,41 @@ export function createCombatController({
       enemy.isBoss ? 0.22 : 0.15
     );
 
+    // 💀 3D Physics Bone-Shatter + Authentic Rigged Skeleton Death Collapse!
+    world?.spawnBoneShatter?.(enemy.x, enemy.z, Boolean(enemy.isBoss || enemy.isMiniBoss));
+    audio?.playArmorBreak?.('bones');
+    if (enemy.model && !enemy._corpseTransferred) {
+      enemy._corpseTransferred = true;
+      enemy.model.obj.position.y = 0;
+      enemy.model.obj.rotation.z = 0;
+      enemy.model.handle?.playDeathCollapse?.();
+      if (dyingCorpses.length >= 14) {
+        const oldest = dyingCorpses.shift();
+        removeSceneObject(oldest.model.obj, oldest.model.handle);
+      }
+      dyingCorpses.push({ model: enemy.model, age: 0, duration: 0.66 });
+    }
+
     // Bomber spawns 0.80s orange explosive barrel hazard on death!
     if (enemy.explodesOnDeath && !enemy.bomberTriggered) {
       enemy.bomberTriggered = true;
       spawnBomberHazard(enemy.x, enemy.z);
     }
 
-    // Vampiric blessing: heal 8 * stacks HP every 16 kills
-    const vampStacks = perks.vampiric || 0;
-    if (vampStacks > 0) {
+    // 🩸 Казнь Кровопийцы (war_blood_cleave): heal +12 HP per stack every 9 kills!
+    const bloodCleaveStacks = stats?.warBloodStacks || 0;
+    if (bloodCleaveStacks > 0) {
       player.vampiricKills += 1;
-      if (player.vampiricKills >= 16) {
+      if (player.vampiricKills >= 9) {
         player.vampiricKills = 0;
-        const heal = 8 * vampStacks;
+        const heal = 12 * bloodCleaveStacks;
         player.hp = Math.min(stats.maxHp, player.hp + heal);
         floatText(`+${heal} HP`, player.x, player.z, '#f87171');
       }
     }
 
     // Direct & immediate Gold + Soul XP (ZERO floor coins or XP meshes!)
-    const greedStacks = perks.greed_contract || 0;
-    const earnedGold = Math.max(1, Math.round((enemy.gold || 1) * (1 + greedStacks * 0.30)));
+    const earnedGold = Math.max(1, Math.round((enemy.gold || 1) * (stats?.goldMult || 1)));
     progression.addGold(earnedGold);
     goldRun += earnedGold;
 
@@ -1730,17 +1902,20 @@ export function createCombatController({
       return;
     }
 
-    // Rare tactical drops ONLY (Supply Crate, Companion Crate, Heart, Clover)
+    // Rare tactical drops ONLY (Supply Crate, Companion Crate, Heart, Clover — Beast Seals slowed down!)
+    const beastNow = player.beastTimeLeft > 0;
     if (enemy.eliteType === 'purple') {
       const dropCompanion = !companion && Math.random() < 0.48 ? 'companion_crate' : 'supply_crate';
       spawnPickup(dropCompanion, enemy.x, enemy.z);
     } else if (enemy.eliteType === 'blue') {
-      spawnPickup('heart', enemy.x - 0.55, enemy.z, { value: Math.round(stats.maxHp * 0.25) });
-      spawnPickup('clover', enemy.x + 0.55, enemy.z);
+      spawnPickup('heart', enemy.x - 0.45, enemy.z, { value: Math.round(stats.maxHp * 0.25) });
+      if (!beastNow && Math.random() < 0.32) {
+        spawnPickup('clover', enemy.x + 0.45, enemy.z);
+      }
     } else if (!enemy.isSummoned) {
       if (player.hp < stats.maxHp * 0.66 && Math.random() < 0.042) {
         spawnPickup('heart', enemy.x, enemy.z, { value: Math.round(stats.maxHp * 0.22) });
-      } else if (Math.random() < 0.022) {
+      } else if (!beastNow && Math.random() < 0.007) {
         spawnPickup('clover', enemy.x, enemy.z);
       }
     }
@@ -1812,12 +1987,32 @@ export function createCombatController({
 
     let dmg = rawDamage * (1 - (stats?.damageBlock || 0));
 
+    // 🛡️ Сфера Отражения (mage_arcane_ward): absorbs 65% damage & blasts attackers away!
+    if ((stats?.mageWardStacks || 0) > 0 && player.arcaneWardReady) {
+      player.arcaneWardReady = false;
+      player.arcaneWardTimer = Math.max(4.5, 8.5 - stats.mageWardStacks * 1.2);
+      dmg *= 0.35;
+      const wardColor = stats.mageElementColor || 0xc084fc;
+      audio?.playMagicCast?.(stats.mageElement || 'void_orb');
+      emitShockwave(player.x, player.z, 4.4, wardColor, 0.36);
+      emitParticles(player.x, 0.85, player.z, wardColor, 16, 6.5, 0.16);
+      damageEnemiesInRadius(player.x, player.z, 4.4, Math.round(stats.damage * (0.9 + stats.mageWardStacks * 0.45)), 15.0, null, false, stats.mageElement);
+      floatText('🔮 ЩИТ ЧАР!', player.x, player.z, '#c084fc');
+    }
+
     // Class Shield Block Passive!
     if (Math.random() < (stats?.blockChance || 0)) {
       dmg *= 0.5;
       audio?.playBlock?.();
       emitParticles(player.x, 0.85, player.z, 0xfbbf24, 10, 5.2, 0.15);
       floatText('БЛОК!', player.x, player.z, '#fbbf24');
+    }
+
+    // ⚔️ Шипованный Бастион (war_shield_thorns): retaliates with steel shrapnel blast!
+    if ((stats?.warThornsStacks || 0) > 0) {
+      const thornDmg = Math.round(stats.damage * (0.75 + stats.warThornsStacks * 0.40));
+      emitShockwave(player.x, player.z, 3.8, 0xfbbf24, 0.28);
+      damageEnemiesInRadius(player.x, player.z, 3.8, thornDmg, 11.5, null, false);
     }
 
     const finalDmg = Math.max(1, Math.round(dmg));
@@ -1864,7 +2059,7 @@ export function createCombatController({
     mageElement = null
   }) {
     const scale =
-      kind === 'magic' ? 1.0 : isEnemy ? 0.84 : isShotgunPellet ? 0.66 : 0.74;
+      kind === 'magic' ? 1.28 : isEnemy ? 0.84 : isShotgunPellet ? 0.66 : 0.74;
     const vis = makeProjectileVisual(visualType || kind, color, scale);
     vis.obj.position.set(x, 0.78, z);
     vis.obj.rotation.y = Math.atan2(vx, vz);
@@ -1945,12 +2140,14 @@ export function createCombatController({
       player.mana = Math.max(0, player.mana - mCost);
     }
 
+    let ammoBeforeShot = player.ammo;
     if (!isOverdrive && usesMag) {
       if (player.isReloading) return;
       if (player.ammo <= 0) {
         triggerReload();
         return;
       }
+      ammoBeforeShot = player.ammo;
       player.ammo = Math.max(0, player.ammo - 1);
     }
 
@@ -1962,9 +2159,15 @@ export function createCombatController({
       }
     }
 
+    // 🔥 Гнев Несокрушимого (war_iron_banner): missing HP boosts Warrior attack speed & damage up to +45% per stack!
+    const missingHpRatio = wpn.type === 'melee' && (stats.warBannerStacks || 0) > 0
+      ? clamp(1 - player.hp / Math.max(1, stats.maxHp), 0, 0.85)
+      : 0;
+    const berserkBoost = 1 + missingHpRatio * (stats.warBannerStacks || 0) * 0.52;
+
     player.facing = aimAngle;
     player.attackAnimTimer = 0.22;
-    player.attackCooldown = isOverdrive ? stats.cooldown / 1.55 : stats.cooldown;
+    player.attackCooldown = (isOverdrive ? stats.cooldown / 1.55 : stats.cooldown) / berserkBoost;
     triggerModelAttack(heroModel, wpn.type);
 
     const dirX = Math.sin(aimAngle);
@@ -1981,12 +2184,32 @@ export function createCombatController({
 
     // 1. WARRIOR MELEE
     if (wpn.type === 'melee') {
+      player.meleeSwingCount = (player.meleeSwingCount || 0) + 1;
       audio?.playMeleeSwing?.(wpn.id !== 'club');
       const swingColor = isOverdrive ? 0xf97316 : wpn.color;
       emitSlashArc(player.x, player.z, aimAngle, stats.range, stats.arcAngle, swingColor);
 
       const halfArc = stats.arcAngle * 0.5 + 0.16;
-      const baseMeleeDmg = isOverdrive ? Math.round(stats.damage * 1.25) : stats.damage;
+      const baseMeleeDmg = Math.round((isOverdrive ? stats.damage * 1.25 : stats.damage) * berserkBoost);
+
+      // 🌋 Раскол Брусчатки (war_seismic_slam): every 3rd sword swing shatters the ground!
+      if ((stats.warSeismicStacks || 0) > 0 && player.meleeSwingCount % 3 === 0) {
+        const slamX = player.x + dirX * 1.8;
+        const slamZ = player.z + dirZ * 1.8;
+        const slamDmg = Math.round(baseMeleeDmg * (0.85 + stats.warSeismicStacks * 0.35));
+        emitShockwave(slamX, slamZ, 4.6, 0xfbbf24, 0.38);
+        emitParticles(slamX, 0.5, slamZ, 0xfde047, 16, 6.8, 0.18);
+        world?.addScreenShake?.(0.28, 0.15);
+        for (let si = enemies.length - 1; si >= 0; si--) {
+          const se = enemies[si];
+          if (!se || se.hp <= 0) continue;
+          const sDist = Math.hypot(se.x - slamX, se.z - slamZ);
+          if (sDist <= 4.6 + se.radius) {
+            se.stunTimer = Math.max(se.stunTimer || 0, se.isBoss ? 0.08 : 0.35);
+            applyDamageToEnemy(se, slamDmg, (se.x - slamX) * 2.5, (se.z - slamZ) * 2.5, false, { isSplash: true });
+          }
+        }
+      }
 
       for (let i = enemies.length - 1; i >= 0; i--) {
         const e = enemies[i];
@@ -2080,10 +2303,27 @@ export function createCombatController({
       const rightZ = -Math.sin(aimAngle);
       emitParticles(player.x + rightX * 0.45, 0.78, player.z + rightZ * 0.45, 0xfbbf24, 3, 4.0, 0.08);
 
+      player.gunShotCount = (player.gunShotCount || 0) + 1;
+      const isLastShell = usesMag && !isOverdrive && ammoBeforeShot === 1 && (stats.ammoPouchStacks || 0) > 0;
+      const expSlugStacks = stats.gunExplosiveStacks || 0;
+      const isExplosiveShot = expSlugStacks > 0 && player.gunShotCount % (expSlugStacks >= 3 ? 2 : 3) === 0;
+
       const count = stats.pellets + (isOverdrive ? 2 : 0);
       const totalSpread = stats.spread + (isOverdrive ? 0.06 : 0);
-      const projSplash = isOverdrive ? Math.max(0.95, stats.splashRadius) : stats.splashRadius;
-      const shotCrit = Math.random() < (stats.critChance || 0.04);
+      const projSplash = isExplosiveShot
+        ? 2.25
+        : isOverdrive
+          ? Math.max(0.95, stats.splashRadius)
+          : stats.splashRadius;
+      const shotCrit = isLastShell || Math.random() < (stats.critChance || 0.04);
+      const pelletDmg = Math.round(
+        stats.damage *
+          (isLastShell ? 2.0 / (stats.critMult || 1.8) : 1.0) *
+          (isExplosiveShot ? 1 + expSlugStacks * 0.25 : 1.0)
+      );
+      if (isLastShell) {
+        floatText('🎯 КОЗЫРЬ ×2!', player.x, player.z, '#fde047');
+      }
 
       for (let i = 0; i < count; i++) {
         const frac = count > 1 ? i / (count - 1) - 0.5 : 0;
@@ -2101,7 +2341,7 @@ export function createCombatController({
           z: muzzleZ,
           vx: Math.sin(shotAngle) * pelletSpeed,
           vz: Math.cos(shotAngle) * pelletSpeed,
-          damage: stats.damage,
+          damage: pelletDmg,
           maxDist: pelletMaxDist,
           pierce: stats.pierce + (isOverdrive ? 1 : 0),
           splashRadius: projSplash,
@@ -2110,7 +2350,7 @@ export function createCombatController({
           visualType: wpn.isShotgun ? 'buckshot' : wpn.id,
           isShotgunPellet: Boolean(wpn.isShotgun),
           isCrit: shotCrit,
-          color: isOverdrive ? 0xf97316 : shotCrit ? 0xfef08a : wpn.color,
+          color: isExplosiveShot || isOverdrive ? 0xf97316 : shotCrit ? 0xfef08a : wpn.color,
           isEnemy: false
         });
       }
@@ -2121,24 +2361,33 @@ export function createCombatController({
       return;
     }
 
-    // 3. MAGE ELEMENTAL STAVES (Fire, Water, Lightning, Air — Sculpted 3D Spells & Authentic Audio!)
+    // 3. MAGE ELEMENTAL STAVES (Fire = Burn DoT, Water = Slow + 7% 3D Water Sphere, Lightning = Chain, Air = Small Wind Gust!)
     const mageElem = stats.mageElement || 'fire';
+    player.mageCastCount = (player.mageCastCount || 0) + 1;
     audio?.playMagicCast?.(mageElem);
     const castColor = isOverdrive ? 0xf43f5e : (stats.mageElementColor || wpn.color);
-    world?.spawnMuzzleFlash?.({ x: muzzleX, y: 0.85, z: muzzleZ, angle: aimAngle, color: castColor, scale: 1.18 });
-    world?.addScreenShake?.(wpn.id === 'void_orb' ? 0.18 : 0.09, 0.11);
-    emitParticles(muzzleX, 0.84, muzzleZ, castColor, 7, 5.0, 0.13);
+    world?.spawnMuzzleFlash?.({ x: muzzleX, y: 0.85, z: muzzleZ, angle: aimAngle, color: castColor, scale: 1.24 });
+    world?.addScreenShake?.(wpn.id === 'void_orb' ? 0.16 : 0.08, 0.10);
+    emitParticles(muzzleX, 0.84, muzzleZ, castColor, 8, 5.2, 0.14);
 
-    const orbCount = stats.pellets + (isOverdrive ? 1 : 0);
-    const orbSpread = stats.spread + (isOverdrive && orbCount > 1 ? 0.14 : 0);
-    const magicSplash = mageElem === 'lightning'
-      ? (wpn.tier > 1 ? stats.splashRadius * 0.65 : 0)
-      : Math.max(2.2, stats.splashRadius * (isOverdrive ? 1.25 : 1.0));
-    const spellCrit = Math.random() < (stats.critChance || 0.04);
+    // 💧 Астральный Колодец (mage_mana_font): every 6th cast restores +16 Mana & pulses arcane wave!
+    if ((stats.mageManaFontStacks || 0) > 0 && player.mageCastCount % 6 === 0) {
+      player.mana = Math.min(player.maxMana, player.mana + 16);
+      emitParticles(player.x, 0.85, player.z, 0x38bdf8, 14, 5.8, 0.15);
+      damageEnemiesInRadius(player.x, player.z, 3.6, Math.round(stats.damage * 0.85), 8.5, null, false, mageElem);
+      floatText('💧 +16 МАНЫ!', player.x, player.z, '#38bdf8');
+    }
+
+    // ✨ Раздвоение Кометы (mage_twin_cast): 40% / 75% / 100% chance for a free twin projectile!
+    const twinStacks = stats.mageTwinStacks || 0;
+    const bonusTwin = twinStacks > 0 && Math.random() < Math.min(1.0, 0.05 + twinStacks * 0.35) ? 1 : 0;
+    const orbCount = stats.pellets + (isOverdrive ? 1 : 0) + bonusTwin;
+    const orbSpread = stats.spread + (orbCount > 1 ? 0.16 : 0);
+    const spellCrit = Math.random() < (stats.critChance || 0.05);
 
     for (let i = 0; i < orbCount; i++) {
       const frac = orbCount > 1 ? i / (orbCount - 1) - 0.5 : 0;
-      const shotAngle = aimAngle + frac * orbSpread + (Math.random() - 0.5) * 0.03;
+      const shotAngle = aimAngle + frac * orbSpread + (Math.random() - 0.5) * 0.025;
       spawnProjectile({
         x: muzzleX,
         z: muzzleZ,
@@ -2147,7 +2396,7 @@ export function createCombatController({
         damage: stats.damage,
         maxDist: stats.range,
         pierce: stats.pierce + (mageElem === 'air' ? 1 : 0),
-        splashRadius: magicSplash,
+        splashRadius: 0, // NO ugly flat ground splash circles on basic magic shots!
         knockback: stats.knockback,
         kind: 'magic',
         mageElement: mageElem,
@@ -2900,18 +3149,153 @@ export function createCombatController({
       }
     }
 
-    // Soul Nova periodic shockwave blessing (every 9.0s!)
-    const soulNovaStacks = perks.soul_nova || 0;
-    if (soulNovaStacks > 0 && !beastActive) {
-      player.soulNovaTimer -= dt;
-      if (player.soulNovaTimer <= 0) {
-        player.soulNovaTimer = stats.soulNovaInterval || 9.0;
-        const novaRad = stats.soulNovaRadius || 5.4;
-        const novaDmg = stats.soulNovaDamage || Math.round(stats.damage * (0.85 + soulNovaStacks * 0.45));
-        audio?.playMagicCast?.('void_orb');
-        emitShockwave(player.x, player.z, novaRad, 0xc084fc, 0.44);
-        emitParticles(player.x, 0.75, player.z, 0xc084fc, 18, 6.2, 0.16);
-        damageEnemiesInRadius(player.x, player.z, novaRad, novaDmg, 12.5 + soulNovaStacks * 2.0, null, false);
+    // Class-specific periodic & aura blessings!
+    if (player.sprintTimer > 0) player.sprintTimer = Math.max(0, player.sprintTimer - dt);
+
+    // 🛡️ Сфера Отражения (mage_arcane_ward) recharge
+    if ((stats.mageWardStacks || 0) > 0 && !player.arcaneWardReady) {
+      player.arcaneWardTimer -= dt;
+      if (player.arcaneWardTimer <= 0) {
+        player.arcaneWardReady = true;
+        emitParticles(player.x, 0.9, player.z, 0xc084fc, 8, 3.2, 0.12);
+      }
+    }
+
+    // ☄️ Звездопад Архонта (mage_meteor_shower)
+    const meteorStacks = stats.mageMeteorStacks || 0;
+    if (meteorStacks > 0 && !beastActive && enemies.length > 0) {
+      player.meteorTimer -= dt;
+      if (player.meteorTimer <= 0) {
+        player.meteorTimer = Math.max(2.3, 4.4 - meteorStacks * 0.65);
+        const mTarget = enemies[Math.floor(Math.random() * enemies.length)];
+        if (mTarget && mTarget.hp > 0) {
+          const mColor = stats.mageElementColor || 0xff5722;
+          world?.spawnMeteorStrike?.({ x: mTarget.x, z: mTarget.z, radius: 3.8, color: mColor, duration: 0.34 });
+          pendingMeteors.push({
+            x: mTarget.x,
+            z: mTarget.z,
+            radius: 3.8,
+            timer: 0.34,
+            damage: Math.round(stats.damage * (1.6 + meteorStacks * 0.55)),
+            element: stats.mageElement
+          });
+        }
+      }
+    }
+    for (let mi = pendingMeteors.length - 1; mi >= 0; mi--) {
+      const mt = pendingMeteors[mi];
+      mt.timer -= dt;
+      if (mt.timer <= 0) {
+        audio?.playExplosion?.();
+        world?.addScreenShake?.(0.32, 0.16);
+        damageEnemiesInRadius(mt.x, mt.z, mt.radius, mt.damage, 12.0, null, true, mt.element);
+        pendingMeteors.splice(mi, 1);
+      }
+    }
+
+    // 💣 Шрапнельный Капкан (gun_shrapnel_mine)
+    const mineStacks = stats.gunMineStacks || 0;
+    if (mineStacks > 0 && !beastActive && shrapnelMines.length < 6) {
+      player.mineTimer -= dt;
+      if (player.mineTimer <= 0) {
+        player.mineTimer = Math.max(2.6, 5.2 - mineStacks * 0.75);
+        let mineMesh = null;
+        if (world?.scene) {
+          mineMesh = new THREE.Mesh(sharedMiniCrateGeo, getProjMaterial(0xef4444));
+          mineMesh.scale.set(0.65, 0.32, 0.65);
+          mineMesh.position.set(player.x, 0.14, player.z);
+          world.scene.add(mineMesh);
+        }
+        shrapnelMines.push({
+          x: player.x,
+          z: player.z,
+          age: 0,
+          armTime: 0.35,
+          damage: Math.round(stats.damage * (1.7 + mineStacks * 0.6) * Math.max(1, (stats.pellets || 1) * 0.35)),
+          mesh: mineMesh
+        });
+      }
+    }
+    for (let smi = shrapnelMines.length - 1; smi >= 0; smi--) {
+      const sm = shrapnelMines[smi];
+      sm.age += dt;
+      if (sm.mesh) sm.mesh.rotation.y += dt * 2.5;
+      let triggered = sm.age > 14.0;
+      if (!triggered && sm.age >= sm.armTime) {
+        for (let ei = 0; ei < enemies.length; ei++) {
+          const e = enemies[ei];
+          if (e && e.hp > 0 && Math.hypot(e.x - sm.x, e.z - sm.z) <= 1.45 + e.radius) {
+            triggered = true;
+            break;
+          }
+        }
+      }
+      if (triggered) {
+        if (sm.age <= 14.0) {
+          audio?.playExplosion?.();
+          emitShockwave(sm.x, sm.z, 3.6, 0xf97316, 0.34);
+          emitParticles(sm.x, 0.5, sm.z, 0xfbbf24, 18, 7.2, 0.16);
+          damageEnemiesInRadius(sm.x, sm.z, 3.6, sm.damage, 13.0, null, true);
+        }
+        if (sm.mesh?.parent) sm.mesh.parent.remove(sm.mesh);
+        shrapnelMines.splice(smi, 1);
+      }
+    }
+
+    // 🌪️ Вихрь Жнеца (war_whirlwind): automatic 360° spin slash!
+    const wwStacks = stats.warWhirlwindStacks || 0;
+    if (wwStacks > 0 && !beastActive) {
+      player.whirlwindTimer -= dt;
+      if (player.whirlwindTimer <= 0) {
+        player.whirlwindTimer = Math.max(2.6, 4.8 - wwStacks * 0.65);
+        audio?.playMeleeSwing?.(true);
+        emitSlashArc(player.x, player.z, player.facing, stats.range * 1.12, Math.PI * 1.98, 0xef4444);
+        damageEnemiesInRadius(player.x, player.z, stats.range * 1.12, Math.round(stats.damage * (0.95 + wwStacks * 0.35)), stats.knockback * 1.1, null, true);
+      }
+    }
+
+    // 🗡️ Клинки Предков (war_orbit_blades): real 3D spinning spectral swords around Warrior!
+    const orbitStacks = stats.warOrbitStacks || 0;
+    if (orbitStacks > 0 && world?.scene) {
+      const desiredBlades = 1 + orbitStacks;
+      if (!orbitBladesGroup) {
+        orbitBladesGroup = new THREE.Group();
+        world.scene.add(orbitBladesGroup);
+        orbitBladeMeshes = [];
+      }
+      while (orbitBladeMeshes.length < desiredBlades) {
+        const bGrp = new THREE.Group();
+        const bladeMesh = new THREE.Mesh(
+          new THREE.BoxGeometry(0.12, 0.04, 0.92),
+          getProjMaterial(0xfde047)
+        );
+        bladeMesh.position.z = 0.25;
+        bGrp.add(bladeMesh);
+        orbitBladesGroup.add(bGrp);
+        orbitBladeMeshes.push(bGrp);
+      }
+      orbitBladesGroup.position.set(player.x, 0.82, player.z);
+      const baseSpin = elapsedTime * (3.6 + orbitStacks * 0.55);
+      const orbitRad = 2.45;
+      for (let bi = 0; bi < orbitBladeMeshes.length; bi++) {
+        const ang = baseSpin + (bi / orbitBladeMeshes.length) * TWO_PI;
+        const bx = Math.cos(ang) * orbitRad;
+        const bz = Math.sin(ang) * orbitRad;
+        orbitBladeMeshes[bi].position.set(bx, 0, bz);
+        orbitBladeMeshes[bi].rotation.y = -ang;
+        const wx = player.x + bx;
+        const wz = player.z + bz;
+        for (let ei = enemies.length - 1; ei >= 0; ei--) {
+          const e = enemies[ei];
+          if (!e || e.hp <= 0) continue;
+          if (Math.hypot(e.x - wx, e.z - wz) <= 0.75 + e.radius) {
+            const lastHit = player.orbitHitTimers.get(e.uid) || 0;
+            if (elapsedTime - lastHit >= 0.36) {
+              player.orbitHitTimers.set(e.uid, elapsedTime);
+              applyDamageToEnemy(e, Math.max(4, Math.round(stats.damage * 0.55)), bx * 2.2, bz * 2.2, false, { isSplash: true });
+            }
+          }
+        }
       }
     }
 
@@ -2924,7 +3308,8 @@ export function createCombatController({
       mz /= moveMag;
     }
     const speedRatio = Math.min(1, moveMag);
-    const effectiveMoveSpeed = stats.moveSpeed * (beastActive ? 1.45 : 1.0);
+    const sprintMult = player.sprintTimer > 0 ? 1.35 : 1.0;
+    const effectiveMoveSpeed = stats.moveSpeed * (beastActive ? 1.45 : 1.0) * sprintMult;
 
     if (moveMag > 0.01) {
       player.x += mx * effectiveMoveSpeed * dt;
@@ -3099,9 +3484,75 @@ export function createCombatController({
 
     spawnTimer -= dt;
     if (spawnTimer <= 0) {
-      const intervalMult = finaleStarted ? 2.35 : 1.0;
+      const intervalMult = finaleStarted ? 2.6 : 1.52;
       spawnTimer = currentLevelDef.spawnInterval * intervalMult;
       spawnWavePack();
+    }
+
+    // 50. Update Dying Skeleton Corpses (Rigged Death Collapse onto Cobblestones -> Pool Recycle!)
+    for (let ci = dyingCorpses.length - 1; ci >= 0; ci--) {
+      const dc = dyingCorpses[ci];
+      dc.age += dt;
+      if (dc.age >= dc.duration) {
+        removeSceneObject(dc.model.obj, dc.model.handle);
+        dyingCorpses.splice(ci, 1);
+        continue;
+      }
+      const sink = dc.age > dc.duration * 0.72 ? (dc.age - dc.duration * 0.72) / (dc.duration * 0.28) : 0;
+      dc.model.handle?.updateDying?.(dt, sink);
+    }
+
+    // 50B. Update Water Mage's 7% Spherical Water Prisons (1.1s Mid-Air Suspension -> Slam Down for 3x Normal Attack Damage!)
+    for (let wpi = activeWaterPrisons.length - 1; wpi >= 0; wpi--) {
+      const wp = activeWaterPrisons[wpi];
+      wp.timer -= dt;
+      if (wp.timer > 0) {
+        // Also snare any enemy that walks into the floating water sphere while it's active!
+        for (let ei = 0; ei < enemies.length; ei++) {
+          const cand = enemies[ei];
+          if (!cand || cand.hp <= 0 || wp.targets.includes(cand)) continue;
+          if (Math.hypot(cand.x - wp.x, cand.z - wp.z) <= wp.radius) {
+            cand.waterLiftTimer = wp.timer;
+            cand.stunTimer = Math.max(cand.stunTimer || 0, wp.timer + 0.1);
+            wp.targets.push(cand);
+          }
+        }
+        for (let ti = 0; ti < wp.targets.length; ti++) {
+          const te = wp.targets[ti];
+          if (!te || te.hp <= 0) continue;
+          te.waterLiftTimer = Math.max(te.waterLiftTimer || 0, wp.timer);
+          te.stunTimer = Math.max(te.stunTimer || 0, wp.timer + 0.08);
+          // Pull firmly inside the suspended 3D water sphere!
+          const orbitOffX = Math.cos(ti * 2.1 + elapsedTime * 3.2) * 0.42;
+          const orbitOffZ = Math.sin(ti * 2.1 + elapsedTime * 3.2) * 0.42;
+          te.x += (wp.x + orbitOffX - te.x) * Math.min(1, dt * 11.0);
+          te.z += (wp.z + orbitOffZ - te.z) * Math.min(1, dt * 11.0);
+          te.vx = 0;
+          te.vz = 0;
+        }
+      } else {
+        audio?.playElementImpact?.('water_prison_slam');
+        world?.addScreenShake?.(0.36, 0.18);
+        emitParticles(wp.x, 0.55, wp.z, 0x38bdf8, 24, 8.2, 0.19);
+        emitParticles(wp.x, 0.45, wp.z, 0xe0f2fe, 12, 6.0, 0.15);
+        for (let ti = 0; ti < wp.targets.length; ti++) {
+          const te = wp.targets[ti];
+          if (!te || te.hp <= 0) continue;
+          te.waterLiftTimer = 0;
+          if (te.model?.obj) {
+            te.model.obj.position.y = 0;
+            te.model.obj.rotation.x = 0;
+            te.model.obj.rotation.z = 0;
+          }
+          floatText(`🌊 ×3! -${wp.slamDamage}`, te.x, te.z, '#38bdf8');
+          applyDamageToEnemy(te, wp.slamDamage, 0, 0, false, {
+            isWaterSlam: true,
+            isSplash: true,
+            mageElement: 'water'
+          });
+        }
+        activeWaterPrisons.splice(wpi, 1);
+      }
     }
 
     // 5A. Boss Ground Hazards Update
@@ -3231,26 +3682,26 @@ export function createCombatController({
             });
 
             if (proj.mageElement === 'air') {
-              emitShockwave(proj.x, proj.z, 2.8, 0x5eead4, 0.24);
-              damageEnemiesInRadius(proj.x, proj.z, 2.8, Math.round(hitDamage * 0.35), proj.knockback * 0.85, e, false, 'air');
-            } else if (proj.kind === 'magic' && proj.splashRadius > 0) {
-              const sRad = proj.splashRadius || 2.2;
-              emitShockwave(proj.x, proj.z, sRad, proj.color, 0.28);
-              emitParticles(proj.x, 0.72, proj.z, proj.color, 10, 5.0, 0.15);
+              // 🌪️ Air: Tight small wind-vortex splash (1.85m — smaller than Lightning chain reach, NO flat ground ring!)
+              const catAir = stats?.mageCatalystStacks || 0;
+              world?.spawnElementalImpact?.({ element: 'air', x: proj.x, z: proj.z, radius: 1.85 });
               damageEnemiesInRadius(
                 proj.x,
                 proj.z,
-                sRad,
-                Math.round(hitDamage * 0.65),
-                proj.knockback * 0.7,
+                1.85,
+                Math.max(2, Math.round(hitDamage * (0.28 + catAir * 0.20))),
+                proj.knockback * 0.72,
                 e,
                 false,
-                proj.mageElement
+                'air'
               );
+            } else if (proj.kind === 'magic') {
+              // Crisp elemental burst particles ONLY — ZERO flat expanding ground circles!
+              emitParticles(proj.x, 0.78, proj.z, proj.color, 8, 4.6, 0.15);
             } else if (proj.splashRadius > 0) {
               const sRad = proj.splashRadius || 2.2;
               emitShockwave(proj.x, proj.z, sRad, proj.color, 0.28);
-              emitParticles(proj.x, 0.72, proj.z, proj.color, 6, 5.2, 0.15);
+              emitParticles(proj.x, 0.72, proj.z, proj.color, 8, 5.4, 0.15);
               damageEnemiesInRadius(proj.x, proj.z, sRad, Math.round(hitDamage * 0.55), proj.knockback * 0.7, e, false);
             }
 
@@ -3309,7 +3760,7 @@ export function createCombatController({
     for (let i = enemies.length - 1; i >= 0; i--) {
       const e = enemies[i];
       if (!e || e.hp <= 0) {
-        if (e) removeSceneObject(e.model.obj, e.model.handle);
+        if (e && !e._corpseTransferred) removeSceneObject(e.model.obj, e.model.handle);
         enemies.splice(i, 1);
         continue;
       }
@@ -3319,25 +3770,58 @@ export function createCombatController({
       if (e.stunTimer > 0) e.stunTimer = Math.max(0, e.stunTimer - dt);
       if (e.frostTimer > 0) e.frostTimer = Math.max(0, e.frostTimer - dt);
       if (e.soakedTimer > 0) e.soakedTimer = Math.max(0, e.soakedTimer - dt);
+      if (e.waterLiftTimer > 0) e.waterLiftTimer = Math.max(0, e.waterLiftTimer - dt);
       if (e.napalmTimer > 0) {
         e.napalmTimer = Math.max(0, e.napalmTimer - dt);
         if (e.napalmTimer <= 0) e.napalmStacks = 0;
       }
 
-      // Burn Cinder DoT tick!
+      // 🔥 Visible continuous Fire Burn DoT flames on burning enemies!
       if (e.burnTimer > 0 && e.burnDps > 0) {
         e.burnTimer = Math.max(0, e.burnTimer - dt);
+        e.fireVfxTick = (e.fireVfxTick || 0) + dt;
+        if (e.fireVfxTick >= 0.18) {
+          e.fireVfxTick = 0;
+          emitParticles(e.x + (Math.random() - 0.5) * 0.35, 0.65, e.z + (Math.random() - 0.5) * 0.35, Math.random() < 0.5 ? 0xff5722 : 0xfef08a, 2, 2.2, 0.13);
+        }
         e.burnTickTimer += dt;
-        if (e.burnTickTimer >= 0.5) {
-          e.burnTickTimer -= 0.5;
-          emitParticles(e.x, 0.72, e.z, 0xf97316, 3, 2.8, 0.11);
-          applyDamageToEnemy(e, Math.max(1, Math.round(e.burnDps * 0.5)), 0, 0, false, { isDoT: true });
+        if (e.burnTickTimer >= 0.45) {
+          e.burnTickTimer -= 0.45;
+          applyDamageToEnemy(e, Math.max(1, Math.round(e.burnDps * 0.45)), 0, 0, false, { isDoT: true });
           if (e.hp <= 0) {
-            removeSceneObject(e.model.obj, e.model.handle);
+            if (!e._corpseTransferred) removeSceneObject(e.model.obj, e.model.handle);
             enemies.splice(i, 1);
             continue;
           }
         }
+      }
+
+      // If enemy is suspended in mid-air inside Water Mage's 7% Spherical Water Ball, lift & flail their 3D model right inside the bubble!
+      if ((e.waterLiftTimer || 0) > 0) {
+        if (e.model?.obj) {
+          const liftRamp = Math.min(1, (1.15 - e.waterLiftTimer) / 0.20);
+          const targetY = e.isBoss ? 0.45 : 1.18;
+          e.model.obj.position.x = e.x;
+          e.model.obj.position.y = targetY * liftRamp + Math.sin(elapsedTime * 9 + e.uid) * 0.08;
+          e.model.obj.position.z = e.z;
+          e.facing += dt * 3.2;
+          e.model.obj.rotation.y = e.facing;
+          // Animate arms & legs flailing inside the water sphere!
+          animateEntityModel(e.model, dt * 1.6, true, 1.4, false, false, elapsedTime);
+          if (!e.isBoss) {
+            e.model.obj.rotation.x = -0.56 * liftRamp;
+            e.model.obj.rotation.z = Math.sin(elapsedTime * 7 + e.uid) * 0.34;
+          }
+        }
+        continue;
+      } else if (
+        e.model?.obj &&
+        (e.model.obj.position.y > 0.01 || e.model.obj.rotation.x !== 0 || e.model.obj.rotation.z !== 0) &&
+        !e.isBoss
+      ) {
+        e.model.obj.position.y = 0;
+        e.model.obj.rotation.x = 0;
+        e.model.obj.rotation.z = 0;
       }
 
       // Apply knockback velocity with crisp damping
@@ -3380,19 +3864,19 @@ export function createCombatController({
             }
           }
         }
-        // --- ARCHETYPE 2: ARCHER (Keeps ~9m, pauses 0.45s before 1 cyan bone bolt @ 15.5 spd) ---
+        // --- ARCHETYPE 2: ARCHER (Rare ranged sniper: pauses 0.65s with clear glint before 1 dodgeable bolt @ 11.8 spd) ---
         else if (e.type === 'archer') {
           if (e.windupTimer > 0) {
             e.windupTimer -= dt;
             e.facing = Math.atan2(e.aimDirX, e.aimDirZ);
             if (e.windupTimer <= 0) {
-              e.shootCooldown = 2.25 + Math.random() * 0.35;
+              e.shootCooldown = 3.25 + Math.random() * 0.55;
               triggerModelAttack(e.model);
               spawnProjectile({
                 x: e.x,
                 z: e.z,
-                vx: e.aimDirX * 15.5,
-                vz: e.aimDirZ * 15.5,
+                vx: e.aimDirX * 11.8,
+                vz: e.aimDirZ * 11.8,
                 damage: e.damage,
                 maxDist: 20,
                 pierce: 1,
@@ -3411,11 +3895,11 @@ export function createCombatController({
               e.z -= (dz / dist) * (moveSpeed * 0.6) * dt;
             }
             e.shootCooldown -= dt;
-            if (e.shootCooldown <= 0 && dist <= 16.8) {
-              e.windupTimer = 0.45;
+            if (e.shootCooldown <= 0 && dist <= 16.5) {
+              e.windupTimer = 0.65;
               e.aimDirX = dx / dist;
               e.aimDirZ = dz / dist;
-              emitParticles(e.x + e.aimDirX * 0.45, 0.85, e.z + e.aimDirZ * 0.45, 0x22d3ee, 5, 2.8, 0.11);
+              emitParticles(e.x + e.aimDirX * 0.45, 0.85, e.z + e.aimDirZ * 0.45, 0x22d3ee, 6, 3.0, 0.13);
             }
           }
         }
@@ -3599,7 +4083,7 @@ export function createCombatController({
         e.model.obj.rotation.y = e.facing;
         animateEntityModel(e.model, dt, true, slowMult, false, false, elapsedTime);
       } else if (e.hp <= 0) {
-        removeSceneObject(e.model.obj, e.model.handle);
+        if (!e._corpseTransferred) removeSceneObject(e.model.obj, e.model.handle);
         enemies.splice(i, 1);
       }
     }
@@ -3663,10 +4147,10 @@ export function createCombatController({
             floatText('+3С ЗВЕРЯ!', player.x, player.z, '#4ade80');
           } else {
             player.seals += 1;
-            if (player.seals >= 3) {
+            if (player.seals >= 5) {
               activateBeastMode();
             } else {
-              floatText(`🍀 ПЕЧАТЬ ${player.seals}/3`, player.x, player.z, '#4ade80');
+              floatText(`🍀 ПЕЧАТЬ ${player.seals}/5`, player.x, player.z, '#4ade80');
             }
           }
         }

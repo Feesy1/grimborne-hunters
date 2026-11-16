@@ -2,14 +2,14 @@
 // Arsenal Progression, Procedural Web Audio, Gothic UI, and Yandex Games SDK v2.
 
 import * as THREE from '../vendor/three.module.js';
-import { LEVELS, MAGE_ELEMENTS } from './config.js?v=20261116f';
-import { createArenaWorld } from './world.js?v=20261116f';
-import * as models from './models.js?v=20261116f';
-import { createProgressionStore } from './progression.js?v=20261116f';
-import { createCombatController } from './combat.js?v=20261116f';
-import { createAudioEngine } from './audio.js?v=20261116f';
-import { initYandexSdk } from './yandexSdk.js?v=20261116f';
-import { createUIManager } from './ui.js?v=20261116f';
+import { LEVELS, MAGE_ELEMENTS } from './config.js?v=20261116h';
+import { createArenaWorld } from './world.js?v=20261116h';
+import * as models from './models.js?v=20261116h';
+import { createProgressionStore } from './progression.js?v=20261116h';
+import { createCombatController } from './combat.js?v=20261116h';
+import { createAudioEngine } from './audio.js?v=20261116h';
+import { initYandexSdk } from './yandexSdk.js?v=20261116h';
+import { createUIManager } from './ui.js?v=20261116h';
 
 async function bootstrap() {
   const canvas = document.getElementById('game-canvas');
@@ -240,6 +240,35 @@ async function bootstrap() {
     refreshHubDiorama();
   }
 
+  function togglePauseGame() {
+    if (gameMode === 'playing') {
+      gameMode = 'paused';
+      keysDown.clear();
+      pointerFiring = false;
+      sdk.GameplayAPI.stop();
+      const snap = combat.getHudSnapshot?.() || {};
+      ui.showPauseModal?.(snap, {
+        onResume: () => {
+          if (gameMode === 'paused') {
+            gameMode = 'playing';
+            sdk.GameplayAPI.start();
+          }
+        },
+        onRestart: () => {
+          persistSave();
+          startBattle(progression.getState().selectedClass, activeRunLevel);
+        },
+        onExit: () => {
+          persistSave();
+          enterHub();
+        }
+      });
+    } else if (gameMode === 'paused') {
+      ui.hidePauseModal?.();
+      gameMode = 'playing';
+      sdk.GameplayAPI.start();
+    }
+  }
   function startBattle(classId, levelNum) {
     audio.unlock();
     const chosenClass = classId || progression.getState().selectedClass || 'warrior';
@@ -385,6 +414,9 @@ async function bootstrap() {
       ui.setVolumeState?.(v);
       ui.setMutedState?.(audio.isMuted());
     },
+    onTogglePause: () => {
+      togglePauseGame();
+    },
     onExitToHub: () => {
       persistSave();
       enterHub();
@@ -411,8 +443,9 @@ async function bootstrap() {
       ui.setAutoAimState(next);
       ui.showToast(next ? '🎯 Автоприцел включён' : '🎯 Ручной прицел курсором');
     }
-    if (e.code === 'Escape' && gameMode === 'playing' && !e.repeat) {
-      enterHub();
+    if ((e.code === 'Escape' || e.code === 'KeyP') && (gameMode === 'playing' || gameMode === 'paused') && !e.repeat) {
+      e.preventDefault();
+      togglePauseGame();
     }
   });
 

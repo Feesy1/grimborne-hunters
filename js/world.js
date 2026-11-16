@@ -3,7 +3,7 @@
 
 import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
-import { ARENA_HALF_SIZE } from './config.js?v=20261116f';
+import { ARENA_HALF_SIZE } from './config.js?v=20261116h';
 
 // ============================================================================
 // Procedural Textures: Gothic Slate Cobblestone Floor & Soft Radial Glow Sprite
@@ -308,7 +308,7 @@ export function createArenaWorld(canvas) {
   groundMesh.receiveShadow = true;
   arenaGroup.add(groundMesh);
 
-  // Etched glowing purple mystic circles on the 3D courtyard flagstones
+  // Hub Showcase Raised Stone Pedestal + Pedestal Mystic Circle (visible ONLY in 'hub' mode — zero confusing floor circles in combat!)
   const plazaRuneMat = new THREE.MeshBasicMaterial({
     map: arcaneCircleTex,
     color: 0xc084fc,
@@ -318,23 +318,14 @@ export function createArenaWorld(canvas) {
     depthWrite: false
   });
 
-  const runeSpots = [
-    { x: 0, z: 0, s: 6.4 },
-    { x: -15, z: -4, s: 4.8 },
-    { x: 15, z: -9, s: 4.8 },
-    { x: -12, z: 14, s: 4.6 }
-  ];
-  for (const rs of runeSpots) {
-    const disc = new THREE.Mesh(new THREE.PlaneGeometry(rs.s, rs.s), plazaRuneMat);
-    disc.rotation.x = -Math.PI / 2;
-    disc.position.set(rs.x, 0.02, rs.z);
-    arenaGroup.add(disc);
-  }
-
-  // Hub Showcase Raised Stone Pedestal (visible ONLY in 'hub' mode)
   const hubBackdropGroup = new THREE.Group();
   hubBackdropGroup.visible = false;
   scene.add(hubBackdropGroup);
+
+  const hubRuneDisc = new THREE.Mesh(new THREE.PlaneGeometry(6.4, 6.4), plazaRuneMat);
+  hubRuneDisc.rotation.x = -Math.PI / 2;
+  hubRuneDisc.position.set(0, 0.02, 0);
+  hubBackdropGroup.add(hubRuneDisc);
 
   const stoneMat = new THREE.MeshStandardMaterial({ color: 0x555e75, roughness: 0.74, metalness: 0.14 });
   const darkStoneMat = new THREE.MeshStandardMaterial({ color: 0x363d52, roughness: 0.80, metalness: 0.15 });
@@ -1199,6 +1190,395 @@ export function createArenaWorld(canvas) {
     activeLightningArcs.push(arc);
   }
 
+  // ==========================================================================
+  // Pooled 3D Physics Debris (Skulls, Bones, Flying Shields & Helmets)
+  // + 3D Water Prison Sphere, Elemental Tornado/Fire-Patch/Sky-Bolt & Meteors!
+  // ==========================================================================
+  const debrisSkullGeo = new THREE.SphereGeometry(0.14, 8, 7);
+  const debrisBoneGeo = (() => {
+    const g = new THREE.CylinderGeometry(0.032, 0.036, 0.42, 6);
+    g.rotateZ(Math.PI / 2);
+    return g;
+  })();
+  const debrisHelmGeo = new THREE.SphereGeometry(0.22, 10, 7, 0, Math.PI * 2, 0, Math.PI * 0.55);
+  const debrisShieldGeo = (() => {
+    const g = new THREE.CylinderGeometry(0.28, 0.28, 0.05, 10);
+    g.rotateX(Math.PI / 2);
+    return g;
+  })();
+  const debrisBoneMat = new THREE.MeshStandardMaterial({ color: 0xe7e0d0, roughness: 0.55, metalness: 0.05 });
+  const debrisHelmMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.35, metalness: 0.75 });
+  const debrisShieldMat = new THREE.MeshStandardMaterial({ color: 0x784828, roughness: 0.72, metalness: 0.22 });
+
+  const activeDebris = [];
+  const freeDebrisByKind = { skull: [], bone: [], helmet: [], shield: [] };
+
+  function acquireDebrisPiece(kind = 'bone') {
+    const bucket = freeDebrisByKind[kind] || freeDebrisByKind.bone;
+    let d = bucket.pop();
+    if (!d) {
+      let mesh;
+      if (kind === 'skull') {
+        mesh = new THREE.Mesh(debrisSkullGeo, debrisBoneMat);
+        mesh.scale.set(0.92, 1.05, 0.96);
+      } else if (kind === 'helmet') {
+        mesh = new THREE.Mesh(debrisHelmGeo, debrisHelmMat);
+      } else if (kind === 'shield') {
+        mesh = new THREE.Mesh(debrisShieldGeo, debrisShieldMat);
+      } else {
+        mesh = new THREE.Mesh(debrisBoneGeo, debrisBoneMat);
+      }
+      scene.add(mesh);
+      d = { kind, mesh, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, vrx: 0, vry: 0, vrz: 0, age: 0, life: 0.9, baseScale: 1 };
+    }
+    d.mesh.visible = true;
+    return d;
+  }
+
+  function spawnBoneShatter(x, z, isBig = false) {
+    if (activeDebris.length > 56) return;
+    const boneCount = isBig ? 6 : 4;
+    // 1 tumbling skull + spinning femur/rib bones!
+    for (let i = 0; i <= boneCount; i++) {
+      const kind = i === 0 ? 'skull' : 'bone';
+      const d = acquireDebrisPiece(kind);
+      const ang = (i / (boneCount + 1)) * Math.PI * 2 + (Math.random() - 0.5) * 0.7;
+      const spd = (2.4 + Math.random() * 3.4) * (isBig ? 1.25 : 1.0);
+      d.x = x + (Math.random() - 0.5) * 0.25;
+      d.y = i === 0 ? 0.95 : 0.55 + Math.random() * 0.35;
+      d.z = z + (Math.random() - 0.5) * 0.25;
+      d.vx = Math.cos(ang) * spd;
+      d.vz = Math.sin(ang) * spd;
+      d.vy = 4.2 + Math.random() * 3.2;
+      d.vrx = (Math.random() - 0.5) * 16;
+      d.vry = (Math.random() - 0.5) * 16;
+      d.vrz = (Math.random() - 0.5) * 16;
+      d.age = 0;
+      d.life = 0.82 + Math.random() * 0.22;
+      d.baseScale = isBig ? 1.28 : 1.0;
+      d.mesh.position.set(d.x, d.y, d.z);
+      d.mesh.scale.setScalar(d.baseScale);
+      activeDebris.push(d);
+    }
+  }
+
+  function spawnArmorBreakPiece(kind = 'helmet', x = 0, z = 0, dirAngle = 0) {
+    if (activeDebris.length > 64) return;
+    const validKind = kind === 'shield' ? 'shield' : 'helmet';
+    const d = acquireDebrisPiece(validKind);
+    const scatter = dirAngle + (Math.random() - 0.5) * 0.9;
+    const spd = 3.2 + Math.random() * 2.2;
+    d.x = x;
+    d.y = validKind === 'helmet' ? 1.28 : 0.85;
+    d.z = z;
+    d.vx = Math.sin(scatter) * spd;
+    d.vz = Math.cos(scatter) * spd;
+    d.vy = validKind === 'helmet' ? 5.6 : 4.2;
+    d.vrx = (Math.random() - 0.5) * 18;
+    d.vry = (Math.random() - 0.5) * 18;
+    d.vrz = (Math.random() - 0.5) * 18;
+    d.age = 0;
+    d.life = 0.95;
+    d.baseScale = 1.08;
+    d.mesh.position.set(d.x, d.y, d.z);
+    d.mesh.scale.setScalar(d.baseScale);
+    activeDebris.push(d);
+  }
+
+  // 💧 3D Reference-Matched Water Prison Sphere (Matches user's 9-stage concept art 1-to-1!):
+  //    1) Glowing concentric base puddle ripple + splash crown on the ground (y = 0.03)
+  //    2) Twisting tapered water vortex stem connecting ground puddle to floating bubble
+  //    3) Glossy translucent sapphire-aqua 3D water bubble + specular highlight + 3 helical water ribbons
+  //    4) 10 orbiting glossy 3D water droplets/bubbles + explosive droplet burst on slam!
+  const waterSphereShellGeo = new THREE.SphereGeometry(1.0, 24, 18);
+  const waterDropletGeo = new THREE.SphereGeometry(0.085, 8, 8);
+  const waterBaseRingOuterGeo = (() => {
+    const g = new THREE.RingGeometry(0.72, 0.92, 28);
+    g.rotateX(-Math.PI / 2);
+    return g;
+  })();
+  const waterBaseRingInnerGeo = (() => {
+    const g = new THREE.RingGeometry(0.32, 0.50, 24);
+    g.rotateX(-Math.PI / 2);
+    return g;
+  })();
+  const waterSplashCrownGeo = (() => {
+    const g = new THREE.ConeGeometry(0.68, 0.42, 10, 1, true);
+    g.rotateX(Math.PI);
+    g.translate(0, 0.21, 0);
+    return g;
+  })();
+  const waterStemGeo = (() => {
+    const g = new THREE.CylinderGeometry(0.15, 0.44, 0.72, 12, 1, true);
+    g.translate(0, 0.36, 0);
+    return g;
+  })();
+  const waterHelixRibbonGeo = (() => {
+    const pts = [];
+    const steps = 16;
+    for (let s = 0; s <= steps; s++) {
+      const f = s / steps;
+      const theta = f * Math.PI * 1.85;
+      const phi = (f - 0.5) * Math.PI * 0.86;
+      const rad = Math.cos(phi) * 1.04;
+      pts.push(new THREE.Vector3(Math.cos(theta) * rad, Math.sin(phi) * 1.02, Math.sin(theta) * rad));
+    }
+    const curve = new THREE.CatmullRomCurve3(pts);
+    return new THREE.TubeGeometry(curve, 18, 0.055, 6, false);
+  })();
+
+  const activeWaterSpheres = [];
+  const freeWaterSpheres = [];
+
+  function spawnWaterPrisonSphere({ x = 0, z = 0, radius = 2.65, duration = 1.15 } = {}) {
+    let ws = freeWaterSpheres.pop();
+    if (!ws) {
+      const rootGroup = new THREE.Group();
+      const baseGroup = new THREE.Group();
+      const bubbleGroup = new THREE.Group();
+
+      const deepWaterMat = new THREE.MeshBasicMaterial({
+        color: 0x0284c7,
+        transparent: true,
+        opacity: 0.30,
+        side: THREE.BackSide,
+        depthWrite: false,
+        toneMapped: false
+      });
+      const shellMat = new THREE.MeshBasicMaterial({
+        color: 0x38bdf8,
+        transparent: true,
+        opacity: 0.36,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        toneMapped: false
+      });
+      const ribbonMat = new THREE.MeshBasicMaterial({
+        color: 0x7dd3fc,
+        transparent: true,
+        opacity: 0.82,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        toneMapped: false
+      });
+      const specMat = new THREE.MeshBasicMaterial({
+        color: 0xf0f9ff,
+        transparent: true,
+        opacity: 0.78,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        toneMapped: false
+      });
+
+      // 1. Ground ripple rings + base splash crown + twisting water stem
+      const ringOut = new THREE.Mesh(waterBaseRingOuterGeo, ribbonMat);
+      ringOut.position.y = 0.03;
+      const ringIn = new THREE.Mesh(waterBaseRingInnerGeo, specMat);
+      ringIn.position.y = 0.035;
+      const crown = new THREE.Mesh(waterSplashCrownGeo, shellMat);
+      const stem = new THREE.Mesh(waterStemGeo, shellMat);
+      baseGroup.add(ringOut, ringIn, crown, stem);
+
+      // 2. Main levitating 3D spherical water bubble + glossy highlight + 3 spiraling water ribbons
+      const backSphere = new THREE.Mesh(waterSphereShellGeo, deepWaterMat);
+      const frontSphere = new THREE.Mesh(waterSphereShellGeo, shellMat);
+      frontSphere.scale.setScalar(1.015);
+      const specHighlight = new THREE.Mesh(waterDropletGeo, specMat);
+      specHighlight.scale.set(2.8, 1.4, 0.7);
+      specHighlight.position.set(-0.46, 0.56, 0.66);
+      specHighlight.rotation.set(-0.45, -0.45, 0.35);
+
+      const ribbons = new THREE.Group();
+      for (let r = 0; r < 3; r++) {
+        const rib = new THREE.Mesh(waterHelixRibbonGeo, r === 0 ? specMat : ribbonMat);
+        rib.rotation.y = (r / 3) * Math.PI * 2;
+        ribbons.add(rib);
+      }
+
+      // 3. 10 orbiting glossy water droplets around the sphere
+      const dropletsGroup = new THREE.Group();
+      const droplets = [];
+      for (let d = 0; d < 10; d++) {
+        const dm = new THREE.Mesh(waterDropletGeo, d % 3 === 0 ? specMat : ribbonMat);
+        const ang = (d / 10) * Math.PI * 2;
+        const yOff = ((d % 5) - 2) * 0.34;
+        const distR = 1.18 + (d % 3) * 0.14;
+        const dScale = 0.65 + (d % 4) * 0.32;
+        dm.scale.setScalar(dScale);
+        dm.position.set(Math.cos(ang) * distR, yOff, Math.sin(ang) * distR);
+        dropletsGroup.add(dm);
+        droplets.push({ mesh: dm, baseY: yOff, phase: d * 1.1 });
+      }
+
+      bubbleGroup.add(backSphere, frontSphere, specHighlight, ribbons, dropletsGroup);
+      rootGroup.add(baseGroup, bubbleGroup);
+      scene.add(rootGroup);
+
+      ws = {
+        group: rootGroup,
+        baseGroup,
+        bubbleGroup,
+        stem,
+        crown,
+        ribbons,
+        dropletsGroup,
+        droplets,
+        deepWaterMat,
+        shellMat,
+        ribbonMat,
+        specMat,
+        x: 0,
+        z: 0,
+        radius: 2.65,
+        age: 0,
+        duration: 1.15
+      };
+    }
+    ws.x = x;
+    ws.z = z;
+    ws.radius = radius;
+    ws.age = 0;
+    ws.duration = duration;
+    ws.group.position.set(x, 0, z);
+    ws.bubbleGroup.position.set(0, 0.45, 0);
+    ws.bubbleGroup.scale.setScalar(0.15);
+    ws.group.visible = true;
+    activeWaterSpheres.push(ws);
+  }
+
+  // 🔥🌪️⚡💧 Pooled 3D Elemental Impacts (Tornado Vortex, Burning Magma Patch, Vertical Sky-Bolt) & Falling Meteors!
+  const tornadoRingGeo = (() => {
+    const g = new THREE.TorusGeometry(1.0, 0.06, 6, 20);
+    g.rotateX(Math.PI / 2);
+    return g;
+  })();
+  const firePatchGeo = (() => {
+    const g = new THREE.CircleGeometry(1.0, 22);
+    g.rotateX(-Math.PI / 2);
+    return g;
+  })();
+  const skyBoltGeo = (() => {
+    const g = new THREE.CylinderGeometry(0.06, 0.14, 6.2, 6);
+    g.translate(0, 3.1, 0);
+    return g;
+  })();
+  const meteorRockGeo = new THREE.DodecahedronGeometry(0.55, 0);
+
+  const activeElemVfx = [];
+
+  function spawnElementalImpact({ element = 'fire', x = 0, z = 0, radius = 2.4 } = {}) {
+    if (activeElemVfx.length > 26) return;
+    if (element === 'air') {
+      // Rising 4-ring 3D Cyclone Tornado!
+      const group = new THREE.Group();
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0x99f6e4,
+        transparent: true,
+        opacity: 0.85,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        toneMapped: false
+      });
+      const rings = [];
+      for (let r = 0; r < 4; r++) {
+        const rm = new THREE.Mesh(tornadoRingGeo, mat);
+        rm.position.y = 0.22 + r * 0.42;
+        const s = 0.45 + r * 0.26;
+        rm.scale.set(s, 1, s);
+        rm.rotation.z = (r % 2 === 0 ? 1 : -1) * 0.14;
+        group.add(rm);
+        rings.push(rm);
+      }
+      group.position.set(x, 0, z);
+      scene.add(group);
+      activeElemVfx.push({ kind: 'tornado', group, mat, rings, radius: Math.max(1.4, radius * 0.65), age: 0, duration: 0.56 });
+      spawnParticles({ x, y: 0.5, z, color: 0x5eead4, count: 14, speed: 6.5, size: 0.15, life: 0.42, gravity: -2.8 });
+    } else if (element === 'lightning') {
+      // Blinding vertical jagged sky-bolt + electric burst!
+      const group = new THREE.Group();
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0x7dd3fc,
+        transparent: true,
+        opacity: 0.95,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        toneMapped: false
+      });
+      const bolt = new THREE.Mesh(skyBoltGeo, mat);
+      bolt.rotation.z = (Math.random() - 0.5) * 0.18;
+      bolt.rotation.x = (Math.random() - 0.5) * 0.18;
+      group.add(bolt);
+      group.position.set(x, 0.05, z);
+      scene.add(group);
+      activeElemVfx.push({ kind: 'skybolt', group, mat, age: 0, duration: 0.18 });
+      spawnShockwaveRing({ x, y: 0.08, z, radius: Math.max(1.8, radius * 0.78), color: 0x38bdf8, duration: 0.24 });
+      spawnParticles({ x, y: 0.75, z, color: 0xfef08a, count: 14, speed: 7.4, size: 0.14, life: 0.30, gravity: 4 });
+    } else if (element === 'water') {
+      // Cresting sapphire-foam splash wave + fountain droplets!
+      spawnShockwaveRing({ x, y: 0.08, z, radius: radius * 1.05, color: 0x0ea5e9, duration: 0.34 });
+      spawnShockwaveRing({ x, y: 0.14, z, radius: radius * 0.68, color: 0xe0f2fe, duration: 0.26 });
+      spawnParticles({ x, y: 0.55, z, color: 0x38bdf8, count: 15, speed: 6.2, size: 0.16, life: 0.44, gravity: 13 });
+    } else {
+      // 🔥 Fire: Blazing ground magma scorch patch + roaring flame burst!
+      const group = new THREE.Group();
+      const mat = new THREE.MeshBasicMaterial({
+        map: softGlowTex,
+        color: 0xff5722,
+        transparent: true,
+        opacity: 0.82,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        toneMapped: false
+      });
+      const patch = new THREE.Mesh(firePatchGeo, mat);
+      patch.scale.setScalar(radius * 0.92);
+      group.add(patch);
+      group.position.set(x, 0.04, z);
+      scene.add(group);
+      activeElemVfx.push({ kind: 'firepatch', group, mat, x, z, emitTick: 0, age: 0, duration: 1.05 });
+      spawnShockwaveRing({ x, y: 0.08, z, radius, color: 0xff6b00, duration: 0.30 });
+      spawnParticles({ x, y: 0.65, z, color: 0xfef08a, count: 14, speed: 6.2, size: 0.18, life: 0.40, gravity: -3.2 });
+    }
+  }
+
+  function spawnMeteorStrike({ x = 0, z = 0, radius = 3.8, color = 0xff5722, duration = 0.34 } = {}) {
+    const group = new THREE.Group();
+    const mat = new THREE.MeshBasicMaterial({ color: 0xfef08a, toneMapped: false });
+    const auraMat = new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.85,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      toneMapped: false
+    });
+    const core = new THREE.Mesh(meteorRockGeo, mat);
+    const aura = new THREE.Mesh(meteorRockGeo, auraMat);
+    aura.scale.setScalar(1.55);
+    group.add(core, aura);
+    const startX = x - 3.2;
+    const startY = 9.5;
+    const startZ = z - 2.4;
+    group.position.set(startX, startY, startZ);
+    scene.add(group);
+    spawnDangerZone({ x, z, radius, duration, color });
+    activeElemVfx.push({
+      kind: 'meteor',
+      group,
+      mat: auraMat,
+      coreMat: mat,
+      startX,
+      startY,
+      startZ,
+      endX: x,
+      endZ: z,
+      color,
+      radius,
+      age: 0,
+      duration
+    });
+  }
+
   // 3) Enemy Cultist Jagged Shadow Spear (Needle diamond + dark tail)
   const enemySpearGeo = (() => {
     const g = new THREE.OctahedronGeometry(0.13, 0);
@@ -1670,18 +2050,48 @@ export function createArenaWorld(canvas) {
       }
       if (proj.isMagic) {
         proj.trailAccum += safeDt;
-        if (proj.trailAccum >= 0.026) {
+        if (proj.trailAccum >= 0.018) {
           proj.trailAccum = 0;
+          let tColor = proj.color;
+          let tCount = 3;
+          let tSpeed = 2.4;
+          let tSize = 0.14;
+          let tGrav = -2.2;
+          if (proj.visualKind === 'magic_fire') {
+            tColor = Math.random() < 0.45 ? 0xfef08a : 0xff5722;
+            tCount = 4;
+            tSpeed = 2.8;
+            tSize = 0.16;
+            tGrav = -3.4;
+          } else if (proj.visualKind === 'magic_water') {
+            tColor = Math.random() < 0.4 ? 0xe0f2fe : 0x38bdf8;
+            tCount = 3;
+            tSpeed = 2.2;
+            tSize = 0.13;
+            tGrav = 6.5;
+          } else if (proj.visualKind === 'magic_lightning') {
+            tColor = Math.random() < 0.5 ? 0xfef08a : 0x38bdf8;
+            tCount = 3;
+            tSpeed = 3.8;
+            tSize = 0.12;
+            tGrav = 0;
+          } else if (proj.visualKind === 'magic_air') {
+            tColor = Math.random() < 0.5 ? 0xf8fafc : 0x5eead4;
+            tCount = 3;
+            tSpeed = 3.2;
+            tSize = 0.13;
+            tGrav = -1.2;
+          }
           spawnParticles({
             x: m.position.x,
             y: m.position.y,
             z: m.position.z,
-            color: proj.color,
-            count: 2,
-            speed: 1.8,
-            size: 0.11,
-            life: 0.24,
-            gravity: -1.5
+            color: tColor,
+            count: tCount,
+            speed: tSpeed,
+            size: tSize,
+            life: 0.28,
+            gravity: tGrav
           });
         }
       }
@@ -1799,6 +2209,151 @@ export function createArenaWorld(canvas) {
       la.innerMat.opacity = p;
     }
 
+    // Update 3D Physics Debris (Skulls, Bones, Shields, Helmets)
+    for (let i = activeDebris.length - 1; i >= 0; i--) {
+      const d = activeDebris[i];
+      d.age += safeDt;
+      if (d.age >= d.life) {
+        d.mesh.visible = false;
+        activeDebris.splice(i, 1);
+        (freeDebrisByKind[d.kind] || freeDebrisByKind.bone).push(d);
+        continue;
+      }
+      d.vy -= 22 * safeDt;
+      d.x += d.vx * safeDt;
+      d.y += d.vy * safeDt;
+      d.z += d.vz * safeDt;
+      if (d.y < 0.09) {
+        d.y = 0.09;
+        d.vy = Math.abs(d.vy) * 0.42;
+        d.vx *= 0.72;
+        d.vz *= 0.72;
+        d.vrx *= 0.78;
+        d.vrz *= 0.78;
+      }
+      d.mesh.position.set(d.x, d.y, d.z);
+      d.mesh.rotation.x += d.vrx * safeDt;
+      d.mesh.rotation.y += d.vry * safeDt;
+      d.mesh.rotation.z += d.vrz * safeDt;
+      const rem = 1 - d.age / d.life;
+      const sc = d.baseScale * (rem < 0.25 ? rem / 0.25 : 1.0);
+      d.mesh.scale.setScalar(sc);
+    }
+
+    // Update 3D Water Prison Spheres (9-stage rise -> levitating bubble + droplets -> explosive splash burst!)
+    for (let i = activeWaterSpheres.length - 1; i >= 0; i--) {
+      const ws = activeWaterSpheres[i];
+      ws.age += safeDt;
+      if (ws.age >= ws.duration) {
+        // Frame 9 burst: explosive fountain of glossy water droplets & splash arcs!
+        spawnParticles({
+          x: ws.x,
+          y: 1.45,
+          z: ws.z,
+          color: 0x38bdf8,
+          count: 22,
+          speed: 8.8,
+          size: 0.19,
+          life: 0.48,
+          gravity: 16.5
+        });
+        spawnParticles({
+          x: ws.x,
+          y: 1.55,
+          z: ws.z,
+          color: 0xe0f2fe,
+          count: 14,
+          speed: 7.2,
+          size: 0.14,
+          life: 0.42,
+          gravity: 15.0
+        });
+        ws.group.visible = false;
+        activeWaterSpheres.splice(i, 1);
+        freeWaterSpheres.push(ws);
+        continue;
+      }
+      const p = ws.age / ws.duration;
+      const riseEase = p < 0.22 ? 1 - Math.pow(1 - p / 0.22, 2) : 1.0;
+      const popScale = p < 0.20 ? 0.25 + 0.75 * (p / 0.20) : p > 0.92 ? 1 + (p - 0.92) * 2.2 : 1.0;
+      const alphaFade = p > 0.92 ? (1 - p) / 0.08 : 1.0;
+      const sphereR = ws.radius * 0.56 * popScale;
+      const wobble = 1 + Math.sin(ws.age * 14) * 0.035;
+
+      // Ground ripple & water stem connecting ground to bottom of sphere
+      const baseR = ws.radius * 0.58 * (0.6 + 0.4 * riseEase);
+      ws.baseGroup.scale.set(baseR, 0.5 + 0.75 * riseEase, baseR);
+      ws.baseGroup.rotation.y += safeDt * 3.2;
+
+      // Levitating spherical bubble at y = 1.62
+      ws.bubbleGroup.position.y = 0.45 + 1.18 * riseEase + Math.sin(ws.age * 9) * 0.05;
+      ws.bubbleGroup.scale.set(sphereR * wobble, (sphereR / wobble) * 1.02, sphereR * wobble);
+      ws.ribbons.rotation.y += safeDt * 5.6;
+      ws.ribbons.rotation.z = Math.sin(ws.age * 4) * 0.18;
+      ws.dropletsGroup.rotation.y -= safeDt * 2.8;
+      for (let d = 0; d < ws.droplets.length; d++) {
+        const dr = ws.droplets[d];
+        dr.mesh.position.y = dr.baseY + Math.sin(ws.age * 7 + dr.phase) * 0.12;
+      }
+
+      ws.deepWaterMat.opacity = 0.32 * alphaFade;
+      ws.shellMat.opacity = 0.38 * alphaFade;
+      ws.ribbonMat.opacity = 0.85 * alphaFade;
+      ws.specMat.opacity = 0.82 * alphaFade;
+    }
+
+    // Update Elemental Impacts (Tornadoes, Fire Patches, Sky-Bolts & Meteors)
+    for (let i = activeElemVfx.length - 1; i >= 0; i--) {
+      const ev = activeElemVfx[i];
+      ev.age += safeDt;
+      if (ev.age >= ev.duration) {
+        if (ev.kind === 'meteor') {
+          spawnShockwaveRing({ x: ev.endX, y: 0.1, z: ev.endZ, radius: ev.radius, color: ev.color, duration: 0.42 });
+          spawnParticles({ x: ev.endX, y: 0.6, z: ev.endZ, color: ev.color, count: 22, speed: 8.5, size: 0.22, life: 0.5, gravity: 8 });
+          ev.coreMat?.dispose();
+        }
+        scene.remove(ev.group);
+        ev.mat?.dispose();
+        activeElemVfx.splice(i, 1);
+        continue;
+      }
+      const p = ev.age / ev.duration;
+      if (ev.kind === 'tornado') {
+        ev.group.rotation.y += safeDt * 18;
+        const fade = 1 - p;
+        ev.mat.opacity = fade * 0.88;
+        const expand = ev.radius * (0.7 + p * 0.5);
+        ev.group.scale.set(expand, 0.6 + p * 0.65, expand);
+      } else if (ev.kind === 'skybolt') {
+        ev.mat.opacity = (1 - p) * 0.96;
+        ev.group.scale.set(1 + p * 0.5, 1, 1 + p * 0.5);
+      } else if (ev.kind === 'firepatch') {
+        ev.mat.opacity = (1 - p) * 0.78;
+        ev.emitTick += safeDt;
+        if (ev.emitTick >= 0.12) {
+          ev.emitTick = 0;
+          spawnParticles({
+            x: ev.x + (Math.random() - 0.5) * 1.4,
+            y: 0.18,
+            z: ev.z + (Math.random() - 0.5) * 1.4,
+            color: Math.random() < 0.5 ? 0xff5722 : 0xfef08a,
+            count: 2,
+            speed: 1.8,
+            size: 0.14,
+            life: 0.36,
+            gravity: -3.6
+          });
+        }
+      } else if (ev.kind === 'meteor') {
+        const mx = ev.startX + (ev.endX - ev.startX) * p;
+        const my = ev.startY * (1 - p) + 0.35 * p;
+        const mz = ev.startZ + (ev.endZ - ev.startZ) * p;
+        ev.group.position.set(mx, my, mz);
+        ev.group.rotation.x += safeDt * 12;
+        ev.group.rotation.y += safeDt * 10;
+      }
+    }
+
     // Update Boss Danger Zones
     for (let i = activeDangerZones.length - 1; i >= 0; i--) {
       const dz = activeDangerZones[i];
@@ -1876,6 +2431,22 @@ export function createArenaWorld(canvas) {
       la.group.visible = false;
       freeLightningArcs.push(la);
     }
+    while (activeDebris.length > 0) {
+      const d = activeDebris.pop();
+      d.mesh.visible = false;
+      (freeDebrisByKind[d.kind] || freeDebrisByKind.bone).push(d);
+    }
+    while (activeWaterSpheres.length > 0) {
+      const ws = activeWaterSpheres.pop();
+      ws.group.visible = false;
+      freeWaterSpheres.push(ws);
+    }
+    while (activeElemVfx.length > 0) {
+      const ev = activeElemVfx.pop();
+      scene.remove(ev.group);
+      ev.mat?.dispose();
+      ev.coreMat?.dispose();
+    }
     while (activeDangerZones.length > 0) {
       const dz = activeDangerZones.pop();
       scene.remove(dz.group);
@@ -1902,6 +2473,11 @@ export function createArenaWorld(canvas) {
     spawnSlashArc,
     spawnShockwaveRing,
     spawnLightningArc,
+    spawnBoneShatter,
+    spawnArmorBreakPiece,
+    spawnWaterPrisonSphere,
+    spawnElementalImpact,
+    spawnMeteorStrike,
     spawnDangerZone,
     createProjectileVisual,
     setBossAtmosphere,
