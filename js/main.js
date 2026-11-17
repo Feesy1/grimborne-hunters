@@ -2,14 +2,14 @@
 // Arsenal Progression, Procedural Web Audio, Gothic UI, and Yandex Games SDK v2.
 
 import * as THREE from '../vendor/three.module.js';
-import { LEVELS, MAGE_ELEMENTS } from './config.js?v=20261117z18';
-import { createArenaWorld } from './world.js?v=20261117z18';
-import * as models from './models.js?v=20261117z18';
-import { createProgressionStore } from './progression.js?v=20261117z18';
-import { createCombatController } from './combat.js?v=20261117z18';
-import { createAudioEngine } from './audio.js?v=20261117z18';
-import { initYandexSdk } from './yandexSdk.js?v=20261117z18';
-import { createUIManager } from './ui.js?v=20261117z18';
+import { LEVELS, MAGE_ELEMENTS } from './config.js?v=20261117z19';
+import { createArenaWorld } from './world.js?v=20261117z19';
+import * as models from './models.js?v=20261117z19';
+import { createProgressionStore } from './progression.js?v=20261117z19';
+import { createCombatController } from './combat.js?v=20261117z19';
+import { createAudioEngine } from './audio.js?v=20261117z19';
+import { initYandexSdk } from './yandexSdk.js?v=20261117z19';
+import { createUIManager } from './ui.js?v=20261117z19';
 
 async function bootstrap() {
   const canvas = document.getElementById('game-canvas');
@@ -332,6 +332,13 @@ async function bootstrap() {
   });
 
   let reloadRequested = false;
+  let lastSyncedMusicMode = '';
+  function syncMusicMode(nextMode) {
+    if (nextMode !== lastSyncedMusicMode) {
+      lastSyncedMusicMode = nextMode;
+      audio.setMusicMode?.(nextMode);
+    }
+  }
 
   function enterHub(targetTab = null) {
     reloadRequested = false;
@@ -343,7 +350,7 @@ async function bootstrap() {
     }
     world.setBossAtmosphere(false);
     world.setCameraMode?.('hub');
-    audio.setMusicMode?.('hub');
+    syncMusicMode('hub');
     gameMode = 'hub';
     sdk.GameplayAPI.stop();
     ui.hideAllModals();
@@ -362,14 +369,14 @@ async function bootstrap() {
       gameMode = 'paused';
       keysDown.clear();
       pointerFiring = false;
-      audio.setMusicMode?.('hub');
+      syncMusicMode('hub');
       sdk.GameplayAPI.stop();
       const snap = combat.getHudSnapshot?.() || {};
       ui.showPauseModal?.(snap, {
         onResume: () => {
           if (gameMode === 'paused') {
             gameMode = 'playing';
-            audio.setMusicMode?.(combat.getHudSnapshot?.()?.finaleStarted ? 'boss' : 'combat');
+            syncMusicMode(combat.getHudSnapshot?.()?.finaleStarted ? 'boss' : 'combat');
             sdk.GameplayAPI.start();
           }
         },
@@ -385,7 +392,7 @@ async function bootstrap() {
     } else if (gameMode === 'paused') {
       ui.hidePauseModal?.();
       gameMode = 'playing';
-      audio.setMusicMode?.(combat.getHudSnapshot?.()?.finaleStarted ? 'boss' : 'combat');
+      syncMusicMode(combat.getHudSnapshot?.()?.finaleStarted ? 'boss' : 'combat');
       sdk.GameplayAPI.start();
     }
   }
@@ -425,7 +432,7 @@ async function bootstrap() {
     ui.setAttackEnabledState?.(true);
 
     world.setArenaBiome?.('courtyard');
-    audio.setMusicMode?.('combat');
+    syncMusicMode('combat');
     const difficultyMode = progression.getState().difficultyMode || 'normal';
     combat.startRun({ classId: chosenClass, levelNumber: chosenLevel, difficultyMode });
     ui.updateHud(combat.getHudSnapshot());
@@ -964,6 +971,9 @@ async function bootstrap() {
     }
   };
 
+  let lowFpsStreak = 0;
+  let thermalLowSpecApplied = false;
+
   // === High-Refresh Render & Simulation Loop (Up to 120 FPS ProMotion / Desktop) ===
   const fpsBadgeEl = document.getElementById('fps-badge');
   let hubParallaxX = 0;
@@ -991,6 +1001,17 @@ async function bootstrap() {
           const shownFps = Math.min(120, Math.max(1, Math.round(smoothedFps)));
           fpsBadgeEl.textContent = `${shownFps} FPS`;
         }
+        if (gameMode === 'playing' && !externalPaused && !thermalLowSpecApplied) {
+          if (instFps < 43) {
+            lowFpsStreak += 1;
+            if (lowFpsStreak >= 8) {
+              thermalLowSpecApplied = true;
+              world.setLowSpecMode?.(true);
+            }
+          } else {
+            lowFpsStreak = Math.max(0, lowFpsStreak - 1);
+          }
+        }
         fpsAccumTime = 0;
         fpsFrameCount = 0;
       }
@@ -1011,11 +1032,11 @@ async function bootstrap() {
       const input = gatherInput(dt);
       combat.update(dt, input, elapsedTime);
       hudSyncAccum = (hudSyncAccum || 0) + dt;
-      if (hudSyncAccum >= 0.036 || input.reload) {
+      if (hudSyncAccum >= 0.05 || input.reload) {
         hudSyncAccum = 0;
         const snap = combat.getHudSnapshot();
         ui.updateHud(snap);
-        audio.setMusicMode?.(snap?.finaleStarted ? 'boss' : 'combat');
+        syncMusicMode(snap?.finaleStarted ? 'boss' : 'combat');
       }
       autoSaveAccum += dt;
       if (autoSaveAccum >= 3.0) {

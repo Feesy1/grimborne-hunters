@@ -7,6 +7,8 @@ export function createAudioEngine() {
   let sfxGain = null;
   let musicGain = null;
   let musicFilter = null;
+  let musicGuitarShaper = null;
+  let musicGuitarPostLp = null;
   let compressor = null;
   let whiteNoiseBuffer = null;
   let brownNoiseBuffer = null;
@@ -114,6 +116,15 @@ export function createAudioEngine() {
       }
 
       distortionCurve = makeDistortionCurve(42);
+      musicGuitarShaper = ctx.createWaveShaper();
+      musicGuitarShaper.curve = distortionCurve;
+      musicGuitarShaper.oversample = 'none';
+      musicGuitarPostLp = ctx.createBiquadFilter();
+      musicGuitarPostLp.type = 'lowpass';
+      musicGuitarPostLp.frequency.setValueAtTime(2150, ctx.currentTime);
+      musicGuitarPostLp.Q.setValueAtTime(0.9, ctx.currentTime);
+      musicGuitarShaper.connect(musicGuitarPostLp);
+      musicGuitarPostLp.connect(musicFilter);
     } catch {
       ctx = null;
     }
@@ -177,13 +188,11 @@ export function createAudioEngine() {
     const table = isBoss ? DOOM_BOSS_RIFF : isHub ? HUB_DARK_PULSE : DOOM_COMBAT_RIFF;
     const freq = table[stepIdx % table.length];
 
-    // 1. Heavily distorted Argent Drop-E Chug Guitar / Synth Bass
+    // 1. Heavily distorted Argent Drop-E Chug Guitar / Synth Bass (uses persistent shared WaveShaper!)
     if (freq > 0) {
       const dur = isHub ? 0.34 : freq > 105 ? 0.145 : 0.115;
       const osc = ctx.createOscillator();
       const sub = ctx.createOscillator();
-      const shaper = ctx.createWaveShaper();
-      const toneLp = ctx.createBiquadFilter();
       const g = ctx.createGain();
 
       osc.type = 'sawtooth';
@@ -191,22 +200,21 @@ export function createAudioEngine() {
       sub.type = 'square';
       sub.frequency.setValueAtTime(freq * 0.5, t);
 
-      shaper.curve = distortionCurve;
-      shaper.oversample = '2x';
-      toneLp.type = 'lowpass';
-      toneLp.frequency.setValueAtTime(isHub ? 480 : freq > 105 ? 2400 : 1450, t);
-      toneLp.frequency.exponentialRampToValueAtTime(isHub ? 220 : 520, t + dur);
+      if (musicGuitarPostLp) {
+        musicGuitarPostLp.frequency.setTargetAtTime(isHub ? 520 : isBoss ? 2550 : 2150, t, 0.04);
+      }
 
-      const amp = isHub ? 0.22 : isBoss ? 0.30 : 0.26;
+      const amp = isHub ? 0.17 : isBoss ? 0.24 : 0.20;
       g.gain.setValueAtTime(0.0001, t);
       g.gain.linearRampToValueAtTime(amp, t + 0.006);
       g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
 
-      osc.connect(shaper);
-      sub.connect(shaper);
-      shaper.connect(toneLp);
-      toneLp.connect(g);
-      g.connect(musicFilter);
+      osc.connect(g);
+      sub.connect(g);
+      g.connect(musicGuitarShaper || musicFilter);
+      osc.onended = () => {
+        try { g.disconnect(); } catch {}
+      };
 
       osc.start(t);
       sub.start(t);
@@ -253,15 +261,19 @@ export function createAudioEngine() {
         ns.connect(bp);
         bp.connect(sg);
         sg.connect(musicFilter);
-        ns.start(t, Math.random() * 0.4, 0.14);
+        ns.start(t, Math.random() * 0.35);
         ns.stop(t + 0.14);
+        ns.onended = () => {
+          try { sg.disconnect(); } catch {}
+        };
       }
       const st = ctx.createOscillator();
       const stg = ctx.createGain();
       st.type = 'triangle';
       st.frequency.setValueAtTime(210, t);
       st.frequency.exponentialRampToValueAtTime(95, t + 0.07);
-      stg.gain.setValueAtTime(0.18, t);
+      stg.gain.setValueAtTime(0.0001, t);
+      stg.gain.linearRampToValueAtTime(0.18, t + 0.002);
       stg.gain.exponentialRampToValueAtTime(0.0001, t + 0.08);
       st.connect(stg);
       stg.connect(musicFilter);
@@ -284,8 +296,11 @@ export function createAudioEngine() {
       hs.connect(hp);
       hp.connect(hg);
       hg.connect(musicFilter);
-      hs.start(t, Math.random() * 0.5, 0.045);
+      hs.start(t, Math.random() * 0.4);
       hs.stop(t + 0.048);
+      hs.onended = () => {
+        try { hg.disconnect(); } catch {}
+      };
     }
   }
 
@@ -300,16 +315,18 @@ export function createAudioEngine() {
       }
       const bpm = musicMode === 'boss' ? 168 : musicMode === 'hub' ? 96 : 154;
       const stepSec = 60 / bpm / 4; // 16th-note resolution (classic ~154 BPM thrash!)
-      const horizon = ctx.currentTime + 0.14;
-      if (nextNoteTime < ctx.currentTime - 0.12) {
+      const horizon = ctx.currentTime + 0.18;
+      if (nextNoteTime < ctx.currentTime - 0.10) {
         nextNoteTime = ctx.currentTime + 0.03;
       }
-      while (nextNoteTime < horizon) {
+      let scheduled = 0;
+      while (nextNoteTime < horizon && scheduled < 6) {
         scheduleMusicNote(musicStep, nextNoteTime);
-        musicStep = (musicStep + 1) % 64;
+        musicStep = (musicStep + 1) % 32;
         nextNoteTime += stepSec;
+        scheduled += 1;
       }
-    }, 32);
+    }, 36);
   }
 
   function unlock() {
@@ -322,19 +339,18 @@ export function createAudioEngine() {
     startMusicLoop();
   }
 
-  // Unlock AudioContext on first user gesture
+  // Unlock / recover AudioContext on user gesture (crucial on iOS & macOS Safari after suspend!)
   if (typeof window !== 'undefined') {
-    const onFirstGesture = () => {
-      unlock();
-      if (ctx && ctx.state === 'running') {
-        window.removeEventListener('pointerdown', onFirstGesture, true);
-        window.removeEventListener('keydown', onFirstGesture, true);
-        window.removeEventListener('touchstart', onFirstGesture, true);
+    const ensureGestureResume = () => {
+      if (!unlocked) {
+        unlock();
+      } else if (ctx && ctx.state === 'suspended' && !suspendedBySystem) {
+        ctx.resume().then(() => startMusicLoop()).catch(() => {});
       }
     };
-    window.addEventListener('pointerdown', onFirstGesture, { capture: true, passive: true });
-    window.addEventListener('keydown', onFirstGesture, { capture: true, passive: true });
-    window.addEventListener('touchstart', onFirstGesture, { capture: true, passive: true });
+    window.addEventListener('pointerdown', ensureGestureResume, { capture: true, passive: true });
+    window.addEventListener('keydown', ensureGestureResume, { capture: true, passive: true });
+    window.addEventListener('touchstart', ensureGestureResume, { capture: true, passive: true });
   }
 
   function readyToPlay() {
@@ -1924,7 +1940,12 @@ export function createAudioEngine() {
 
     setMusicMode(mode = 'hub') {
       const next = mode === 'combat' || mode === 'boss' || mode === 'off' ? mode : 'hub';
+      if (next === musicMode) return;
       musicMode = next;
+      musicStep = 0;
+      if (ctx) {
+        nextNoteTime = ctx.currentTime + 0.05;
+      }
       syncGain();
     },
 

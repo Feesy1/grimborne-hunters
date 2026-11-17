@@ -7,31 +7,31 @@
 import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { clone as cloneSkinned } from '../vendor/SkeletonUtils.js';
-import { WEAPONS } from './config.js?v=20261117z18';
+import { WEAPONS } from './config.js?v=20261117z19';
 
 const MODEL_PATHS = {
-  warrior_tripo: './assets/models/Warrior_Tripo.glb?v=20261117z18',
-  sword_tripo: './assets/models/Sword_Tripo.glb?v=20261117z18',
-  spear_tripo: './assets/models/Spear_Tripo.glb?v=20261117z18',
-  zweihander_tripo: './assets/models/Zweihander_Tripo.glb?v=20261117z18',
-  axe_tripo: './assets/models/Axe_Tripo.glb?v=20261117z18',
-  hammer_tripo: './assets/models/Hammer_Tripo.glb?v=20261117z18',
-  mage_tripo: './assets/models/Mage_Tripo.glb?v=20261117z18',
-  staff_tripo: './assets/models/Staff_Tripo.glb?v=20261117z18',
-  gunslinger_tripo: './assets/models/Gunslinger_Tripo.glb?v=20261117z18',
-  shotgun_tripo: './assets/models/Shotgun_Tripo.glb?v=20261117z18',
-  pistol_tripo: './assets/models/Pistol_Tripo.glb?v=20261117z18',
-  smg_tripo: './assets/models/SMG_Tripo.glb?v=20261117z18',
-  ak47_tripo: './assets/models/AK47_Tripo.glb?v=20261117z18',
-  zombie_tripo: './assets/models/Zombie_Tripo.glb?v=20261117z18',
-  tree_tripo: './assets/models/Tree_Tripo.glb?v=20261117z18',
-  dracula_tripo: './assets/models/Dracula_Tripo.glb?v=20261117z18',
-  mimic_tripo: './assets/models/Mimic_Tripo.glb?v=20261117z18',
-  chest_disguise_tripo: './assets/models/Chest_Disguise_Tripo.glb?v=20261117z18',
-  lich_tripo: './assets/models/Lich_Tripo.glb?v=20261117z18',
-  troll_tripo: './assets/models/Troll_Tripo.glb?v=20261117z18',
-  succubus_tripo: './assets/models/Succubus_Tripo.glb?v=20261117z18',
-  spider_tripo: './assets/models/Spider_Tripo.glb?v=20261117z18',
+  warrior_tripo: './assets/models/Warrior_Tripo.glb?v=20261117z19',
+  sword_tripo: './assets/models/Sword_Tripo.glb?v=20261117z19',
+  spear_tripo: './assets/models/Spear_Tripo.glb?v=20261117z19',
+  zweihander_tripo: './assets/models/Zweihander_Tripo.glb?v=20261117z19',
+  axe_tripo: './assets/models/Axe_Tripo.glb?v=20261117z19',
+  hammer_tripo: './assets/models/Hammer_Tripo.glb?v=20261117z19',
+  mage_tripo: './assets/models/Mage_Tripo.glb?v=20261117z19',
+  staff_tripo: './assets/models/Staff_Tripo.glb?v=20261117z19',
+  gunslinger_tripo: './assets/models/Gunslinger_Tripo.glb?v=20261117z19',
+  shotgun_tripo: './assets/models/Shotgun_Tripo.glb?v=20261117z19',
+  pistol_tripo: './assets/models/Pistol_Tripo.glb?v=20261117z19',
+  smg_tripo: './assets/models/SMG_Tripo.glb?v=20261117z19',
+  ak47_tripo: './assets/models/AK47_Tripo.glb?v=20261117z19',
+  zombie_tripo: './assets/models/Zombie_Tripo.glb?v=20261117z19',
+  tree_tripo: './assets/models/Tree_Tripo.glb?v=20261117z19',
+  dracula_tripo: './assets/models/Dracula_Tripo.glb?v=20261117z19',
+  mimic_tripo: './assets/models/Mimic_Tripo.glb?v=20261117z19',
+  chest_disguise_tripo: './assets/models/Chest_Disguise_Tripo.glb?v=20261117z19',
+  lich_tripo: './assets/models/Lich_Tripo.glb?v=20261117z19',
+  troll_tripo: './assets/models/Troll_Tripo.glb?v=20261117z19',
+  succubus_tripo: './assets/models/Succubus_Tripo.glb?v=20261117z19',
+  spider_tripo: './assets/models/Spider_Tripo.glb?v=20261117z19',
   barbarian: './assets/models/Barbarian.glb',
   knight: './assets/models/Knight.glb',
   rogue: './assets/models/Rogue_Hooded.glb',
@@ -66,7 +66,7 @@ function buildStaffGlobeCutoutAlphaMap(img) {
   const imgH = img.height || img.naturalHeight || 0;
   if (!imgW || !imgH) return null;
 
-  const size = 512;
+  const size = 256;
   const cv = document.createElement('canvas');
   cv.width = size;
   cv.height = size;
@@ -418,7 +418,7 @@ function buildTripoSkullEyeEmissiveMap(cacheKey, sceneRoot) {
   }
   if (!foundAnyFace) return null;
 
-  const size = 512;
+  const size = 256;
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
@@ -547,7 +547,7 @@ function loadSingleModelKey(key) {
             key === 'spider_tripo';
           const isTripoAsset = isTripoHero || isTripoWeapon || isTripoMonster;
           const eyeEmissiveTex = isTripoHero || key === 'tree_tripo' ? buildTripoSkullEyeEmissiveMap(key, gltf.scene) : null;
-          const maxAniso = isMobile ? 2 : 16;
+          const maxAniso = isMobile ? 1 : 4;
           gltf.scene.traverse((node) => {
             if (/^Icosphere/i.test(node.name || '')) {
               node.visible = false;
@@ -5000,8 +5000,16 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
         canonicalType === 'boss_warden' ||
         canonicalType === 'boss_ashlord');
 
+      const allowEnemyShadows =
+        Boolean(cfg.isBossVisual || eliteVariant === 'miniboss' || eliteVariant === 'warden') &&
+        (!isMobileRuntimeDevice() || Boolean(cfg.isBossVisual));
+
       inst.traverse((n) => {
         const nm = n.name || '';
+        if (n.isMesh) {
+          n.castShadow = allowEnemyShadows;
+          n.receiveShadow = false;
+        }
         if (/^handslot\.?r$/i.test(nm) || (!handR && /^hand\.?r$/i.test(nm))) handR = n;
         if (/^handslot\.?l$/i.test(nm) || (!handL && /^hand\.?l$/i.test(nm))) handL = n;
         if (/^head$/i.test(nm)) headBone = n;

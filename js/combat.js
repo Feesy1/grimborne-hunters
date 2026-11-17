@@ -8,7 +8,7 @@ import {
   ENEMY_TYPES,
   LEVELS,
   RUN_UPGRADES
-} from './config.js?v=20261117z18';
+} from './config.js?v=20261117z19';
 
 const TWO_PI = Math.PI * 2;
 const ARENA_PLAYER_LIMIT = ARENA_HALF_SIZE - 1.4;
@@ -2008,7 +2008,11 @@ export function createCombatController({
       enemy.model.obj.position.y = 0;
       enemy.model.obj.rotation.z = 0;
       enemy.model.handle?.playDeathCollapse?.();
-      if (dyingCorpses.length >= 14) {
+      const maxDyingCorpses =
+        typeof navigator !== 'undefined' && /iPhone|iPod|iPad|Android/i.test(navigator.userAgent || '')
+          ? 6
+          : 9;
+      if (dyingCorpses.length >= maxDyingCorpses) {
         const oldest = dyingCorpses.shift();
         removeSceneObject(oldest.model.obj, oldest.model.handle);
       }
