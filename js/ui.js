@@ -18,7 +18,7 @@ import {
   RUN_UPGRADES,
   MAGE_TALENT_TREE,
   CLASS_TALENT_TREES
-} from './config.js?v=20261117z20';
+} from './config.js?v=20261117z21';
 
 const CLASS_ORDER = ['warrior', 'gunslinger', 'mage'];
 
@@ -1559,7 +1559,7 @@ export function createUIManager(initialCallbacks = {}) {
   );
   const hubHeaderFiligree = el('div', 'hub-header-filigree');
   const hubFiligreeImg = document.createElement('img');
-  hubFiligreeImg.src = './assets/ui/hub_top_filigree.png?v=20261117z20';
+  hubFiligreeImg.src = './assets/ui/hub_top_filigree.png?v=20261117z21';
   hubFiligreeImg.className = 'hub-filigree-img';
   hubFiligreeImg.alt = '';
   hubFiligreeImg.draggable = false;
@@ -1633,7 +1633,7 @@ export function createUIManager(initialCallbacks = {}) {
   stagePrevBtn.setAttribute('aria-label', 'Предыдущий класс');
   const stagePrevImg = document.createElement('img');
   stagePrevImg.className = 'switch-arrow-icon is-prev';
-  stagePrevImg.src = './assets/ui/btn_arrow_switch.png?v=20261117z20';
+  stagePrevImg.src = './assets/ui/btn_arrow_switch.png?v=20261117z21';
   stagePrevImg.alt = '';
   stagePrevImg.draggable = false;
   stagePrevBtn.appendChild(stagePrevImg);
@@ -1645,7 +1645,7 @@ export function createUIManager(initialCallbacks = {}) {
   stageNextBtn.setAttribute('aria-label', 'Следующий класс');
   const stageNextImg = document.createElement('img');
   stageNextImg.className = 'switch-arrow-icon is-next';
-  stageNextImg.src = './assets/ui/btn_arrow_switch.png?v=20261117z20';
+  stageNextImg.src = './assets/ui/btn_arrow_switch.png?v=20261117z21';
   stageNextImg.alt = '';
   stageNextImg.draggable = false;
   stageNextBtn.appendChild(stageNextImg);
@@ -1819,7 +1819,7 @@ export function createUIManager(initialCallbacks = {}) {
   const worldStageFrame = el('div', 'campaign-map-stage-frame');
   const campaignWorldBg = document.createElement('img');
   campaignWorldBg.className = 'campaign-map-bg-img';
-  campaignWorldBg.src = './assets/ui/world_map_clean_hq.jpg?v=20261117z20';
+  campaignWorldBg.src = './assets/ui/world_map_clean_hq.jpg?v=20261117z21';
   campaignWorldBg.alt = 'Карта Мира';
   campaignWorldBg.draggable = false;
   const campaignWorldVignette = el('div', 'campaign-map-vignette');
@@ -1874,7 +1874,7 @@ export function createUIManager(initialCallbacks = {}) {
   const forestStageFrame = el('div', 'campaign-map-stage-frame is-forest-frame');
   const forestBgImg = document.createElement('img');
   forestBgImg.className = 'campaign-map-bg-img';
-  forestBgImg.src = './assets/ui/forest_stages_clean_hq.jpg?v=20261117z20';
+  forestBgImg.src = './assets/ui/forest_stages_clean_hq.jpg?v=20261117z21';
   forestBgImg.alt = 'Туманный лес';
   forestBgImg.draggable = false;
   const forestVignette = el('div', 'campaign-map-vignette is-forest');
@@ -1973,7 +1973,7 @@ export function createUIManager(initialCallbacks = {}) {
   arsenalPrevBtn.setAttribute('aria-label', 'Предыдущее оружие');
   const arsenalPrevImg = document.createElement('img');
   arsenalPrevImg.className = 'switch-arrow-icon is-prev';
-  arsenalPrevImg.src = './assets/ui/btn_arrow_switch.png?v=20261117z20';
+  arsenalPrevImg.src = './assets/ui/btn_arrow_switch.png?v=20261117z21';
   arsenalPrevImg.alt = '';
   arsenalPrevImg.draggable = false;
   arsenalPrevBtn.appendChild(arsenalPrevImg);
@@ -1985,7 +1985,7 @@ export function createUIManager(initialCallbacks = {}) {
   arsenalNextBtn.setAttribute('aria-label', 'Следующее оружие');
   const arsenalNextImg = document.createElement('img');
   arsenalNextImg.className = 'switch-arrow-icon is-next';
-  arsenalNextImg.src = './assets/ui/btn_arrow_switch.png?v=20261117z20';
+  arsenalNextImg.src = './assets/ui/btn_arrow_switch.png?v=20261117z21';
   arsenalNextImg.alt = '';
   arsenalNextImg.draggable = false;
   arsenalNextBtn.appendChild(arsenalNextImg);
@@ -2180,7 +2180,7 @@ export function createUIManager(initialCallbacks = {}) {
     btn.type = 'button';
     const crest = el('span', 'dock-crest-circle');
     const socketImg = document.createElement('img');
-    socketImg.src = './assets/ui/dock_crest_socket.png?v=20261117z20';
+    socketImg.src = './assets/ui/dock_crest_socket.png?v=20261117z21';
     socketImg.className = 'dock-socket-ring';
     socketImg.alt = '';
     socketImg.draggable = false;

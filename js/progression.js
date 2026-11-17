@@ -10,7 +10,7 @@ import {
   MAGE_ELEMENT_UNLOCK_COSTS,
   MAGE_TALENT_TREE,
   CLASS_TALENT_TREES
-} from './config.js?v=20261117z20';
+} from './config.js?v=20261117z21';
 
 export const WEAPON_MAX_SHOP_LEVEL = WEAPON_MAX_LEVEL || 12;
 
