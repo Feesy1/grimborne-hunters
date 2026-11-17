@@ -8,7 +8,7 @@ import {
   ENEMY_TYPES,
   LEVELS,
   RUN_UPGRADES
-} from './config.js?v=20261117z16';
+} from './config.js?v=20261117z18';
 
 const TWO_PI = Math.PI * 2;
 const ARENA_PLAYER_LIMIT = ARENA_HALF_SIZE - 1.4;

@@ -3,7 +3,7 @@
 
 import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
-import { ARENA_HALF_SIZE } from './config.js?v=20261117z16';
+import { ARENA_HALF_SIZE } from './config.js?v=20261117z18';
 
 // ============================================================================
 // Procedural Textures: Gothic Slate Cobblestone Floor & Soft Radial Glow Sprite
@@ -910,94 +910,101 @@ export function createArenaWorld(canvas) {
     const loader = new GLTFLoader();
     const templates = new Map();
 
-    await Promise.all(
-      Object.entries(envPaths).map(
-        ([key, url]) =>
-          new Promise((resolve) => {
-            let settled = false;
-            let attempt = 0;
-            const finish = () => {
-              if (settled) return;
-              settled = true;
-              resolve();
-            };
-            const timer = setTimeout(finish, 30000);
-            const tryLoad = () => {
-              attempt += 1;
-              loader.load(
-                url,
-                (gltf) => {
-                  clearTimeout(timer);
-                  const isOuterOrTiny =
-                    key === 'pine_large' ||
-                    key === 'pine_med' ||
-                    key === 'candle_triple' ||
-                    key === 'skull_candle' ||
-                    key === 'fence' ||
-                    key === 'fence_broken';
-                  gltf.scene.traverse((n) => {
-                    if (n.isMesh) {
-                      n.castShadow = !isOuterOrTiny;
-                      n.receiveShadow = key !== 'pine_large' && key !== 'pine_med';
-                      if ((key === 'pine_large' || key === 'pine_med') && n.geometry) {
-                        // Bake frosted dark-fantasy evergreen + snow-dusted upper needles!
-                        const pos = n.geometry.attributes.position;
-                        const nrm = n.geometry.attributes.normal;
-                        const colors = new Float32Array(pos.count * 3);
-                        const bark = new THREE.Color(0x382722);
-                        const pine = new THREE.Color(0x284052);
-                        const snow = new THREE.Color(0x9fb5d6);
-                        const cTmp = new THREE.Color();
-                        for (let i = 0; i < pos.count; i++) {
-                          const py = pos.getY(i);
-                          const ny = nrm ? nrm.getY(i) : 0;
-                          if (py < 1.25) {
-                            cTmp.copy(bark);
-                          } else if (ny > 0.42) {
-                            cTmp.copy(pine).lerp(snow, Math.min(1, (ny - 0.42) * 1.45));
-                          } else {
-                            cTmp.copy(pine);
-                          }
-                          colors[i * 3] = cTmp.r;
-                          colors[i * 3 + 1] = cTmp.g;
-                          colors[i * 3 + 2] = cTmp.b;
-                        }
-                        n.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-                        n.material = new THREE.MeshStandardMaterial({
-                          vertexColors: true,
-                          roughness: 0.85,
-                          metalness: 0.05
-                        });
-                      } else if (n.material && key !== 'banner_red') {
-                        // Moody twilight slate stone tint so KayKit props match the dark courtyard
-                        const cloned = Array.isArray(n.material)
-                          ? n.material.map((m) => m.clone())
-                          : n.material.clone();
-                        n.material = cloned;
-                        const list = Array.isArray(cloned) ? cloned : [cloned];
-                        for (const m of list) {
-                          if (m.color) m.color.setHex(0x8c96b2);
-                        }
+    const envEntries = Object.entries(envPaths);
+    const loadEnvProp = ([key, url]) =>
+      new Promise((resolve) => {
+        let settled = false;
+        let attempt = 0;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          resolve();
+        };
+        const timer = setTimeout(finish, 30000);
+        const tryLoad = () => {
+          attempt += 1;
+          loader.load(
+            url,
+            (gltf) => {
+              clearTimeout(timer);
+              const isOuterOrTiny =
+                key === 'pine_large' ||
+                key === 'pine_med' ||
+                key === 'candle_triple' ||
+                key === 'skull_candle' ||
+                key === 'fence' ||
+                key === 'fence_broken';
+              gltf.scene.traverse((n) => {
+                if (n.isMesh) {
+                  n.castShadow = !isOuterOrTiny;
+                  n.receiveShadow = key !== 'pine_large' && key !== 'pine_med';
+                  if ((key === 'pine_large' || key === 'pine_med') && n.geometry) {
+                    // Bake frosted dark-fantasy evergreen + snow-dusted upper needles!
+                    const pos = n.geometry.attributes.position;
+                    const nrm = n.geometry.attributes.normal;
+                    const colors = new Float32Array(pos.count * 3);
+                    const bark = new THREE.Color(0x382722);
+                    const pine = new THREE.Color(0x284052);
+                    const snow = new THREE.Color(0x9fb5d6);
+                    const cTmp = new THREE.Color();
+                    for (let i = 0; i < pos.count; i++) {
+                      const py = pos.getY(i);
+                      const ny = nrm ? nrm.getY(i) : 0;
+                      if (py < 1.25) {
+                        cTmp.copy(bark);
+                      } else if (ny > 0.42) {
+                        cTmp.copy(pine).lerp(snow, Math.min(1, (ny - 0.42) * 1.45));
+                      } else {
+                        cTmp.copy(pine);
                       }
+                      colors[i * 3] = cTmp.r;
+                      colors[i * 3 + 1] = cTmp.g;
+                      colors[i * 3 + 2] = cTmp.b;
                     }
-                  });
-                  templates.set(key, gltf.scene);
-                  finish();
-                },
-                undefined,
-                () => {
-                  if (attempt < 2 && !settled) {
-                    setTimeout(tryLoad, 180);
-                    return;
+                    n.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+                    n.material = new THREE.MeshStandardMaterial({
+                      vertexColors: true,
+                      roughness: 0.85,
+                      metalness: 0.05
+                    });
+                  } else if (n.material && key !== 'banner_red') {
+                    // Moody twilight slate stone tint so KayKit props match the dark courtyard
+                    const cloned = Array.isArray(n.material)
+                      ? n.material.map((m) => m.clone())
+                      : n.material.clone();
+                    n.material = cloned;
+                    const list = Array.isArray(cloned) ? cloned : [cloned];
+                    for (const m of list) {
+                      if (m.color) m.color.setHex(0x8c96b2);
+                    }
                   }
-                  clearTimeout(timer);
-                  finish();
                 }
-              );
-            };
-            tryLoad();
-          })
-      )
+              });
+              templates.set(key, gltf.scene);
+              finish();
+            },
+            undefined,
+            () => {
+              if (attempt < 2 && !settled) {
+                setTimeout(tryLoad, 180);
+                return;
+              }
+              clearTimeout(timer);
+              finish();
+            }
+          );
+        };
+        tryLoad();
+      });
+
+    let envIdx = 0;
+    await Promise.all(
+      Array.from({ length: Math.min(4, envEntries.length) }, async () => {
+        while (envIdx < envEntries.length) {
+          const i = envIdx++;
+          await loadEnvProp(envEntries[i]);
+        }
+      })
     );
 
     const fallbackStoneMat = new THREE.MeshStandardMaterial({

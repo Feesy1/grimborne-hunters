@@ -2,14 +2,14 @@
 // Arsenal Progression, Procedural Web Audio, Gothic UI, and Yandex Games SDK v2.
 
 import * as THREE from '../vendor/three.module.js';
-import { LEVELS, MAGE_ELEMENTS } from './config.js?v=20261117z16';
-import { createArenaWorld } from './world.js?v=20261117z16';
-import * as models from './models.js?v=20261117z16';
-import { createProgressionStore } from './progression.js?v=20261117z16';
-import { createCombatController } from './combat.js?v=20261117z16';
-import { createAudioEngine } from './audio.js?v=20261117z16';
-import { initYandexSdk } from './yandexSdk.js?v=20261117z16';
-import { createUIManager } from './ui.js?v=20261117z16';
+import { LEVELS, MAGE_ELEMENTS } from './config.js?v=20261117z18';
+import { createArenaWorld } from './world.js?v=20261117z18';
+import * as models from './models.js?v=20261117z18';
+import { createProgressionStore } from './progression.js?v=20261117z18';
+import { createCombatController } from './combat.js?v=20261117z18';
+import { createAudioEngine } from './audio.js?v=20261117z18';
+import { initYandexSdk } from './yandexSdk.js?v=20261117z18';
+import { createUIManager } from './ui.js?v=20261117z18';
 
 async function bootstrap() {
   const canvas = document.getElementById('game-canvas');
@@ -84,11 +84,19 @@ async function bootstrap() {
   window.addEventListener('touchstart', clearStaleExternalPause, { passive: true });
   window.addEventListener('focus', clearStaleExternalPause);
 
-  // Load tiny arena props & floor/sky textures FIRST (~1MB) before streaming large Tripo hero/monster GLBs
-  // so no courtyard prop ever times out or leaves an invisible obstacle collider!
+  // Load tiny arena props & floor/sky textures FIRST (~1MB), then load ONLY the Tier-1 active hero/weapon/stage GLBs
+  // before opening Hub so iPhone & mobile browsers boot in a few seconds instead of blocking on 290MB!
   await world.ready;
-  await models.preloadModels((loaded, total) => {
-    window.__setSplashAssetProgress?.(loaded, total);
+  const bootState = progression.getState();
+  const bootClass = bootState.selectedClass || 'warrior';
+  const bootWpn = progression.getEquippedWeaponId(bootClass);
+  const bootLevelDef = LEVELS[Math.max(0, (activeRunLevel || 1) - 1)];
+  const bootPriorityKeys = models.getBootModelKeys(bootClass, bootWpn, bootLevelDef);
+  await models.preloadModels({
+    priorityKeys: bootPriorityKeys,
+    onProgress: (loaded, total) => {
+      window.__setSplashAssetProgress?.(loaded, total);
+    }
   });
 
   // 3D Hero & 3D Arsenal Weapon Preview in Hub Diorama + Interactive Right-Mouse-Button 360° Turntable
@@ -117,6 +125,7 @@ async function bootstrap() {
   let activeHeroTouchId = null;
   let lastHeroTouchX = 0;
 
+  let hubDioramaGen = 0;
   function refreshArsenalWeaponDiorama(explicitWeaponId = null, isLocked = false) {
     if (hubArsenalWeapon?.root && hubArsenalWeapon.root.parent) {
       hubArsenalWeapon.root.parent.remove(hubArsenalWeapon.root);
@@ -135,6 +144,17 @@ async function bootstrap() {
     previewedArsenalWeaponId = wId;
     previewedArsenalLocked = Boolean(isLocked);
     const mageElem = st.activeMageElement || 'water';
+
+    const missing = models.getMissingHeroOrWeaponKeys(null, wId);
+    if (missing.length > 0) {
+      const gen = ++hubDioramaGen;
+      models.ensureModelKeysLoaded(missing).then(() => {
+        if (gen === hubDioramaGen && gameMode === 'hub' && (currentHubTab === 'arsenal' || currentHubTab === 'store')) {
+          refreshArsenalWeaponDiorama(wId, previewedArsenalLocked);
+        }
+      });
+    }
+
     hubArsenalWeapon = models.createArsenalShowcaseWeapon(wId, mageElem, previewedArsenalLocked);
     if (hubArsenalWeapon?.root) {
       hubArsenalWeapon.root.rotation.y = hubHeroRotY;
@@ -153,6 +173,17 @@ async function bootstrap() {
     const classId = st.selectedClass || 'warrior';
     const weaponId = progression.getEquippedWeaponId(classId);
     const mageElem = st.activeMageElement || 'water';
+
+    const missing = models.getMissingHeroOrWeaponKeys(classId, weaponId);
+    if (missing.length > 0) {
+      const gen = ++hubDioramaGen;
+      models.ensureModelKeysLoaded(missing).then(() => {
+        if (gen === hubDioramaGen && gameMode === 'hub') {
+          refreshHubDiorama();
+        }
+      });
+    }
+
     hubPreviewHero = models.createHeroMesh(classId, weaponId, mageElem);
     if (hubPreviewHero?.root) {
       hubPreviewHero.root.position.set(0, world.HUB_PEDESTAL_TOP_Y ?? 0, 0);
@@ -358,11 +389,25 @@ async function bootstrap() {
       sdk.GameplayAPI.start();
     }
   }
-  function startBattle(classId, levelNum) {
+  let battleLaunchLock = false;
+  async function startBattle(classId, levelNum) {
+    if (battleLaunchLock) return;
     audio.unlock();
     const chosenClass = classId || progression.getState().selectedClass || 'warrior';
     const maxLvl = progression.getState().maxUnlockedLevel || 1;
     const chosenLevel = Math.min(maxLvl, Math.max(1, Number(levelNum) || activeRunLevel || 1));
+    const eqWpnId = progression.getEquippedWeaponId(chosenClass);
+    const stageDef = LEVELS[Math.max(0, chosenLevel - 1)];
+    const missingKeys = models.getMissingStageModelKeys(chosenClass, eqWpnId, stageDef);
+    if (missingKeys.length > 0) {
+      battleLaunchLock = true;
+      ui.showToast('⏳ Загружаем 3D-модели главы…');
+      try {
+        await models.ensureModelKeysLoaded(missingKeys);
+      } finally {
+        battleLaunchLock = false;
+      }
+    }
     activeRunLevel = chosenLevel;
     usedReviveThisRun = false;
     usedDoubleGoldThisRun = false;

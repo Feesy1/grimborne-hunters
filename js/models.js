@@ -7,31 +7,31 @@
 import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { clone as cloneSkinned } from '../vendor/SkeletonUtils.js';
-import { WEAPONS } from './config.js?v=20261117z16';
+import { WEAPONS } from './config.js?v=20261117z18';
 
 const MODEL_PATHS = {
-  warrior_tripo: './assets/models/Warrior_Tripo.glb?v=20261117z16',
-  sword_tripo: './assets/models/Sword_Tripo.glb?v=20261117z16',
-  spear_tripo: './assets/models/Spear_Tripo.glb?v=20261117z16',
-  zweihander_tripo: './assets/models/Zweihander_Tripo.glb?v=20261117z16',
-  axe_tripo: './assets/models/Axe_Tripo.glb?v=20261117z16',
-  hammer_tripo: './assets/models/Hammer_Tripo.glb?v=20261117z16',
-  mage_tripo: './assets/models/Mage_Tripo.glb?v=20261117z16',
-  staff_tripo: './assets/models/Staff_Tripo.glb?v=20261117z16',
-  gunslinger_tripo: './assets/models/Gunslinger_Tripo.glb?v=20261117z16',
-  shotgun_tripo: './assets/models/Shotgun_Tripo.glb?v=20261117z16',
-  pistol_tripo: './assets/models/Pistol_Tripo.glb?v=20261117z16',
-  smg_tripo: './assets/models/SMG_Tripo.glb?v=20261117z16',
-  ak47_tripo: './assets/models/AK47_Tripo.glb?v=20261117z16',
-  zombie_tripo: './assets/models/Zombie_Tripo.glb?v=20261117z16',
-  tree_tripo: './assets/models/Tree_Tripo.glb?v=20261117z16',
-  dracula_tripo: './assets/models/Dracula_Tripo.glb?v=20261117z16',
-  mimic_tripo: './assets/models/Mimic_Tripo.glb?v=20261117z16',
-  chest_disguise_tripo: './assets/models/Chest_Disguise_Tripo.glb?v=20261117z16',
-  lich_tripo: './assets/models/Lich_Tripo.glb?v=20261117z16',
-  troll_tripo: './assets/models/Troll_Tripo.glb?v=20261117z16',
-  succubus_tripo: './assets/models/Succubus_Tripo.glb?v=20261117z16',
-  spider_tripo: './assets/models/Spider_Tripo.glb?v=20261117z16',
+  warrior_tripo: './assets/models/Warrior_Tripo.glb?v=20261117z18',
+  sword_tripo: './assets/models/Sword_Tripo.glb?v=20261117z18',
+  spear_tripo: './assets/models/Spear_Tripo.glb?v=20261117z18',
+  zweihander_tripo: './assets/models/Zweihander_Tripo.glb?v=20261117z18',
+  axe_tripo: './assets/models/Axe_Tripo.glb?v=20261117z18',
+  hammer_tripo: './assets/models/Hammer_Tripo.glb?v=20261117z18',
+  mage_tripo: './assets/models/Mage_Tripo.glb?v=20261117z18',
+  staff_tripo: './assets/models/Staff_Tripo.glb?v=20261117z18',
+  gunslinger_tripo: './assets/models/Gunslinger_Tripo.glb?v=20261117z18',
+  shotgun_tripo: './assets/models/Shotgun_Tripo.glb?v=20261117z18',
+  pistol_tripo: './assets/models/Pistol_Tripo.glb?v=20261117z18',
+  smg_tripo: './assets/models/SMG_Tripo.glb?v=20261117z18',
+  ak47_tripo: './assets/models/AK47_Tripo.glb?v=20261117z18',
+  zombie_tripo: './assets/models/Zombie_Tripo.glb?v=20261117z18',
+  tree_tripo: './assets/models/Tree_Tripo.glb?v=20261117z18',
+  dracula_tripo: './assets/models/Dracula_Tripo.glb?v=20261117z18',
+  mimic_tripo: './assets/models/Mimic_Tripo.glb?v=20261117z18',
+  chest_disguise_tripo: './assets/models/Chest_Disguise_Tripo.glb?v=20261117z18',
+  lich_tripo: './assets/models/Lich_Tripo.glb?v=20261117z18',
+  troll_tripo: './assets/models/Troll_Tripo.glb?v=20261117z18',
+  succubus_tripo: './assets/models/Succubus_Tripo.glb?v=20261117z18',
+  spider_tripo: './assets/models/Spider_Tripo.glb?v=20261117z18',
   barbarian: './assets/models/Barbarian.glb',
   knight: './assets/models/Knight.glb',
   rogue: './assets/models/Rogue_Hooded.glb',
@@ -45,9 +45,19 @@ const MODEL_PATHS = {
 };
 
 const gltfCache = new Map();
+const inFlightModelLoads = new Map();
 let preloadPromise = null;
+let sharedModelLoader = null;
 const cachedEyeEmissiveTextures = new Map();
 let cachedStaffGlobeAlphaTex = null;
+
+function isMobileRuntimeDevice() {
+  if (typeof navigator === 'undefined') return false;
+  return (
+    /iPhone|iPod|iPad|Android/i.test(navigator.userAgent || '') ||
+    ((navigator.maxTouchPoints || 0) > 0 && Math.min(window.innerWidth || 1280, window.innerHeight || 720) <= 720)
+  );
+}
 
 function buildStaffGlobeCutoutAlphaMap(img) {
   if (cachedStaffGlobeAlphaTex) return cachedStaffGlobeAlphaTex;
@@ -458,150 +468,275 @@ function buildTripoSkullEyeEmissiveMap(cacheKey, sceneRoot) {
   return tex;
 }
 
-export function preloadModels(onProgress) {
-  if (preloadPromise) return preloadPromise;
-  const loader = new GLTFLoader();
+function getWeaponAssetKey(weaponId = 'club') {
+  if (weaponId === 'spear' || weaponId === 'cleaver') return 'spear_tripo';
+  if (weaponId === 'zweihander') return 'zweihander_tripo';
+  if (weaponId === 'axe' || weaponId === 'flail') return 'axe_tripo';
+  if (weaponId === 'boss_hammer') return 'hammer_tripo';
+  if (weaponId === 'usp_pistol') return 'pistol_tripo';
+  if (weaponId === 'smg') return 'smg_tripo';
+  if (weaponId === 'ak47') return 'ak47_tripo';
+  if (weaponId === 'pistol' || weaponId === 'blunderbuss' || weaponId === 'gatling') return 'shotgun_tripo';
+  if (weaponId === 'colt') return null; // procedural chrome revolver
+  if (weaponId === 'spark_staff' || weaponId === 'void_orb') return 'staff_tripo';
+  return 'sword_tripo';
+}
 
-  const entries = Object.entries(MODEL_PATHS);
+function getHeroAssetKey(classId = 'warrior') {
+  if (classId === 'gunslinger') return 'gunslinger_tripo';
+  if (classId === 'mage') return 'mage_tripo';
+  return 'warrior_tripo';
+}
+
+function loadSingleModelKey(key) {
+  if (!key || !MODEL_PATHS[key] || gltfCache.has(key)) return Promise.resolve();
+  if (inFlightModelLoads.has(key)) return inFlightModelLoads.get(key);
+  if (!sharedModelLoader) sharedModelLoader = new GLTFLoader();
+  const url = MODEL_PATHS[key];
+  const isMobile = isMobileRuntimeDevice();
+
+  const p = new Promise((resolve) => {
+    let settled = false;
+    let attempt = 0;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      inFlightModelLoads.delete(key);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      console.warn(`[models] Timeout loading ${url}, continuing with fallback`);
+      finish();
+    }, 60000);
+
+    const tryLoad = () => {
+      attempt += 1;
+      sharedModelLoader.load(
+        url,
+        (gltf) => {
+          clearTimeout(timer);
+          const clipMap = new Map();
+          for (const clip of gltf.animations || []) {
+            clipMap.set(clip.name, clip);
+            const cleanClipName = clip.name.replace(/\.\d+$/, '');
+            if (cleanClipName !== clip.name && !clipMap.has(cleanClipName)) {
+              clipMap.set(cleanClipName, clip);
+            }
+          }
+          const isTripoHero = key === 'gunslinger_tripo' || key === 'mage_tripo' || key === 'warrior_tripo';
+          const isTripoWeapon =
+            key === 'shotgun_tripo' ||
+            key === 'pistol_tripo' ||
+            key === 'smg_tripo' ||
+            key === 'ak47_tripo' ||
+            key === 'sword_tripo' ||
+            key === 'spear_tripo' ||
+            key === 'zweihander_tripo' ||
+            key === 'axe_tripo' ||
+            key === 'hammer_tripo' ||
+            key === 'staff_tripo';
+          const isTripoMonster =
+            key === 'zombie_tripo' ||
+            key === 'tree_tripo' ||
+            key === 'dracula_tripo' ||
+            key === 'mimic_tripo' ||
+            key === 'chest_disguise_tripo' ||
+            key === 'lich_tripo' ||
+            key === 'troll_tripo' ||
+            key === 'succubus_tripo' ||
+            key === 'spider_tripo';
+          const isTripoAsset = isTripoHero || isTripoWeapon || isTripoMonster;
+          const eyeEmissiveTex = isTripoHero || key === 'tree_tripo' ? buildTripoSkullEyeEmissiveMap(key, gltf.scene) : null;
+          const maxAniso = isMobile ? 2 : 16;
+          gltf.scene.traverse((node) => {
+            if (/^Icosphere/i.test(node.name || '')) {
+              node.visible = false;
+              return;
+            }
+            if (node.isMesh) {
+              node.castShadow = true;
+              node.receiveShadow = true;
+              node.frustumCulled = false;
+              if (isTripoAsset && node.material) {
+                node.receiveShadow = false;
+                const isEmbeddedWeapon = /HeroWeapon|Sword|Staff|Shotgun/i.test(node.name);
+                const isStaffMesh = key === 'staff_tripo' || /Staff/i.test(node.name);
+                const srcMats = Array.isArray(node.material) ? node.material : [node.material];
+                const cleanMats = srcMats.map((m) => {
+                  for (const t of [m.map, m.normalMap, m.roughnessMap, m.metalnessMap]) {
+                    if (t) {
+                      t.anisotropy = maxAniso;
+                      t.minFilter = THREE.LinearMipmapLinearFilter;
+                      t.magFilter = THREE.LinearFilter;
+                      t.generateMipmaps = true;
+                      t.needsUpdate = true;
+                    }
+                  }
+                  const staffCutoutAlpha = isStaffMesh && m.map?.image ? buildStaffGlobeCutoutAlphaMap(m.map.image) : null;
+                  const std = new THREE.MeshStandardMaterial({
+                    map: m.map || null,
+                    alphaMap: staffCutoutAlpha || null,
+                    alphaTest: staffCutoutAlpha ? 0.5 : 0,
+                    normalMap: m.normalMap || null,
+                    normalScale: new THREE.Vector2(1.72, 1.72),
+                    roughnessMap: m.roughnessMap || null,
+                    metalnessMap: m.metalnessMap || null,
+                    color: 0xffffff,
+                    roughness: isTripoWeapon || isEmbeddedWeapon || key === 'warrior_tripo' ? 0.48 : 0.60,
+                    metalness: isTripoWeapon || isEmbeddedWeapon || key === 'warrior_tripo' ? 0.46 : 0.20
+                  });
+                  if (eyeEmissiveTex && !isEmbeddedWeapon) {
+                    std.emissiveMap = eyeEmissiveTex;
+                    std.emissive.setHex(key === 'mage_tripo' ? 0xff5200 : 0xff7a00);
+                    std.emissiveIntensity = 2.4;
+                  }
+                  return std;
+                });
+                node.material = Array.isArray(node.material) ? cleanMats : cleanMats[0];
+              }
+            }
+          });
+          gltfCache.set(key, { scene: gltf.scene, clips: clipMap });
+          finish();
+        },
+        undefined,
+        (err) => {
+          if (attempt < 2 && !settled) {
+            setTimeout(tryLoad, 220);
+            return;
+          }
+          clearTimeout(timer);
+          console.warn(`[models] Failed to load ${url}:`, err);
+          finish();
+        }
+      );
+    };
+    tryLoad();
+  });
+
+  inFlightModelLoads.set(key, p);
+  return p;
+}
+
+export async function ensureModelKeysLoaded(keys = []) {
+  const valid = [...new Set(keys.filter((k) => k && MODEL_PATHS[k] && !gltfCache.has(k)))];
+  if (valid.length === 0) return;
+  const conc = isMobileRuntimeDevice() ? 2 : 4;
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(conc, valid.length) }, async () => {
+    while (cursor < valid.length) {
+      const k = valid[cursor++];
+      await loadSingleModelKey(k);
+    }
+  });
+  await Promise.all(workers);
+}
+
+export function getBootModelKeys(classId = 'warrior', weaponId = null, levelDef = null) {
+  const set = new Set([
+    getHeroAssetKey(classId),
+    getWeaponAssetKey(weaponId || (classId === 'gunslinger' ? 'usp_pistol' : classId === 'mage' ? 'spark_staff' : 'club')),
+    'zombie_tripo',
+    'chest',
+    'chest_gold',
+    'skel_minion',
+    'skel_warrior'
+  ]);
+  const pool = [
+    ...(levelDef?.enemyPool || []),
+    ...(levelDef?.enemies || []),
+    ...Object.keys(levelDef?.enemyQuotas || {}),
+    ...(levelDef?.miniBossPool || []),
+    ...(levelDef?.finaleBosses || []),
+    levelDef?.bossId,
+    levelDef?.coBossId,
+    levelDef?.finaleMiniBossType
+  ];
+  for (const eType of pool) {
+    if (!eType) continue;
+    const canon = ENEMY_TYPE_ALIASES?.[eType] || eType;
+    const k = ENEMY_MODEL_CFG?.[canon]?.key || ENEMY_MODEL_CFG?.[eType]?.key;
+    if (k && MODEL_PATHS[k]) set.add(k);
+  }
+  return [...set].filter(Boolean);
+}
+
+export function getMissingHeroOrWeaponKeys(classId = 'warrior', weaponId = null) {
+  const out = [];
+  const hk = getHeroAssetKey(classId);
+  if (hk && MODEL_PATHS[hk] && !gltfCache.has(hk)) out.push(hk);
+  const wk = getWeaponAssetKey(weaponId);
+  if (wk && MODEL_PATHS[wk] && !gltfCache.has(wk)) out.push(wk);
+  return out;
+}
+
+export function getMissingStageModelKeys(classId = 'warrior', weaponId = null, levelDef = null) {
+  return getBootModelKeys(classId, weaponId, levelDef).filter((k) => !gltfCache.has(k));
+}
+
+export function preloadModels(onProgressOrOpts, maybeOpts = null) {
+  if (preloadPromise) return preloadPromise;
+
+  const opts = typeof onProgressOrOpts === 'object' && onProgressOrOpts !== null ? onProgressOrOpts : maybeOpts || {};
+  const onProgress = typeof onProgressOrOpts === 'function' ? onProgressOrOpts : opts.onProgress;
+  const allKeys = Object.keys(MODEL_PATHS);
+  const priorityList = Array.isArray(opts.priorityKeys) && opts.priorityKeys.length > 0
+    ? [...new Set(opts.priorityKeys.filter((k) => MODEL_PATHS[k]))]
+    : null;
+
+  // Fast Progressive Boot (iPhone / MacBook / Web): await ONLY Tier-1 essential keys before opening the Hub,
+  // then stream all remaining heroes, weapons & late bosses smoothly in the background!
+  const isMobile = isMobileRuntimeDevice();
+  const tier1Keys = priorityList || [
+    'warrior_tripo',
+    'sword_tripo',
+    'zombie_tripo',
+    'chest',
+    'chest_gold',
+    'skel_minion',
+    'skel_warrior',
+    ...(isMobile ? [] : ['gunslinger_tripo', 'pistol_tripo', 'mage_tripo', 'staff_tripo'])
+  ];
+  const tier1Set = new Set(tier1Keys);
+  const tier2Keys = allKeys.filter((k) => !tier1Set.has(k));
+
   let doneCount = 0;
   const markDone = () => {
     doneCount += 1;
     try {
-      onProgress?.(doneCount, entries.length);
+      onProgress?.(doneCount, tier1Keys.length);
     } catch {
       // ignore progress callback error
     }
   };
 
-  const loadOneModel = ([key, url]) =>
-    new Promise((resolve) => {
-      let settled = false;
-      let attempt = 0;
-      const finish = () => {
-        if (settled) return;
-        settled = true;
+  const concTier1 = isMobile ? 2 : 4;
+  let idx1 = 0;
+  preloadPromise = (async () => {
+    const workers1 = Array.from({ length: Math.min(concTier1, tier1Keys.length) }, async () => {
+      while (idx1 < tier1Keys.length) {
+        const k = tier1Keys[idx1++];
+        await loadSingleModelKey(k);
         markDone();
-        resolve();
-      };
-      const timer = setTimeout(() => {
-        console.warn(`[models] Timeout loading ${url}, continuing with fallback`);
-        finish();
-      }, 60000);
-
-      const tryLoad = () => {
-        attempt += 1;
-        loader.load(
-          url,
-          (gltf) => {
-            clearTimeout(timer);
-            const clipMap = new Map();
-            for (const clip of gltf.animations || []) {
-              clipMap.set(clip.name, clip);
-              const cleanClipName = clip.name.replace(/\.\d+$/, '');
-              if (cleanClipName !== clip.name && !clipMap.has(cleanClipName)) {
-                clipMap.set(cleanClipName, clip);
-              }
-            }
-            const isTripoHero = key === 'gunslinger_tripo' || key === 'mage_tripo' || key === 'warrior_tripo';
-            const isTripoWeapon =
-              key === 'shotgun_tripo' ||
-              key === 'pistol_tripo' ||
-              key === 'smg_tripo' ||
-              key === 'ak47_tripo' ||
-              key === 'sword_tripo' ||
-              key === 'spear_tripo' ||
-              key === 'zweihander_tripo' ||
-              key === 'axe_tripo' ||
-              key === 'hammer_tripo' ||
-              key === 'staff_tripo';
-            const isTripoMonster =
-              key === 'zombie_tripo' ||
-              key === 'tree_tripo' ||
-              key === 'dracula_tripo' ||
-              key === 'mimic_tripo' ||
-              key === 'chest_disguise_tripo' ||
-              key === 'lich_tripo' ||
-              key === 'troll_tripo' ||
-              key === 'succubus_tripo' ||
-              key === 'spider_tripo';
-            const isTripoAsset = isTripoHero || isTripoWeapon || isTripoMonster;
-            const eyeEmissiveTex = isTripoHero || key === 'tree_tripo' ? buildTripoSkullEyeEmissiveMap(key, gltf.scene) : null;
-            gltf.scene.traverse((node) => {
-              if (/^Icosphere/i.test(node.name || '')) {
-                node.visible = false;
-                return;
-              }
-              if (node.isMesh) {
-                node.castShadow = true;
-                node.receiveShadow = true;
-                node.frustumCulled = false;
-                if (isTripoAsset && node.material) {
-                  node.receiveShadow = false;
-                  const isEmbeddedWeapon = /HeroWeapon|Sword|Staff|Shotgun/i.test(node.name);
-                  const isStaffMesh = key === 'staff_tripo' || /Staff/i.test(node.name);
-                  const srcMats = Array.isArray(node.material) ? node.material : [node.material];
-                  const cleanMats = srcMats.map((m) => {
-                    for (const t of [m.map, m.normalMap, m.roughnessMap, m.metalnessMap]) {
-                      if (t) {
-                        t.anisotropy = 16;
-                        t.minFilter = THREE.LinearMipmapLinearFilter;
-                        t.magFilter = THREE.LinearFilter;
-                        t.generateMipmaps = true;
-                        t.needsUpdate = true;
-                      }
-                    }
-                    const staffCutoutAlpha = isStaffMesh && m.map?.image ? buildStaffGlobeCutoutAlphaMap(m.map.image) : null;
-                    const std = new THREE.MeshStandardMaterial({
-                      map: m.map || null,
-                      alphaMap: staffCutoutAlpha || null,
-                      alphaTest: staffCutoutAlpha ? 0.5 : 0,
-                      normalMap: m.normalMap || null,
-                      normalScale: new THREE.Vector2(1.72, 1.72),
-                      roughnessMap: m.roughnessMap || null,
-                      metalnessMap: m.metalnessMap || null,
-                      color: 0xffffff,
-                      roughness: isTripoWeapon || isEmbeddedWeapon || key === 'warrior_tripo' ? 0.48 : 0.60,
-                      metalness: isTripoWeapon || isEmbeddedWeapon || key === 'warrior_tripo' ? 0.46 : 0.20
-                    });
-                    if (eyeEmissiveTex && !isEmbeddedWeapon) {
-                      std.emissiveMap = eyeEmissiveTex;
-                      std.emissive.setHex(key === 'mage_tripo' ? 0xff5200 : 0xff7a00);
-                      std.emissiveIntensity = 2.4;
-                    }
-                    return std;
-                  });
-                  node.material = Array.isArray(node.material) ? cleanMats : cleanMats[0];
-                }
-              }
-            });
-            gltfCache.set(key, { scene: gltf.scene, clips: clipMap });
-            finish();
-          },
-          undefined,
-          (err) => {
-            if (attempt < 2 && !settled) {
-              setTimeout(tryLoad, 220);
-              return;
-            }
-            clearTimeout(timer);
-            console.warn(`[models] Failed to load ${url}:`, err);
-            finish();
-          }
-        );
-      };
-      tryLoad();
+      }
     });
+    await Promise.all(workers1);
 
-  // Bound concurrency to 4 parallel GLB streams so single-threaded local servers & mobile sockets never abort large GLBs
-  const CONCURRENCY = 4;
-  let nextIdx = 0;
-  const workers = Array.from({ length: Math.min(CONCURRENCY, entries.length) }, async () => {
-    while (nextIdx < entries.length) {
-      const idx = nextIdx++;
-      await loadOneModel(entries[idx]);
+    // Kick off non-blocking background streaming of remaining models right after Hub unlocks!
+    if (tier2Keys.length > 0) {
+      const concTier2 = isMobile ? 2 : 3;
+      let idx2 = 0;
+      const runBg = () => {
+        Array.from({ length: Math.min(concTier2, tier2Keys.length) }, async () => {
+          while (idx2 < tier2Keys.length) {
+            const k = tier2Keys[idx2++];
+            await loadSingleModelKey(k);
+          }
+        });
+      };
+      setTimeout(runBg, isMobile ? 450 : 120);
     }
-  });
-  preloadPromise = Promise.all(workers).then(() => undefined);
+  })();
 
   return preloadPromise;
 }
