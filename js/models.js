@@ -7,32 +7,32 @@
 import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { clone as cloneSkinned } from '../vendor/SkeletonUtils.js';
-import { WEAPONS } from './config.js?v=20261117z22';
+import { WEAPONS } from './config.js?v=20261117z23';
 
 const MODEL_PATHS = {
-  gunslinger_tripo: './assets/models/Gunslinger_Tripo.glb?v=20261117z22',
-  warrior_tripo: './assets/models/Warrior_Tripo.glb?v=20261117z22',
-  sword_tripo: './assets/models/Sword_Tripo.glb?v=20261117z22',
-  spear_tripo: './assets/models/Spear_Tripo.glb?v=20261117z22',
-  zweihander_tripo: './assets/models/Zweihander_Tripo.glb?v=20261117z22',
-  axe_tripo: './assets/models/Axe_Tripo.glb?v=20261117z22',
-  hammer_tripo: './assets/models/Hammer_Tripo.glb?v=20261117z22',
-  mage_tripo: './assets/models/Mage_Tripo.glb?v=20261117z22',
-  staff_tripo: './assets/models/Staff_Tripo.glb?v=20261117z22',
-  shotgun_tripo: './assets/models/Shotgun_Tripo.glb?v=20261117z22',
-  pistol_tripo: './assets/models/Pistol_Tripo.glb?v=20261117z22',
-  colt_tripo: './assets/models/Colt_Tripo.glb?v=20261117z22',
-  smg_tripo: './assets/models/SMG_Tripo.glb?v=20261117z22',
-  ak47_tripo: './assets/models/AK47_Tripo.glb?v=20261117z22',
-  zombie_tripo: './assets/models/Zombie_Tripo.glb?v=20261117z22',
-  tree_tripo: './assets/models/Tree_Tripo.glb?v=20261117z22',
-  dracula_tripo: './assets/models/Dracula_Tripo.glb?v=20261117z22',
-  mimic_tripo: './assets/models/Mimic_Tripo.glb?v=20261117z22',
-  chest_disguise_tripo: './assets/models/Chest_Disguise_Tripo.glb?v=20261117z22',
-  lich_tripo: './assets/models/Lich_Tripo.glb?v=20261117z22',
-  troll_tripo: './assets/models/Troll_Tripo.glb?v=20261117z22',
-  succubus_tripo: './assets/models/Succubus_Tripo.glb?v=20261117z22',
-  spider_tripo: './assets/models/Spider_Tripo.glb?v=20261117z22',
+  gunslinger_tripo: './assets/models/Gunslinger_Tripo.glb?v=20261117z23',
+  warrior_tripo: './assets/models/Warrior_Tripo.glb?v=20261117z23',
+  sword_tripo: './assets/models/Sword_Tripo.glb?v=20261117z23',
+  spear_tripo: './assets/models/Spear_Tripo.glb?v=20261117z23',
+  zweihander_tripo: './assets/models/Zweihander_Tripo.glb?v=20261117z23',
+  axe_tripo: './assets/models/Axe_Tripo.glb?v=20261117z23',
+  hammer_tripo: './assets/models/Hammer_Tripo.glb?v=20261117z23',
+  mage_tripo: './assets/models/Mage_Tripo.glb?v=20261117z23',
+  staff_tripo: './assets/models/Staff_Tripo.glb?v=20261117z23',
+  shotgun_tripo: './assets/models/Shotgun_Tripo.glb?v=20261117z23',
+  pistol_tripo: './assets/models/Pistol_Tripo.glb?v=20261117z23',
+  colt_tripo: './assets/models/Colt_Tripo.glb?v=20261117z23',
+  smg_tripo: './assets/models/SMG_Tripo.glb?v=20261117z23',
+  ak47_tripo: './assets/models/AK47_Tripo.glb?v=20261117z23',
+  zombie_tripo: './assets/models/Zombie_Tripo.glb?v=20261117z23',
+  tree_tripo: './assets/models/Tree_Tripo.glb?v=20261117z23',
+  dracula_tripo: './assets/models/Dracula_Tripo.glb?v=20261117z23',
+  mimic_tripo: './assets/models/Mimic_Tripo.glb?v=20261117z23',
+  chest_disguise_tripo: './assets/models/Chest_Disguise_Tripo.glb?v=20261117z23',
+  lich_tripo: './assets/models/Lich_Tripo.glb?v=20261117z23',
+  troll_tripo: './assets/models/Troll_Tripo.glb?v=20261117z23',
+  succubus_tripo: './assets/models/Succubus_Tripo.glb?v=20261117z23',
+  spider_tripo: './assets/models/Spider_Tripo.glb?v=20261117z23',
   barbarian: './assets/models/Barbarian.glb',
   knight: './assets/models/Knight.glb',
   rogue: './assets/models/Rogue_Hooded.glb',
@@ -525,6 +525,13 @@ function loadSingleModelKey(key) {
           clearTimeout(timer);
           const clipMap = new Map();
           for (const clip of gltf.animations || []) {
+            // Strip lower-body leg tracks from Gunslinger Shoot_A / Shoot_B so 4-way movement legs stay crisp while firing!
+            if (key === 'gunslinger_tripo' && /^Shoot_[AB](?:\.\d+)?$/i.test(clip.name || '')) {
+              clip.tracks = (clip.tracks || []).filter((tr) => {
+                const nodePart = (tr?.name || '').split('.')[0] || '';
+                return !/(?:UpLeg|Leg|Foot|Toe)/i.test(nodePart);
+              });
+            }
             clipMap.set(clip.name, clip);
             const cleanClipName = clip.name.replace(/\.\d+$/, '');
             if (cleanClipName !== clip.name && !clipMap.has(cleanClipName)) {

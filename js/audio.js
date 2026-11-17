@@ -18,11 +18,11 @@ export function createAudioEngine() {
   function preloadExternalSamples(audioCtx) {
     if (!audioCtx || typeof fetch === 'undefined') return;
     const files = [
-      ['usp_1', './assets/audio/usp_shot_1.wav?v=20261117z22'],
-      ['usp_2', './assets/audio/usp_shot_2.wav?v=20261117z22'],
-      ['usp_3', './assets/audio/usp_shot_3.wav?v=20261117z22'],
-      ['map_open', './assets/audio/map_open.wav?v=20261117z22'],
-      ['portal_enter', './assets/audio/portal_enter.wav?v=20261117z22']
+      ['usp_1', './assets/audio/usp_shot_1.wav?v=20261117z23'],
+      ['usp_2', './assets/audio/usp_shot_2.wav?v=20261117z23'],
+      ['usp_3', './assets/audio/usp_shot_3.wav?v=20261117z23'],
+      ['map_open', './assets/audio/map_open.wav?v=20261117z23'],
+      ['portal_enter', './assets/audio/portal_enter.wav?v=20261117z23']
     ];
     for (const [key, url] of files) {
       if (externalSampleBuffers.has(key)) continue;
@@ -266,17 +266,32 @@ export function createAudioEngine() {
     }
   }
 
+  function stopMusicLoop() {
+    if (musicTimerId !== null) {
+      clearInterval(musicTimerId);
+      musicTimerId = null;
+    }
+  }
+
   function startMusicLoop() {
+    if (musicMode !== 'hub' || muted || suspendedBySystem || musicVolume <= 0.001) {
+      stopMusicLoop();
+      return;
+    }
     if (musicTimerId !== null) return;
     if (!ctx) return;
     nextNoteTime = Math.max(ctx.currentTime + 0.04, nextNoteTime || ctx.currentTime + 0.04);
     musicTimerId = setInterval(() => {
-      if (!ctx || ctx.state !== 'running' || muted || suspendedBySystem || musicMode === 'off') {
+      if (musicMode !== 'hub' || muted || suspendedBySystem || musicVolume <= 0.001) {
+        stopMusicLoop();
+        return;
+      }
+      if (!ctx || ctx.state !== 'running') {
         if (ctx) nextNoteTime = ctx.currentTime + 0.05;
         return;
       }
-      const bpm = musicMode === 'boss' ? 168 : musicMode === 'hub' ? 96 : 154;
-      const stepSec = 60 / bpm / 4; // 16th-note resolution (classic ~154 BPM thrash!)
+      const bpm = 96;
+      const stepSec = 60 / bpm / 4;
       const horizon = ctx.currentTime + 0.18;
       if (nextNoteTime < ctx.currentTime - 0.10) {
         nextNoteTime = ctx.currentTime + 0.03;
@@ -1927,6 +1942,8 @@ export function createAudioEngine() {
         nextNoteTime = ctx.currentTime + 0.05;
       }
       syncGain();
+      if (next === 'hub') startMusicLoop();
+      else stopMusicLoop();
     },
 
     playMapOpenSfx() {
@@ -1953,6 +1970,8 @@ export function createAudioEngine() {
           localStorage.setItem('grimborne_music_volume', String(musicVolume));
         } catch {}
         syncGain();
+        if (musicVolume > 0.001) startMusicLoop();
+        else stopMusicLoop();
       }
       return musicVolume;
     },
@@ -2011,6 +2030,8 @@ export function createAudioEngine() {
         localStorage.setItem('grimborne_muted', muted ? '1' : '0');
       } catch {}
       syncGain();
+      if (muted) stopMusicLoop();
+      else startMusicLoop();
       return muted;
     },
 
@@ -2020,6 +2041,8 @@ export function createAudioEngine() {
         localStorage.setItem('grimborne_muted', muted ? '1' : '0');
       } catch {}
       syncGain();
+      if (muted) stopMusicLoop();
+      else startMusicLoop();
       return muted;
     },
 
@@ -2029,6 +2052,7 @@ export function createAudioEngine() {
 
     suspend() {
       suspendedBySystem = true;
+      stopMusicLoop();
       syncGain();
       if (ctx && ctx.state === 'running') {
         ctx.suspend().catch(() => {});
@@ -2039,7 +2063,9 @@ export function createAudioEngine() {
       suspendedBySystem = false;
       syncGain();
       if (ctx && ctx.state === 'suspended' && unlocked) {
-        ctx.resume().catch(() => {});
+        ctx.resume().then(() => startMusicLoop()).catch(() => {});
+      } else {
+        startMusicLoop();
       }
     }
   };

@@ -2,14 +2,14 @@
 // Arsenal Progression, Procedural Web Audio, Gothic UI, and Yandex Games SDK v2.
 
 import * as THREE from '../vendor/three.module.js';
-import { LEVELS, MAGE_ELEMENTS, WEAPONS } from './config.js?v=20261117z22';
-import { createArenaWorld } from './world.js?v=20261117z22';
-import * as models from './models.js?v=20261117z22';
-import { createProgressionStore } from './progression.js?v=20261117z22';
-import { createCombatController } from './combat.js?v=20261117z22';
-import { createAudioEngine } from './audio.js?v=20261117z22';
-import { initYandexSdk } from './yandexSdk.js?v=20261117z22';
-import { createUIManager } from './ui.js?v=20261117z22';
+import { LEVELS, MAGE_ELEMENTS, WEAPONS } from './config.js?v=20261117z23';
+import { createArenaWorld } from './world.js?v=20261117z23';
+import * as models from './models.js?v=20261117z23';
+import { createProgressionStore } from './progression.js?v=20261117z23';
+import { createCombatController } from './combat.js?v=20261117z23';
+import { createAudioEngine } from './audio.js?v=20261117z23';
+import { initYandexSdk } from './yandexSdk.js?v=20261117z23';
+import { createUIManager } from './ui.js?v=20261117z23';
 
 async function bootstrap() {
   const canvas = document.getElementById('game-canvas');
@@ -1074,8 +1074,9 @@ async function bootstrap() {
         hubArsenalWeapon.update?.(dt, elapsedTime);
       }
       if (hubBgPlateEl) {
-        const vw = Math.max(window.innerWidth, 1);
-        const vh = Math.max(window.innerHeight, 1);
+        const vp = window.__getGameViewportSize?.();
+        const vw = Math.max(vp?.w || window.innerWidth, 1);
+        const vh = Math.max(vp?.h || window.innerHeight, 1);
         const nx = Number.isFinite(pointerClientX) ? (pointerClientX / vw - 0.5) : 0;
         const ny = Number.isFinite(pointerClientY) ? (pointerClientY / vh - 0.5) : 0;
         const targetPx = -nx * 11.0 + Math.sin(elapsedTime * 0.45) * 2.2;

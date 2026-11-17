@@ -3,7 +3,7 @@
 
 import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
-import { ARENA_HALF_SIZE } from './config.js?v=20261117z22';
+import { ARENA_HALF_SIZE } from './config.js?v=20261117z23';
 
 // ============================================================================
 // Procedural Textures: Gothic Slate Cobblestone Floor & Soft Radial Glow Sprite
@@ -280,6 +280,27 @@ export function createArenaWorld(canvas) {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.28;
+
+  if (renderer.domElement) {
+    renderer.domElement.addEventListener(
+      'webglcontextlost',
+      (e) => {
+        e.preventDefault();
+      },
+      false
+    );
+    renderer.domElement.addEventListener(
+      'webglcontextrestored',
+      () => {
+        const vp = window.__getGameViewportSize?.();
+        const w = vp?.w || window.innerWidth;
+        const h = vp?.h || window.innerHeight;
+        renderer.setPixelRatio(getTargetPixelRatio());
+        renderer.setSize(w, h);
+      },
+      false
+    );
+  }
 
   const scene = new THREE.Scene();
 

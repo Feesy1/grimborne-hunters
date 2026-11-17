@@ -18,7 +18,7 @@ import {
   RUN_UPGRADES,
   MAGE_TALENT_TREE,
   CLASS_TALENT_TREES
-} from './config.js?v=20261117z22';
+} from './config.js?v=20261117z23';
 
 const CLASS_ORDER = ['warrior', 'gunslinger', 'mage'];
 
@@ -1559,7 +1559,7 @@ export function createUIManager(initialCallbacks = {}) {
   );
   const hubHeaderFiligree = el('div', 'hub-header-filigree');
   const hubFiligreeImg = document.createElement('img');
-  hubFiligreeImg.src = './assets/ui/hub_top_filigree.png?v=20261117z22';
+  hubFiligreeImg.src = './assets/ui/hub_top_filigree.png?v=20261117z23';
   hubFiligreeImg.className = 'hub-filigree-img';
   hubFiligreeImg.alt = '';
   hubFiligreeImg.draggable = false;
@@ -1633,7 +1633,7 @@ export function createUIManager(initialCallbacks = {}) {
   stagePrevBtn.setAttribute('aria-label', 'Предыдущий класс');
   const stagePrevImg = document.createElement('img');
   stagePrevImg.className = 'switch-arrow-icon is-prev';
-  stagePrevImg.src = './assets/ui/btn_arrow_switch.png?v=20261117z22';
+  stagePrevImg.src = './assets/ui/btn_arrow_switch.png?v=20261117z23';
   stagePrevImg.alt = '';
   stagePrevImg.draggable = false;
   stagePrevBtn.appendChild(stagePrevImg);
@@ -1645,7 +1645,7 @@ export function createUIManager(initialCallbacks = {}) {
   stageNextBtn.setAttribute('aria-label', 'Следующий класс');
   const stageNextImg = document.createElement('img');
   stageNextImg.className = 'switch-arrow-icon is-next';
-  stageNextImg.src = './assets/ui/btn_arrow_switch.png?v=20261117z22';
+  stageNextImg.src = './assets/ui/btn_arrow_switch.png?v=20261117z23';
   stageNextImg.alt = '';
   stageNextImg.draggable = false;
   stageNextBtn.appendChild(stageNextImg);
@@ -1796,8 +1796,8 @@ export function createUIManager(initialCallbacks = {}) {
   const worldStageFrame = el('div', 'campaign-map-stage-frame is-world-fullscreen');
   const campaignWorldBg = document.createElement('video');
   campaignWorldBg.className = 'campaign-map-bg-img campaign-map-video';
-  campaignWorldBg.src = './assets/ui/world_map_loop.mp4?v=20261117z22';
-  campaignWorldBg.poster = './assets/ui/world_map_clean_hq.jpg?v=20261117z22';
+  campaignWorldBg.src = './assets/ui/world_map_loop.mp4?v=20261117z23';
+  campaignWorldBg.poster = './assets/ui/world_map_clean_hq.jpg?v=20261117z23';
   campaignWorldBg.autoplay = true;
   campaignWorldBg.loop = true;
   campaignWorldBg.muted = true;
@@ -1856,8 +1856,8 @@ export function createUIManager(initialCallbacks = {}) {
   const forestStageFrame = el('div', 'campaign-map-stage-frame is-forest-frame');
   const forestBgImg = document.createElement('video');
   forestBgImg.className = 'campaign-map-bg-img campaign-map-video';
-  forestBgImg.src = './assets/ui/forest_stages_loop.mp4?v=20261117z22';
-  forestBgImg.poster = './assets/ui/forest_stages_clean_hq.jpg?v=20261117z22';
+  forestBgImg.src = './assets/ui/forest_stages_loop.mp4?v=20261117z23';
+  forestBgImg.poster = './assets/ui/forest_stages_clean_hq.jpg?v=20261117z23';
   forestBgImg.autoplay = true;
   forestBgImg.loop = true;
   forestBgImg.muted = true;
@@ -1960,7 +1960,7 @@ export function createUIManager(initialCallbacks = {}) {
   arsenalPrevBtn.setAttribute('aria-label', 'Предыдущее оружие');
   const arsenalPrevImg = document.createElement('img');
   arsenalPrevImg.className = 'switch-arrow-icon is-prev';
-  arsenalPrevImg.src = './assets/ui/btn_arrow_switch.png?v=20261117z22';
+  arsenalPrevImg.src = './assets/ui/btn_arrow_switch.png?v=20261117z23';
   arsenalPrevImg.alt = '';
   arsenalPrevImg.draggable = false;
   arsenalPrevBtn.appendChild(arsenalPrevImg);
@@ -1972,7 +1972,7 @@ export function createUIManager(initialCallbacks = {}) {
   arsenalNextBtn.setAttribute('aria-label', 'Следующее оружие');
   const arsenalNextImg = document.createElement('img');
   arsenalNextImg.className = 'switch-arrow-icon is-next';
-  arsenalNextImg.src = './assets/ui/btn_arrow_switch.png?v=20261117z22';
+  arsenalNextImg.src = './assets/ui/btn_arrow_switch.png?v=20261117z23';
   arsenalNextImg.alt = '';
   arsenalNextImg.draggable = false;
   arsenalNextBtn.appendChild(arsenalNextImg);
@@ -2167,7 +2167,7 @@ export function createUIManager(initialCallbacks = {}) {
     btn.type = 'button';
     const crest = el('span', 'dock-crest-circle');
     const socketImg = document.createElement('img');
-    socketImg.src = './assets/ui/dock_crest_socket.png?v=20261117z22';
+    socketImg.src = './assets/ui/dock_crest_socket.png?v=20261117z23';
     socketImg.className = 'dock-socket-ring';
     socketImg.alt = '';
     socketImg.draggable = false;

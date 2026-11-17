@@ -10,7 +10,7 @@ import {
   MAGE_ELEMENT_UNLOCK_COSTS,
   MAGE_TALENT_TREE,
   CLASS_TALENT_TREES
-} from './config.js?v=20261117z22';
+} from './config.js?v=20261117z23';
 
 export const WEAPON_MAX_SHOP_LEVEL = WEAPON_MAX_LEVEL || 12;
 
@@ -148,7 +148,7 @@ function createDefaultState(zeroGold = false) {
     },
     gunslingerUspStarterMigrated: true,
     weaponShopLevels: {
-      club: 1, spear: 1, zweihander: 1, axe: 1, boss_hammer: 1, cleaver: 1, flail: 1,
+      club: 1, spear: 1, zweihander: 1, axe: 1, boss_hammer: 1,
       usp_pistol: 1, colt: 1, smg: 1, pistol: 1, ak47: 1, blunderbuss: 1, gatling: 1,
       spark_staff: 1
     },
