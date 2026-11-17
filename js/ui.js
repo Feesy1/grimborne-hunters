@@ -18,7 +18,7 @@ import {
   RUN_UPGRADES,
   MAGE_TALENT_TREE,
   CLASS_TALENT_TREES
-} from './config.js?v=20261117z21';
+} from './config.js?v=20261117z22';
 
 const CLASS_ORDER = ['warrior', 'gunslinger', 'mage'];
 
@@ -1559,7 +1559,7 @@ export function createUIManager(initialCallbacks = {}) {
   );
   const hubHeaderFiligree = el('div', 'hub-header-filigree');
   const hubFiligreeImg = document.createElement('img');
-  hubFiligreeImg.src = './assets/ui/hub_top_filigree.png?v=20261117z21';
+  hubFiligreeImg.src = './assets/ui/hub_top_filigree.png?v=20261117z22';
   hubFiligreeImg.className = 'hub-filigree-img';
   hubFiligreeImg.alt = '';
   hubFiligreeImg.draggable = false;
@@ -1633,7 +1633,7 @@ export function createUIManager(initialCallbacks = {}) {
   stagePrevBtn.setAttribute('aria-label', 'Предыдущий класс');
   const stagePrevImg = document.createElement('img');
   stagePrevImg.className = 'switch-arrow-icon is-prev';
-  stagePrevImg.src = './assets/ui/btn_arrow_switch.png?v=20261117z21';
+  stagePrevImg.src = './assets/ui/btn_arrow_switch.png?v=20261117z22';
   stagePrevImg.alt = '';
   stagePrevImg.draggable = false;
   stagePrevBtn.appendChild(stagePrevImg);
@@ -1645,7 +1645,7 @@ export function createUIManager(initialCallbacks = {}) {
   stageNextBtn.setAttribute('aria-label', 'Следующий класс');
   const stageNextImg = document.createElement('img');
   stageNextImg.className = 'switch-arrow-icon is-next';
-  stageNextImg.src = './assets/ui/btn_arrow_switch.png?v=20261117z21';
+  stageNextImg.src = './assets/ui/btn_arrow_switch.png?v=20261117z22';
   stageNextImg.alt = '';
   stageNextImg.draggable = false;
   stageNextBtn.appendChild(stageNextImg);
@@ -1770,41 +1770,18 @@ export function createUIManager(initialCallbacks = {}) {
       titleRu: 'Туманный лес',
       subRu: '25 этапов • Открыто',
       x: 29,
-      y: 27,
+      y: 26,
       unlocked: true
-    },
-    {
-      id: 'crypt',
-      titleRu: 'Сумрачный погост',
-      subRu: 'Заблокировано',
-      x: 35,
-      y: 74,
-      unlocked: false
-    },
-    {
-      id: 'peaks',
-      titleRu: 'Ледяные пики',
-      subRu: 'Заблокировано',
-      x: 70,
-      y: 27,
-      unlocked: false
-    },
-    {
-      id: 'lava',
-      titleRu: 'Огненный разлом',
-      subRu: 'Заблокировано',
-      x: 76,
-      y: 66,
-      unlocked: false
     }
   ];
 
+  // Exact coordinates of the 25 stone tiles along the serpentine road in forest_stages_loop.mp4!
   const FOREST_PATH_COORDS = [
-    [11, 63], [16, 73], [24, 75], [32, 68], [26, 53],
-    [17, 41], [24, 29], [34, 26], [43, 23], [52, 24],
-    [60, 28], [63, 39], [58, 52], [50, 62], [41, 68],
-    [58, 72], [68, 70], [76, 62], [82, 53], [74, 44],
-    [69, 33], [77, 25], [86, 28], [90, 41], [88, 57]
+    [27.2, 82.0], [22.6, 70.8], [19.2, 40.5], [20.8, 23.6], [32.2, 45.2],
+    [30.6, 31.2], [37.3, 30.2], [43.4, 36.2], [53.3, 40.8], [58.3, 39.4],
+    [62.1, 33.5], [59.3, 26.8], [63.0, 24.4], [78.8, 30.0], [85.8, 27.2],
+    [92.8, 31.6], [90.3, 45.6], [85.0, 57.5], [82.0, 71.5], [82.0, 81.2],
+    [62.6, 84.8], [56.1, 81.2], [55.0, 70.8], [59.8, 63.2], [64.8, 57.2]
   ];
 
   let campaignSubView = 'world'; // 'world' | 'forest'
@@ -1814,21 +1791,26 @@ export function createUIManager(initialCallbacks = {}) {
   campaignPanel.id = 'campaignPanel';
   const campaignBox = el('div', 'campaign-fullscreen-shell');
 
-  // --- SCENE 2: WORLD REGIONS MAP ---
+  // --- SCENE 2: WORLD REGIONS MAP (Full-Screen Animated Video + Only Close X & Stylized Misty Forest Button!) ---
   const campaignWorldView = el('div', 'campaign-world-view');
-  const worldStageFrame = el('div', 'campaign-map-stage-frame');
-  const campaignWorldBg = document.createElement('img');
-  campaignWorldBg.className = 'campaign-map-bg-img';
-  campaignWorldBg.src = './assets/ui/world_map_clean_hq.jpg?v=20261117z21';
-  campaignWorldBg.alt = 'Карта Мира';
-  campaignWorldBg.draggable = false;
+  const worldStageFrame = el('div', 'campaign-map-stage-frame is-world-fullscreen');
+  const campaignWorldBg = document.createElement('video');
+  campaignWorldBg.className = 'campaign-map-bg-img campaign-map-video';
+  campaignWorldBg.src = './assets/ui/world_map_loop.mp4?v=20261117z22';
+  campaignWorldBg.poster = './assets/ui/world_map_clean_hq.jpg?v=20261117z22';
+  campaignWorldBg.autoplay = true;
+  campaignWorldBg.loop = true;
+  campaignWorldBg.muted = true;
+  campaignWorldBg.playsInline = true;
+  campaignWorldBg.setAttribute('playsinline', '');
+  campaignWorldBg.setAttribute('webkit-playsinline', '');
   const campaignWorldVignette = el('div', 'campaign-map-vignette');
 
-  const worldTopBar = el('div', 'campaign-map-topbar');
+  const worldTopBar = el('div', 'campaign-map-topbar is-world-minimal-bar');
   const worldLeftSpacer = el('div', 'map-topbar-left');
-  const worldHeaderTitle = el('h2', 'campaign-map-heading', 'Карта Мира — Выбор региона');
+  const worldHeaderTitle = el('h2', 'campaign-map-heading hidden', 'Карта Мира — Выбор региона');
   const worldRightControls = el('div', 'map-topbar-right');
-  const worldProgressPill = el('span', 'campaign-map-progress-pill', 'Открыт: Туманный лес');
+  const worldProgressPill = el('span', 'campaign-map-progress-pill hidden', 'Открыт: Туманный лес');
   const campaignBackHeroBtn = el('button', 'map-close-x-btn', '✕');
   campaignBackHeroBtn.type = 'button';
   campaignBackHeroBtn.title = 'Вернуться в меню';
@@ -1869,14 +1851,19 @@ export function createUIManager(initialCallbacks = {}) {
   worldStageFrame.append(campaignWorldBg, campaignWorldVignette, worldPinsLayer);
   campaignWorldView.append(worldTopBar, worldStageFrame);
 
-  // --- SCENE 3: MISTY FOREST 25-STAGE WINDING PATH MAP ---
+  // --- SCENE 3: MISTY FOREST 25-STAGE WINDING PATH MAP (Animated Video Scene + 25 Stone Tile Nodes!) ---
   const campaignForestView = el('div', 'campaign-forest-view hidden');
   const forestStageFrame = el('div', 'campaign-map-stage-frame is-forest-frame');
-  const forestBgImg = document.createElement('img');
-  forestBgImg.className = 'campaign-map-bg-img';
-  forestBgImg.src = './assets/ui/forest_stages_clean_hq.jpg?v=20261117z21';
-  forestBgImg.alt = 'Туманный лес';
-  forestBgImg.draggable = false;
+  const forestBgImg = document.createElement('video');
+  forestBgImg.className = 'campaign-map-bg-img campaign-map-video';
+  forestBgImg.src = './assets/ui/forest_stages_loop.mp4?v=20261117z22';
+  forestBgImg.poster = './assets/ui/forest_stages_clean_hq.jpg?v=20261117z22';
+  forestBgImg.autoplay = true;
+  forestBgImg.loop = true;
+  forestBgImg.muted = true;
+  forestBgImg.playsInline = true;
+  forestBgImg.setAttribute('playsinline', '');
+  forestBgImg.setAttribute('webkit-playsinline', '');
   const forestVignette = el('div', 'campaign-map-vignette is-forest');
 
   const forestTopBar = el('div', 'campaign-map-topbar');
@@ -1973,7 +1960,7 @@ export function createUIManager(initialCallbacks = {}) {
   arsenalPrevBtn.setAttribute('aria-label', 'Предыдущее оружие');
   const arsenalPrevImg = document.createElement('img');
   arsenalPrevImg.className = 'switch-arrow-icon is-prev';
-  arsenalPrevImg.src = './assets/ui/btn_arrow_switch.png?v=20261117z21';
+  arsenalPrevImg.src = './assets/ui/btn_arrow_switch.png?v=20261117z22';
   arsenalPrevImg.alt = '';
   arsenalPrevImg.draggable = false;
   arsenalPrevBtn.appendChild(arsenalPrevImg);
@@ -1985,7 +1972,7 @@ export function createUIManager(initialCallbacks = {}) {
   arsenalNextBtn.setAttribute('aria-label', 'Следующее оружие');
   const arsenalNextImg = document.createElement('img');
   arsenalNextImg.className = 'switch-arrow-icon is-next';
-  arsenalNextImg.src = './assets/ui/btn_arrow_switch.png?v=20261117z21';
+  arsenalNextImg.src = './assets/ui/btn_arrow_switch.png?v=20261117z22';
   arsenalNextImg.alt = '';
   arsenalNextImg.draggable = false;
   arsenalNextBtn.appendChild(arsenalNextImg);
@@ -2180,7 +2167,7 @@ export function createUIManager(initialCallbacks = {}) {
     btn.type = 'button';
     const crest = el('span', 'dock-crest-circle');
     const socketImg = document.createElement('img');
-    socketImg.src = './assets/ui/dock_crest_socket.png?v=20261117z21';
+    socketImg.src = './assets/ui/dock_crest_socket.png?v=20261117z22';
     socketImg.className = 'dock-socket-ring';
     socketImg.alt = '';
     socketImg.draggable = false;
@@ -2871,6 +2858,11 @@ export function createUIManager(initialCallbacks = {}) {
     if (valid === 'campaign') {
       campaignWorldView.classList.toggle('hidden', campaignSubView !== 'world');
       campaignForestView.classList.toggle('hidden', campaignSubView !== 'forest');
+      if (campaignSubView === 'world') {
+        try { campaignWorldBg.play?.().catch(() => {}); } catch {}
+      } else {
+        try { forestBgImg.play?.().catch(() => {}); } catch {}
+      }
     }
 
     if (valid === 'arsenal' && lastHubState) {

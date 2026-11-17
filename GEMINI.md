@@ -4,8 +4,8 @@
 
 ## 1. Общие сведения и деплой
 - **Репозиторий**: `D:\GrimborneHunters` -> `https://github.com/Feesy1/grimborne-hunters.git` (ветка `main`).
-- **Онлайн-ссылка (GitHub Pages)**: `https://feesy1.github.io/grimborne-hunters/?v=20261117z21`.
-- **Cache-buster (обязательно обновлять при каждом пуше!)**: `?v=20261117z21` используется в `index.html`, `manifest.json`, `README.md`, `ИГРАТЬ_НА_ТЕЛЕФОНЕ.md`, `Запустить_игру.cmd`, `Запустить_на_Mac.command`, `js/*.js` — увеличивать суффикс (`z20`, `z21`, …), чтобы на iPhone и MacBook Safari не зависал кэш.
+- **Онлайн-ссылка (GitHub Pages)**: `https://feesy1.github.io/grimborne-hunters/?v=20261117z22`.
+- **Cache-buster (обязательно обновлять при каждом пуше!)**: `?v=20261117z22` используется в `index.html`, `manifest.json`, `README.md`, `ИГРАТЬ_НА_ТЕЛЕФОНЕ.md`, `Запустить_игру.cmd`, `Запустить_на_Mac.command`, `js/*.js` — увеличивать суффикс (`z20`, `z21`, …), чтобы на iPhone и MacBook Safari не зависал кэш.
 - **Локальный запуск**: `server.ps1 -Port 8090` (`Запустить_игру.cmd` для Windows, `Запустить_на_Mac.command` для macOS).
 - **Стек**: Vanilla ES Modules + Three.js `r160`, без сборщика, локальный + Yandex SDK fallback (`js/yandexSdk.js`).
 
@@ -13,8 +13,8 @@
 - `config.js`: классы героев, арсенал оружия, 16 архетипов врагов и 5 боссов, 25 уровней кампании.
   - **Чумной зомби (`plague_zombie`)**: ослаблен до `hp: 50`, `damage: 8`, `speed: 2.35`.
   - **Опыт за уровень**: снижен в 10 раз по просьбе пользователя.
-  - **Стрелок (`gunslinger`)**: стартует с `usp_pistol` («Тактический USP», 15 патр., перезарядка 2.0 с, пробитие брони 15%), далее `colt` -> `smg` -> `pistol` (охотничье ружьё с дозарядкой по 1 патрону) -> `ak47`.
-- `models.js`: прогрессивный загрузчик 3D-моделей (Tier-1 приоритетно грузит активного героя, его оружие и врагов текущей главы; `*_Tripo.glb` оптимизированы по текстурам, статическое оружие облегчено). Особые эффекты: светящиеся глаза и вырез сферы посоха Воды (`buildStaffGlobeCutoutAlphaMap`, `buildTripoSkullEyeEmissiveMap`), оверлеи анимаций рук Воина и Стрелка под каждое оружие.
-- `world.js` & `css/style.css`: оптимизация под MacBook и iPhone — потолок DPR (`1.0` моб / `1.35` ПК), отключение MSAA при `devicePixelRatio >= 1.5`, тени `512 BasicShadowMap` / `1024 PCFShadowMap` (отключены на рядовых зомби), пулинг VFX (`SlashArc`, `DangerZone`, `MuzzleFlash`, `Shockwave`), автопереход в `setLowSpecMode(true)` при просадке FPS ниже `43`, без `backdrop-filter: blur` поверх живого WebGL.
-- `audio.js` & `main.js`: процедурный DOOM-подобный саундтрек и профили звуков для огнестрельного и ближнего оружия с раздельными ползунками Музыки и Эффектов; общий `musicGuitarShaper` и защита от спама `setMusicMode()`.
+  - **Стрелок (`gunslinger`)**: стартует с `usp_pistol` («Тактический USP», 15 патр., перезарядка 2.0 с, пробитие брони 15%, одноручный хват без пересечения пальцев, 4-сторонняя направленная анимация бега `Running_A`/`Running_Back`/`Strafe_Left`/`Strafe_Right` и 2 чередующиеся каждые 5 выстрелов манеры стрельбы `Shoot_A`/`Shoot_B`), далее 3D `Colt_Tripo.glb` (`colt`) -> `smg` -> `pistol` (охотничье ружьё с дозарядкой по 1 патрону) -> `ak47`.
+- `models.js`: прогрессивный загрузчик 3D-моделей (Tier-1 приоритетно грузит активного героя, его оружие и врагов текущей главы; `*_Tripo.glb` оптимизированы по текстурам, у `Zombie_Tripo.glb` добавлен клип атаки руками `Attack`). Особые эффекты: светящиеся глаза и вырез сферы посоха Воды (`buildStaffGlobeCutoutAlphaMap`, `buildTripoSkullEyeEmissiveMap`), оверлеи анимаций рук Воина и Стрелка под каждое оружие.
+- `world.js` & `css/style.css`: реалистичные патроны с медной головкой, латунной гильзой, тонким трассером, компактной пороховой вспышкой с дымком и вылетающими крутящимися 3D-гильзами (`spawnShellCasing`); полноэкранные анимированные видео-сцены Карты Мира (`world_map_loop.mp4`) и 25 этапов Туманного леса (`forest_stages_loop.mp4`).
+- `audio.js` & `main.js`: реальные CC0-сэмплы выстрела пистолета (`usp_shot_1..3.wav`) и звуки открытия карты/портала (`map_open.wav`, `portal_enter.wav`), боевая музыка Doom Slayer отключена.
 - `combat.js`, `progression.js`, `ui.js`: боевая логика, кислотные лужи слизней, сохранения (`grimborne_save_v1`) и хаб/HUD на русском.

@@ -12,6 +12,50 @@ export function createAudioEngine() {
   let compressor = null;
   let whiteNoiseBuffer = null;
   let brownNoiseBuffer = null;
+  const externalSampleBuffers = new Map();
+  let uspShotCycleIdx = 0;
+
+  function preloadExternalSamples(audioCtx) {
+    if (!audioCtx || typeof fetch === 'undefined') return;
+    const files = [
+      ['usp_1', './assets/audio/usp_shot_1.wav?v=20261117z22'],
+      ['usp_2', './assets/audio/usp_shot_2.wav?v=20261117z22'],
+      ['usp_3', './assets/audio/usp_shot_3.wav?v=20261117z22'],
+      ['map_open', './assets/audio/map_open.wav?v=20261117z22'],
+      ['portal_enter', './assets/audio/portal_enter.wav?v=20261117z22']
+    ];
+    for (const [key, url] of files) {
+      if (externalSampleBuffers.has(key)) continue;
+      externalSampleBuffers.set(key, null);
+      fetch(url)
+        .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject()))
+        .then((ab) => audioCtx.decodeAudioData(ab))
+        .then((buf) => {
+          externalSampleBuffers.set(key, buf);
+        })
+        .catch(() => {
+          externalSampleBuffers.delete(key);
+        });
+    }
+  }
+
+  function playSampleBuffer(key, gainPeak = 0.65, rate = 1.0) {
+    if (!ctx || !masterGain) return false;
+    const buf = externalSampleBuffers.get(key);
+    if (!buf) {
+      preloadExternalSamples(ctx);
+      return false;
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.playbackRate.value = rate;
+    const g = ctx.createGain();
+    g.gain.value = gainPeak;
+    src.connect(g);
+    g.connect(masterGain);
+    src.start(0);
+    return true;
+  }
   let distortionCurve = null;
 
   let muted = false;
@@ -179,39 +223,38 @@ export function createAudioEngine() {
   ];
 
   function scheduleMusicNote(stepIdx, t) {
-    if (!ctx || !musicFilter || !distortionCurve || muted || suspendedBySystem || musicMode === 'off' || musicVolume <= 0.001) {
+    if (!ctx || !musicFilter || !distortionCurve || muted || suspendedBySystem || musicMode !== 'hub' || musicVolume <= 0.001) {
       return;
     }
 
-    const isBoss = musicMode === 'boss';
-    const isHub = musicMode === 'hub';
-    const table = isBoss ? DOOM_BOSS_RIFF : isHub ? HUB_DARK_PULSE : DOOM_COMBAT_RIFF;
+    const isHub = true;
+    const table = HUB_DARK_PULSE;
     const freq = table[stepIdx % table.length];
 
-    // 1. Heavily distorted Argent Drop-E Chug Guitar / Synth Bass (uses persistent shared WaveShaper!)
+    // Gentle Dark-Fantasy Hub Sub-Pulse (DOOM Slayer / Doomsday combat metal removed per user request)
     if (freq > 0) {
-      const dur = isHub ? 0.34 : freq > 105 ? 0.145 : 0.115;
+      const dur = 0.34;
       const osc = ctx.createOscillator();
       const sub = ctx.createOscillator();
       const g = ctx.createGain();
 
-      osc.type = 'sawtooth';
+      osc.type = 'triangle';
       osc.frequency.setValueAtTime(freq, t);
-      sub.type = 'square';
+      sub.type = 'sine';
       sub.frequency.setValueAtTime(freq * 0.5, t);
 
       if (musicGuitarPostLp) {
-        musicGuitarPostLp.frequency.setTargetAtTime(isHub ? 520 : isBoss ? 2550 : 2150, t, 0.04);
+        musicGuitarPostLp.frequency.setTargetAtTime(420, t, 0.04);
       }
 
-      const amp = isHub ? 0.17 : isBoss ? 0.24 : 0.20;
+      const amp = 0.12;
       g.gain.setValueAtTime(0.0001, t);
-      g.gain.linearRampToValueAtTime(amp, t + 0.006);
+      g.gain.linearRampToValueAtTime(amp, t + 0.012);
       g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
 
       osc.connect(g);
       sub.connect(g);
-      g.connect(musicGuitarShaper || musicFilter);
+      g.connect(musicFilter);
       osc.onended = () => {
         try { g.disconnect(); } catch {}
       };
@@ -220,87 +263,6 @@ export function createAudioEngine() {
       sub.start(t);
       osc.stop(t + dur + 0.015);
       sub.stop(t + dur + 0.015);
-    }
-
-    if (isHub) return;
-
-    // 2. Punchy Industrial Kick (downbeats & syncopated double-kick on Boss!)
-    const s16 = stepIdx % 16;
-    const hitKick = isBoss
-      ? s16 === 0 || s16 === 2 || s16 === 6 || s16 === 8 || s16 === 10 || s16 === 14
-      : s16 === 0 || s16 === 6 || s16 === 8 || s16 === 14;
-    if (hitKick) {
-      const kOsc = ctx.createOscillator();
-      const kGain = ctx.createGain();
-      kOsc.type = 'sine';
-      kOsc.frequency.setValueAtTime(132, t);
-      kOsc.frequency.exponentialRampToValueAtTime(34, t + 0.11);
-      kGain.gain.setValueAtTime(0.0001, t);
-      kGain.gain.linearRampToValueAtTime(isBoss ? 0.42 : 0.36, t + 0.003);
-      kGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
-      kOsc.connect(kGain);
-      kGain.connect(musicFilter);
-      kOsc.start(t);
-      kOsc.stop(t + 0.14);
-    }
-
-    // 3. Industrial Snare Backbeat (beats 2 & 4: steps 4, 12)
-    if (s16 === 4 || s16 === 12) {
-      if (whiteNoiseBuffer) {
-        const ns = ctx.createBufferSource();
-        ns.buffer = whiteNoiseBuffer;
-        ns.loop = true;
-        const bp = ctx.createBiquadFilter();
-        bp.type = 'bandpass';
-        bp.frequency.setValueAtTime(1950, t);
-        bp.Q.setValueAtTime(0.95, t);
-        const sg = ctx.createGain();
-        sg.gain.setValueAtTime(0.0001, t);
-        sg.gain.linearRampToValueAtTime(0.24, t + 0.003);
-        sg.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
-        ns.connect(bp);
-        bp.connect(sg);
-        sg.connect(musicFilter);
-        ns.start(t, Math.random() * 0.35);
-        ns.stop(t + 0.14);
-        ns.onended = () => {
-          try { sg.disconnect(); } catch {}
-        };
-      }
-      const st = ctx.createOscillator();
-      const stg = ctx.createGain();
-      st.type = 'triangle';
-      st.frequency.setValueAtTime(210, t);
-      st.frequency.exponentialRampToValueAtTime(95, t + 0.07);
-      stg.gain.setValueAtTime(0.0001, t);
-      stg.gain.linearRampToValueAtTime(0.18, t + 0.002);
-      stg.gain.exponentialRampToValueAtTime(0.0001, t + 0.08);
-      st.connect(stg);
-      stg.connect(musicFilter);
-      st.start(t);
-      st.stop(t + 0.09);
-    }
-
-    // 4. Driving Metallic Hi-Hat (every 8th note)
-    if (s16 % 2 === 0 && whiteNoiseBuffer) {
-      const hs = ctx.createBufferSource();
-      hs.buffer = whiteNoiseBuffer;
-      hs.loop = true;
-      const hp = ctx.createBiquadFilter();
-      hp.type = 'highpass';
-      hp.frequency.setValueAtTime(6200, t);
-      const hg = ctx.createGain();
-      hg.gain.setValueAtTime(0.0001, t);
-      hg.gain.linearRampToValueAtTime(s16 % 4 === 2 ? 0.07 : 0.045, t + 0.002);
-      hg.gain.exponentialRampToValueAtTime(0.0001, t + 0.038);
-      hs.connect(hp);
-      hp.connect(hg);
-      hg.connect(musicFilter);
-      hs.start(t, Math.random() * 0.4);
-      hs.stop(t + 0.048);
-      hs.onended = () => {
-        try { hg.disconnect(); } catch {}
-      };
     }
   }
 
@@ -668,7 +630,24 @@ export function createAudioEngine() {
       const jitter = 0.95 + Math.random() * 0.10;
 
       if (weaponId === 'usp_pistol') {
-        // Crisp tactical .45 USP snap (sharp slide crack + compact punch + brass casing tink, ZERO shotgun boom!)
+        // Play genuine recorded CC0 .45/9mm Tactical USP gunshot sample (cycling 3 variations + brass shell tink!)
+        preloadExternalSamples(ctx);
+        const sampleKey = `usp_${(uspShotCycleIdx++ % 3) + 1}`;
+        const playedReal = playSampleBuffer(sampleKey, 0.72, 0.96 + Math.random() * 0.08);
+        if (playedReal) {
+          // Subtle brass casing clink on cobblestone 120ms later
+          playTone({
+            type: 'sine',
+            freqStart: 3150 * jitter,
+            freqEnd: 2680,
+            startTime: 0.11,
+            duration: 0.026,
+            gainPeak: 0.045,
+            attack: 0.001
+          });
+          return;
+        }
+        // Fallback if sample is still decoding on very first shot
         playTone({
           type: 'triangle',
           freqStart: 220 * jitter,
@@ -1944,9 +1923,22 @@ export function createAudioEngine() {
       musicMode = next;
       musicStep = 0;
       if (ctx) {
+        preloadExternalSamples(ctx);
         nextNoteTime = ctx.currentTime + 0.05;
       }
       syncGain();
+    },
+
+    playMapOpenSfx() {
+      if (!readyToPlay()) return;
+      preloadExternalSamples(ctx);
+      playSampleBuffer('map_open', 0.48, 1.0);
+    },
+
+    playPortalEnterSfx() {
+      if (!readyToPlay()) return;
+      preloadExternalSamples(ctx);
+      playSampleBuffer('portal_enter', 0.54, 1.0);
     },
 
     getMusicMode() {

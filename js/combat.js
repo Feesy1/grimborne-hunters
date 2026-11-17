@@ -8,7 +8,7 @@ import {
   ENEMY_TYPES,
   LEVELS,
   RUN_UPGRADES
-} from './config.js?v=20261117z21';
+} from './config.js?v=20261117z22';
 
 const TWO_PI = Math.PI * 2;
 const ARENA_PLAYER_LIMIT = ARENA_HALF_SIZE - 1.4;
@@ -452,7 +452,7 @@ export function createCombatController({
     }
   }
 
-  function animateEntityModel(modelWrap, dt, moving, speedRatio, attacking, beastMode, elapsedTime) {
+  function animateEntityModel(modelWrap, dt, moving, speedRatio, attacking, beastMode, elapsedTime, moveLocalX = 0, moveLocalZ = 1) {
     if (!modelWrap) return;
     const { handle, obj, sigUpdate } = modelWrap;
     const fn = handle?.update || obj?.userData?.update || handle?.animate;
@@ -461,7 +461,7 @@ export function createCombatController({
       const p1 = (sig.params[1] || '').toLowerCase();
       const p2 = (sig.params[2] || '').toLowerCase();
       if (!sig.isObject && sig.params.length >= 4 && p2.includes('speed')) {
-        fn.call(handle, dt, moving, speedRatio, elapsedTime);
+        fn.call(handle, dt, moving, speedRatio, elapsedTime, moveLocalX, moveLocalZ);
       } else if (!sig.isObject && (p1.includes('mov') || p1.includes('spd') || p1.includes('walk') || p1 === 'arg2')) {
         fn.call(handle, dt, moving, elapsedTime, attacking);
       } else if (!sig.isObject && p1.includes('elaps')) {
@@ -2632,12 +2632,16 @@ export function createCombatController({
         world?.addScreenShake?.(wpn.id === 'blunderbuss' ? 0.36 : 0.22, 0.16);
       }
 
-      // Hot fiery muzzle sparks + glowing orange-gold ember droplets matching reference video!
-      emitParticles(gunMuzzleX, 0.86, gunMuzzleZ, flashColor, wpn.id === 'blunderbuss' ? 16 : 12, 10.5, 0.11);
-      emitParticles(gunMuzzleX + dirX * 0.22, 0.86, gunMuzzleZ + dirZ * 0.22, 0xfef08a, 6, 7.5, 0.08);
+      // Crisp gunpowder sparks + ejecting 3D spinning brass shell casing (ZERO plasma!)
+      emitParticles(gunMuzzleX, 0.86, gunMuzzleZ, flashColor, wpn.id === 'blunderbuss' ? 10 : 5, 8.5, 0.065);
       const rightX = Math.cos(aimAngle);
       const rightZ = -Math.sin(aimAngle);
-      emitParticles(player.x + rightX * 0.42 + dirX * 0.25, 0.80, player.z + rightZ * 0.42 + dirZ * 0.25, 0xfbbf24, 3, 4.4, 0.08);
+      world?.spawnShellCasing?.({
+        x: player.x + rightX * 0.30 + dirX * 0.32,
+        y: 0.86,
+        z: player.z + rightZ * 0.30 + dirZ * 0.32,
+        angle: aimAngle
+      });
 
       player.gunShotCount = (player.gunShotCount || 0) + 1;
       const isLastShell = usesMag && !isOverdrive && ammoBeforeShot === 1 && (stats.ammoPouchStacks || 0) > 0;
@@ -3778,6 +3782,11 @@ export function createCombatController({
       heroModel.obj.rotation.z = 0;
 
       const strideRatio = speedRatio * (effectiveMoveSpeed / 4.2);
+      const faceSin = Math.sin(player.facing);
+      const faceCos = Math.cos(player.facing);
+      // Decompose world movement (mx, mz) into hero-local Forward (dot) and Left-Strafe (cross)
+      const moveLocalZ = moveMag > 0.01 ? (mx * faceSin + mz * faceCos) / moveMag : 1;
+      const moveLocalX = moveMag > 0.01 ? (mx * faceCos - mz * faceSin) / moveMag : 0;
       animateEntityModel(
         heroModel,
         dt,
@@ -3785,7 +3794,9 @@ export function createCombatController({
         strideRatio,
         player.attackAnimTimer > 0,
         beastActive,
-        elapsedTime
+        elapsedTime,
+        moveLocalX,
+        moveLocalZ
       );
     }
     syncFollowTarget(player.x, player.z, heroModel?.obj, dt);
@@ -4547,9 +4558,25 @@ export function createCombatController({
           e.hp = 0;
           handleEnemyDeath(e);
         } else if (e.contactCooldown <= 0 && (e.disarmTimer || 0) <= 0) {
-          e.contactCooldown = 0.65;
+          e.contactCooldown = 0.68;
+          triggerModelAttack(e.model, 'Attack', 0.55);
+          audio?.playMeleeSwing?.(false);
           applyDamageToPlayer(e.damage);
         }
+      } else if (
+        !beastActive &&
+        !e.explodesOnDeath &&
+        !e.ranged &&
+        pDist <= touchDist + 0.58 &&
+        e.contactCooldown <= 0.22 &&
+        (e.meleeWindupAnimTimer || 0) <= 0
+      ) {
+        // Trigger visible zombie/melee claw-swipe windup right as they lunge into striking reach!
+        e.meleeWindupAnimTimer = 0.65;
+        triggerModelAttack(e.model, 'Attack', 0.55);
+      }
+      if ((e.meleeWindupAnimTimer || 0) > 0) {
+        e.meleeWindupAnimTimer = Math.max(0, e.meleeWindupAnimTimer - dt);
       }
 
       if (e.hp > 0 && e.model?.obj) {

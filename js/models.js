@@ -7,31 +7,32 @@
 import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { clone as cloneSkinned } from '../vendor/SkeletonUtils.js';
-import { WEAPONS } from './config.js?v=20261117z21';
+import { WEAPONS } from './config.js?v=20261117z22';
 
 const MODEL_PATHS = {
-  gunslinger_tripo: './assets/models/Gunslinger_Tripo.glb?v=20261117z21',
-  warrior_tripo: './assets/models/Warrior_Tripo.glb?v=20261117z21',
-  sword_tripo: './assets/models/Sword_Tripo.glb?v=20261117z21',
-  spear_tripo: './assets/models/Spear_Tripo.glb?v=20261117z21',
-  zweihander_tripo: './assets/models/Zweihander_Tripo.glb?v=20261117z21',
-  axe_tripo: './assets/models/Axe_Tripo.glb?v=20261117z21',
-  hammer_tripo: './assets/models/Hammer_Tripo.glb?v=20261117z21',
-  mage_tripo: './assets/models/Mage_Tripo.glb?v=20261117z21',
-  staff_tripo: './assets/models/Staff_Tripo.glb?v=20261117z21',
-  shotgun_tripo: './assets/models/Shotgun_Tripo.glb?v=20261117z21',
-  pistol_tripo: './assets/models/Pistol_Tripo.glb?v=20261117z21',
-  smg_tripo: './assets/models/SMG_Tripo.glb?v=20261117z21',
-  ak47_tripo: './assets/models/AK47_Tripo.glb?v=20261117z21',
-  zombie_tripo: './assets/models/Zombie_Tripo.glb?v=20261117z21',
-  tree_tripo: './assets/models/Tree_Tripo.glb?v=20261117z21',
-  dracula_tripo: './assets/models/Dracula_Tripo.glb?v=20261117z21',
-  mimic_tripo: './assets/models/Mimic_Tripo.glb?v=20261117z21',
-  chest_disguise_tripo: './assets/models/Chest_Disguise_Tripo.glb?v=20261117z21',
-  lich_tripo: './assets/models/Lich_Tripo.glb?v=20261117z21',
-  troll_tripo: './assets/models/Troll_Tripo.glb?v=20261117z21',
-  succubus_tripo: './assets/models/Succubus_Tripo.glb?v=20261117z21',
-  spider_tripo: './assets/models/Spider_Tripo.glb?v=20261117z21',
+  gunslinger_tripo: './assets/models/Gunslinger_Tripo.glb?v=20261117z22',
+  warrior_tripo: './assets/models/Warrior_Tripo.glb?v=20261117z22',
+  sword_tripo: './assets/models/Sword_Tripo.glb?v=20261117z22',
+  spear_tripo: './assets/models/Spear_Tripo.glb?v=20261117z22',
+  zweihander_tripo: './assets/models/Zweihander_Tripo.glb?v=20261117z22',
+  axe_tripo: './assets/models/Axe_Tripo.glb?v=20261117z22',
+  hammer_tripo: './assets/models/Hammer_Tripo.glb?v=20261117z22',
+  mage_tripo: './assets/models/Mage_Tripo.glb?v=20261117z22',
+  staff_tripo: './assets/models/Staff_Tripo.glb?v=20261117z22',
+  shotgun_tripo: './assets/models/Shotgun_Tripo.glb?v=20261117z22',
+  pistol_tripo: './assets/models/Pistol_Tripo.glb?v=20261117z22',
+  colt_tripo: './assets/models/Colt_Tripo.glb?v=20261117z22',
+  smg_tripo: './assets/models/SMG_Tripo.glb?v=20261117z22',
+  ak47_tripo: './assets/models/AK47_Tripo.glb?v=20261117z22',
+  zombie_tripo: './assets/models/Zombie_Tripo.glb?v=20261117z22',
+  tree_tripo: './assets/models/Tree_Tripo.glb?v=20261117z22',
+  dracula_tripo: './assets/models/Dracula_Tripo.glb?v=20261117z22',
+  mimic_tripo: './assets/models/Mimic_Tripo.glb?v=20261117z22',
+  chest_disguise_tripo: './assets/models/Chest_Disguise_Tripo.glb?v=20261117z22',
+  lich_tripo: './assets/models/Lich_Tripo.glb?v=20261117z22',
+  troll_tripo: './assets/models/Troll_Tripo.glb?v=20261117z22',
+  succubus_tripo: './assets/models/Succubus_Tripo.glb?v=20261117z22',
+  spider_tripo: './assets/models/Spider_Tripo.glb?v=20261117z22',
   barbarian: './assets/models/Barbarian.glb',
   knight: './assets/models/Knight.glb',
   rogue: './assets/models/Rogue_Hooded.glb',
@@ -480,6 +481,7 @@ function getWeaponAssetKey(weaponId = 'club') {
   if (weaponId === 'axe' || weaponId === 'flail') return 'axe_tripo';
   if (weaponId === 'boss_hammer') return 'hammer_tripo';
   if (weaponId === 'usp_pistol') return 'pistol_tripo';
+  if (weaponId === 'colt') return 'colt_tripo';
   if (weaponId === 'smg') return 'smg_tripo';
   if (weaponId === 'ak47') return 'ak47_tripo';
   if (weaponId === 'pistol' || weaponId === 'blunderbuss' || weaponId === 'gatling') return 'shotgun_tripo';
@@ -533,6 +535,7 @@ function loadSingleModelKey(key) {
           const isTripoWeapon =
             key === 'shotgun_tripo' ||
             key === 'pistol_tripo' ||
+            key === 'colt_tripo' ||
             key === 'smg_tripo' ||
             key === 'ak47_tripo' ||
             key === 'sword_tripo' ||
@@ -1017,6 +1020,21 @@ function createHeroWeaponMesh(weaponId, mageElement = null) {
   }
 
   // === GUNSLINGER DARK-FANTASY SHOTGUNS, TACTICAL USP, COLT REVOLVER, SMG & AK-47 ===
+  if (weaponId === 'colt' && gltfCache.has('colt_tripo')) {
+    const cClone = gltfCache.get('colt_tripo').scene.clone(true);
+    cClone.position.set(0, 0, 0);
+    cClone.traverse((n) => {
+      if (n.isMesh && n.material) {
+        n.castShadow = true;
+        n.receiveShadow = true;
+        n.frustumCulled = false;
+      }
+    });
+    grp.add(cClone);
+    grp.userData.tripoShotgun = cClone;
+    grp.userData.baseZ = 0.04;
+    return grp;
+  }
   if (weaponId === 'colt') {
     const chromeMat = getMat('hw_colt_chrome_v2', () =>
       new THREE.MeshStandardMaterial({ color: 0xdce4ef, metalness: 0.92, roughness: 0.16 })
@@ -1657,6 +1675,8 @@ export function createArsenalShowcaseWeapon(weaponId = 'club', mageElement = 'wa
     rawModel = gltfCache.has('hammer_tripo')
       ? gltfCache.get('hammer_tripo').scene.clone(true)
       : gltfCache.get('sword_tripo')?.scene.clone(true) || createHeroWeaponMesh(weaponId, mageElement);
+  } else if (weaponId === 'colt' && gltfCache.has('colt_tripo')) {
+    rawModel = gltfCache.get('colt_tripo').scene.clone(true);
   } else if (weaponId === 'colt') {
     rawModel = createHeroWeaponMesh('colt', null);
   } else if (weaponId === 'usp_pistol' && gltfCache.has('pistol_tripo')) {
@@ -2061,6 +2081,8 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
   // Gunslinger two-handed carry pivot, recoil kick, pump rack & walk cycle state
   let gunCarryPivot = null;
   let gunKickTimer = 0;
+  let gunShotCounter = 0;
+  let gunStyleBlend = 0; // 0 = Style A (shots 1..5 extended 1H), 1 = Style B (shots 6..10 canted C.A.R. 1H)
   let aimHoldTimer = 0;
   let aimYawBlend = 0;
   let pumpCycleTimer = 0;
@@ -2712,12 +2734,17 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
 
   function playAttackAnim(_weaponType = null, attackDuration = 0) {
     if (safeClass === 'gunslinger') {
-      gunKickTimer = Math.min(0.24, Math.max(0.11, (attackDuration || 0.25) * 0.65));
+      gunShotCounter += 1;
+      gunKickTimer = Math.min(0.24, Math.max(0.12, (attackDuration || 0.25) * 0.65));
+      aimHoldTimer = 0.85;
       if (hasBakedGunslingerClips && animCtrl) {
-        animCtrl.triggerOneShot('Shoot', computeSyncedClipSpeed('Shoot', 1.75, attackDuration));
+        const useStyleB = Math.floor((gunShotCounter - 1) / 5) % 2 === 1;
+        const shootClip = useStyleB && asset?.clips?.has('Shoot_B') ? 'Shoot_B' : asset?.clips?.has('Shoot_A') ? 'Shoot_A' : 'Shoot';
+        if (asset?.clips?.has(shootClip)) {
+          animCtrl.triggerOneShot(shootClip, computeSyncedClipSpeed(shootClip, 1.55, attackDuration));
+        }
         return;
       }
-      aimHoldTimer = 0.65;
       pumpCycleTimer = currentWeaponId === 'pistol' ? 0.38 : 0.22;
       return;
     }
@@ -2874,14 +2901,50 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
     const isOneHandPistol = wId === 'usp_pistol' || wId === 'colt';
 
     if (embeddedPistolNode) {
-      // Preserve our baked two-handed tactical pistol Idle/Running_A pose; add crisp shot recoil & reload dip!
+      // Smoothly transition between Shooting Style A (shots 1..5: extended sighted 1H)
+      // and Shooting Style B (shots 6..10: canted C.A.R. close-quarters 1H) + crisp shot recoil!
       reloadBlend += ((isReloadingState ? 1 : 0) - reloadBlend) * Math.min(1, safeDt * 12);
+      if (aimHoldTimer > 0) aimHoldTimer = Math.max(0, aimHoldTimer - safeDt);
+      const targetStyleB = gunShotCounter > 0 && Math.floor((gunShotCounter - 1) / 5) % 2 === 1 ? 1 : 0;
+      gunStyleBlend += (targetStyleB - gunStyleBlend) * Math.min(1, safeDt * 7.5);
+
       const kick = gunKickTimer > 0 ? Math.sin((gunKickTimer / 0.22) * Math.PI) : 0;
       const recoilPitch = wId === 'colt' ? 0.30 : wId === 'ak47' ? 0.16 : wId === 'smg' ? 0.10 : 0.20;
+      const sb = gunStyleBlend;
+
+      if (sb > 0.01 && isMoving) {
+        // Apply Style B upper-body canted C.A.R. arm posture while moving so both styles are clearly distinct on the move too!
+        if (mx.Spine2?.node) {
+          _wEuler.set(0.06 * sb, -0.18 * sb, 0);
+          _wQuat.setFromEuler(_wEuler);
+          mx.Spine2.node.quaternion.multiply(_wQuat);
+        }
+        if (mx.RightArm?.node) {
+          _wEuler.set(0.18 * sb, 0.22 * sb, -0.14 * sb);
+          _wQuat.setFromEuler(_wEuler);
+          mx.RightArm.node.quaternion.multiply(_wQuat);
+        }
+        if (mx.RightForeArm?.node) {
+          _wEuler.set(-0.28 * sb, 0.24 * sb, 0.32 * sb);
+          _wQuat.setFromEuler(_wEuler);
+          mx.RightForeArm.node.quaternion.multiply(_wQuat);
+        }
+        if (mx.LeftForeArm?.node) {
+          _wEuler.set(-0.35 * sb, 0.20 * sb, -0.25 * sb);
+          _wQuat.setFromEuler(_wEuler);
+          mx.LeftForeArm.node.quaternion.multiply(_wQuat);
+        }
+      }
+
       if (kick > 0.001 && mx.Spine2?.node) {
-        _wEuler.set(-kick * recoilPitch * 0.22, 0, 0);
+        _wEuler.set(-kick * recoilPitch * 0.24, -kick * 0.06 * sb, 0);
         _wQuat.setFromEuler(_wEuler);
         mx.Spine2.node.quaternion.multiply(_wQuat);
+      }
+      if (kick > 0.001 && mx.RightForeArm?.node) {
+        _wEuler.set(-kick * recoilPitch * 0.55, 0, kick * 0.14 * sb);
+        _wQuat.setFromEuler(_wEuler);
+        mx.RightForeArm.node.quaternion.multiply(_wQuat);
       }
       if (reloadBlend > 0.02 && mx.RightForeArm?.node) {
         _wEuler.set(reloadBlend * 0.22, 0, -reloadBlend * 0.16);
@@ -2893,11 +2956,11 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
         const kickBack = (wId === 'colt' ? 0.036 : wId === 'ak47' ? 0.026 : 0.020) / Math.max(0.5, heroBaseScale);
         activeGunNode.position.copy(activeGunNode.userData.basePos);
         activeGunNode.quaternion.copy(activeGunNode.userData.baseQuat);
-        if (kick > 0.001) {
-          _wEuler.set(-kick * recoilPitch, 0, 0);
+        if (kick > 0.001 || sb > 0.01) {
+          _wEuler.set(-kick * recoilPitch, 0, -0.42 * sb);
           _wQuat.setFromEuler(_wEuler);
           activeGunNode.quaternion.multiply(_wQuat);
-          activeGunNode.translateZ(-kick * kickBack);
+          if (kick > 0.001) activeGunNode.translateZ(-kick * kickBack);
         }
       }
       return;
@@ -2936,11 +2999,19 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
     }
   }
 
-  function update(dt, isMoving = false, speedRatio = 1, elapsedTime = 0) {
+  function update(dt, isMoving = false, speedRatio = 1, elapsedTime = 0, moveLocalX = 0, moveLocalZ = 1) {
     const safeDt = Math.min(Math.max(dt || 0.016, 0), 0.1);
     if (animCtrl) {
       if (isMoving) {
-        const runClip = isBeast && asset?.clips?.has('Running_B') ? 'Running_B' : 'Running_A';
+        let runClip = isBeast && asset?.clips?.has('Running_B') ? 'Running_B' : 'Running_A';
+        if (hasBakedGunslingerClips && !isBeast) {
+          if (Math.abs(moveLocalX) > Math.abs(moveLocalZ) * 0.82) {
+            const strafeClip = moveLocalX > 0 ? 'Strafe_Left' : 'Strafe_Right';
+            if (asset?.clips?.has(strafeClip)) runClip = strafeClip;
+          } else if (moveLocalZ < -0.35 && asset?.clips?.has('Running_Back')) {
+            runClip = 'Running_Back';
+          }
+        }
         animCtrl.setBaseState(runClip, Math.max(0.95, Math.min(2.15, speedRatio * 1.32)));
       } else {
         animCtrl.setBaseState('Idle', 1.0);
@@ -4909,7 +4980,7 @@ const ENEMY_MODEL_CFG = {
     key: 'zombie_tripo',
     scale: 2.02,
     moveClip: 'Strut_Walking',
-    atkClip: 'Strut_Walking',
+    atkClip: 'Attack',
     weapon: null,
     tint: null,
     eye: null

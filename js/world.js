@@ -3,7 +3,7 @@
 
 import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
-import { ARENA_HALF_SIZE } from './config.js?v=20261117z21';
+import { ARENA_HALF_SIZE } from './config.js?v=20261117z22';
 
 // ============================================================================
 // Procedural Textures: Gothic Slate Cobblestone Floor & Soft Radial Glow Sprite
@@ -1298,7 +1298,50 @@ export function createArenaWorld(canvas) {
   const activeDangerZones = [];
   const activeMuzzleFlashes = [];
   const activeGunSmokes = [];
+  const activeShellCasings = [];
+  const freeShellCasings = [];
   const activeProjectiles = new Set();
+
+  const shellCasingGeo = (() => {
+    const g = new THREE.CylinderGeometry(0.022, 0.022, 0.095, 8);
+    g.rotateZ(Math.PI * 0.5);
+    return g;
+  })();
+  const shellCasingMat = new THREE.MeshStandardMaterial({
+    color: 0xfacc15,
+    emissive: 0xa16207,
+    emissiveIntensity: 0.35,
+    metalness: 0.92,
+    roughness: 0.18
+  });
+
+  function spawnShellCasing({ x = 0, y = 0.86, z = 0, angle = 0 } = {}) {
+    let sc = freeShellCasings.pop();
+    if (!sc) {
+      const mesh = new THREE.Mesh(shellCasingGeo, shellCasingMat);
+      scene.add(mesh);
+      sc = { mesh, vx: 0, vy: 0, vz: 0, vrx: 0, vry: 0, vrz: 0, age: 0, duration: 0.78 };
+    }
+    const rightX = Math.cos(angle);
+    const rightZ = -Math.sin(angle);
+    const backX = -Math.sin(angle);
+    const backZ = -Math.cos(angle);
+    const sideSpd = 2.4 + Math.random() * 1.1;
+    const backSpd = 0.4 + (Math.random() - 0.5) * 0.8;
+    sc.mesh.position.set(x, y, z);
+    sc.mesh.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
+    sc.mesh.scale.setScalar(1.0);
+    sc.mesh.visible = true;
+    sc.vx = rightX * sideSpd + backX * backSpd;
+    sc.vy = 2.6 + Math.random() * 1.1;
+    sc.vz = rightZ * sideSpd + backZ * backSpd;
+    sc.vrx = (Math.random() - 0.5) * 28;
+    sc.vry = (Math.random() - 0.5) * 28;
+    sc.vrz = 18 + Math.random() * 16;
+    sc.age = 0;
+    sc.duration = 0.78;
+    activeShellCasings.push(sc);
+  }
 
   const muzzleConeGeo = (() => {
     const g = new THREE.ConeGeometry(0.21, 0.96, 8);
@@ -1351,7 +1394,10 @@ export function createArenaWorld(canvas) {
   }
 
   function spawnMuzzleFlash({ x = 0, y = 0.84, z = 0, angle = 0, color = 0xfbbf24, scale = 1.0, smoke = false } = {}) {
-    const vividColor = new THREE.Color(color).offsetHSL(0, 0.18, -0.04);
+    // Firearms (smoke === true) use a tight, realistic warm gunpowder flash instead of an oversized plasma cone!
+    const effColor = smoke ? 0xffb703 : color;
+    const effScale = smoke ? scale * 0.34 : scale;
+    const vividColor = new THREE.Color(effColor).offsetHSL(0, 0.14, -0.02);
     let mf = freeMuzzleFlashes.pop();
     if (!mf) {
       const group = new THREE.Group();
@@ -1383,34 +1429,34 @@ export function createArenaWorld(canvas) {
         map: softGlowTex,
         color: vividColor,
         transparent: true,
-        opacity: 0.85,
+        opacity: 0.72,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
         toneMapped: false
       });
       const flashSprite = new THREE.Sprite(spriteMat);
-      flashSprite.scale.set(1.48, 1.48, 1);
+      flashSprite.scale.set(0.76, 0.76, 1);
       group.add(mainJet, coreJet, sideJetL, sideJetR, flashSprite);
       scene.add(group);
-      mf = { group, coreMat, outerMat, spriteMat, baseScale: scale, age: 0, duration: 0.095 };
+      mf = { group, coreMat, outerMat, spriteMat, baseScale: effScale, age: 0, duration: smoke ? 0.052 : 0.095 };
     } else {
       mf.outerMat.color.copy(vividColor);
       mf.spriteMat.color.copy(vividColor);
       mf.coreMat.opacity = 0.96;
       mf.outerMat.opacity = 0.92;
-      mf.spriteMat.opacity = 0.85;
+      mf.spriteMat.opacity = smoke ? 0.58 : 0.85;
       mf.group.visible = true;
     }
     mf.group.position.set(x, y, z);
     mf.group.rotation.y = angle;
-    mf.group.scale.setScalar(scale);
-    mf.baseScale = scale;
+    mf.group.scale.setScalar(effScale);
+    mf.baseScale = effScale;
     mf.age = 0;
-    mf.duration = 0.095;
+    mf.duration = smoke ? 0.052 : 0.095;
     activeMuzzleFlashes.push(mf);
 
     if (smoke) {
-      spawnGunSmokePuffs(x, y, z, angle, scale);
+      spawnGunSmokePuffs(x, y, z, angle, scale * 0.65);
     }
   }
 
@@ -1608,16 +1654,45 @@ export function createArenaWorld(canvas) {
   }
 
   // Sleek Projectile Geometries (Oriented so +Z is forward flight direction!)
-  // 1) Supersonic Bullet Dart + Long Tapered Tracer Wake (NO round balls!)
+  // 1) Realistic Metallic Brass Cartridge + Copper Ogive Bullet Nose + Thin Ballistic Tracer Streak (ZERO plasma!)
   const bulletCoreGeo = (() => {
-    const g = new THREE.ConeGeometry(0.055, 0.48, 6);
+    const g = new THREE.ConeGeometry(0.036, 0.22, 8);
     g.rotateX(Math.PI / 2);
+    g.translate(0, 0, 0.09);
     return g;
   })();
+  const bulletBrassCaseGeo = (() => {
+    const g = new THREE.CylinderGeometry(0.036, 0.036, 0.20, 8);
+    g.rotateX(Math.PI / 2);
+    g.translate(0, 0, -0.10);
+    return g;
+  })();
+  const bulletCopperMat = new THREE.MeshStandardMaterial({
+    color: 0xd97736,
+    emissive: 0x9a3412,
+    emissiveIntensity: 0.35,
+    metalness: 0.88,
+    roughness: 0.22
+  });
+  const bulletBrassMat = new THREE.MeshStandardMaterial({
+    color: 0xeab308,
+    emissive: 0xa16207,
+    emissiveIntensity: 0.42,
+    metalness: 0.92,
+    roughness: 0.18
+  });
+  const bulletTracerMat = new THREE.MeshBasicMaterial({
+    color: 0xfde047,
+    transparent: true,
+    opacity: 0.52,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    toneMapped: false
+  });
   const bulletTailGeo = (() => {
-    const g = new THREE.ConeGeometry(0.11, 2.15, 6, 1, true);
+    const g = new THREE.ConeGeometry(0.022, 1.05, 6, 1, true);
     g.rotateX(-Math.PI / 2);
-    g.translate(0, 0, -1.05);
+    g.translate(0, 0, -0.68);
     return g;
   })();
 
@@ -2670,7 +2745,11 @@ export function createArenaWorld(canvas) {
       !isBuckshot &&
       (type === 'ranged' ||
         type === 'bullet' ||
-        type === 'bolt');
+        type === 'bolt' ||
+        type === 'usp_pistol' ||
+        type === 'colt' ||
+        type === 'smg' ||
+        type === 'ak47');
 
     const isEnemyProj = type === 'enemy' || type === 'enemy_bolt';
 
@@ -2691,12 +2770,13 @@ export function createArenaWorld(canvas) {
       mesh.add(pelletCore, leadSpark, wake, haloSprite);
       mesh.scale.setScalar(scaleMult * 0.78);
     } else if (isBullet) {
-      const dart = new THREE.Mesh(bulletCoreGeo, projWhiteCoreMat);
-      dart.scale.set(0.7, 0.7, 1.0);
-      const tail = new THREE.Mesh(bulletTailGeo, glowMat);
-      haloSprite.scale.set(0.52, 0.52, 1);
-      mesh.add(dart, tail, haloSprite);
-      mesh.scale.setScalar(scaleMult);
+      // Real metallic copper-jacketed bullet + brass cartridge + razor-thin warm ballistic tracer (NO plasma orb!)
+      const copperNose = new THREE.Mesh(bulletCoreGeo, bulletCopperMat);
+      const brassBody = new THREE.Mesh(bulletBrassCaseGeo, bulletBrassMat);
+      const tail = new THREE.Mesh(bulletTailGeo, bulletTracerMat);
+      haloSprite.scale.set(0.14, 0.14, 1);
+      mesh.add(copperNose, brassBody, tail);
+      mesh.scale.setScalar(scaleMult * (type === 'colt' ? 1.18 : 1.0));
     } else if (isEnemyProj) {
       const spear = new THREE.Mesh(enemySpearGeo, solidCoreMat);
       const outerSpear = new THREE.Mesh(enemySpearGeo, glowMat);
@@ -3416,6 +3496,33 @@ export function createArenaWorld(canvas) {
       particleMesh.instanceMatrix.needsUpdate = true;
     }
 
+    // Update Ejected Brass Shell Casings
+    for (let i = activeShellCasings.length - 1; i >= 0; i--) {
+      const sc = activeShellCasings[i];
+      sc.age += safeDt;
+      if (sc.age >= sc.duration) {
+        sc.mesh.visible = false;
+        activeShellCasings.splice(i, 1);
+        freeShellCasings.push(sc);
+        continue;
+      }
+      sc.vy -= 14.5 * safeDt;
+      sc.mesh.position.x += sc.vx * safeDt;
+      sc.mesh.position.y += sc.vy * safeDt;
+      sc.mesh.position.z += sc.vz * safeDt;
+      if (sc.mesh.position.y < 0.03) {
+        sc.mesh.position.y = 0.03;
+        sc.vy = Math.abs(sc.vy) * 0.42;
+        sc.vx *= 0.65;
+        sc.vz *= 0.65;
+      }
+      sc.mesh.rotation.x += sc.vrx * safeDt;
+      sc.mesh.rotation.y += sc.vry * safeDt;
+      sc.mesh.rotation.z += sc.vrz * safeDt;
+      const rem = 1 - sc.age / sc.duration;
+      if (rem < 0.25) sc.mesh.scale.setScalar(rem / 0.25);
+    }
+
     // Update Slash Arcs
     for (let i = activeSlashArcs.length - 1; i >= 0; i--) {
       const sa = activeSlashArcs[i];
@@ -3805,6 +3912,7 @@ export function createArenaWorld(canvas) {
     addScreenShake,
     spawnParticles,
     spawnMuzzleFlash,
+    spawnShellCasing,
     spawnSlashArc,
     spawnShockwaveRing,
     spawnLightningArc,
