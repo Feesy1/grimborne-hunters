@@ -5690,7 +5690,7 @@ html.is-mobile-landscape .hub-rotate-hint {
   z-index: 0;
   pointer-events: none;
   overflow: hidden;
-  background: #140f21 url('../assets/ui/hub_stage_bg.jpg?v=20261117z24') center 58% / cover no-repeat;
+  background: #140f21 url('../assets/ui/hub_stage_bg.jpg?v=20261117z25') center 58% / cover no-repeat;
   transform: translate3d(0, 0, 0) scale(1.03);
   will-change: transform;
 }

@@ -18,11 +18,11 @@ export function createAudioEngine() {
   function preloadExternalSamples(audioCtx) {
     if (!audioCtx || typeof fetch === 'undefined') return;
     const files = [
-      ['usp_1', './assets/audio/usp_shot_1.wav?v=20261117z24'],
-      ['usp_2', './assets/audio/usp_shot_2.wav?v=20261117z24'],
-      ['usp_3', './assets/audio/usp_shot_3.wav?v=20261117z24'],
-      ['map_open', './assets/audio/map_open.wav?v=20261117z24'],
-      ['portal_enter', './assets/audio/portal_enter.wav?v=20261117z24']
+      ['usp_1', './assets/audio/usp_shot_1.wav?v=20261117z25'],
+      ['usp_2', './assets/audio/usp_shot_2.wav?v=20261117z25'],
+      ['usp_3', './assets/audio/usp_shot_3.wav?v=20261117z25'],
+      ['map_open', './assets/audio/map_open.wav?v=20261117z25'],
+      ['portal_enter', './assets/audio/portal_enter.wav?v=20261117z25']
     ];
     for (const [key, url] of files) {
       if (externalSampleBuffers.has(key)) continue;

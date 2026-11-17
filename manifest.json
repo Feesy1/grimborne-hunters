@@ -1,7 +1,7 @@
 {
   "name": "Охотники Мрака — Grimborne Hunters",
   "short_name": "Охотники Мрака",
-  "start_url": "./index.html?v=20261117z24",
+  "start_url": "./index.html?v=20261117z25",
   "display": "fullscreen",
   "display_override": ["fullscreen", "standalone"],
   "orientation": "landscape",

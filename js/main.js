@@ -2,14 +2,14 @@
 // Arsenal Progression, Procedural Web Audio, Gothic UI, and Yandex Games SDK v2.
 
 import * as THREE from '../vendor/three.module.js';
-import { LEVELS, MAGE_ELEMENTS, WEAPONS } from './config.js?v=20261117z24';
-import { createArenaWorld } from './world.js?v=20261117z24';
-import * as models from './models.js?v=20261117z24';
-import { createProgressionStore } from './progression.js?v=20261117z24';
-import { createCombatController } from './combat.js?v=20261117z24';
-import { createAudioEngine } from './audio.js?v=20261117z24';
-import { initYandexSdk } from './yandexSdk.js?v=20261117z24';
-import { createUIManager } from './ui.js?v=20261117z24';
+import { LEVELS, MAGE_ELEMENTS, WEAPONS } from './config.js?v=20261117z25';
+import { createArenaWorld } from './world.js?v=20261117z25';
+import * as models from './models.js?v=20261117z25';
+import { createProgressionStore } from './progression.js?v=20261117z25';
+import { createCombatController } from './combat.js?v=20261117z25';
+import { createAudioEngine } from './audio.js?v=20261117z25';
+import { initYandexSdk } from './yandexSdk.js?v=20261117z25';
+import { createUIManager } from './ui.js?v=20261117z25';
 
 async function bootstrap() {
   const canvas = document.getElementById('game-canvas');

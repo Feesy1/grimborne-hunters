@@ -8,7 +8,7 @@ import {
   ENEMY_TYPES,
   LEVELS,
   RUN_UPGRADES
-} from './config.js?v=20261117z24';
+} from './config.js?v=20261117z25';
 
 const TWO_PI = Math.PI * 2;
 const ARENA_PLAYER_LIMIT = ARENA_HALF_SIZE - 1.4;
@@ -603,6 +603,7 @@ export function createCombatController({
 
   let goldRun = 0;
   let kills = 0;
+  let regularMobsSpawned = 0;
   let targetKills = 30;
   let levelSpawnQueue = [];
   let bossSpawnCountdown = 0;
@@ -905,6 +906,7 @@ export function createCombatController({
     unlockedWeaponThisRun = null;
     goldRun = 0;
     kills = 0;
+    regularMobsSpawned = 0;
     critFloaterCooldown = 0;
     shieldSparkCooldown = 0;
     runEnded = false;
@@ -1149,6 +1151,9 @@ export function createCombatController({
   }
 
   function spawnWavePack() {
+    const quotaRemaining = Math.max(0, targetKills - regularMobsSpawned);
+    if (kills >= targetKills || quotaRemaining <= 0) return;
+
     const lvl = currentLevelDef?.level || 1;
     const maxConcurrentForLvl =
       lvl === 1 ? 4 : lvl === 2 ? 5 : lvl === 3 ? 6 : Math.min(MAX_ACTIVE_ENEMIES, 5 + Math.min(lvl, 12) * 2);
@@ -1178,6 +1183,7 @@ export function createCombatController({
     if (!finaleStarted && currentLevelDef.enemyQuotas && levelSpawnQueue.length > 0) {
       totalWaveSize = Math.min(totalWaveSize, levelSpawnQueue.length);
     }
+    totalWaveSize = Math.min(totalWaveSize, quotaRemaining);
 
     // Pick a distinct courtyard flank direction (rotates 90°/135° from previous wave so waves emerge visibly from gates!)
     lastWaveSector = (lastWaveSector + 1 + (Math.random() < 0.45 ? 1 : 0)) % 4;
@@ -1189,7 +1195,7 @@ export function createCombatController({
 
     for (let n = 0; n < totalWaveSize; n++) {
       if (enemies.length >= maxConcurrentForLvl) break;
-      if (!finaleStarted && currentLevelDef.enemyQuotas && levelSpawnQueue.length === 0 && kills + enemies.length >= targetKills) {
+      if (kills >= targetKills || regularMobsSpawned >= targetKills) {
         break;
       }
 
@@ -1241,8 +1247,11 @@ export function createCombatController({
       );
 
       const spawned = spawnEnemy(chosen, sx, sz);
-      if (localIdx === 0 && spawned) {
-        emitParticles(spawned.x, 0.35, spawned.z, 0xa855f7, 8, 3.6, 0.14);
+      if (spawned) {
+        regularMobsSpawned += 1;
+        if (localIdx === 0) {
+          emitParticles(spawned.x, 0.35, spawned.z, 0xa855f7, 8, 3.6, 0.14);
+        }
       }
     }
 
@@ -3894,17 +3903,18 @@ export function createCombatController({
         }
       }
 
-      // Minigore-2 Wave Pacing: Distinct rhythmic horde waves that accelerate with time pressure,
-      // plus instant wave reinforcement if player wipes the field (< 3 enemies left)!
-      spawnTimer -= dt;
-      if (!finaleStarted && enemies.length <= 2 && spawnTimer > 0.55) {
-        spawnTimer = 0.55;
-      }
-      if (spawnTimer <= 0) {
-        const timeRamp = clamp(elapsedRunTime / 60, 0, 1);
-        const baseWaveGap = finaleStarted ? 9.5 : 6.4 - timeRamp * 1.65;
-        spawnTimer = Math.max(4.2, baseWaveGap * clamp(currentLevelDef.spawnInterval || 1, 0.72, 1.12));
-        spawnWavePack();
+      // Minigore-2 Wave Pacing: Distinct rhythmic horde waves that stop strictly once targetKills quota is fulfilled or spawned!
+      if (kills < targetKills && regularMobsSpawned < targetKills) {
+        spawnTimer -= dt;
+        if (!finaleStarted && enemies.length <= 2 && spawnTimer > 0.55) {
+          spawnTimer = 0.55;
+        }
+        if (spawnTimer <= 0) {
+          const timeRamp = clamp(elapsedRunTime / 60, 0, 1);
+          const baseWaveGap = finaleStarted ? 9.5 : 6.4 - timeRamp * 1.65;
+          spawnTimer = Math.max(4.2, baseWaveGap * clamp(currentLevelDef.spawnInterval || 1, 0.72, 1.12));
+          spawnWavePack();
+        }
       }
     }
 
