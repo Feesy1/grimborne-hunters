@@ -5081,25 +5081,21 @@ body.is-rotating-hero * {
   gap: 6px;
 }
 
-/* --- Unified Shared Gothic Wrought-Iron Header Across ALL Menu Tabs --- */
+/* --- Unified Shared Floating Gothic Wrought-Iron Header Across ALL Menu Tabs --- */
 .hub-topbar.hub-topbar-minimal {
   position: relative;
   z-index: 25;
   display: grid;
-  grid-template-columns: auto minmax(120px, 1fr) auto;
+  grid-template-columns: auto minmax(90px, 1fr) auto;
   align-items: center;
   gap: 12px;
-  padding: 6px 14px 8px;
+  padding: 2px 6px 4px;
   margin-bottom: 4px;
-  border-radius: 0 0 18px 18px;
-  background:
-    linear-gradient(180deg, rgba(36, 29, 44, 0.96) 0%, rgba(22, 18, 30, 0.98) 65%, rgba(16, 13, 22, 0.98) 100%);
-  border: 1.5px solid rgba(154, 128, 92, 0.42);
-  border-top: none;
-  box-shadow:
-    0 8px 26px rgba(0, 0, 0, 0.72),
-    inset 0 -1px 0 rgba(216, 176, 106, 0.36);
-  pointer-events: auto;
+  border-radius: 0;
+  background: none;
+  border: none;
+  box-shadow: none;
+  pointer-events: none;
 }
 
 .hub-header-filigree {
@@ -5107,17 +5103,17 @@ body.is-rotating-hero * {
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  height: 44px;
+  height: 46px;
   overflow: visible;
 }
 
 .hub-filigree-img {
-  margin-top: -8px;
-  width: min(440px, 100%);
-  height: 68px;
+  margin-top: -6px;
+  width: min(360px, 100%);
+  height: 54px;
   object-fit: contain;
   display: block;
-  filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.92));
+  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.92));
 }
 
 /* Top-Left Profile & Level Plaque */
@@ -5954,14 +5950,52 @@ html.is-mobile-landscape .hub-rotate-hint {
 .upgrade-btn-main {
   text-align: center;
   flex: 1;
-}
+  white-space: nowrap;
   font-family: var(--font-display);
-  font-size: 18px;
+  font-size: clamp(12px, 1.3vw, 15px);
   font-weight: 800;
   letter-spacing: 0.04em;
   color: #f6efe2;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.95);
   transition: transform 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.arsenal-gothic-card.is-purchased-flash {
+  animation: purchaseCardPulse 0.65s ease-out;
+}
+
+.treasury-gold-pill.is-spent-flash {
+  animation: goldSpentFlash 0.55s ease-out;
+}
+
+@keyframes purchaseCardPulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 rgba(251, 191, 36, 0);
+  }
+  35% {
+    transform: scale(1.03);
+    box-shadow: 0 0 36px rgba(251, 191, 36, 0.72), inset 0 0 24px rgba(251, 191, 36, 0.32);
+    border-color: #fde047;
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 18px 46px rgba(0, 0, 0, 0.85);
+  }
+}
+
+@keyframes goldSpentFlash {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.07);
+    border-color: #fde047;
+    box-shadow: 0 0 20px rgba(250, 204, 21, 0.55);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 .arsenal-gothic-upgrade-btn:hover:not(:disabled) {
@@ -5982,16 +6016,29 @@ html.is-mobile-landscape .hub-rotate-hint {
   font-size: 13px;
 }
 
+@media (max-width: 960px) {
+  .hub-topbar.hub-topbar-minimal {
+    grid-template-columns: auto auto;
+    justify-content: space-between;
+  }
+  .hub-header-filigree {
+    display: none;
+  }
+}
+
+html.is-mobile-landscape .hub-topbar.hub-topbar-minimal {
+  grid-template-columns: auto auto;
+  justify-content: space-between;
+}
+
+html.is-mobile-landscape .hub-header-filigree {
+  display: none;
+}
+
 @media (max-width: 820px) {
   html:not(.is-mobile-landscape) .hub-panel-arsenal-3d {
     grid-template-columns: 1fr;
     align-items: end;
-  }
-  .hub-topbar.hub-topbar-minimal {
-    grid-template-columns: auto auto;
-  }
-  .hub-header-filigree {
-    display: none;
   }
 }
 

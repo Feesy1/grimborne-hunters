@@ -2,14 +2,14 @@
 // Arsenal Progression, Procedural Web Audio, Gothic UI, and Yandex Games SDK v2.
 
 import * as THREE from '../vendor/three.module.js';
-import { LEVELS, MAGE_ELEMENTS } from './config.js?v=20261117z19';
-import { createArenaWorld } from './world.js?v=20261117z19';
-import * as models from './models.js?v=20261117z19';
-import { createProgressionStore } from './progression.js?v=20261117z19';
-import { createCombatController } from './combat.js?v=20261117z19';
-import { createAudioEngine } from './audio.js?v=20261117z19';
-import { initYandexSdk } from './yandexSdk.js?v=20261117z19';
-import { createUIManager } from './ui.js?v=20261117z19';
+import { LEVELS, MAGE_ELEMENTS, WEAPONS } from './config.js?v=20261117z20';
+import { createArenaWorld } from './world.js?v=20261117z20';
+import * as models from './models.js?v=20261117z20';
+import { createProgressionStore } from './progression.js?v=20261117z20';
+import { createCombatController } from './combat.js?v=20261117z20';
+import { createAudioEngine } from './audio.js?v=20261117z20';
+import { initYandexSdk } from './yandexSdk.js?v=20261117z20';
+import { createUIManager } from './ui.js?v=20261117z20';
 
 async function bootstrap() {
   const canvas = document.getElementById('game-canvas');
@@ -525,7 +525,7 @@ async function bootstrap() {
         persistSave();
         ui.renderHub(progression);
         refreshHubDiorama();
-        ui.showToast(`⚔️ Куплено: «${wName}» — теперь в Арсенале!`);
+        ui.playPurchaseCelebration?.(weaponId);
       } else if (check?.reason === 'blueprint') {
         ui.showToast('📜 Сначала найдите чертёж Копья в сундуках (этапы III+, шанс 20%)!');
       } else if (check?.reason === 'boss') {

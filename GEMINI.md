@@ -4,8 +4,8 @@
 
 ## 1. Общие сведения и деплой
 - **Репозиторий**: `D:\GrimborneHunters` -> `https://github.com/Feesy1/grimborne-hunters.git` (ветка `main`).
-- **Онлайн-ссылка (GitHub Pages)**: `https://feesy1.github.io/grimborne-hunters/?v=20261117z19`.
-- **Cache-buster (обязательно обновлять при каждом пуше!)**: `?v=20261117z19` используется в `index.html`, `manifest.json`, `README.md`, `ИГРАТЬ_НА_ТЕЛЕФОНЕ.md`, `Запустить_игру.cmd`, `Запустить_на_Mac.command`, `js/*.js` — увеличивать суффикс (`z20`, `z21`, …), чтобы на iPhone и MacBook Safari не зависал кэш.
+- **Онлайн-ссылка (GitHub Pages)**: `https://feesy1.github.io/grimborne-hunters/?v=20261117z20`.
+- **Cache-buster (обязательно обновлять при каждом пуше!)**: `?v=20261117z20` используется в `index.html`, `manifest.json`, `README.md`, `ИГРАТЬ_НА_ТЕЛЕФОНЕ.md`, `Запустить_игру.cmd`, `Запустить_на_Mac.command`, `js/*.js` — увеличивать суффикс (`z20`, `z21`, …), чтобы на iPhone и MacBook Safari не зависал кэш.
 - **Локальный запуск**: `server.ps1 -Port 8090` (`Запустить_игру.cmd` для Windows, `Запустить_на_Mac.command` для macOS).
 - **Стек**: Vanilla ES Modules + Three.js `r160`, без сборщика, локальный + Yandex SDK fallback (`js/yandexSdk.js`).
 

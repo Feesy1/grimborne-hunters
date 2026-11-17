@@ -7,31 +7,31 @@
 import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { clone as cloneSkinned } from '../vendor/SkeletonUtils.js';
-import { WEAPONS } from './config.js?v=20261117z19';
+import { WEAPONS } from './config.js?v=20261117z20';
 
 const MODEL_PATHS = {
-  warrior_tripo: './assets/models/Warrior_Tripo.glb?v=20261117z19',
-  sword_tripo: './assets/models/Sword_Tripo.glb?v=20261117z19',
-  spear_tripo: './assets/models/Spear_Tripo.glb?v=20261117z19',
-  zweihander_tripo: './assets/models/Zweihander_Tripo.glb?v=20261117z19',
-  axe_tripo: './assets/models/Axe_Tripo.glb?v=20261117z19',
-  hammer_tripo: './assets/models/Hammer_Tripo.glb?v=20261117z19',
-  mage_tripo: './assets/models/Mage_Tripo.glb?v=20261117z19',
-  staff_tripo: './assets/models/Staff_Tripo.glb?v=20261117z19',
-  gunslinger_tripo: './assets/models/Gunslinger_Tripo.glb?v=20261117z19',
-  shotgun_tripo: './assets/models/Shotgun_Tripo.glb?v=20261117z19',
-  pistol_tripo: './assets/models/Pistol_Tripo.glb?v=20261117z19',
-  smg_tripo: './assets/models/SMG_Tripo.glb?v=20261117z19',
-  ak47_tripo: './assets/models/AK47_Tripo.glb?v=20261117z19',
-  zombie_tripo: './assets/models/Zombie_Tripo.glb?v=20261117z19',
-  tree_tripo: './assets/models/Tree_Tripo.glb?v=20261117z19',
-  dracula_tripo: './assets/models/Dracula_Tripo.glb?v=20261117z19',
-  mimic_tripo: './assets/models/Mimic_Tripo.glb?v=20261117z19',
-  chest_disguise_tripo: './assets/models/Chest_Disguise_Tripo.glb?v=20261117z19',
-  lich_tripo: './assets/models/Lich_Tripo.glb?v=20261117z19',
-  troll_tripo: './assets/models/Troll_Tripo.glb?v=20261117z19',
-  succubus_tripo: './assets/models/Succubus_Tripo.glb?v=20261117z19',
-  spider_tripo: './assets/models/Spider_Tripo.glb?v=20261117z19',
+  warrior_tripo: './assets/models/Warrior_Tripo.glb?v=20261117z20',
+  sword_tripo: './assets/models/Sword_Tripo.glb?v=20261117z20',
+  spear_tripo: './assets/models/Spear_Tripo.glb?v=20261117z20',
+  zweihander_tripo: './assets/models/Zweihander_Tripo.glb?v=20261117z20',
+  axe_tripo: './assets/models/Axe_Tripo.glb?v=20261117z20',
+  hammer_tripo: './assets/models/Hammer_Tripo.glb?v=20261117z20',
+  mage_tripo: './assets/models/Mage_Tripo.glb?v=20261117z20',
+  staff_tripo: './assets/models/Staff_Tripo.glb?v=20261117z20',
+  gunslinger_tripo: './assets/models/Gunslinger_Tripo.glb?v=20261117z20',
+  shotgun_tripo: './assets/models/Shotgun_Tripo.glb?v=20261117z20',
+  pistol_tripo: './assets/models/Pistol_Tripo.glb?v=20261117z20',
+  smg_tripo: './assets/models/SMG_Tripo.glb?v=20261117z20',
+  ak47_tripo: './assets/models/AK47_Tripo.glb?v=20261117z20',
+  zombie_tripo: './assets/models/Zombie_Tripo.glb?v=20261117z20',
+  tree_tripo: './assets/models/Tree_Tripo.glb?v=20261117z20',
+  dracula_tripo: './assets/models/Dracula_Tripo.glb?v=20261117z20',
+  mimic_tripo: './assets/models/Mimic_Tripo.glb?v=20261117z20',
+  chest_disguise_tripo: './assets/models/Chest_Disguise_Tripo.glb?v=20261117z20',
+  lich_tripo: './assets/models/Lich_Tripo.glb?v=20261117z20',
+  troll_tripo: './assets/models/Troll_Tripo.glb?v=20261117z20',
+  succubus_tripo: './assets/models/Succubus_Tripo.glb?v=20261117z20',
+  spider_tripo: './assets/models/Spider_Tripo.glb?v=20261117z20',
   barbarian: './assets/models/Barbarian.glb',
   knight: './assets/models/Knight.glb',
   rogue: './assets/models/Rogue_Hooded.glb',
@@ -1011,47 +1011,119 @@ function createHeroWeaponMesh(weaponId, mageElement = null) {
 
   // === GUNSLINGER DARK-FANTASY SHOTGUNS, TACTICAL USP, COLT REVOLVER, SMG & AK-47 ===
   if (weaponId === 'colt') {
-    const chromeMat = getMat('hw_colt_chrome', () =>
-      new THREE.MeshStandardMaterial({ color: 0xe2e8f0, metalness: 0.90, roughness: 0.18 })
+    const chromeMat = getMat('hw_colt_chrome_v2', () =>
+      new THREE.MeshStandardMaterial({ color: 0xdce4ef, metalness: 0.92, roughness: 0.16 })
     );
-    const frameMat = getMat('hw_colt_frame', () =>
-      new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.85, roughness: 0.24 })
+    const frameMat = getMat('hw_colt_frame_v2', () =>
+      new THREE.MeshStandardMaterial({ color: 0x8b98ad, metalness: 0.88, roughness: 0.24 })
     );
+    const woodGripMat = getMat('hw_colt_walnut_v2', () => {
+      let tex = null;
+      if (typeof document !== 'undefined') {
+        const cv = document.createElement('canvas');
+        cv.width = 128;
+        cv.height = 128;
+        const c = cv.getContext('2d');
+        if (c) {
+          c.fillStyle = '#5c2c16';
+          c.fillRect(0, 0, 128, 128);
+          for (let y = 0; y < 128; y += 4) {
+            c.fillStyle = y % 8 === 0 ? 'rgba(30,12,4,0.34)' : 'rgba(146,72,32,0.22)';
+            c.fillRect(0, y, 128, 2);
+          }
+          tex = new THREE.CanvasTexture(cv);
+          tex.colorSpace = THREE.SRGBColorSpace;
+        }
+      }
+      return new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        map: tex,
+        roughness: 0.56,
+        metalness: 0.08
+      });
+    });
     const revGrp = new THREE.Group();
 
+    // Round heavy revolver barrel + recessed muzzle bore
     const barrel = new THREE.Mesh(
-      getGeo('colt_barrel', () => new THREE.BoxGeometry(0.044, 0.058, 0.28)),
+      getGeo('colt_barrel_cyl', () => {
+        const g = new THREE.CylinderGeometry(0.025, 0.027, 0.285, 16);
+        g.rotateX(Math.PI * 0.5);
+        return g;
+      }),
       chromeMat
     );
-    barrel.position.set(0, 0.095, 0.21);
+    barrel.position.set(0, 0.095, 0.215);
 
-    const underlug = new THREE.Mesh(
-      getGeo('colt_lug', () => new THREE.BoxGeometry(0.034, 0.032, 0.24)),
-      frameMat
-    );
-    underlug.position.set(0, 0.056, 0.195);
-
-    const topRib = new THREE.Mesh(
-      getGeo('colt_rib', () => new THREE.BoxGeometry(0.032, 0.016, 0.29)),
+    const boreHole = new THREE.Mesh(
+      getGeo('colt_bore', () => {
+        const g = new THREE.CylinderGeometry(0.011, 0.011, 0.014, 12);
+        g.rotateX(Math.PI * 0.5);
+        return g;
+      }),
       darkIronMat
     );
-    topRib.position.set(0, 0.130, 0.205);
+    boreHole.position.set(0, 0.095, 0.354);
 
-    const frontSight = new THREE.Mesh(
-      getGeo('colt_sight', () => new THREE.BoxGeometry(0.014, 0.022, 0.028)),
-      brassMat
-    );
-    frontSight.position.set(0, 0.142, 0.33);
-
-    const frame = new THREE.Mesh(
-      getGeo('colt_frame', () => new THREE.BoxGeometry(0.052, 0.092, 0.175)),
+    // Tapered lower underlug + cylindrical ejector rod housing
+    const underlug = new THREE.Mesh(
+      getGeo('colt_lug_cyl', () => {
+        const g = new THREE.CylinderGeometry(0.015, 0.016, 0.255, 12);
+        g.rotateX(Math.PI * 0.5);
+        return g;
+      }),
       frameMat
     );
-    frame.position.set(0, 0.072, 0.015);
+    underlug.position.set(0, 0.062, 0.205);
 
+    // Ventilated upper sight rib + front blade sight
+    const topRib = new THREE.Mesh(
+      getGeo('colt_rib_v2', () => new THREE.BoxGeometry(0.024, 0.014, 0.28)),
+      frameMat
+    );
+    topRib.position.set(0, 0.123, 0.21);
+
+    const frontSight = new THREE.Mesh(
+      getGeo('colt_sight_v2', () => {
+        const s = new THREE.Shape();
+        s.moveTo(0, 0);
+        s.lineTo(0.030, 0);
+        s.lineTo(0.024, 0.022);
+        s.lineTo(0.008, 0.022);
+        s.closePath();
+        const g = new THREE.ExtrudeGeometry(s, { depth: 0.010, bevelEnabled: true, bevelThickness: 0.002, bevelSize: 0.002, bevelSegments: 1 });
+        g.rotateY(-Math.PI * 0.5);
+        g.translate(0.005, 0, -0.015);
+        return g;
+      }),
+      darkIronMat
+    );
+    frontSight.position.set(0, 0.129, 0.33);
+
+    // Contoured beveled steel frame (side profile extruded symmetrically)
+    const frame = new THREE.Mesh(
+      getGeo('colt_frame_ext', () => {
+        const s = new THREE.Shape();
+        s.moveTo(-0.072, -0.010);
+        s.lineTo(0.088, -0.006);
+        s.lineTo(0.088, 0.056);
+        s.lineTo(0.075, 0.068);
+        s.lineTo(-0.054, 0.068);
+        s.lineTo(-0.076, 0.042);
+        s.lineTo(-0.082, 0.008);
+        s.closePath();
+        const g = new THREE.ExtrudeGeometry(s, { depth: 0.036, bevelEnabled: true, bevelThickness: 0.006, bevelSize: 0.005, bevelSegments: 2 });
+        g.rotateY(-Math.PI * 0.5);
+        g.translate(0.018, 0.054, 0.012);
+        return g;
+      }),
+      frameMat
+    );
+
+    // Fluted 6-shot revolving cylinder + 6 recessed brass bullet rims
     const cylinder = new THREE.Mesh(
-      getGeo('colt_cyl', () => {
-        const cg = new THREE.CylinderGeometry(0.048, 0.048, 0.088, 12);
+      getGeo('colt_cyl_v2', () => {
+        const cg = new THREE.CylinderGeometry(0.047, 0.047, 0.088, 18);
         cg.rotateX(Math.PI * 0.5);
         return cg;
       }),
@@ -1059,9 +1131,23 @@ function createHeroWeaponMesh(weaponId, mageElement = null) {
     );
     cylinder.position.set(0, 0.082, 0.038);
 
+    const cylGroup = new THREE.Group();
+    cylGroup.add(cylinder);
+    const rimGeo = getGeo('colt_brass_rim', () => {
+      const g = new THREE.CylinderGeometry(0.010, 0.010, 0.094, 8);
+      g.rotateX(Math.PI * 0.5);
+      return g;
+    });
+    for (let k = 0; k < 6; k++) {
+      const a = (k / 6) * Math.PI * 2;
+      const rim = new THREE.Mesh(rimGeo, brassMat);
+      rim.position.set(Math.sin(a) * 0.028, 0.082 + Math.cos(a) * 0.028, 0.038);
+      cylGroup.add(rim);
+    }
+
     const brassPin = new THREE.Mesh(
       getGeo('colt_pin', () => {
-        const cg = new THREE.CylinderGeometry(0.012, 0.012, 0.105, 8);
+        const cg = new THREE.CylinderGeometry(0.011, 0.011, 0.106, 10);
         cg.rotateX(Math.PI * 0.5);
         return cg;
       }),
@@ -1070,34 +1156,64 @@ function createHeroWeaponMesh(weaponId, mageElement = null) {
     brassPin.position.set(0, 0.082, 0.042);
 
     const triggerGuard = new THREE.Mesh(
-      getGeo('colt_tguard', () => new THREE.TorusGeometry(0.030, 0.007, 6, 12)),
+      getGeo('colt_tguard_v2', () => new THREE.TorusGeometry(0.029, 0.0065, 8, 16)),
       darkIronMat
     );
     triggerGuard.rotation.y = Math.PI * 0.5;
-    triggerGuard.position.set(0, 0.012, 0.015);
+    triggerGuard.position.set(0, 0.016, 0.020);
+
+    const trigger = new THREE.Mesh(
+      getGeo('colt_trigger', () => new THREE.BoxGeometry(0.008, 0.024, 0.010)),
+      brassMat
+    );
+    trigger.position.set(0, 0.018, 0.022);
+    trigger.rotation.x = 0.28;
 
     const hammer = new THREE.Mesh(
-      getGeo('colt_hammer', () => new THREE.BoxGeometry(0.016, 0.032, 0.028)),
+      getGeo('colt_hammer_v2', () => {
+        const s = new THREE.Shape();
+        s.moveTo(0, 0);
+        s.lineTo(0.022, 0.012);
+        s.lineTo(0.012, 0.036);
+        s.lineTo(-0.006, 0.032);
+        s.closePath();
+        const g = new THREE.ExtrudeGeometry(s, { depth: 0.012, bevelEnabled: true, bevelThickness: 0.002, bevelSize: 0.002, bevelSegments: 1 });
+        g.rotateY(-Math.PI * 0.5);
+        g.translate(0.006, 0, 0);
+        return g;
+      }),
       brassMat
     );
-    hammer.position.set(0, 0.122, -0.068);
-    hammer.rotation.x = -0.55;
+    hammer.position.set(0, 0.112, -0.058);
 
+    // Ergonomic beveled walnut handle grip + brass medallions
     const grip = new THREE.Mesh(
-      getGeo('colt_grip', () => new THREE.BoxGeometry(0.048, 0.145, 0.068)),
-      walnutMat
+      getGeo('colt_grip_ext', () => {
+        const s = new THREE.Shape();
+        s.moveTo(-0.024, 0);
+        s.lineTo(0.032, 0.008);
+        s.quadraticCurveTo(0.036, -0.065, 0.046, -0.145);
+        s.lineTo(-0.028, -0.152);
+        s.quadraticCurveTo(-0.020, -0.068, -0.024, 0);
+        const g = new THREE.ExtrudeGeometry(s, { depth: 0.034, bevelEnabled: true, bevelThickness: 0.008, bevelSize: 0.007, bevelSegments: 2 });
+        g.rotateY(-Math.PI * 0.5);
+        g.translate(0.017, 0.044, -0.045);
+        return g;
+      }),
+      woodGripMat
     );
-    grip.position.set(0, -0.036, -0.055);
-    grip.rotation.x = 0.34;
 
-    const pommel = new THREE.Mesh(
-      getGeo('colt_pommel', () => new THREE.BoxGeometry(0.052, 0.024, 0.072)),
+    const gripMedallion = new THREE.Mesh(
+      getGeo('colt_medallion', () => {
+        const g = new THREE.CylinderGeometry(0.013, 0.013, 0.053, 12);
+        g.rotateZ(Math.PI * 0.5);
+        return g;
+      }),
       brassMat
     );
-    pommel.position.set(0, -0.102, -0.078);
-    pommel.rotation.x = 0.34;
+    gripMedallion.position.set(0, -0.028, -0.066);
 
-    revGrp.add(barrel, underlug, topRib, frontSight, frame, cylinder, brassPin, triggerGuard, hammer, grip, pommel);
+    revGrp.add(barrel, boreHole, underlug, topRib, frontSight, frame, cylGroup, brassPin, triggerGuard, trigger, hammer, grip, gripMedallion);
     revGrp.traverse((n) => {
       if (n.isMesh) {
         n.castShadow = true;
