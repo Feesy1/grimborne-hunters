@@ -7,9 +7,31 @@
 import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { clone as cloneSkinned } from '../vendor/SkeletonUtils.js';
-import { WEAPONS } from './config.js?v=20261116m';
+import { WEAPONS } from './config.js?v=20261117z16';
 
 const MODEL_PATHS = {
+  warrior_tripo: './assets/models/Warrior_Tripo.glb?v=20261117z16',
+  sword_tripo: './assets/models/Sword_Tripo.glb?v=20261117z16',
+  spear_tripo: './assets/models/Spear_Tripo.glb?v=20261117z16',
+  zweihander_tripo: './assets/models/Zweihander_Tripo.glb?v=20261117z16',
+  axe_tripo: './assets/models/Axe_Tripo.glb?v=20261117z16',
+  hammer_tripo: './assets/models/Hammer_Tripo.glb?v=20261117z16',
+  mage_tripo: './assets/models/Mage_Tripo.glb?v=20261117z16',
+  staff_tripo: './assets/models/Staff_Tripo.glb?v=20261117z16',
+  gunslinger_tripo: './assets/models/Gunslinger_Tripo.glb?v=20261117z16',
+  shotgun_tripo: './assets/models/Shotgun_Tripo.glb?v=20261117z16',
+  pistol_tripo: './assets/models/Pistol_Tripo.glb?v=20261117z16',
+  smg_tripo: './assets/models/SMG_Tripo.glb?v=20261117z16',
+  ak47_tripo: './assets/models/AK47_Tripo.glb?v=20261117z16',
+  zombie_tripo: './assets/models/Zombie_Tripo.glb?v=20261117z16',
+  tree_tripo: './assets/models/Tree_Tripo.glb?v=20261117z16',
+  dracula_tripo: './assets/models/Dracula_Tripo.glb?v=20261117z16',
+  mimic_tripo: './assets/models/Mimic_Tripo.glb?v=20261117z16',
+  chest_disguise_tripo: './assets/models/Chest_Disguise_Tripo.glb?v=20261117z16',
+  lich_tripo: './assets/models/Lich_Tripo.glb?v=20261117z16',
+  troll_tripo: './assets/models/Troll_Tripo.glb?v=20261117z16',
+  succubus_tripo: './assets/models/Succubus_Tripo.glb?v=20261117z16',
+  spider_tripo: './assets/models/Spider_Tripo.glb?v=20261117z16',
   barbarian: './assets/models/Barbarian.glb',
   knight: './assets/models/Knight.glb',
   rogue: './assets/models/Rogue_Hooded.glb',
@@ -24,6 +46,417 @@ const MODEL_PATHS = {
 
 const gltfCache = new Map();
 let preloadPromise = null;
+const cachedEyeEmissiveTextures = new Map();
+let cachedStaffGlobeAlphaTex = null;
+
+function buildStaffGlobeCutoutAlphaMap(img) {
+  if (cachedStaffGlobeAlphaTex) return cachedStaffGlobeAlphaTex;
+  if (!img || typeof document === 'undefined') return null;
+  const imgW = img.width || img.naturalWidth || 0;
+  const imgH = img.height || img.naturalHeight || 0;
+  if (!imgW || !imgH) return null;
+
+  const size = 512;
+  const cv = document.createElement('canvas');
+  cv.width = size;
+  cv.height = size;
+  const ctx = cv.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return null;
+
+  ctx.drawImage(img, 0, 0, size, size);
+  const imgData = ctx.getImageData(0, 0, size, size);
+  const d = imgData.data;
+
+  // Dissolve ONLY the interior cyan/turquoise globe pixels while keeping 100% of olive/gold/coral wood claws!
+  for (let i = 0; i < d.length; i += 4) {
+    const r = d[i];
+    const g = d[i + 1];
+    const b = d[i + 2];
+    const isCyanGlobe = g > 118 && b > 116 && r < 96 && g - r > 44 && b - r > 38;
+    const val = isCyanGlobe ? 0 : 255;
+    d[i] = val;
+    d[i + 1] = val;
+    d[i + 2] = val;
+    d[i + 3] = 255;
+  }
+  ctx.putImageData(imgData, 0, 0);
+
+  const tex = new THREE.CanvasTexture(cv);
+  tex.flipY = false;
+  tex.needsUpdate = true;
+  cachedStaffGlobeAlphaTex = tex;
+  return tex;
+}
+
+const ELEMENT_VORTEX_PALETTES = {
+  water:     { deep: 0x02648c, mid: 0x06c8cc, core: 0xbefcf6, ribbon: 0x16c5c9, drop: 0x7ef9f5 },
+  fire:      { deep: 0x7f1d1d, mid: 0xea580c, core: 0xfef08a, ribbon: 0xf97316, drop: 0xfde047 },
+  lightning: { deep: 0x1e3a8a, mid: 0x0284c7, core: 0xfef9c3, ribbon: 0x38bdf8, drop: 0xfef08a },
+  air:       { deep: 0x115e59, mid: 0x14b8a6, core: 0xccfbf1, ribbon: 0x5eead4, drop: 0xf0fdfa }
+};
+
+function createLivingStaffOrbVfx(orbRadius = 9.95, initialElement = 'water') {
+  const pal = ELEMENT_VORTEX_PALETTES[initialElement] || ELEMENT_VORTEX_PALETTES.water;
+  const grp = new THREE.Group();
+
+  // 1. Single Seamless Sculpted Spiral Whirlpool Sphere (Matches fb044451.mp4 & bcf5a263.mp4 1-to-1:
+  //    ZERO nested concentric rings, ZERO polar pinch, real wet 3D wave-crest relief!)
+  const vortexUniforms = {
+    uTime: { value: 0 },
+    uCastPulse: { value: 0 },
+    uColorDeep: { value: new THREE.Color(pal.deep) },
+    uColorMid: { value: new THREE.Color(pal.mid) },
+    uColorCore: { value: new THREE.Color(pal.core) }
+  };
+
+  const vortexMat = new THREE.ShaderMaterial({
+    uniforms: vortexUniforms,
+    transparent: true,
+    depthWrite: true,
+    extensions: { derivatives: true },
+    vertexShader: `
+      uniform float uTime;
+      uniform float uCastPulse;
+      varying vec3 vNormalV;
+      varying vec3 vViewDir;
+      varying vec3 vLocalDir;
+      void main() {
+        vec3 n = normalize(normal);
+        vLocalDir = n;
+        float w1 = sin(n.x * 4.2 + uTime * 3.8) * cos(n.y * 3.9 - uTime * 3.1);
+        float w2 = sin(n.z * 4.5 - uTime * 4.4 + n.y * 3.2);
+        float ripple = (w1 * 0.55 + w2 * 0.45) * (0.032 + uCastPulse * 0.055);
+        vec3 displaced = position * (1.0 + uCastPulse * 0.10) + n * (length(position) * ripple);
+        vec4 mvPos = modelViewMatrix * vec4(displaced, 1.0);
+        vNormalV = normalize(normalMatrix * n);
+        vViewDir = normalize(-mvPos.xyz);
+        gl_Position = projectionMatrix * mvPos;
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      uniform float uCastPulse;
+      uniform vec3 uColorDeep;
+      uniform vec3 uColorMid;
+      uniform vec3 uColorCore;
+      varying vec3 vNormalV;
+      varying vec3 vViewDir;
+      varying vec3 vLocalDir;
+
+      float gyroid(vec3 p) {
+        return dot(sin(p), cos(p.yzx));
+      }
+
+      void main() {
+        vec3 N = normalize(vNormalV);
+        vec3 V = normalize(vViewDir);
+        float ndv = clamp(dot(N, V), 0.0, 1.0);
+
+        // View-aligned spiral whirlpool coordinates (pinch-free at r -> 0!)
+        vec2 disk = N.xy;
+        float r = clamp(length(disk), 0.0, 1.0);
+        float theta = atan(disk.y, disk.x);
+        float spiralFade = smoothstep(0.0, 0.24, r) * smoothstep(1.0, 0.78, r);
+
+        // 2-arm + 3-arm logarithmic whirlpool curling inward continuously
+        float armA = sin(theta * 2.0 - r * 9.5 + uTime * 4.4);
+        float armB = sin(theta * 3.0 - r * 13.0 + uTime * 5.8 + 1.2);
+        float spiralWave = (armA * 0.62 + armB * 0.38) * spiralFade;
+
+        // Pole-free 3D rotating gyroid liquid currents for organic volume from every camera angle
+        float c = cos(uTime * 1.35);
+        float s = sin(uTime * 1.35);
+        vec3 pRot = vec3(vLocalDir.x * c - vLocalDir.z * s, vLocalDir.y, vLocalDir.x * s + vLocalDir.z * c);
+        float g1 = gyroid(pRot * 4.2 + vec3(0.0, -uTime * 2.2, uTime * 1.6)) / 1.7;
+        float g2 = gyroid(pRot * 7.8 - vec3(uTime * 2.8, uTime * 1.9, 0.0)) / 2.2;
+
+        float eyeGlow = exp(-r * r * 13.5) * (0.72 + 0.28 * sin(uTime * 5.2));
+        float height = clamp(0.50 + spiralWave * 0.34 + g1 * 0.24 + g2 * 0.12 + eyeGlow * 0.30, 0.0, 1.0);
+
+        // Screen-space derivative normal perturbation for glossy 3D sculpted water crests!
+        float dhx = dFdx(height);
+        float dhy = dFdy(height);
+        vec3 nPerturb = normalize(N - vec3(dhx, dhy, 0.0) * 3.6);
+        vec3 lightDir = normalize(vec3(-0.38, 0.62, 0.68));
+        float wetSpec = pow(max(dot(nPerturb, lightDir), 0.0), 22.0);
+        float fresnel = pow(1.0 - ndv, 2.6);
+
+        vec3 col = mix(uColorDeep, uColorMid, smoothstep(0.18, 0.72, height));
+        float foamCrest = smoothstep(0.64, 0.95, height) * 0.68 + eyeGlow * 0.48 + fresnel * 0.45 + uCastPulse * 0.72;
+        col = mix(col, uColorCore, clamp(foamCrest, 0.0, 1.0));
+        col += vec3(0.88, 1.0, 0.99) * (wetSpec * 0.62);
+
+        float edgeSoft = smoothstep(0.0, 0.08, ndv);
+        float alpha = clamp((0.86 + fresnel * 0.12 + uCastPulse * 0.10) * edgeSoft, 0.0, 0.98);
+        gl_FragColor = vec4(col, alpha);
+      }
+    `
+  });
+
+  const liquidSphere = new THREE.Mesh(new THREE.SphereGeometry(orbRadius, 36, 30), vortexMat);
+  grp.add(liquidSphere);
+
+  // 2. Glossy Undulating Turquoise Water Ribbon hugging the S-curve wooden shaft (Matches fb044451.mp4!)
+  const streamUniforms = {
+    uTime: { value: 0 },
+    uCastPulse: { value: 0 },
+    uStreamDeep: { value: new THREE.Color(pal.deep) },
+    uStreamCol: { value: new THREE.Color(pal.ribbon) },
+    uFoamCol: { value: new THREE.Color(pal.core) }
+  };
+  const shaftPts = [];
+  for (let s = 0; s <= 36; s++) {
+    const u = s / 36;
+    const ang = u * Math.PI * 3.2 + 0.55;
+    const shaftCenterX = 3.5 * Math.min(1, u * 2.0);
+    const rad = orbRadius * (0.44 - u * 0.16 + Math.sin(u * Math.PI * 2.0) * 0.09);
+    const yy = -orbRadius * 0.86 - u * (orbRadius * 5.9);
+    shaftPts.push(new THREE.Vector3(shaftCenterX + Math.cos(ang) * rad, yy, Math.sin(ang) * rad));
+  }
+  const shaftCurve = new THREE.CatmullRomCurve3(shaftPts);
+  const shaftStreamGeo = new THREE.TubeGeometry(shaftCurve, 48, orbRadius * 0.125, 8, false);
+  const sPos = shaftStreamGeo.attributes.position;
+  const sUv = shaftStreamGeo.attributes.uv;
+  const cPt = new THREE.Vector3();
+  const vTmp = new THREE.Vector3();
+  for (let i = 0; i < sPos.count; i++) {
+    const u = Math.min(1, Math.max(0, sUv.getX(i)));
+    const taper = Math.sin(u * Math.PI);
+    shaftCurve.getPointAt(u, cPt);
+    vTmp.fromBufferAttribute(sPos, i).sub(cPt).multiplyScalar(0.22 + 0.90 * taper).add(cPt);
+    sPos.setXYZ(i, vTmp.x, vTmp.y, vTmp.z);
+  }
+  sPos.needsUpdate = true;
+  shaftStreamGeo.computeVertexNormals();
+
+  const shaftStreamMat = new THREE.ShaderMaterial({
+    uniforms: streamUniforms,
+    transparent: true,
+    depthWrite: false,
+    vertexShader: `
+      uniform float uTime;
+      varying vec2 vUv;
+      varying vec3 vNormV;
+      void main() {
+        vUv = uv;
+        vec3 p = position;
+        float sway = sin(uv.x * 14.0 - uTime * 5.2) * 0.42 * sin(uv.x * 3.14159);
+        p += normal * sway;
+        vNormV = normalize(normalMatrix * normal);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      uniform float uCastPulse;
+      uniform vec3 uStreamDeep;
+      uniform vec3 uStreamCol;
+      uniform vec3 uFoamCol;
+      varying vec2 vUv;
+      varying vec3 vNormV;
+      void main() {
+        float endFade = smoothstep(0.0, 0.12, vUv.x) * smoothstep(1.0, 0.84, vUv.x);
+        float flow = 0.5 + 0.5 * sin(vUv.x * 20.0 - uTime * 6.8 + sin(vUv.y * 6.2831) * 1.5);
+        float spec = pow(max(dot(normalize(vNormV), normalize(vec3(-0.35, 0.65, 0.7))), 0.0), 14.0);
+        vec3 col = mix(uStreamDeep, uStreamCol, 0.35 + 0.65 * flow);
+        col = mix(col, uFoamCol, pow(flow, 2.6) * 0.55 + spec * 0.55 + uCastPulse * 0.45);
+        float alpha = endFade * (0.62 + 0.28 * flow + uCastPulse * 0.10);
+        gl_FragColor = vec4(col, alpha);
+      }
+    `
+  });
+  const shaftStreamMesh = new THREE.Mesh(shaftStreamGeo, shaftStreamMat);
+  grp.add(shaftStreamMesh);
+
+  // 3. Radial Charge-Flash Rays on Attack
+  const burstGroup = new THREE.Group();
+  burstGroup.visible = false;
+  const burstMat = new THREE.MeshBasicMaterial({
+    color: pal.core,
+    transparent: true,
+    opacity: 0,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+  });
+  const rayGeo = new THREE.ConeGeometry(orbRadius * 0.08, orbRadius * 1.05, 5);
+  rayGeo.translate(0, orbRadius * 1.25, 0);
+  for (let r = 0; r < 8; r++) {
+    const ray = new THREE.Mesh(rayGeo, burstMat);
+    ray.rotation.z = (r / 8) * Math.PI * 2;
+    ray.rotation.x = (r % 2 === 0 ? 1 : -1) * 0.38;
+    burstGroup.add(ray);
+  }
+  grp.add(burstGroup);
+
+  // 4. Glossy Rising Teardrop Water Droplets around the coral tips & lower stream (Matches fb044451.mp4!)
+  const dropGeo = new THREE.SphereGeometry(orbRadius * 0.072, 10, 10);
+  const dropMat = new THREE.MeshStandardMaterial({
+    color: pal.ribbon,
+    emissive: pal.drop,
+    emissiveIntensity: 0.65,
+    roughness: 0.12,
+    metalness: 0.05,
+    transparent: true,
+    opacity: 0.88
+  });
+  const droplets = [];
+  for (let d = 0; d < 9; d++) {
+    const dMesh = new THREE.Mesh(dropGeo, dropMat);
+    grp.add(dMesh);
+    droplets.push(dMesh);
+  }
+
+  function setElementTheme(elemId) {
+    const p = ELEMENT_VORTEX_PALETTES[elemId] || ELEMENT_VORTEX_PALETTES.water;
+    vortexUniforms.uColorDeep.value.setHex(p.deep);
+    vortexUniforms.uColorMid.value.setHex(p.mid);
+    vortexUniforms.uColorCore.value.setHex(p.core);
+    streamUniforms.uStreamDeep.value.setHex(p.deep);
+    streamUniforms.uStreamCol.value.setHex(p.ribbon);
+    streamUniforms.uFoamCol.value.setHex(p.core);
+    burstMat.color.setHex(p.core);
+    dropMat.color.setHex(p.ribbon);
+    dropMat.emissive.setHex(p.drop);
+  }
+
+  function updateVfx(elapsedTime = 0, castPulse = 0) {
+    vortexUniforms.uTime.value = elapsedTime;
+    vortexUniforms.uCastPulse.value = castPulse;
+    streamUniforms.uTime.value = elapsedTime;
+    streamUniforms.uCastPulse.value = castPulse;
+
+    if (castPulse > 0.03) {
+      burstGroup.visible = true;
+      burstGroup.rotation.y = elapsedTime * 5.0;
+      const bScale = 0.78 + (1.0 - castPulse) * 0.58;
+      burstGroup.scale.setScalar(bScale);
+      burstMat.opacity = castPulse * 0.80;
+    } else {
+      burstGroup.visible = false;
+    }
+
+    for (let i = 0; i < droplets.length; i++) {
+      const dm = droplets[i];
+      const uRise = ((elapsedTime * (0.48 + (i % 4) * 0.12) + i * 0.37) % 1);
+      const fade = Math.sin(uRise * Math.PI);
+      const isLower = i >= 6;
+      const a = i * 2.15 + Math.sin(elapsedTime * 1.8 + i) * 0.35;
+      const rad = orbRadius * (isLower ? 0.62 : 1.16 + (i % 2) * 0.14);
+      const yy = isLower
+        ? -orbRadius * (4.4 - uRise * 2.6)
+        : -orbRadius * 0.55 + uRise * (orbRadius * 1.85);
+      dm.position.set((isLower ? 3.2 : 0) + Math.cos(a) * rad, yy, Math.sin(a) * rad);
+      const sc = (0.45 + 0.65 * fade) * (1.0 + castPulse * 0.35);
+      dm.scale.set(sc * 0.88, sc * 1.24, sc * 0.88);
+    }
+  }
+
+  return { group: grp, setElementTheme, updateVfx };
+}
+
+function buildTripoSkullEyeEmissiveMap(cacheKey, sceneRoot) {
+  if (cachedEyeEmissiveTextures.has(cacheKey) || typeof document === 'undefined') {
+    return cachedEyeEmissiveTextures.get(cacheKey) || null;
+  }
+  let targetMesh = null;
+  sceneRoot.updateMatrixWorld(true);
+  sceneRoot.traverse((n) => {
+    if (!targetMesh && n.isMesh && n.geometry?.attributes?.position && n.geometry?.attributes?.uv && n.material?.map?.image) {
+      targetMesh = n;
+    }
+  });
+  if (!targetMesh) return null;
+
+  const img = targetMesh.material.map.image;
+  const imgW = img.width || img.naturalWidth || 0;
+  const imgH = img.height || img.naturalHeight || 0;
+  if (!imgW || !imgH) return null;
+
+  // Find UV bounding region of front skull face vertices in scene space
+  const posAttr = targetMesh.geometry.attributes.position;
+  const uvAttr = targetMesh.geometry.attributes.uv;
+  const matW = targetMesh.matrixWorld;
+  const vPos = new THREE.Vector3();
+  const faceCells = new Uint8Array(64 * 64);
+  let foundAnyFace = false;
+
+  if (cacheKey === 'tree_tripo') {
+    faceCells.fill(1);
+    foundAnyFace = true;
+  } else {
+    for (let i = 0; i < posAttr.count; i++) {
+      vPos.fromBufferAttribute(posAttr, i).applyMatrix4(matW);
+      if (vPos.y > 0.48 && vPos.y < 0.78 && vPos.z > 0.035 && Math.abs(vPos.x) < 0.145) {
+        let u = uvAttr.getX(i);
+        let v = uvAttr.getY(i);
+        u = ((u % 1) + 1) % 1;
+        v = ((v % 1) + 1) % 1;
+        const cx = Math.min(63, Math.max(0, Math.floor(u * 64)));
+        const cy = Math.min(63, Math.max(0, Math.floor(v * 64)));
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const nx = cx + dx;
+            const ny = cy + dy;
+            if (nx >= 0 && nx < 64 && ny >= 0 && ny < 64) {
+              faceCells[ny * 64 + nx] = 1;
+              foundAnyFace = true;
+            }
+          }
+        }
+      }
+    }
+  }
+  if (!foundAnyFace) return null;
+
+  const size = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return null;
+
+  ctx.drawImage(img, 0, 0, size, size);
+  const imgData = ctx.getImageData(0, 0, size, size);
+  const d = imgData.data;
+
+  for (let py = 0; py < size; py++) {
+    const cy = Math.min(63, Math.floor((py / size) * 64));
+    for (let px = 0; px < size; px++) {
+      const cx = Math.min(63, Math.floor((px / size) * 64));
+      const idx = (py * size + px) * 4;
+      if (!faceCells[cy * 64 + cx]) {
+        d[idx] = 0;
+        d[idx + 1] = 0;
+        d[idx + 2] = 0;
+        d[idx + 3] = 255;
+        continue;
+      }
+      const r = d[idx];
+      const g = d[idx + 1];
+      const b = d[idx + 2];
+      // Isolate blazing red/orange/yellow eye socket glow from pale skull bone & armor/hood
+      if (r > 185 && g > 55 && r > b * 1.42 && r - b > 70) {
+        const boost = Math.min(1, (r - 175) / 75);
+        d[idx] = Math.min(255, Math.round(r * (0.85 + boost * 0.25)));
+        d[idx + 1] = Math.min(255, Math.round(g * (0.75 + boost * 0.25)));
+        d[idx + 2] = Math.round(b * 0.25);
+      } else {
+        d[idx] = 0;
+        d[idx + 1] = 0;
+        d[idx + 2] = 0;
+      }
+      d[idx + 3] = 255;
+    }
+  }
+  ctx.putImageData(imgData, 0, 0);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.flipY = false;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  cachedEyeEmissiveTextures.set(cacheKey, tex);
+  return tex;
+}
 
 export function preloadModels(onProgress) {
   if (preloadPromise) return preloadPromise;
@@ -40,50 +473,135 @@ export function preloadModels(onProgress) {
     }
   };
 
-  preloadPromise = Promise.all(
-    entries.map(
-      ([key, url]) =>
-        new Promise((resolve) => {
-          let settled = false;
-          const finish = () => {
-            if (settled) return;
-            settled = true;
-            markDone();
-            resolve();
-          };
-          const timer = setTimeout(() => {
-            console.warn(`[models] Timeout loading ${url}, continuing with fallback`);
-            finish();
-          }, 9000);
+  const loadOneModel = ([key, url]) =>
+    new Promise((resolve) => {
+      let settled = false;
+      let attempt = 0;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        markDone();
+        resolve();
+      };
+      const timer = setTimeout(() => {
+        console.warn(`[models] Timeout loading ${url}, continuing with fallback`);
+        finish();
+      }, 60000);
 
-          loader.load(
-            url,
-            (gltf) => {
-              clearTimeout(timer);
-              const clipMap = new Map();
-              for (const clip of gltf.animations || []) {
-                clipMap.set(clip.name, clip);
+      const tryLoad = () => {
+        attempt += 1;
+        loader.load(
+          url,
+          (gltf) => {
+            clearTimeout(timer);
+            const clipMap = new Map();
+            for (const clip of gltf.animations || []) {
+              clipMap.set(clip.name, clip);
+              const cleanClipName = clip.name.replace(/\.\d+$/, '');
+              if (cleanClipName !== clip.name && !clipMap.has(cleanClipName)) {
+                clipMap.set(cleanClipName, clip);
               }
-              gltf.scene.traverse((node) => {
-                if (node.isMesh) {
-                  node.castShadow = true;
-                  node.receiveShadow = true;
-                  node.frustumCulled = false;
-                }
-              });
-              gltfCache.set(key, { scene: gltf.scene, clips: clipMap });
-              finish();
-            },
-            undefined,
-            (err) => {
-              clearTimeout(timer);
-              console.warn(`[models] Failed to load ${url}:`, err);
-              finish();
             }
-          );
-        })
-    )
-  );
+            const isTripoHero = key === 'gunslinger_tripo' || key === 'mage_tripo' || key === 'warrior_tripo';
+            const isTripoWeapon =
+              key === 'shotgun_tripo' ||
+              key === 'pistol_tripo' ||
+              key === 'smg_tripo' ||
+              key === 'ak47_tripo' ||
+              key === 'sword_tripo' ||
+              key === 'spear_tripo' ||
+              key === 'zweihander_tripo' ||
+              key === 'axe_tripo' ||
+              key === 'hammer_tripo' ||
+              key === 'staff_tripo';
+            const isTripoMonster =
+              key === 'zombie_tripo' ||
+              key === 'tree_tripo' ||
+              key === 'dracula_tripo' ||
+              key === 'mimic_tripo' ||
+              key === 'chest_disguise_tripo' ||
+              key === 'lich_tripo' ||
+              key === 'troll_tripo' ||
+              key === 'succubus_tripo' ||
+              key === 'spider_tripo';
+            const isTripoAsset = isTripoHero || isTripoWeapon || isTripoMonster;
+            const eyeEmissiveTex = isTripoHero || key === 'tree_tripo' ? buildTripoSkullEyeEmissiveMap(key, gltf.scene) : null;
+            gltf.scene.traverse((node) => {
+              if (/^Icosphere/i.test(node.name || '')) {
+                node.visible = false;
+                return;
+              }
+              if (node.isMesh) {
+                node.castShadow = true;
+                node.receiveShadow = true;
+                node.frustumCulled = false;
+                if (isTripoAsset && node.material) {
+                  node.receiveShadow = false;
+                  const isEmbeddedWeapon = /HeroWeapon|Sword|Staff|Shotgun/i.test(node.name);
+                  const isStaffMesh = key === 'staff_tripo' || /Staff/i.test(node.name);
+                  const srcMats = Array.isArray(node.material) ? node.material : [node.material];
+                  const cleanMats = srcMats.map((m) => {
+                    for (const t of [m.map, m.normalMap, m.roughnessMap, m.metalnessMap]) {
+                      if (t) {
+                        t.anisotropy = 16;
+                        t.minFilter = THREE.LinearMipmapLinearFilter;
+                        t.magFilter = THREE.LinearFilter;
+                        t.generateMipmaps = true;
+                        t.needsUpdate = true;
+                      }
+                    }
+                    const staffCutoutAlpha = isStaffMesh && m.map?.image ? buildStaffGlobeCutoutAlphaMap(m.map.image) : null;
+                    const std = new THREE.MeshStandardMaterial({
+                      map: m.map || null,
+                      alphaMap: staffCutoutAlpha || null,
+                      alphaTest: staffCutoutAlpha ? 0.5 : 0,
+                      normalMap: m.normalMap || null,
+                      normalScale: new THREE.Vector2(1.72, 1.72),
+                      roughnessMap: m.roughnessMap || null,
+                      metalnessMap: m.metalnessMap || null,
+                      color: 0xffffff,
+                      roughness: isTripoWeapon || isEmbeddedWeapon || key === 'warrior_tripo' ? 0.48 : 0.60,
+                      metalness: isTripoWeapon || isEmbeddedWeapon || key === 'warrior_tripo' ? 0.46 : 0.20
+                    });
+                    if (eyeEmissiveTex && !isEmbeddedWeapon) {
+                      std.emissiveMap = eyeEmissiveTex;
+                      std.emissive.setHex(key === 'mage_tripo' ? 0xff5200 : 0xff7a00);
+                      std.emissiveIntensity = 2.4;
+                    }
+                    return std;
+                  });
+                  node.material = Array.isArray(node.material) ? cleanMats : cleanMats[0];
+                }
+              }
+            });
+            gltfCache.set(key, { scene: gltf.scene, clips: clipMap });
+            finish();
+          },
+          undefined,
+          (err) => {
+            if (attempt < 2 && !settled) {
+              setTimeout(tryLoad, 220);
+              return;
+            }
+            clearTimeout(timer);
+            console.warn(`[models] Failed to load ${url}:`, err);
+            finish();
+          }
+        );
+      };
+      tryLoad();
+    });
+
+  // Bound concurrency to 4 parallel GLB streams so single-threaded local servers & mobile sockets never abort large GLBs
+  const CONCURRENCY = 4;
+  let nextIdx = 0;
+  const workers = Array.from({ length: Math.min(CONCURRENCY, entries.length) }, async () => {
+    while (nextIdx < entries.length) {
+      const idx = nextIdx++;
+      await loadOneModel(entries[idx]);
+    }
+  });
+  preloadPromise = Promise.all(workers).then(() => undefined);
 
   return preloadPromise;
 }
@@ -241,8 +759,81 @@ function createHeroWeaponMesh(weaponId, mageElement = null) {
   const brassMat = getMat('hw_brass', () => new THREE.MeshStandardMaterial({ color: 0xe09f3e, metalness: 0.85, roughness: 0.24 }));
   const shellHullMat = getMat('hw_shell_hull', () => new THREE.MeshStandardMaterial({ color: 0xb91c1c, roughness: 0.45, metalness: 0.15 }));
 
-  // === WARRIOR WEAPONS (Broadsword -> Inquisitor Cleaver -> Cinderstorm Greatsword) ===
-  if (weaponId === 'club' || weaponId === 'cleaver' || weaponId === 'flail') {
+  // === WARRIOR WEAPONS (Sword, Spear, Zweihander, Sekira Axe & Boss Warhammer in RightHand!) ===
+  if (
+    weaponId === 'club' ||
+    weaponId === 'spear' ||
+    weaponId === 'zweihander' ||
+    weaponId === 'axe' ||
+    weaponId === 'boss_hammer' ||
+    weaponId === 'cleaver' ||
+    weaponId === 'flail'
+  ) {
+    const assetKey =
+      weaponId === 'spear' || weaponId === 'cleaver'
+        ? 'spear_tripo'
+        : weaponId === 'zweihander'
+          ? 'zweihander_tripo'
+          : weaponId === 'axe' || weaponId === 'flail'
+            ? 'axe_tripo'
+            : weaponId === 'boss_hammer'
+              ? 'hammer_tripo'
+              : 'sword_tripo';
+    const tripoMelee = gltfCache.get(assetKey) || gltfCache.get('sword_tripo');
+    if (tripoMelee?.scene) {
+      const swClone = tripoMelee.scene.clone(true);
+      const isSwordAsset = assetKey === 'sword_tripo';
+      if (isSwordAsset) {
+        const swScale = 0.0060;
+        swClone.scale.setScalar(swScale);
+        swClone.position.set(
+          -78.2 * Math.cos(0.174533) * swScale,
+          0.048 + 78.2 * Math.sin(0.174533) * swScale,
+          -0.032
+        );
+        swClone.rotation.set(Math.PI, 0.0, 1.39626);
+      } else {
+        // Upright Tripo GLBs (Spear, Zweihander, Axe, Hammer): pommel at Y=0, tip at Y=0.98
+        // Rotating Z by +1.39626 aligns +Y tip outward along (-X, +Y) matching HeroWeapon_Sword!
+        const wScale =
+          assetKey === 'spear_tripo'
+            ? 1.05
+            : assetKey === 'zweihander_tripo'
+              ? 0.90
+              : assetKey === 'hammer_tripo'
+                ? 0.78
+                : 0.72;
+        const gripFrac =
+          assetKey === 'spear_tripo'
+            ? 0.36
+            : assetKey === 'zweihander_tripo'
+              ? 0.14
+              : assetKey === 'hammer_tripo'
+                ? 0.24
+                : 0.26;
+        const gripOff = gripFrac * wScale;
+        swClone.scale.setScalar(wScale);
+        swClone.position.set(
+          gripOff * Math.cos(0.174533),
+          0.048 - gripOff * Math.sin(0.174533),
+          -0.032
+        );
+        swClone.rotation.set(0.0, 0.0, 1.39626);
+      }
+
+      swClone.traverse((n) => {
+        if (n.isMesh && n.material) {
+          n.castShadow = true;
+          n.receiveShadow = false;
+          n.frustumCulled = false;
+          const m = n.material.clone();
+          if (m.color) m.color.setHex(0xffffff);
+          n.material = m;
+        }
+      });
+      grp.add(swClone);
+      return grp;
+    }
     const isFlail = weaponId === 'flail';
     const isCleaver = weaponId === 'cleaver';
     const grip = new THREE.Mesh(
@@ -283,9 +874,178 @@ function createHeroWeaponMesh(weaponId, mageElement = null) {
     return grp;
   }
 
-  // === GUNSLINGER DARK-FANTASY SHOTGUNS ===
-  // Centered cleanly on gunCarryPivot: stock near (0, -0.02, -0.18), barrel forward to z = +0.78!
-  if (weaponId === 'pistol' || weaponId === 'blunderbuss' || weaponId === 'gatling') {
+  // === GUNSLINGER DARK-FANTASY SHOTGUNS, TACTICAL USP, COLT REVOLVER, SMG & AK-47 ===
+  if (weaponId === 'colt') {
+    const chromeMat = getMat('hw_colt_chrome', () =>
+      new THREE.MeshStandardMaterial({ color: 0xe2e8f0, metalness: 0.90, roughness: 0.18 })
+    );
+    const frameMat = getMat('hw_colt_frame', () =>
+      new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.85, roughness: 0.24 })
+    );
+    const revGrp = new THREE.Group();
+
+    const barrel = new THREE.Mesh(
+      getGeo('colt_barrel', () => new THREE.BoxGeometry(0.044, 0.058, 0.28)),
+      chromeMat
+    );
+    barrel.position.set(0, 0.095, 0.21);
+
+    const underlug = new THREE.Mesh(
+      getGeo('colt_lug', () => new THREE.BoxGeometry(0.034, 0.032, 0.24)),
+      frameMat
+    );
+    underlug.position.set(0, 0.056, 0.195);
+
+    const topRib = new THREE.Mesh(
+      getGeo('colt_rib', () => new THREE.BoxGeometry(0.032, 0.016, 0.29)),
+      darkIronMat
+    );
+    topRib.position.set(0, 0.130, 0.205);
+
+    const frontSight = new THREE.Mesh(
+      getGeo('colt_sight', () => new THREE.BoxGeometry(0.014, 0.022, 0.028)),
+      brassMat
+    );
+    frontSight.position.set(0, 0.142, 0.33);
+
+    const frame = new THREE.Mesh(
+      getGeo('colt_frame', () => new THREE.BoxGeometry(0.052, 0.092, 0.175)),
+      frameMat
+    );
+    frame.position.set(0, 0.072, 0.015);
+
+    const cylinder = new THREE.Mesh(
+      getGeo('colt_cyl', () => {
+        const cg = new THREE.CylinderGeometry(0.048, 0.048, 0.088, 12);
+        cg.rotateX(Math.PI * 0.5);
+        return cg;
+      }),
+      chromeMat
+    );
+    cylinder.position.set(0, 0.082, 0.038);
+
+    const brassPin = new THREE.Mesh(
+      getGeo('colt_pin', () => {
+        const cg = new THREE.CylinderGeometry(0.012, 0.012, 0.105, 8);
+        cg.rotateX(Math.PI * 0.5);
+        return cg;
+      }),
+      brassMat
+    );
+    brassPin.position.set(0, 0.082, 0.042);
+
+    const triggerGuard = new THREE.Mesh(
+      getGeo('colt_tguard', () => new THREE.TorusGeometry(0.030, 0.007, 6, 12)),
+      darkIronMat
+    );
+    triggerGuard.rotation.y = Math.PI * 0.5;
+    triggerGuard.position.set(0, 0.012, 0.015);
+
+    const hammer = new THREE.Mesh(
+      getGeo('colt_hammer', () => new THREE.BoxGeometry(0.016, 0.032, 0.028)),
+      brassMat
+    );
+    hammer.position.set(0, 0.122, -0.068);
+    hammer.rotation.x = -0.55;
+
+    const grip = new THREE.Mesh(
+      getGeo('colt_grip', () => new THREE.BoxGeometry(0.048, 0.145, 0.068)),
+      walnutMat
+    );
+    grip.position.set(0, -0.036, -0.055);
+    grip.rotation.x = 0.34;
+
+    const pommel = new THREE.Mesh(
+      getGeo('colt_pommel', () => new THREE.BoxGeometry(0.052, 0.024, 0.072)),
+      brassMat
+    );
+    pommel.position.set(0, -0.102, -0.078);
+    pommel.rotation.x = 0.34;
+
+    revGrp.add(barrel, underlug, topRib, frontSight, frame, cylinder, brassPin, triggerGuard, hammer, grip, pommel);
+    revGrp.traverse((n) => {
+      if (n.isMesh) {
+        n.castShadow = true;
+        n.receiveShadow = true;
+        n.frustumCulled = false;
+      }
+    });
+    grp.add(revGrp);
+    grp.userData.tripoShotgun = revGrp;
+    grp.userData.baseZ = 0.04;
+    return grp;
+  }
+
+  if (
+    (weaponId === 'usp_pistol' && gltfCache.has('pistol_tripo')) ||
+    (weaponId === 'smg' && gltfCache.has('smg_tripo')) ||
+    (weaponId === 'ak47' && gltfCache.has('ak47_tripo'))
+  ) {
+    const gunKey = weaponId === 'smg' ? 'smg_tripo' : weaponId === 'ak47' ? 'ak47_tripo' : 'pistol_tripo';
+    const pClone = gltfCache.get(gunKey).scene.clone(true);
+    const pScale = weaponId === 'usp_pistol' ? 0.25 : weaponId === 'smg' ? 0.42 : 0.56;
+    pClone.scale.setScalar(pScale);
+    if (gunKey === 'smg_tripo' || gunKey === 'ak47_tripo') {
+      // SMG & AK-47 barrels point +X in glTF -> rotate -90 deg around Y to aim +Z forward
+      pClone.rotation.y = -Math.PI * 0.5;
+      pClone.position.set(0, -0.045, 0.02);
+    } else {
+      pClone.position.set(0, -0.015, 0.04);
+    }
+    pClone.traverse((n) => {
+      if (n.isMesh && n.material) {
+        n.castShadow = true;
+        n.receiveShadow = true;
+        n.frustumCulled = false;
+      }
+    });
+    grp.add(pClone);
+    grp.userData.tripoShotgun = pClone;
+    grp.userData.baseZ = 0.16;
+    return grp;
+  }
+  if (
+    weaponId === 'pistol' ||
+    weaponId === 'usp_pistol' ||
+    weaponId === 'smg' ||
+    weaponId === 'ak47' ||
+    weaponId === 'blunderbuss' ||
+    weaponId === 'gatling'
+  ) {
+    const tripoShotgun = gltfCache.get('shotgun_tripo');
+    if (tripoShotgun?.scene) {
+      const sgClone = tripoShotgun.scene.clone(true);
+      const sgScale = weaponId === 'blunderbuss' ? 0.0086 : weaponId === 'gatling' ? 0.0083 : 0.0080;
+      sgClone.scale.setScalar(sgScale);
+      // Center receiver balance point (raw Y=+10, Z=+26 in Blender -> Z=-10, Y=+26 in glTF Y-up) right at gunCarryPivot (0,0,0)!
+      sgClone.position.set(0, -26.0 * sgScale, 10.0 * sgScale);
+
+      const accentHex =
+        weaponId === 'gatling' ? 0x0284c7 : weaponId === 'blunderbuss' ? 0xd97706 : 0x000000;
+      const accentInt = weaponId === 'gatling' ? 0.22 : weaponId === 'blunderbuss' ? 0.18 : 0.0;
+
+      sgClone.traverse((n) => {
+        if (n.isMesh && n.material) {
+          n.castShadow = true;
+          n.receiveShadow = true;
+          n.frustumCulled = false;
+          const m = n.material.clone();
+          if (m.color) m.color.setHex(0xffffff);
+          if (m.emissive && accentInt > 0) {
+            m.emissive.setHex(accentHex);
+            m.emissiveIntensity = accentInt;
+          }
+          n.material = m;
+        }
+      });
+
+      grp.add(sgClone);
+      grp.userData.tripoShotgun = sgClone;
+      grp.userData.baseZ = 0.18;
+      return grp;
+    }
+
+    // Fallback procedural shotgun if GLB has not loaded yet
     // 1. Chunky Walnut Buttstock + Iron Buttplate + Pistol Grip Wrist
     const stock = new THREE.Mesh(
       getGeo('sg_stock', () => new THREE.BoxGeometry(0.135, 0.19, 0.30)),
@@ -507,7 +1267,7 @@ function createHeroWeaponMesh(weaponId, mageElement = null) {
     return grp;
   }
 
-  // === MAGE WEAPONS (Elemental Crystal Staff matching active Element!) ===
+  // === MAGE WEAPONS (4K Tripo Magic Staff in RightHand + Elemental Orb Glow!) ===
   const elCols = mageElement && ELEMENT_STAFF_COLORS[mageElement] ? ELEMENT_STAFF_COLORS[mageElement] : null;
   const crystalColor = elCols
     ? elCols.color
@@ -523,6 +1283,43 @@ function createHeroWeaponMesh(weaponId, mageElement = null) {
       : weaponId === 'void_orb'
         ? 0x4f46e5
         : 0x9333ea;
+
+  const tripoStaff = gltfCache.get('staff_tripo');
+  if (tripoStaff?.scene) {
+    const stClone = tripoStaff.scene.clone(true);
+    const stScale = weaponId === 'void_orb' ? 0.0102 : weaponId === 'cinder_tome' ? 0.0099 : 0.0096;
+    const ratio = stScale / 0.0096;
+    stClone.scale.setScalar(stScale);
+    stClone.position.set(-0.25509 * ratio, 0.03638, -0.26418 * ratio);
+    stClone.quaternion.set(0.18785, -0.40613, -0.70380, 0.55176);
+
+    stClone.traverse((n) => {
+      if (n.isMesh && n.material) {
+        n.castShadow = true;
+        n.receiveShadow = false;
+        n.frustumCulled = false;
+        const m = n.material.clone();
+        if (m.color) m.color.setHex(0xffffff);
+        n.material = m;
+      }
+    });
+
+    // Subtle additive elemental aura around the staff's top crystal sphere (-3.63, 80.82, 0.38 in staff local space)
+    const orbAura = new THREE.Mesh(
+      getGeo('tripo_staff_orb_aura', () => new THREE.SphereGeometry(10.6, 14, 14)),
+      new THREE.MeshBasicMaterial({
+        color: crystalColor,
+        transparent: true,
+        opacity: 0.30,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      })
+    );
+    orbAura.position.set(-3.63, 80.82, 0.38);
+    stClone.add(orbAura);
+    grp.add(stClone);
+    return grp;
+  }
 
   const staffPole = new THREE.Mesh(
     getGeo('m_pole', () => new THREE.CylinderGeometry(0.042, 0.048, 1.65, 8)),
@@ -556,6 +1353,161 @@ function createHeroWeaponMesh(weaponId, mageElement = null) {
 
   grp.add(staffPole, collar, mainCrystal);
   return grp;
+}
+
+// ============================================================================
+// 3D ARSENAL SHOWCASE WEAPON FACTORY (Floats & Spins 360° above Golden Pedestal!)
+// ============================================================================
+export function createArsenalShowcaseWeapon(weaponId = 'club', mageElement = 'water', isLocked = false) {
+  const root = new THREE.Group();
+  const floatPivot = new THREE.Group();
+  const tiltPivot = new THREE.Group();
+  root.add(floatPivot);
+  floatPivot.add(tiltPivot);
+
+  let rawModel = null;
+  const isSword =
+    weaponId === 'club' ||
+    weaponId === 'spear' ||
+    weaponId === 'zweihander' ||
+    weaponId === 'axe' ||
+    weaponId === 'boss_hammer' ||
+    weaponId === 'cleaver' ||
+    weaponId === 'flail';
+  const isShotgun =
+    weaponId === 'pistol' ||
+    weaponId === 'usp_pistol' ||
+    weaponId === 'colt' ||
+    weaponId === 'smg' ||
+    weaponId === 'ak47' ||
+    weaponId === 'blunderbuss' ||
+    weaponId === 'gatling';
+
+  if (weaponId === 'spear' || weaponId === 'cleaver') {
+    rawModel = gltfCache.has('spear_tripo')
+      ? gltfCache.get('spear_tripo').scene.clone(true)
+      : gltfCache.get('sword_tripo')?.scene.clone(true) || createHeroWeaponMesh(weaponId, mageElement);
+  } else if (weaponId === 'zweihander') {
+    rawModel = gltfCache.has('zweihander_tripo')
+      ? gltfCache.get('zweihander_tripo').scene.clone(true)
+      : gltfCache.get('sword_tripo')?.scene.clone(true) || createHeroWeaponMesh(weaponId, mageElement);
+  } else if (weaponId === 'axe' || weaponId === 'flail') {
+    rawModel = gltfCache.has('axe_tripo')
+      ? gltfCache.get('axe_tripo').scene.clone(true)
+      : gltfCache.get('sword_tripo')?.scene.clone(true) || createHeroWeaponMesh(weaponId, mageElement);
+  } else if (weaponId === 'boss_hammer') {
+    rawModel = gltfCache.has('hammer_tripo')
+      ? gltfCache.get('hammer_tripo').scene.clone(true)
+      : gltfCache.get('sword_tripo')?.scene.clone(true) || createHeroWeaponMesh(weaponId, mageElement);
+  } else if (weaponId === 'colt') {
+    rawModel = createHeroWeaponMesh('colt', null);
+  } else if (weaponId === 'usp_pistol' && gltfCache.has('pistol_tripo')) {
+    rawModel = gltfCache.get('pistol_tripo').scene.clone(true);
+  } else if (weaponId === 'smg' && gltfCache.has('smg_tripo')) {
+    rawModel = gltfCache.get('smg_tripo').scene.clone(true);
+  } else if (weaponId === 'ak47' && gltfCache.has('ak47_tripo')) {
+    rawModel = gltfCache.get('ak47_tripo').scene.clone(true);
+  } else if (isSword && gltfCache.has('sword_tripo')) {
+    rawModel = gltfCache.get('sword_tripo').scene.clone(true);
+  } else if (isShotgun && gltfCache.has('shotgun_tripo')) {
+    rawModel = gltfCache.get('shotgun_tripo').scene.clone(true);
+  } else if (!isSword && !isShotgun && gltfCache.has('staff_tripo')) {
+    rawModel = gltfCache.get('staff_tripo').scene.clone(true);
+  } else {
+    rawModel = createHeroWeaponMesh(weaponId, mageElement);
+  }
+
+  let tintHex = 0x000000;
+  let tintInt = 0;
+  if (weaponId === 'blunderbuss') { tintHex = 0xea580c; tintInt = 0.22; }
+  else if (weaponId === 'gatling') { tintHex = 0x0284c7; tintInt = 0.25; }
+
+  rawModel.traverse((n) => {
+    if (n.isMesh && n.material) {
+      n.castShadow = true;
+      n.receiveShadow = false;
+      const list = Array.isArray(n.material) ? n.material.map((m) => m.clone()) : [n.material.clone()];
+      for (const m of list) {
+        if (isLocked) {
+          if (m.color) m.color.setHex(0x524c66);
+          m.roughness = 0.72;
+        } else {
+          if (m.color) m.color.setHex(0xffffff);
+          if (m.emissive && tintInt > 0) {
+            m.emissive.setHex(tintHex);
+            m.emissiveIntensity = tintInt;
+          }
+        }
+      }
+      n.material = Array.isArray(n.material) ? list : list[0];
+    }
+  });
+
+  let showcaseStaffVfx = null;
+  if (!isSword && !isShotgun && gltfCache.has('staff_tripo') && !isLocked) {
+    showcaseStaffVfx = createLivingStaffOrbVfx(9.95, mageElement || 'water');
+    showcaseStaffVfx.group.position.set(-3.8114, 81.55, 0.3818);
+    rawModel.add(showcaseStaffVfx.group);
+  }
+
+  // Normalize bounding box to a crisp heroic ~1.82m showcase span centered at (0,0,0)!
+  rawModel.position.set(0, 0, 0);
+  rawModel.rotation.set(0, 0, 0);
+  rawModel.scale.setScalar(1);
+  rawModel.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(rawModel);
+  const sz = box.getSize(new THREE.Vector3());
+  const maxDim = Math.max(sz.x, sz.y, sz.z, 0.001);
+  const targetSpan =
+    weaponId === 'usp_pistol'
+      ? 1.32
+      : weaponId === 'colt'
+        ? 1.44
+        : weaponId === 'spear'
+          ? 2.10
+          : weaponId === 'zweihander'
+            ? 1.98
+            : isShotgun
+              ? 1.88
+              : isSword
+                ? 1.82
+                : 1.92;
+  const normScale = targetSpan / maxDim;
+  rawModel.scale.setScalar(normScale);
+  rawModel.updateMatrixWorld(true);
+  const centeredBox = new THREE.Box3().setFromObject(rawModel);
+  const center = centeredBox.getCenter(new THREE.Vector3());
+  rawModel.position.sub(center);
+
+  // Melee & Staves float vertically at a 42° heroic angle; Firearms ALWAYS float horizontally in sleek profile!
+  const orientWrap = new THREE.Group();
+  orientWrap.add(rawModel);
+  if (isShotgun) {
+    if (sz.z > sz.x) {
+      orientWrap.rotation.y = Math.PI * 0.5;
+    }
+    tiltPivot.add(orientWrap);
+    tiltPivot.rotation.z = 0.14;
+    tiltPivot.rotation.x = 0.08;
+  } else {
+    if (sz.z > sz.y && sz.z > sz.x) {
+      orientWrap.rotation.x = -Math.PI * 0.5;
+    } else if (sz.x > sz.y && sz.x > sz.z) {
+      orientWrap.rotation.z = Math.PI * 0.5;
+    }
+    tiltPivot.add(orientWrap);
+    tiltPivot.rotation.z = -0.68;
+    tiltPivot.rotation.x = 0.14;
+  }
+
+  root.position.set(0, 1.02, 0.12);
+
+  function update(dt = 0.016, elapsedTime = 0) {
+    floatPivot.position.y = Math.sin(elapsedTime * 2.1) * 0.055;
+    showcaseStaffVfx?.updateVfx(elapsedTime, 0);
+  }
+
+  return { root, update };
 }
 
 function createMagePotionFlask() {
@@ -677,10 +1629,30 @@ function createAnimController(modelRoot, clipMap, idleClipName = 'Idle', moveCli
     mixer.update(0.016);
   }
 
+  function syncPhase(clipName, phase01 = 0) {
+    if (activeDeathAction) return false;
+    const act = getAction(clipName) || getAction(moveClipName) || getAction(idleClipName);
+    if (!act) return false;
+    const clip = act.getClip();
+    const dur = clip?.duration || 0.8;
+    const wrapped = ((phase01 % 1) + 1) % 1;
+    if (currentBase !== act) {
+      if (currentBase) currentBase.stop();
+      act.reset().play();
+      currentBase = act;
+    }
+    act.enabled = true;
+    act.paused = true;
+    act.weight = 1.0;
+    act.time = wrapped * dur;
+    mixer.update(0);
+    return true;
+  }
+
   setBaseState(idleClipName, 1.0);
   mixer.update(0.016);
 
-  return { mixer, setBaseState, triggerOneShot, triggerHit, triggerDeath, resetAlive };
+  return { mixer, setBaseState, syncPhase, triggerOneShot, triggerHit, triggerDeath, resetAlive };
 }
 
 // ============================================================================
@@ -695,11 +1667,103 @@ const CLASS_SKELETON_ASSET = {
   mage: 'skel_mage'
 };
 
-const HERO_BASE_SCALE = 0.90;
-const STRELOK_AI_BASE_SCALE = 1.35;
+const HERO_BASE_SCALE = 1.02;
+const TRIPO_GUNSLINGER_SCALE = 1.98;
 const GUN_PIVOT_BASE_X = 0.06;
 const GUN_PIVOT_BASE_Y = 0.70;
 const GUN_PIVOT_BASE_Z = 0.24;
+
+const TRIPO_GUN_PIVOT_X = 0.02;
+const TRIPO_GUN_PIVOT_Y = 0.78;
+const TRIPO_GUN_PIVOT_Z = 0.34;
+
+const _tmpEuler = new THREE.Euler(0, 0, 0, 'XYZ');
+const _tmpDeltaQ = new THREE.Quaternion();
+const _ikShoulderW = new THREE.Vector3();
+const _ikTargetW = new THREE.Vector3();
+const _ikPoleW = new THREE.Vector3();
+const _ikDir = new THREE.Vector3();
+const _ikPoleOrtho = new THREE.Vector3();
+const _ikElbowW = new THREE.Vector3();
+const _ikDesiredLocal = new THREE.Vector3();
+const _ikParentWorldQ = new THREE.Quaternion();
+const _ikRotQ = new THREE.Quaternion();
+const _yUnit = new THREE.Vector3(0, 1, 0);
+
+function setBoneRelEuler(boneEntry, rx = 0, ry = 0, rz = 0) {
+  if (!boneEntry) return;
+  _tmpEuler.set(rx, ry, rz, 'XYZ');
+  _tmpDeltaQ.setFromEuler(_tmpEuler);
+  boneEntry.node.quaternion.copy(boneEntry.restQ).multiply(_tmpDeltaQ);
+}
+
+// Exact 2-Bone Analytic Arm IK for Mixamo limbs (+Y local bone axis along limb)
+function solveMixamoArmIK(upperEntry, foreEntry, handEntry, targetWorldPos, poleWorldPos) {
+  if (!upperEntry || !foreEntry || !handEntry) return;
+  const uNode = upperEntry.node;
+  const fNode = foreEntry.node;
+  const hNode = handEntry.node;
+  if (!uNode.parent) return;
+
+  // Reset to rest before measuring/solving
+  uNode.quaternion.copy(upperEntry.restQ);
+  fNode.quaternion.copy(foreEntry.restQ);
+  uNode.parent.updateWorldMatrix(true, false);
+  uNode.updateMatrixWorld(true);
+
+  uNode.getWorldPosition(_ikShoulderW);
+  fNode.getWorldPosition(_ikElbowW);
+  hNode.getWorldPosition(_ikTargetW);
+
+  const L1 = _ikShoulderW.distanceTo(_ikElbowW);
+  const L2 = _ikElbowW.distanceTo(_ikTargetW);
+  if (L1 < 1e-4 || L2 < 1e-4) return;
+
+  _ikDir.subVectors(targetWorldPos, _ikShoulderW);
+  const rawDist = _ikDir.length();
+  if (rawDist < 1e-4) return;
+  _ikDir.divideScalar(rawDist);
+
+  const minD = Math.abs(L1 - L2) + 0.004;
+  const maxD = (L1 + L2) * 0.992;
+  const D = Math.max(minD, Math.min(maxD, rawDist));
+
+  const cosA = Math.max(-1, Math.min(1, (L1 * L1 + D * D - L2 * L2) / (2 * L1 * D)));
+  const sinA = Math.sqrt(Math.max(0, 1 - cosA * cosA));
+
+  _ikPoleOrtho.subVectors(poleWorldPos, _ikShoulderW);
+  _ikPoleOrtho.addScaledVector(_ikDir, -_ikPoleOrtho.dot(_ikDir));
+  if (_ikPoleOrtho.lengthSq() < 1e-6) {
+    _ikPoleOrtho.set(0, -1, -0.5).addScaledVector(_ikDir, -_ikDir.y).normalize();
+  } else {
+    _ikPoleOrtho.normalize();
+  }
+
+  // Desired elbow position in world space
+  _ikElbowW
+    .copy(_ikShoulderW)
+    .addScaledVector(_ikDir, L1 * cosA)
+    .addScaledVector(_ikPoleOrtho, L1 * sinA);
+
+  // Rotate UpperArm so its +Y axis points at _ikElbowW
+  uNode.parent.getWorldQuaternion(_ikParentWorldQ);
+  _ikDesiredLocal.subVectors(_ikElbowW, _ikShoulderW).normalize();
+  _ikDesiredLocal.applyQuaternion(_ikParentWorldQ.invert());
+  const uRestDir = _yUnit.clone().applyQuaternion(upperEntry.restQ).normalize();
+  _ikRotQ.setFromUnitVectors(uRestDir, _ikDesiredLocal);
+  uNode.quaternion.copy(_ikRotQ).multiply(upperEntry.restQ);
+  uNode.updateMatrixWorld(true);
+
+  // Rotate ForeArm so its +Y axis points at targetWorldPos
+  fNode.getWorldPosition(_ikElbowW);
+  uNode.getWorldQuaternion(_ikParentWorldQ);
+  _ikDesiredLocal.subVectors(targetWorldPos, _ikElbowW).normalize();
+  _ikDesiredLocal.applyQuaternion(_ikParentWorldQ.invert());
+  const fRestDir = _yUnit.clone().applyQuaternion(foreEntry.restQ).normalize();
+  _ikRotQ.setFromUnitVectors(fRestDir, _ikDesiredLocal);
+  fNode.quaternion.copy(_ikRotQ).multiply(foreEntry.restQ);
+  fNode.updateMatrixWorld(true);
+}
 
 export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement = 'fire') {
   if (classId && typeof classId === 'object') {
@@ -709,23 +1773,34 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
     classId = opts.classId || 'warrior';
   }
   const safeClass = CLASS_SKELETON_ASSET[classId] ? classId : 'warrior';
-  const isCustomStrelok = safeClass === 'gunslinger' && gltfCache.has('strelok_ai');
-  const assetKey = isCustomStrelok
-    ? 'strelok_ai'
-    : safeClass === 'gunslinger'
-      ? 'skel_rogue'
-      : CLASS_SKELETON_ASSET[safeClass];
+  const isTripoGunslinger = safeClass === 'gunslinger' && gltfCache.has('gunslinger_tripo');
+  const isTripoWarrior = safeClass === 'warrior' && gltfCache.has('warrior_tripo');
+  const isTripoMage = safeClass === 'mage' && gltfCache.has('mage_tripo');
+  const isAnyTripoHero = isTripoGunslinger || isTripoWarrior || isTripoMage;
+  const assetKey = isTripoGunslinger
+    ? 'gunslinger_tripo'
+    : isTripoWarrior
+      ? 'warrior_tripo'
+      : isTripoMage
+        ? 'mage_tripo'
+        : CLASS_SKELETON_ASSET[safeClass];
   const asset = gltfCache.get(assetKey);
-  const heroBaseScale = isCustomStrelok ? STRELOK_AI_BASE_SCALE : HERO_BASE_SCALE;
+  const heroBaseScale = isTripoGunslinger
+    ? TRIPO_GUNSLINGER_SCALE
+    : isTripoWarrior
+      ? 2.17
+      : isTripoMage
+        ? 2.13
+        : HERO_BASE_SCALE;
 
   const root = new THREE.Group();
   let currentWeaponId =
-    weaponId || (safeClass === 'warrior' ? 'club' : safeClass === 'gunslinger' ? 'pistol' : 'spark_staff');
+    weaponId || (safeClass === 'warrior' ? 'club' : safeClass === 'gunslinger' ? 'usp_pistol' : 'spark_staff');
   let currentMageElement = mageElement || 'fire';
   let isBeast = false;
   let flashTimer = 0;
 
-  // Gunslinger two-handed carry pivot, recoil kick & reload tilt state
+  // Gunslinger two-handed carry pivot, recoil kick, pump rack & walk cycle state
   let gunCarryPivot = null;
   let gunKickTimer = 0;
   let aimHoldTimer = 0;
@@ -733,11 +1808,12 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
   let pumpCycleTimer = 0;
   let isReloadingState = false;
   let reloadBlend = 0;
+  let walkPhase = 0;
+  let moveBlend = 0;
 
   let modelInstance = null;
   let animCtrl = null;
   const instanceMats = [];
-  const aiGunMatEntries = [];
   let handR = null;
   let handL = null;
   let chestBone = null;
@@ -746,10 +1822,27 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
   let upperArmL = null;
   let lowerArmL = null;
   let mountedWeaponObj = null;
+  let embeddedWarriorSwordNode = null;
+  let embeddedShotgunNode = null;
+  let embeddedStaffMesh = null;
+  let embeddedStaffVfx = null;
+  let staffCastPulse = 0;
+  let warriorAttackTimer = 0;
+  let warriorAttackDur = 0.45;
+  const hasBakedGunslingerClips = Boolean(isTripoGunslinger && asset?.clips && asset.clips.has('Idle'));
 
-  if (safeClass === 'gunslinger' && !isCustomStrelok) {
+  // Mixamo skeletal rig map for Tripo Gunslinger (used when IK fallback is active)
+  const mx = Object.create(null);
+  const mxFingersL = [];
+  const mxFingersR = [];
+
+  if (safeClass === 'gunslinger' && !hasBakedGunslingerClips) {
     gunCarryPivot = new THREE.Group();
-    gunCarryPivot.position.set(GUN_PIVOT_BASE_X, GUN_PIVOT_BASE_Y, GUN_PIVOT_BASE_Z);
+    if (isTripoGunslinger) {
+      gunCarryPivot.position.set(TRIPO_GUN_PIVOT_X, TRIPO_GUN_PIVOT_Y, TRIPO_GUN_PIVOT_Z);
+    } else {
+      gunCarryPivot.position.set(GUN_PIVOT_BASE_X, GUN_PIVOT_BASE_Y, GUN_PIVOT_BASE_Z);
+    }
     root.add(gunCarryPivot);
   }
 
@@ -774,14 +1867,36 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
   if (asset) {
     modelInstance = cloneSkinned(asset.scene);
     modelInstance.scale.setScalar(heroBaseScale);
+    if (isTripoWarrior || isTripoMage || hasBakedGunslingerClips) {
+      // Blender baked Mixamo NLA export faces +X in glTF Y-up; rotate -90 deg around Y to face +Z!
+      modelInstance.rotation.y = -Math.PI * 0.5;
+    }
     root.add(modelInstance);
 
     let headBone = null;
 
     modelInstance.traverse((node) => {
       const nm = node.name || '';
+      const mxMatch = isTripoGunslinger ? nm.match(/^mixamorig:?(.+)$/) : null;
+      if (mxMatch) {
+        const shortName = mxMatch[1];
+        const entry = {
+          node,
+          restQ: node.quaternion.clone(),
+          restPos: node.position.clone()
+        };
+        mx[shortName] = entry;
+        if (/^LeftHand(Index|Middle|Ring|Pinky)[123]$/.test(shortName)) {
+          mxFingersL.push(entry);
+        } else if (/^RightHand(Index|Middle|Ring|Pinky)[123]$/.test(shortName)) {
+          mxFingersR.push(entry);
+        }
+      }
+
       if (/^handslot\.?r$/i.test(nm) || (!handR && /^hand\.?r$/i.test(nm))) handR = node;
+      if ((isTripoWarrior || isTripoMage) && /^mixamorig:?RightHand$/i.test(nm)) handR = node;
       if (/^handslot\.?l$/i.test(nm) || (!handL && /^hand\.?l$/i.test(nm))) handL = node;
+      if ((isTripoWarrior || isTripoMage) && /^mixamorig:?LeftHand$/i.test(nm)) handL = node;
       if (/^chest$/i.test(nm)) chestBone = node;
       if (/^head$/i.test(nm)) headBone = node;
       if (/^upperarm\.?r$/i.test(nm)) upperArmR = node;
@@ -791,21 +1906,11 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
 
       if (node.isMesh && node.material) {
         const isEyeMesh = /Eyes/i.test(node.name);
-        const isAiGunMesh = isCustomStrelok && /Strelok_Gun/i.test(node.name);
         const isCloakOrScarf = /Cloak|Cape/i.test(node.name);
         const isRogueHood = /Skeleton_Rogue_Hood/i.test(node.name);
         const isMageHatOrRobe = /Skeleton_Mage_(Hat|Body)/i.test(node.name);
 
         if (isEyeMesh) {
-          if (isCustomStrelok) {
-            const eyeMat = node.material.clone();
-            if (eyeMat.emissive) eyeMat.emissive.setHex(0xffffff);
-            eyeMat.emissiveIntensity = 2.6;
-            eyeMat.roughness = 0.2;
-            node.material = eyeMat;
-            instanceMats.push({ mat: eyeMat, baseEmissive: 0xffffff, baseEmissiveInt: 2.6 });
-            return;
-          }
           const eyeMat = new THREE.MeshStandardMaterial({
             color: 0xffc13b,
             emissive: 0xff6a00,
@@ -813,7 +1918,7 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
             roughness: 0.15
           });
           node.material = eyeMat;
-          instanceMats.push({ mat: eyeMat, baseEmissive: 0xff6a00, baseEmissiveInt: 2.6 });
+          instanceMats.push({ mat: eyeMat, baseEmissive: 0xff6a00, baseEmissiveInt: 2.6, hasEyeMap: false });
           return;
         }
 
@@ -824,7 +1929,25 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
         const list = Array.isArray(cloned) ? cloned : [cloned];
 
         for (const m of list) {
-          if (!isCustomStrelok) {
+          const isEmbeddedWeaponMesh = /HeroWeapon|Sword|Staff|Shotgun/i.test(node.name);
+          if (isTripoMage && isEmbeddedWeaponMesh && !embeddedStaffMesh) {
+            embeddedStaffMesh = node;
+          }
+          if (isTripoWarrior && /HeroWeapon_Sword/i.test(node.name) && !embeddedWarriorSwordNode) {
+            embeddedWarriorSwordNode = node;
+          }
+          if (isTripoGunslinger && /HeroWeapon_Shotgun/i.test(node.name) && !embeddedShotgunNode) {
+            embeddedShotgunNode = node;
+          }
+          if (isAnyTripoHero) {
+            if (m.color) m.color.setHex(0xffffff);
+            const eyeTex = cachedEyeEmissiveTextures.get(assetKey);
+            if (eyeTex && !isEmbeddedWeaponMesh && m.emissive !== undefined) {
+              m.emissiveMap = eyeTex;
+              m.emissive.setHex(isTripoMage ? 0xff5200 : 0xff7a00);
+              m.emissiveIntensity = 2.35;
+            }
+          } else {
             if (isCloakOrScarf && (safeClass === 'warrior' || safeClass === 'gunslinger') && m.color) {
               m.color.setHex(0x9b2226);
             } else if (isRogueHood && m.color) {
@@ -836,42 +1959,319 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
           const entry = {
             mat: m,
             baseEmissive: m.emissive ? m.emissive.getHex() : 0x000000,
-            baseEmissiveInt: m.emissiveIntensity || 0
+            baseEmissiveInt: m.emissiveIntensity || 0,
+            hasEyeMap: Boolean(m.emissiveMap)
           };
           instanceMats.push(entry);
-          if (isAiGunMesh) {
-            aiGunMatEntries.push(entry);
-          }
         }
       }
     });
 
-    if (headBone && !isCustomStrelok) {
+    if (headBone && !isAnyTripoHero) {
       headBone.scale.setScalar(1.14);
     }
 
-    if (safeClass === 'warrior') {
+    if (safeClass === 'warrior' && !isTripoWarrior) {
       if (handL) {
         handL.add(createSkullShield(false));
       }
-    } else if (safeClass === 'gunslinger' && !isCustomStrelok) {
+    } else if (safeClass === 'gunslinger' && !isTripoGunslinger) {
       if (chestBone) {
         const pack = createBackpackWithBedroll();
         pack.position.set(0, 0.22, -0.26);
         chestBone.add(pack);
       }
-    } else if (safeClass === 'mage') {
+    } else if (safeClass === 'mage' && !isTripoMage) {
       if (handL) {
         handL.add(createMagePotionFlask());
       }
     }
 
-    const moveClipName = isCustomStrelok ? 'Walk' : 'Running_A';
-    animCtrl = createAnimController(modelInstance, asset.clips, 'Idle', moveClipName);
+    if (!isTripoGunslinger || hasBakedGunslingerClips) {
+      animCtrl = createAnimController(modelInstance, asset.clips, 'Idle', 'Running_A');
+    }
+
+    // Mount Bone-Locked Living GLSL Water/Elemental Sphere right inside HeroWeapon_Staff's wooden claws (0.000mm drift!)
+    if (isTripoMage && embeddedStaffMesh) {
+      embeddedStaffVfx = createLivingStaffOrbVfx(9.95, currentMageElement || 'water');
+      embeddedStaffVfx.group.position.set(-3.8114, 81.55, 0.3818);
+      embeddedStaffMesh.add(embeddedStaffVfx.group);
+    }
+  }
+
+  const gripSocketR = new THREE.Object3D();
+  const forendSocketL = new THREE.Object3D();
+  const poleTargetR = new THREE.Object3D();
+  const poleTargetL = new THREE.Object3D();
+  const footTargetL = new THREE.Object3D();
+  const footTargetR = new THREE.Object3D();
+  const kneePoleL = new THREE.Object3D();
+  const kneePoleR = new THREE.Object3D();
+  const footRestRootQL = new THREE.Quaternion();
+  const footRestRootQR = new THREE.Quaternion();
+
+  function makeBasisQuat(yx, yy, yz, zx, zy, zz) {
+    const yv = new THREE.Vector3(yx, yy, yz).normalize();
+    const zv = new THREE.Vector3(zx, zy, zz);
+    zv.addScaledVector(yv, -zv.dot(yv)).normalize();
+    const xv = new THREE.Vector3().crossVectors(yv, zv).normalize();
+    zv.crossVectors(xv, yv).normalize();
+    const m4 = new THREE.Matrix4().makeBasis(xv, yv, zv);
+    return new THREE.Quaternion().setFromRotationMatrix(m4);
+  }
+
+  if (isTripoGunslinger && gunCarryPivot) {
+    // Exact Pistol Grip/Trigger (Right Hand) & Under-Forend Palm-Up (Left Hand) sockets matching Blender 10/10 rig!
+    gripSocketR.position.set(-0.052, -0.076, -0.210);
+    gripSocketR.quaternion.copy(makeBasisQuat(0.14, -0.36, 0.92, 0.96, 0.20, -0.18));
+
+    forendSocketL.position.set(0.044, -0.086, 0.062);
+    forendSocketL.quaternion.copy(makeBasisQuat(-0.86, -0.02, 0.51, -0.06, -0.995, -0.04));
+
+    gunCarryPivot.add(gripSocketR, forendSocketL);
+
+    poleTargetR.position.set(-0.48, 0.55, -0.28);
+    poleTargetL.position.set(0.45, 0.48, -0.12);
+    kneePoleL.position.set(0.16, 0.38, 1.15);
+    kneePoleR.position.set(-0.16, 0.38, 1.15);
+    footTargetL.position.set(0.151, 0.171, 0.129);
+    footTargetR.position.set(-0.144, 0.171, 0.038);
+    root.add(poleTargetR, poleTargetL, kneePoleL, kneePoleR, footTargetL, footTargetR);
+
+    // Capture rest foot world orientations in root space & pre-apply anatomical finger curls around grip & forend!
+    root.updateMatrixWorld(true);
+    const rootInvQ = root.getWorldQuaternion(new THREE.Quaternion()).invert();
+    if (mx.LeftFoot) {
+      mx.LeftFoot.node.getWorldQuaternion(footRestRootQL).premultiply(rootInvQ);
+    }
+    if (mx.RightFoot) {
+      mx.RightFoot.node.getWorldQuaternion(footRestRootQR).premultiply(rootInvQ);
+    }
+
+    const palmDownRoot = new THREE.Vector3(0, -1, 0);
+    const applyAnatomicalFingerCurl = (entry, angleRad, spreadRad = 0) => {
+      if (!entry) return;
+      const bWorldQ = entry.node.getWorldQuaternion(new THREE.Quaternion()).premultiply(rootInvQ);
+      const yDir = new THREE.Vector3(0, 1, 0).applyQuaternion(bWorldQ).normalize();
+      const hingeRoot = new THREE.Vector3().crossVectors(yDir, palmDownRoot);
+      if (hingeRoot.lengthSq() < 1e-6) return;
+      hingeRoot.normalize();
+      const bInvQ = bWorldQ.clone().invert();
+      const hingeLocal = hingeRoot.applyQuaternion(bInvQ).normalize();
+      const qCurl = new THREE.Quaternion().setFromAxisAngle(hingeLocal, angleRad);
+      if (Math.abs(spreadRad) > 1e-4) {
+        const spreadLocal = palmDownRoot.clone().applyQuaternion(bInvQ).normalize();
+        qCurl.premultiply(new THREE.Quaternion().setFromAxisAngle(spreadLocal, spreadRad));
+      }
+      entry.curlQ = entry.restQ.clone().multiply(qCurl);
+      entry.node.quaternion.copy(entry.curlQ);
+    };
+
+    for (let i = 0; i < mxFingersL.length; i++) {
+      const fEntry = mxFingersL[i];
+      const j = Number(fEntry.node.name.slice(-1)) || 1;
+      applyAnatomicalFingerCurl(fEntry, j === 1 ? 0.62 : j === 2 ? 0.76 : 0.50);
+    }
+    for (let i = 0; i < mxFingersR.length; i++) {
+      const fEntry = mxFingersR[i];
+      const nm = fEntry.node.name;
+      const j = Number(nm.slice(-1)) || 1;
+      if (nm.includes('Index')) {
+        applyAnatomicalFingerCurl(fEntry, j === 1 ? 0.35 : j === 2 ? 0.85 : 0.60);
+      } else {
+        applyAnatomicalFingerCurl(fEntry, j === 1 ? 1.05 : j === 2 ? 1.12 : 0.78);
+      }
+    }
+    for (const j of [1, 2, 3]) {
+      applyAnatomicalFingerCurl(mx[`LeftHandThumb${j}`], j === 1 ? 0.65 : 0.50, j === 1 ? 0.60 : 0);
+      applyAnatomicalFingerCurl(mx[`RightHandThumb${j}`], j === 1 ? 0.62 : 0.55, j === 1 ? 0.25 : 0);
+    }
+  }
+
+  const _gripPosW = new THREE.Vector3();
+  const _forendPosW = new THREE.Vector3();
+  const _polePosRW = new THREE.Vector3();
+  const _polePosLW = new THREE.Vector3();
+  const _footPosLW = new THREE.Vector3();
+  const _footPosRW = new THREE.Vector3();
+  const _kneePoleLW = new THREE.Vector3();
+  const _kneePoleRW = new THREE.Vector3();
+  const _rootWorldQ = new THREE.Quaternion();
+  const _parentInvQ = new THREE.Quaternion();
+  const _targetWorldQ = new THREE.Quaternion();
+  const _pitchQuat = new THREE.Quaternion();
+  const _unitX = new THREE.Vector3(1, 0, 0);
+
+  function evalTripoFootGait(u) {
+    const uu = ((u % 1) + 1) % 1;
+    const zFront = 0.267;
+    const zRear = -0.077;
+    const yFlat = 0.171;
+    if (uu < 0.48) {
+      const s = uu / 0.48;
+      const az = zFront + (zRear - zFront) * s;
+      if (s < 0.15) {
+        const k = 1 - s / 0.15;
+        return { y: yFlat + 0.010 * k, z: az, pitch: -0.28 * k };
+      }
+      if (s < 0.74) {
+        return { y: yFlat, z: az, pitch: 0 };
+      }
+      const k = (s - 0.74) / 0.26;
+      return { y: yFlat + 0.043 * k * k, z: az, pitch: 0.52 * k };
+    }
+    const s = (uu - 0.48) / 0.52;
+    const zMid = 0.5 * (zFront + zRear);
+    const zAmp = 0.5 * (zRear - zFront);
+    const az = zMid + zAmp * Math.cos(Math.PI * s);
+    const ay =
+      yFlat +
+      Math.sin(Math.PI * Math.pow(s, 0.78)) * 0.112 +
+      0.043 * Math.pow(1 - s, 2.4) +
+      0.010 * Math.pow(s, 3.0);
+    const pitch =
+      0.55 * Math.sin(Math.PI * Math.pow(s, 0.70)) * (1 - s * 0.65) +
+      0.52 * Math.pow(1 - s, 2.2) -
+      0.28 * Math.pow(s, 2.6);
+    return { y: ay, z: az, pitch };
+  }
+
+  function positionTripoGunPivot(elapsedTime, kickCurve, pumpFrac, reloadBob, beastScale) {
+    if (!isTripoGunslinger || !gunCarryPivot) return;
+    const walkBobY = Math.sin(2 * walkPhase - 0.35) * 0.010 * moveBlend;
+    const idleBobY = Math.sin(elapsedTime * 2.5) * 0.004 * (1 - moveBlend);
+    const walkSwayX = -Math.cos(walkPhase) * 0.007 * moveBlend;
+    // Natural diagonal carry across chest keeping BOTH elbows comfortably bent (snapping toward firing line when shooting!)
+    const baseDiagonalYaw = 0.72 * (1 - aimYawBlend * 0.55);
+    const carryYaw = baseDiagonalYaw + Math.sin(walkPhase) * 0.018 * moveBlend;
+
+    gunCarryPivot.scale.setScalar(beastScale);
+    gunCarryPivot.position.set(
+      (TRIPO_GUN_PIVOT_X + walkSwayX) * beastScale,
+      (TRIPO_GUN_PIVOT_Y + walkBobY + idleBobY + kickCurve * 0.026 + reloadBob * 0.018) * beastScale,
+      (TRIPO_GUN_PIVOT_Z - kickCurve * 0.068 - pumpFrac * 0.014 - reloadBlend * 0.03) * beastScale
+    );
+    gunCarryPivot.rotation.set(
+      -0.04 - kickCurve * 0.24 + pumpFrac * 0.05 + reloadBlend * 0.20 + reloadBob * 0.05,
+      carryYaw + reloadBlend * -0.08,
+      reloadBlend * 0.26
+    );
+
+    // Slide left-hand forend socket back & forth underneath wooden forend during pump-action rack!
+    forendSocketL.position.set(
+      0.044,
+      -0.086 - reloadBob * 0.015,
+      0.062 - pumpFrac * 0.055 - reloadBlend * 0.02
+    );
+  }
+
+  function applyTripoGunslingerPose(elapsedTime, kickCurve) {
+    if (!isTripoGunslinger || !mx.Hips) return;
+    const m = moveBlend;
+    const idle = 1 - m;
+    const p = walkPhase;
+    const breath = Math.sin(elapsedTime * 2.5);
+
+    // 1. MONOLITHIC HIPS + SPINE:
+    //    - Steady tactical left-side-leading yaw (-0.28 rad) with ZERO spine twisting (Spine/Spine1/Spine2 = 0!)
+    //    - Subtle elastic ±0.006m step spring (NO downward pelvic dive!)
+    const stanceYaw = -0.28 * (1 - aimYawBlend * 0.45);
+    const hipsYOffset = -0.018 * idle + (-0.021 + Math.sin(2 * p - 0.4) * 0.006) * m + breath * 0.002 * idle;
+
+    // Note: in Mixamo Hips local space, X=(-Z_root backward/forward), Y=(+Y_root up), Z=(-X_root)
+    mx.Hips.node.position.set(
+      mx.Hips.restPos.x - kickCurve * 0.016,
+      mx.Hips.restPos.y + hipsYOffset,
+      mx.Hips.restPos.z
+    );
+    setBoneRelEuler(mx.Hips, 0, stanceYaw, -0.05 - 0.02 * m + kickCurve * 0.09);
+
+    // Lock Spine, Spine1, Spine2 at (0,0,0) -> entire Torso + Belt + Backpack move as ONE SOLID MONOLITH!
+    setBoneRelEuler(mx.Spine, 0, 0, 0);
+    setBoneRelEuler(mx.Spine1, 0, 0, 0);
+    setBoneRelEuler(mx.Spine2, 0, 0, 0);
+
+    // 2. Neck & Head: steady forward gaze along +Z
+    const counterYaw = -stanceYaw * 1.02;
+    setBoneRelEuler(mx.Neck, 0, counterYaw * 0.44, 0.02);
+    setBoneRelEuler(
+      mx.Head,
+      0,
+      counterYaw * 0.56 + Math.sin(elapsedTime * 1.4) * 0.02 * idle,
+      0.03 - kickCurve * 0.05
+    );
+
+    // 3. 2-Bone Biomechanical Foot IK (65-85 deg knee bend on swing, flat boot on stance!)
+    const beastScale = isBeast ? 1.78 : 1.0;
+    const uL = (p / (Math.PI * 2)) % 1;
+    const uR = (uL + 0.5) % 1;
+    const gL = evalTripoFootGait(uL);
+    const gR = evalTripoFootGait(uR);
+
+    const footLY = (0.171 * idle + gL.y * m) * beastScale;
+    const footLZ = (0.129 * idle + gL.z * m) * beastScale;
+    const pitchL = gL.pitch * m;
+
+    const footRY = (0.171 * idle + gR.y * m) * beastScale;
+    const footRZ = (0.038 * idle + gR.z * m) * beastScale;
+    const pitchR = gR.pitch * m;
+
+    footTargetL.position.set(0.151 * beastScale, footLY, footLZ);
+    footTargetR.position.set(-0.144 * beastScale, footRY, footRZ);
+    kneePoleL.position.set(0.16 * beastScale, 0.38 * beastScale, 1.15 * beastScale);
+    kneePoleR.position.set(-0.16 * beastScale, 0.38 * beastScale, 1.15 * beastScale);
+
+    // Calm shoulders + twist-free Arm IK
+    setBoneRelEuler(mx.LeftShoulder, 0, 0.04, -0.20);
+    setBoneRelEuler(mx.RightShoulder, 0, 0, 0.04);
+    root.updateMatrixWorld(true);
+    root.getWorldQuaternion(_rootWorldQ);
+
+    footTargetL.getWorldPosition(_footPosLW);
+    footTargetR.getWorldPosition(_footPosRW);
+    kneePoleL.getWorldPosition(_kneePoleLW);
+    kneePoleR.getWorldPosition(_kneePoleRW);
+
+    solveMixamoArmIK(mx.LeftUpLeg, mx.LeftLeg, mx.LeftFoot, _footPosLW, _kneePoleLW);
+    solveMixamoArmIK(mx.RightUpLeg, mx.RightLeg, mx.RightFoot, _footPosRW, _kneePoleRW);
+
+    // World-aligned Foot pitch so stance boot stays flat on arena floor!
+    if (mx.LeftFoot && mx.LeftFoot.node.parent) {
+      mx.LeftFoot.node.parent.getWorldQuaternion(_parentInvQ).invert();
+      _pitchQuat.setFromAxisAngle(_unitX, pitchL);
+      _targetWorldQ.copy(_rootWorldQ).multiply(_pitchQuat).multiply(footRestRootQL);
+      mx.LeftFoot.node.quaternion.copy(_parentInvQ).multiply(_targetWorldQ);
+    }
+    if (mx.RightFoot && mx.RightFoot.node.parent) {
+      mx.RightFoot.node.parent.getWorldQuaternion(_parentInvQ).invert();
+      _pitchQuat.setFromAxisAngle(_unitX, pitchR);
+      _targetWorldQ.copy(_rootWorldQ).multiply(_pitchQuat).multiply(footRestRootQR);
+      mx.RightFoot.node.quaternion.copy(_parentInvQ).multiply(_targetWorldQ);
+    }
+
+    // 4. 2-Bone Arm IK + Exact World Hand Copy-Rotation onto Trigger/Grip & Underneath Wooden Forend!
+    gripSocketR.getWorldPosition(_gripPosW);
+    forendSocketL.getWorldPosition(_forendPosW);
+    poleTargetR.getWorldPosition(_polePosRW);
+    poleTargetL.getWorldPosition(_polePosLW);
+
+    solveMixamoArmIK(mx.RightArm, mx.RightForeArm, mx.RightHand, _gripPosW, _polePosRW);
+    solveMixamoArmIK(mx.LeftArm, mx.LeftForeArm, mx.LeftHand, _forendPosW, _polePosLW);
+
+    if (mx.RightHand && mx.RightHand.node.parent) {
+      mx.RightHand.node.parent.getWorldQuaternion(_parentInvQ).invert();
+      gripSocketR.getWorldQuaternion(_targetWorldQ);
+      mx.RightHand.node.quaternion.copy(_parentInvQ).multiply(_targetWorldQ);
+    }
+    if (mx.LeftHand && mx.LeftHand.node.parent) {
+      mx.LeftHand.node.parent.getWorldQuaternion(_parentInvQ).invert();
+      forendSocketL.getWorldQuaternion(_targetWorldQ);
+      mx.LeftHand.node.quaternion.copy(_parentInvQ).multiply(_targetWorldQ);
+    }
   }
 
   function applyGunslingerArmPose() {
-    if (safeClass !== 'gunslinger' || isCustomStrelok) return;
+    if (safeClass !== 'gunslinger' || isTripoGunslinger) return;
     if (upperArmL) upperArmL.quaternion.slerp(GUN_UPPER_ARM_L_Q, 0.90);
     if (lowerArmL) {
       if (reloadBlend > 0.02) {
@@ -888,32 +2288,66 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
   function setWeapon(newWeaponId, nextElement = null) {
     currentWeaponId = newWeaponId || currentWeaponId;
     if (nextElement) currentMageElement = nextElement;
-    if (isCustomStrelok) {
-      const gunHex =
-        currentWeaponId === 'gatling'
-          ? 0x0284c7
-          : currentWeaponId === 'blunderbuss'
-            ? 0xea580c
-            : 0x000000;
-      const gunInt =
-        currentWeaponId === 'gatling'
-          ? 0.36
-          : currentWeaponId === 'blunderbuss'
-            ? 0.28
-            : 0.0;
-      for (const entry of aiGunMatEntries) {
-        entry.baseEmissive = gunHex;
-        entry.baseEmissiveInt = gunInt;
-        if (!isBeast && flashTimer <= 0 && entry.mat.emissive) {
-          entry.mat.emissive.setHex(gunHex);
-          entry.mat.emissiveIntensity = gunInt;
-        }
-      }
-      return;
+    if (embeddedStaffVfx) {
+      embeddedStaffVfx.setElementTheme(currentMageElement);
     }
     if (mountedWeaponObj && mountedWeaponObj.parent) {
       mountedWeaponObj.parent.remove(mountedWeaponObj);
     }
+    mountedWeaponObj = null;
+
+    if (isTripoMage) {
+      return;
+    }
+
+    if (isTripoWarrior) {
+      const useEmbeddedSword = currentWeaponId === 'club' || !WEAPONS[currentWeaponId];
+      if (embeddedWarriorSwordNode) {
+        embeddedWarriorSwordNode.visible = useEmbeddedSword;
+      }
+      if (useEmbeddedSword || !handR) {
+        return;
+      }
+      mountedWeaponObj = createHeroWeaponMesh(currentWeaponId, null);
+      handR.add(mountedWeaponObj);
+      return;
+    }
+
+    if (hasBakedGunslingerClips) {
+      const usesEmbeddedShotgun =
+        currentWeaponId === 'pistol' || currentWeaponId === 'blunderbuss' || currentWeaponId === 'gatling';
+      if (embeddedShotgunNode) {
+        embeddedShotgunNode.visible = usesEmbeddedShotgun;
+      }
+      if (usesEmbeddedShotgun) {
+        return;
+      }
+      const meshObj = createHeroWeaponMesh(currentWeaponId, null);
+      const mountParent = embeddedShotgunNode?.parent || handR;
+      if (mountParent) {
+        const gunSocket = new THREE.Group();
+        if (embeddedShotgunNode) {
+          gunSocket.position.copy(embeddedShotgunNode.position);
+          gunSocket.quaternion.copy(embeddedShotgunNode.quaternion);
+          if (currentWeaponId === 'usp_pistol' || currentWeaponId === 'colt') {
+            // Pull 1H sidearms closer to the right-hand palm so they sit right in the grip!
+            gunSocket.position.y *= 0.56;
+            gunSocket.position.z *= 0.52;
+          } else {
+            gunSocket.position.y *= 0.85;
+            gunSocket.position.z *= 0.82;
+          }
+        }
+        gunSocket.userData.basePos = gunSocket.position.clone();
+        gunSocket.userData.baseQuat = gunSocket.quaternion.clone();
+        meshObj.position.set(0, 0, 0);
+        gunSocket.add(meshObj);
+        mountParent.add(gunSocket);
+        mountedWeaponObj = gunSocket;
+      }
+      return;
+    }
+
     mountedWeaponObj = createHeroWeaponMesh(currentWeaponId, safeClass === 'mage' ? currentMageElement : null);
     if (safeClass === 'gunslinger' && gunCarryPivot) {
       gunCarryPivot.add(mountedWeaponObj);
@@ -923,15 +2357,23 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
   }
 
   function setElement(newElement) {
-    if (!newElement || newElement === currentMageElement) return;
+    if (!newElement) return;
     currentMageElement = newElement;
+    if (embeddedStaffVfx) {
+      embeddedStaffVfx.setElementTheme(currentMageElement);
+    }
     if (safeClass === 'mage') {
       setWeapon(currentWeaponId, currentMageElement);
     }
   }
 
   setWeapon(currentWeaponId);
-  applyGunslingerArmPose();
+  if (isTripoGunslinger && !hasBakedGunslingerClips) {
+    positionTripoGunPivot(0, 0, 0, 0, 1);
+    applyTripoGunslingerPose(0, 0, 0);
+  } else if (!hasBakedGunslingerClips) {
+    applyGunslingerArmPose();
+  }
 
   function setBeastMode(enabled) {
     isBeast = Boolean(enabled);
@@ -942,15 +2384,14 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
     }
     if (gunCarryPivot) {
       gunCarryPivot.scale.setScalar(beastScale);
-      gunCarryPivot.position.set(
-        GUN_PIVOT_BASE_X * beastScale,
-        GUN_PIVOT_BASE_Y * beastScale,
-        GUN_PIVOT_BASE_Z * beastScale
-      );
+      const bx = isTripoGunslinger ? TRIPO_GUN_PIVOT_X : GUN_PIVOT_BASE_X;
+      const by = isTripoGunslinger ? TRIPO_GUN_PIVOT_Y : GUN_PIVOT_BASE_Y;
+      const bz = isTripoGunslinger ? TRIPO_GUN_PIVOT_Z : GUN_PIVOT_BASE_Z;
+      gunCarryPivot.position.set(bx * beastScale, by * beastScale, bz * beastScale);
     }
     const beastGlow = safeClass === 'warrior' ? 0xd9480f : safeClass === 'gunslinger' ? 0x2563eb : 0x9333ea;
     for (const item of instanceMats) {
-      if (item.mat.emissive && item.baseEmissiveInt < 2.0) {
+      if (item.mat.emissive && !item.hasEyeMap && item.baseEmissiveInt < 2.0) {
         item.mat.emissive.setHex(isBeast ? beastGlow : item.baseEmissive);
         item.mat.emissiveIntensity = isBeast ? 0.55 : item.baseEmissiveInt;
       }
@@ -961,39 +2402,207 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
     isReloadingState = Boolean(reloadingBool);
   }
 
-  function playAttackAnim() {
-    if (isCustomStrelok) {
-      gunKickTimer = 0.24;
-      aimHoldTimer = 0.55;
-      animCtrl?.triggerOneShot('Shoot', 1.65);
-      return;
-    }
+  function computeSyncedClipSpeed(clipName, fallbackSpeed, attackDuration) {
+    if (!attackDuration || attackDuration <= 0 || !asset?.clips) return fallbackSpeed;
+    const cl = asset.clips.get(clipName);
+    if (!cl || !cl.duration) return fallbackSpeed;
+    const minNeededSpeed = cl.duration / Math.max(0.18, attackDuration * 0.90);
+    return Math.min(3.8, Math.max(fallbackSpeed, minNeededSpeed));
+  }
+
+  function playAttackAnim(_weaponType = null, attackDuration = 0) {
     if (safeClass === 'gunslinger') {
-      gunKickTimer = 0.22;
-      pumpCycleTimer = currentWeaponId === 'pistol' ? 0.36 : 0;
+      gunKickTimer = Math.min(0.24, Math.max(0.11, (attackDuration || 0.25) * 0.65));
+      if (hasBakedGunslingerClips && animCtrl) {
+        animCtrl.triggerOneShot('Shoot', computeSyncedClipSpeed('Shoot', 1.75, attackDuration));
+        return;
+      }
+      aimHoldTimer = 0.65;
+      pumpCycleTimer = currentWeaponId === 'pistol' ? 0.38 : 0.22;
       return;
     }
     if (!animCtrl) return;
     if (safeClass === 'warrior') {
+      warriorAttackDur = attackDuration > 0 ? Math.max(0.28, Math.min(0.95, attackDuration * 0.85)) : 0.44;
+      warriorAttackTimer = warriorAttackDur;
+      if (isTripoWarrior) {
+        const baseClipSpd = currentWeaponId === 'axe' || currentWeaponId === 'boss_hammer' ? 1.25 : 1.65;
+        animCtrl.triggerOneShot(
+          '1H_Melee_Attack_Slice_Horizontal',
+          computeSyncedClipSpeed('1H_Melee_Attack_Slice_Horizontal', baseClipSpd, attackDuration)
+        );
+        return;
+      }
       const clip =
         currentWeaponId === 'flail'
           ? '2H_Melee_Attack_Spin'
           : currentWeaponId === 'cleaver'
             ? '2H_Melee_Attack_Slice'
             : '1H_Melee_Attack_Slice_Horizontal';
-      animCtrl.triggerOneShot(clip, 1.85);
+      animCtrl.triggerOneShot(clip, computeSyncedClipSpeed(clip, 1.85, attackDuration));
     } else {
-      animCtrl.triggerOneShot('Spellcast_Shoot', 1.9);
+      staffCastPulse = 1.0;
+      const baseSpd = isTripoMage ? 1.72 : 1.9;
+      animCtrl.triggerOneShot('Spellcast_Shoot', computeSyncedClipSpeed('Spellcast_Shoot', baseSpd, attackDuration));
     }
   }
 
   function flashHit() {
     flashTimer = 0.12;
     for (const item of instanceMats) {
-      if (item.mat.emissive && item.baseEmissiveInt < 2.0) {
+      if (item.mat.emissive && !item.hasEyeMap && item.baseEmissiveInt < 2.0) {
         item.mat.emissive.setHex(0xff3b30);
         item.mat.emissiveIntensity = 0.85;
       }
+    }
+  }
+
+  const _wEuler = new THREE.Euler(0, 0, 0, 'XYZ');
+  const _wQuat = new THREE.Quaternion();
+
+  function applyWarriorWeaponAnimOverlay(safeDt, isMoving, elapsedTime) {
+    if (safeClass !== 'warrior' || !modelInstance) return;
+    if (warriorAttackTimer > 0) {
+      warriorAttackTimer = Math.max(0, warriorAttackTimer - safeDt);
+    }
+    const wId = currentWeaponId || 'club';
+    const isSpear = wId === 'spear';
+    const isAxe = wId === 'axe';
+    const isHammer = wId === 'boss_hammer';
+    const isZwei = wId === 'zweihander';
+    const isTwoHand = isSpear || isZwei || isAxe || isHammer;
+
+    // Reset lunge displacement smoothly when idle/running
+    let lungeZ = 0;
+
+    // Two-handed guard & heavy run posture for Spear / Zweihander / Axe / Hammer
+    if (isTwoHand) {
+      const sway = isMoving ? Math.sin(elapsedTime * 9.5) * 0.08 : Math.sin(elapsedTime * 2.2) * 0.025;
+      if (upperArmL) {
+        _wEuler.set(0.28 + sway, 0.24, -0.42);
+        _wQuat.setFromEuler(_wEuler);
+        upperArmL.quaternion.multiply(_wQuat);
+      }
+      if (lowerArmL) {
+        _wEuler.set(-0.36, 0.34, 0.22);
+        _wQuat.setFromEuler(_wEuler);
+        lowerArmL.quaternion.multiply(_wQuat);
+      }
+      if (isSpear && upperArmR && warriorAttackTimer <= 0) {
+        // Carry spear angled forward at the ready
+        _wEuler.set(-0.22 + sway * 0.5, -0.18, 0.28);
+        _wQuat.setFromEuler(_wEuler);
+        upperArmR.quaternion.multiply(_wQuat);
+      } else if ((isAxe || isHammer || isZwei) && isMoving && upperArmR && warriorAttackTimer <= 0) {
+        // Heavy rested grip while charging in
+        _wEuler.set(0.14 + sway, 0.16, 0.18);
+        _wQuat.setFromEuler(_wEuler);
+        upperArmR.quaternion.multiply(_wQuat);
+      }
+    }
+
+    if (warriorAttackTimer > 0 && warriorAttackDur > 0) {
+      const u = Math.max(0, Math.min(1, 1 - warriorAttackTimer / warriorAttackDur));
+      if (isSpear) {
+        // Sharp forward spear thrust lunge!
+        const thrust = u < 0.38 ? u / 0.38 : Math.max(0, 1 - (u - 0.38) / 0.62);
+        const sharp = Math.sin(thrust * Math.PI * 0.5);
+        lungeZ = sharp * 0.28;
+        if (chestBone) {
+          _wEuler.set(sharp * 0.24, -sharp * 0.28, 0);
+          _wQuat.setFromEuler(_wEuler);
+          chestBone.quaternion.multiply(_wQuat);
+        }
+        if (upperArmR) {
+          _wEuler.set(-sharp * 0.72, -sharp * 0.48, 0.55 * sharp);
+          _wQuat.setFromEuler(_wEuler);
+          upperArmR.quaternion.multiply(_wQuat);
+        }
+        if (lowerArmR) {
+          _wEuler.set(0, -0.35 * sharp, -0.45 * sharp);
+          _wQuat.setFromEuler(_wEuler);
+          lowerArmR.quaternion.multiply(_wQuat);
+        }
+      } else if (isAxe) {
+        // Wide sweeping left-right splash chop!
+        const sweep = Math.sin(u * Math.PI);
+        if (chestBone) {
+          _wEuler.set(0.18 * sweep, Math.cos(u * Math.PI) * 0.42, 0.12 * sweep);
+          _wQuat.setFromEuler(_wEuler);
+          chestBone.quaternion.multiply(_wQuat);
+        }
+        if (upperArmR) {
+          _wEuler.set(0.15 * sweep, Math.cos(u * Math.PI) * 0.55, -0.35 * sweep);
+          _wQuat.setFromEuler(_wEuler);
+          upperArmR.quaternion.multiply(_wQuat);
+        }
+      } else {
+        // Sword ('club'), Zweihander & Hammer: diagonal TOP-DOWN overhead cleave (сверху вниз / наискось вниз)!
+        const wind = u < 0.28 ? u / 0.28 : 0;
+        const chop = u >= 0.28 ? Math.sin(Math.min(1, (u - 0.28) / 0.52) * Math.PI * 0.5) : 0;
+        const release = u > 0.80 ? 1 - (u - 0.80) / 0.20 : 1;
+        const heaviness = isHammer ? 1.32 : isZwei ? 1.18 : 1.0;
+        const pitchDelta = (-0.82 * wind + 1.15 * chop) * heaviness * release;
+        const rollDelta = (0.35 * wind - 0.62 * chop) * release;
+        if (chestBone) {
+          _wEuler.set(0.28 * chop * release - 0.14 * wind, -0.22 * chop * release, rollDelta * 0.35);
+          _wQuat.setFromEuler(_wEuler);
+          chestBone.quaternion.multiply(_wQuat);
+        }
+        if (upperArmR) {
+          _wEuler.set(pitchDelta, -0.25 * chop * release, rollDelta);
+          _wQuat.setFromEuler(_wEuler);
+          upperArmR.quaternion.multiply(_wQuat);
+        }
+        if (lowerArmR) {
+          _wEuler.set(0.25 * chop * release, 0, -0.32 * wind + 0.24 * chop * release);
+          _wQuat.setFromEuler(_wEuler);
+          lowerArmR.quaternion.multiply(_wQuat);
+        }
+      }
+    }
+
+    modelInstance.position.z = lungeZ;
+  }
+
+  function applyGunslingerWeaponAnimOverlay(safeDt, isMoving, elapsedTime) {
+    if (safeClass !== 'gunslinger' || !hasBakedGunslingerClips || !modelInstance) return;
+    if (gunKickTimer > 0) {
+      gunKickTimer = Math.max(0, gunKickTimer - safeDt);
+    }
+    const wId = currentWeaponId || 'usp_pistol';
+    const isOneHandPistol = wId === 'usp_pistol' || wId === 'colt';
+
+    if (isOneHandPistol) {
+      // Relax left arm out of the baked two-handed shotgun forend hold into a balanced 1-handed pistol stance!
+      const walkSwing = isMoving ? Math.sin(elapsedTime * 11.2) * 0.24 : Math.sin(elapsedTime * 2.1) * 0.04;
+      if (mx.LeftArm?.node) {
+        _wEuler.set(0.55 + walkSwing, -0.22, -0.68);
+        _wQuat.setFromEuler(_wEuler);
+        mx.LeftArm.node.quaternion.multiply(_wQuat);
+      }
+      if (mx.LeftForeArm?.node) {
+        _wEuler.set(-0.35, 0.20, 0.28);
+        _wQuat.setFromEuler(_wEuler);
+        mx.LeftForeArm.node.quaternion.multiply(_wQuat);
+      }
+      if (mx.RightArm?.node) {
+        const kickLift = gunKickTimer > 0 ? Math.sin((gunKickTimer / 0.22) * Math.PI) * (wId === 'colt' ? 0.32 : 0.16) : 0;
+        _wEuler.set(-0.14 - kickLift, 0.10, 0.08);
+        _wQuat.setFromEuler(_wEuler);
+        mx.RightArm.node.quaternion.multiply(_wQuat);
+      }
+    }
+
+    if (mountedWeaponObj?.userData?.basePos && mountedWeaponObj?.userData?.baseQuat) {
+      const kick = gunKickTimer > 0 ? Math.sin((gunKickTimer / 0.22) * Math.PI) : 0;
+      const recoilStrength = wId === 'colt' ? 0.045 : wId === 'ak47' ? 0.032 : wId === 'smg' ? 0.020 : 0.025;
+      mountedWeaponObj.position.copy(mountedWeaponObj.userData.basePos);
+      mountedWeaponObj.position.z -= kick * recoilStrength;
+      mountedWeaponObj.position.y += kick * recoilStrength * 0.45;
+      _wEuler.set(-kick * (isOneHandPistol ? 0.22 : 0.08), 0, 0);
+      _wQuat.setFromEuler(_wEuler);
+      mountedWeaponObj.quaternion.copy(mountedWeaponObj.userData.baseQuat).multiply(_wQuat);
     }
   }
 
@@ -1001,84 +2610,94 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
     const safeDt = Math.min(Math.max(dt || 0.016, 0), 0.1);
     if (animCtrl) {
       if (isMoving) {
-        if (isCustomStrelok) {
-          animCtrl.setBaseState('Walk', Math.max(1.05, Math.min(2.2, speedRatio * 1.55)));
-        } else {
-          animCtrl.setBaseState(isBeast ? 'Running_B' : 'Running_A', Math.max(0.85, Math.min(1.8, speedRatio * 1.18)));
-        }
+        const runClip = isBeast && asset?.clips?.has('Running_B') ? 'Running_B' : 'Running_A';
+        animCtrl.setBaseState(runClip, Math.max(0.95, Math.min(2.15, speedRatio * 1.32)));
       } else {
         animCtrl.setBaseState('Idle', 1.0);
       }
       animCtrl.mixer.update(safeDt);
     }
 
-    if (isCustomStrelok && modelInstance) {
-      if (gunKickTimer > 0) gunKickTimer = Math.max(0, gunKickTimer - safeDt);
-      if (aimHoldTimer > 0) aimHoldTimer = Math.max(0, aimHoldTimer - safeDt);
-      const targetReload = isReloadingState ? 1 : 0;
-      reloadBlend += (targetReload - reloadBlend) * Math.min(1, safeDt * 12);
-      const targetAim = aimHoldTimer > 0 ? 1 : 0;
-      aimYawBlend += (targetAim - aimYawBlend) * Math.min(1, safeDt * 16);
+    applyWarriorWeaponAnimOverlay(safeDt, isMoving, elapsedTime);
+    applyGunslingerWeaponAnimOverlay(safeDt, isMoving, elapsedTime);
 
-      const kickRatio = gunKickTimer > 0 ? gunKickTimer / 0.24 : 0;
-      const kickCurve = Math.sin(kickRatio * Math.PI * 0.88) * kickRatio;
-      const reloadBob = reloadBlend > 0.01 ? Math.sin(elapsedTime * 15.0) * reloadBlend : 0;
-
-      // Turn barrel along +Z firing line when shooting, relax to iconic 3/4 carry otherwise
-      modelInstance.rotation.y = -0.68 * aimYawBlend + reloadBlend * 0.18;
-      modelInstance.rotation.x = -kickCurve * 0.12 + reloadBlend * 0.14 + reloadBob * 0.05;
-      modelInstance.position.z = -kickCurve * 0.14;
+    if (staffCastPulse > 0) {
+      staffCastPulse = Math.max(0, staffCastPulse - safeDt * 5.2);
+    }
+    if (embeddedStaffVfx) {
+      embeddedStaffVfx.updateVfx(elapsedTime, staffCastPulse);
     }
 
-    // Two-handed shotgun carry pose, crisp recoil kick, pump rack & reload tilt!
+    // Two-handed shotgun carry pose, crisp recoil kick, pump rack & tactical chibi walk!
     if (safeClass === 'gunslinger' && gunCarryPivot) {
       const beastScale = isBeast ? 1.78 : 1.0;
       if (gunKickTimer > 0) {
         gunKickTimer = Math.max(0, gunKickTimer - safeDt);
       }
+      if (aimHoldTimer > 0) {
+        aimHoldTimer = Math.max(0, aimHoldTimer - safeDt);
+      }
       if (pumpCycleTimer > 0) {
         pumpCycleTimer = Math.max(0, pumpCycleTimer - safeDt);
       }
 
+      const targetMove = isMoving ? 1 : 0;
+      moveBlend += (targetMove - moveBlend) * Math.min(1, safeDt * 11.5);
+      if (moveBlend > 0.01) {
+        const clampedSpd = Math.max(0.75, Math.min(1.65, speedRatio || 1));
+        walkPhase += safeDt * 9.4 * clampedSpd;
+      } else if (!isMoving) {
+        walkPhase = 0;
+      }
+
+      const targetAim = aimHoldTimer > 0 ? 1 : 0;
+      aimYawBlend += (targetAim - aimYawBlend) * Math.min(1, safeDt * 16);
+
       const targetReload = isReloadingState ? 1 : 0;
       reloadBlend += (targetReload - reloadBlend) * Math.min(1, safeDt * 12);
 
-      // Smooth spring curve for recoil (peaks rapidly, eases cleanly back to 0)
-      const kickRatio = gunKickTimer > 0 ? gunKickTimer / 0.22 : 0;
-      const kickCurve = Math.sin(kickRatio * Math.PI * 0.88) * kickRatio * 1.18;
+      // Punchy shotgun recoil spring curve (rapid kickback + smooth return)
+      const kickRatio = gunKickTimer > 0 ? gunKickTimer / 0.26 : 0;
+      const kickCurve = Math.pow(kickRatio, 0.65) * Math.sin(kickRatio * Math.PI * 0.92) * 1.28;
 
-      const strideBobY = isMoving ? Math.abs(Math.sin(elapsedTime * 11.5)) * 0.022 : Math.sin(elapsedTime * 2.6) * 0.008;
-      const reloadBob = reloadBlend > 0.01 ? Math.sin(elapsedTime * 16.0) * reloadBlend : 0;
-
-      gunCarryPivot.scale.setScalar(beastScale);
-      gunCarryPivot.position.set(
-        GUN_PIVOT_BASE_X * beastScale,
-        (GUN_PIVOT_BASE_Y + strideBobY + reloadBob * 0.024) * beastScale,
-        (GUN_PIVOT_BASE_Z - kickCurve * 0.18 - reloadBlend * 0.04) * beastScale
-      );
-      gunCarryPivot.rotation.x = -kickCurve * 0.32 + reloadBlend * 0.25 + reloadBob * 0.075;
-      gunCarryPivot.rotation.y = reloadBlend * -0.10;
-      gunCarryPivot.rotation.z = reloadBlend * 0.45;
-
-      // Subtle upper-torso recoil rock + forward two-handed grip on stock & forend
-      if (chestBone && kickCurve > 0.01) {
-        _recoilPitchQuat.setFromAxisAngle(_xAxis, -kickCurve * 0.14);
-        chestBone.quaternion.multiply(_recoilPitchQuat);
+      // Pump-action rack window right after peak recoil (0.04..0.22s remaining)
+      let pumpFrac = 0;
+      if (pumpCycleTimer > 0 && pumpCycleTimer < 0.20) {
+        pumpFrac = Math.sin((pumpCycleTimer / 0.20) * Math.PI);
       }
-      applyGunslingerArmPose();
 
-      // Mechanical pump forend slide on «Охотничье ружьё» & barrel cluster spin on «Шквал»
-      const forend = mountedWeaponObj?.userData?.pumpForend;
-      if (forend) {
-        let pumpOffset = 0;
-        if (pumpCycleTimer > 0 && pumpCycleTimer < 0.18) {
-          pumpOffset = -Math.sin((pumpCycleTimer / 0.18) * Math.PI) * 0.09;
+      const reloadBob = reloadBlend > 0.01 ? Math.sin(elapsedTime * 15.5) * reloadBlend : 0;
+
+      if (isTripoGunslinger) {
+        positionTripoGunPivot(elapsedTime, kickCurve, pumpFrac, reloadBob, beastScale);
+        applyTripoGunslingerPose(elapsedTime, kickCurve, pumpFrac);
+      } else {
+        const strideBobY = isMoving ? Math.abs(Math.sin(elapsedTime * 11.5)) * 0.022 : Math.sin(elapsedTime * 2.6) * 0.008;
+
+        gunCarryPivot.scale.setScalar(beastScale);
+        gunCarryPivot.position.set(
+          GUN_PIVOT_BASE_X * beastScale,
+          (GUN_PIVOT_BASE_Y + strideBobY + reloadBob * 0.024) * beastScale,
+          (GUN_PIVOT_BASE_Z - kickCurve * 0.18 - reloadBlend * 0.04) * beastScale
+        );
+        gunCarryPivot.rotation.x = -kickCurve * 0.32 + reloadBlend * 0.25 + reloadBob * 0.075;
+        gunCarryPivot.rotation.y = reloadBlend * -0.10;
+        gunCarryPivot.rotation.z = reloadBlend * 0.45;
+
+        if (chestBone && kickCurve > 0.01) {
+          _recoilPitchQuat.setFromAxisAngle(_xAxis, -kickCurve * 0.14);
+          chestBone.quaternion.multiply(_recoilPitchQuat);
         }
-        forend.position.z = (forend.userData.baseZ || 0.39) + pumpOffset;
-      }
-      const gatCluster = mountedWeaponObj?.userData?.gatlingCluster;
-      if (gatCluster && gunKickTimer > 0) {
-        gatCluster.rotation.z += safeDt * 18;
+        applyGunslingerArmPose();
+
+        const forend = mountedWeaponObj?.userData?.pumpForend;
+        if (forend) {
+          forend.position.z = (forend.userData.baseZ || 0.39) - pumpFrac * 0.09;
+        }
+        const gatCluster = mountedWeaponObj?.userData?.gatlingCluster;
+        if (gatCluster && gunKickTimer > 0) {
+          gatCluster.rotation.z += safeDt * 18;
+        }
       }
     }
 
@@ -1154,577 +2773,1058 @@ export function createCompanionMesh() {
 }
 
 // ============================================================================
-// 3. ENEMY SPECIALISTS & 5 MILESTONE ACT BOSSES FACTORY
+// 3. ENEMY SPECIALISTS & 5 MILESTONE ACT BOSSES FACTORY (Matches ad09b7c9.jpg!)
 // ============================================================================
 
-const BOMBER_UPPER_ARM_L_Q = new THREE.Quaternion(-0.136, -0.396, -0.900, 0.123).normalize();
-const BOMBER_LOWER_ARM_L_Q = new THREE.Quaternion(0, 0, -0.450, 0.893).normalize();
-const BOMBER_UPPER_ARM_R_Q = new THREE.Quaternion(-0.136, 0.396, 0.900, 0.123).normalize();
-const BOMBER_LOWER_ARM_R_Q = new THREE.Quaternion(0, 0, 0.450, 0.893).normalize();
-
-function createHumanoidGlowingEyes(eyeHex, visorForward = false) {
+function createGlowingEyePair(eyeHex, spreadX = 0.155, posY = 0.41, posZ = 0.44, scaleX = 1.28, scaleY = 0.78) {
   const grp = new THREE.Group();
-  const eyeMat = getMat(`hum_eye_${eyeHex}`, () =>
+  const eyeMat = getMat(`en_eye_${eyeHex}`, () =>
     new THREE.MeshStandardMaterial({
       color: eyeHex,
       emissive: eyeHex,
-      emissiveIntensity: 2.5,
-      roughness: 0.15
+      emissiveIntensity: 2.75,
+      roughness: 0.14
     })
   );
-  const eyeGeo = getGeo('hum_eye_sphere', () => new THREE.SphereGeometry(0.058, 8, 8));
-  const zPos = visorForward ? 0.52 : 0.45;
-  const yPos = visorForward ? 0.38 : 0.40;
-  for (const sx of [-0.155, 0.155]) {
+  const eyeGeo = getGeo('en_eye_sphere', () => new THREE.SphereGeometry(0.060, 8, 8));
+  for (const sx of [-spreadX, spreadX]) {
     const eye = new THREE.Mesh(eyeGeo, eyeMat);
-    eye.scale.set(1.25, 0.78, 0.65);
-    eye.position.set(sx, yPos, zPos);
+    eye.scale.set(scaleX, scaleY, 0.65);
+    eye.position.set(sx, posY, posZ);
+    eye.rotation.z = sx < 0 ? 0.18 : -0.18;
     grp.add(eye);
   }
   return grp;
 }
 
-function createEnemyCrossbow() {
+function createBatWings(boneHex = 0x4b4e57, membraneHex = 0x373940, wingSpan = 1.0, magmaGlow = false) {
   const grp = new THREE.Group();
-  const woodMat = getMat('cb_wood', () => new THREE.MeshStandardMaterial({ color: 0x4a2e1b, roughness: 0.74, metalness: 0.1 }));
-  const steelMat = getMat('cb_steel', () => new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.82, roughness: 0.28 }));
-  const stringMat = getMat('cb_string', () => new THREE.MeshBasicMaterial({ color: 0xcbd5e1 }));
-  const boltMat = getMat('cb_bolt_cyan', () =>
-    new THREE.MeshStandardMaterial({ color: 0xa5f3fc, emissive: 0x06b6d4, emissiveIntensity: 1.9, roughness: 0.2 })
+  const boneMat = getMat(`bw_bone_${boneHex}`, () =>
+    new THREE.MeshStandardMaterial({ color: boneHex, roughness: 0.58, metalness: 0.24 })
+  );
+  const memMat = getMat(`bw_mem_${membraneHex}_${magmaGlow ? 1 : 0}`, () =>
+    new THREE.MeshStandardMaterial({
+      color: membraneHex,
+      emissive: magmaGlow ? 0xea580c : 0x000000,
+      emissiveIntensity: magmaGlow ? 1.15 : 0,
+      roughness: 0.52,
+      metalness: 0.08,
+      side: THREE.DoubleSide
+    })
   );
 
-  // Stock / tiller pointing along +Z
-  const tiller = new THREE.Mesh(getGeo('cb_tiller', () => new THREE.BoxGeometry(0.095, 0.11, 0.62)), woodMat);
-  tiller.position.set(0, 0, 0.12);
-
-  // Curved twin steel bow limbs at front (+Z)
-  const limbGeo = getGeo('cb_limb', () => new THREE.BoxGeometry(0.40, 0.045, 0.065));
-  const limbL = new THREE.Mesh(limbGeo, steelMat);
-  limbL.position.set(0.20, 0.02, 0.36);
-  limbL.rotation.y = 0.28;
-  const limbR = new THREE.Mesh(limbGeo, steelMat);
-  limbR.position.set(-0.20, 0.02, 0.36);
-  limbR.rotation.y = -0.28;
-
-  // Drawn bowstrings meeting at trigger lock
-  const strGeo = getGeo('cb_str', () => {
-    const cg = new THREE.CylinderGeometry(0.008, 0.008, 0.44, 6);
-    cg.rotateZ(Math.PI / 2);
+  const wingShape = getGeo('bw_web_geo', () => {
+    const s = new THREE.Shape();
+    s.moveTo(0, 0.05);
+    s.lineTo(0.55, 0.48);
+    s.lineTo(1.08, 0.24);
+    s.quadraticCurveTo(0.84, -0.08, 0.74, -0.44);
+    s.quadraticCurveTo(0.50, -0.18, 0.36, -0.48);
+    s.quadraticCurveTo(0.18, -0.22, 0.02, -0.32);
+    s.closePath();
+    return new THREE.ShapeGeometry(s, 6);
+  });
+  const sparGeo = getGeo('bw_spar', () => {
+    const cg = new THREE.CylinderGeometry(0.028, 0.042, 0.68, 7);
+    cg.translate(0, 0.34, 0);
     return cg;
   });
-  const strL = new THREE.Mesh(strGeo, stringMat);
-  strL.position.set(0.19, 0.035, 0.17);
-  strL.rotation.y = 0.62;
-  const strR = new THREE.Mesh(strGeo, stringMat);
-  strR.position.set(-0.19, 0.035, 0.17);
-  strR.rotation.y = -0.62;
+  const clawGeo = getGeo('bw_claw', () => new THREE.ConeGeometry(0.042, 0.15, 5));
 
-  // Glowing cyan bone bolt ready on the rail
-  const boltShaft = new THREE.Mesh(
-    getGeo('cb_bolt_shaft', () => {
-      const cg = new THREE.CylinderGeometry(0.018, 0.018, 0.48, 6);
-      cg.rotateX(Math.PI / 2);
-      return cg;
-    }),
-    boltMat
-  );
-  boltShaft.position.set(0, 0.068, 0.28);
-  const boltHead = new THREE.Mesh(
-    getGeo('cb_bolt_tip', () => {
-      const cg = new THREE.ConeGeometry(0.048, 0.14, 4);
-      cg.rotateX(Math.PI / 2);
-      return cg;
-    }),
-    boltMat
-  );
-  boltHead.position.set(0, 0.068, 0.56);
+  const wingPivots = [];
+  for (const side of [-1, 1]) {
+    const wPivot = new THREE.Group();
+    wPivot.position.set(side * 0.16, 0.32, -0.22);
 
-  grp.add(tiller, limbL, limbR, strL, strR, boltShaft, boltHead);
+    const innerArm = new THREE.Mesh(sparGeo, boneMat);
+    innerArm.rotation.z = -side * 0.88;
+    innerArm.position.set(0, 0.04, 0);
+
+    const outerArm = new THREE.Mesh(sparGeo, boneMat);
+    outerArm.scale.set(0.85, 0.92, 0.85);
+    outerArm.position.set(side * 0.52, 0.46, -0.02);
+    outerArm.rotation.z = -side * 1.92;
+
+    const thumbClaw = new THREE.Mesh(clawGeo, boneMat);
+    thumbClaw.position.set(side * 0.54, 0.54, 0.02);
+    thumbClaw.rotation.z = -side * 0.35;
+
+    const web = new THREE.Mesh(wingShape, memMat);
+    web.scale.set(side, 1, 1);
+    web.position.set(0, 0.02, -0.02);
+
+    wPivot.add(innerArm, outerArm, thumbClaw, web);
+    wPivot.scale.setScalar(wingSpan);
+    wPivot.rotation.y = -side * 0.36;
+    grp.add(wPivot);
+    wingPivots.push({ pivot: wPivot, side });
+  }
+  grp.userData.wingPivots = wingPivots;
   return grp;
+}
+
+function createChibiMonsterHead({
+  skinHex = 0x5c8a32,
+  eyeHex = 0xff4500,
+  ears = 'pointed', // 'pointed' | 'wolf' | 'ogre' | 'none'
+  horns = 'none',   // 'none' | 'imp' | 'gargoyle' | 'demon_magma'
+  tusks = false,
+  wolfSnout = false,
+  goblinNose = false
+} = {}) {
+  const grp = new THREE.Group();
+  const skinMat = getMat(`cmh_skin_${skinHex}`, () =>
+    new THREE.MeshStandardMaterial({ color: skinHex, roughness: 0.68, metalness: 0.08 })
+  );
+  const darkMouthMat = getMat('cmh_mouth_dark', () =>
+    new THREE.MeshStandardMaterial({ color: 0x140d12, roughness: 0.85 })
+  );
+  const fangMat = getMat('cmh_fang_ivory', () =>
+    new THREE.MeshStandardMaterial({ color: 0xf5efe0, roughness: 0.38, metalness: 0.06 })
+  );
+
+  const cranium = new THREE.Mesh(
+    getGeo('cmh_cranium', () => new THREE.SphereGeometry(0.43, 14, 12)),
+    skinMat
+  );
+  cranium.scale.set(1.04, 0.98, 0.98);
+  cranium.position.set(0, 0.42, 0.02);
+
+  const jaw = new THREE.Mesh(
+    getGeo('cmh_jaw', () => new THREE.BoxGeometry(0.56, 0.28, 0.48)),
+    skinMat
+  );
+  jaw.position.set(0, 0.20, 0.10);
+
+  const brow = new THREE.Mesh(
+    getGeo('cmh_brow', () => new THREE.BoxGeometry(0.58, 0.11, 0.24)),
+    skinMat
+  );
+  brow.position.set(0, 0.50, 0.34);
+  brow.rotation.x = 0.18;
+
+  const mouth = new THREE.Mesh(
+    getGeo('cmh_mouth_box', () => new THREE.BoxGeometry(0.36, 0.10, 0.10)),
+    darkMouthMat
+  );
+  mouth.position.set(0, 0.21, 0.33);
+
+  grp.add(cranium, jaw, brow, mouth);
+  grp.add(createGlowingEyePair(eyeHex, 0.155, 0.41, 0.41, 1.32, 0.76));
+
+  if (goblinNose) {
+    const nose = new THREE.Mesh(
+      getGeo('cmh_gob_nose', () => {
+        const cg = new THREE.ConeGeometry(0.085, 0.24, 6);
+        cg.rotateX(Math.PI * 0.56);
+        return cg;
+      }),
+      skinMat
+    );
+    nose.position.set(0, 0.35, 0.47);
+    grp.add(nose);
+  }
+
+  if (wolfSnout) {
+    const snout = new THREE.Mesh(
+      getGeo('cmh_wolf_snout', () => new THREE.BoxGeometry(0.36, 0.24, 0.38)),
+      skinMat
+    );
+    snout.position.set(0, 0.28, 0.42);
+    const noseTip = new THREE.Mesh(
+      getGeo('cmh_wolf_nose', () => new THREE.SphereGeometry(0.075, 8, 8)),
+      darkMouthMat
+    );
+    noseTip.position.set(0, 0.36, 0.60);
+    grp.add(snout, noseTip);
+    for (const sx of [-0.11, 0.11]) {
+      const wf = new THREE.Mesh(
+        getGeo('cmh_wolf_fang', () => new THREE.ConeGeometry(0.036, 0.12, 5)),
+        fangMat
+      );
+      wf.rotation.x = Math.PI;
+      wf.position.set(sx, 0.18, 0.54);
+      grp.add(wf);
+    }
+    // Shaggy cheek fur tufts
+    const tuftGeo = getGeo('cmh_wolf_tuft', () => new THREE.ConeGeometry(0.14, 0.34, 5));
+    for (const sx of [-1, 1]) {
+      const tuft = new THREE.Mesh(tuftGeo, skinMat);
+      tuft.position.set(sx * 0.46, 0.30, 0.08);
+      tuft.rotation.z = -sx * 1.25;
+      grp.add(tuft);
+    }
+  } else if (tusks) {
+    const tuskGeo = getGeo('cmh_tusk', () => new THREE.ConeGeometry(0.052, 0.20, 6));
+    for (const sx of [-0.15, 0.15]) {
+      const t = new THREE.Mesh(tuskGeo, fangMat);
+      t.position.set(sx, 0.26, 0.38);
+      t.rotation.x = 0.24;
+      t.rotation.z = sx < 0 ? 0.15 : -0.15;
+      grp.add(t);
+    }
+  } else {
+    const fangGeo = getGeo('cmh_tiny_fang', () => new THREE.ConeGeometry(0.032, 0.09, 5));
+    for (const sx of [-0.11, 0.11]) {
+      const f = new THREE.Mesh(fangGeo, fangMat);
+      f.rotation.x = Math.PI;
+      f.position.set(sx, 0.23, 0.37);
+      grp.add(f);
+    }
+  }
+
+  if (ears === 'pointed') {
+    const earGeo = getGeo('cmh_ear_long', () => new THREE.ConeGeometry(0.12, 0.48, 5));
+    for (const sx of [-1, 1]) {
+      const ear = new THREE.Mesh(earGeo, skinMat);
+      ear.position.set(sx * 0.55, 0.42, 0.02);
+      ear.rotation.z = -sx * 1.28;
+      ear.rotation.y = -sx * 0.22;
+      grp.add(ear);
+    }
+  } else if (ears === 'wolf') {
+    const wEarGeo = getGeo('cmh_ear_wolf', () => new THREE.ConeGeometry(0.14, 0.42, 5));
+    for (const sx of [-1, 1]) {
+      const ear = new THREE.Mesh(wEarGeo, skinMat);
+      ear.position.set(sx * 0.28, 0.88, -0.02);
+      ear.rotation.z = -sx * 0.24;
+      grp.add(ear);
+    }
+  } else if (ears === 'ogre') {
+    const oEarGeo = getGeo('cmh_ear_ogre', () => new THREE.SphereGeometry(0.11, 8, 8));
+    for (const sx of [-1, 1]) {
+      const ear = new THREE.Mesh(oEarGeo, skinMat);
+      ear.scale.set(0.65, 1.1, 0.85);
+      ear.position.set(sx * 0.45, 0.42, 0.0);
+      grp.add(ear);
+    }
+  }
+
+  if (horns === 'imp' || horns === 'gargoyle') {
+    const isStone = horns === 'gargoyle';
+    const hMat = getMat(isStone ? 'cmh_stone_horn' : 'cmh_imp_horn', () =>
+      new THREE.MeshStandardMaterial({
+        color: isStone ? 0x373a42 : 0x450a0a,
+        roughness: 0.48,
+        metalness: 0.22
+      })
+    );
+    for (const sx of [-1, 1]) {
+      const curve = new THREE.QuadraticBezierCurve3(
+        new THREE.Vector3(sx * 0.24, 0.72, 0.08),
+        new THREE.Vector3(sx * 0.46, 0.94, 0.02),
+        new THREE.Vector3(sx * 0.36, 1.18, -0.10)
+      );
+      const hGeo = getGeo(`cmh_small_horn_${sx}`, () => new THREE.TubeGeometry(curve, 8, 0.062, 7, false));
+      const tip = new THREE.Mesh(getGeo('cmh_small_horn_tip', () => new THREE.ConeGeometry(0.06, 0.16, 6)), hMat);
+      tip.position.set(sx * 0.35, 1.24, -0.12);
+      tip.rotation.x = -0.35;
+      grp.add(new THREE.Mesh(hGeo, hMat), tip);
+    }
+  } else if (horns === 'demon_magma') {
+    // Sweeping dark-obsidian bull/demon horns with blazing molten orange-yellow tips (matches Act I Boss in ad09b7c9.jpg!)
+    const obsMat = getMat('demon_obs_horn', () =>
+      new THREE.MeshStandardMaterial({ color: 0x1c1917, roughness: 0.42, metalness: 0.35 })
+    );
+    const magmaTipMat = getMat('demon_magma_tip', () =>
+      new THREE.MeshStandardMaterial({
+        color: 0xfde047,
+        emissive: 0xff5500,
+        emissiveIntensity: 2.4,
+        roughness: 0.20
+      })
+    );
+    for (const sx of [-1, 1]) {
+      const baseCurve = new THREE.QuadraticBezierCurve3(
+        new THREE.Vector3(sx * 0.28, 0.68, 0.04),
+        new THREE.Vector3(sx * 0.74, 0.76, 0.08),
+        new THREE.Vector3(sx * 0.68, 1.14, 0.12)
+      );
+      const hBase = new THREE.Mesh(
+        getGeo(`demon_horn_base_${sx}`, () => new THREE.TubeGeometry(baseCurve, 10, 0.098, 8, false)),
+        obsMat
+      );
+      const tipCone = new THREE.Mesh(
+        getGeo('demon_horn_glow_tip', () => new THREE.ConeGeometry(0.095, 0.42, 8)),
+        magmaTipMat
+      );
+      tipCone.position.set(sx * 0.62, 1.32, 0.13);
+      tipCone.rotation.z = sx * 0.28;
+      grp.add(hBase, tipCone);
+    }
+  }
+
+  return grp;
+}
+
+function createCthulhuHeadAndTentacles() {
+  const grp = new THREE.Group();
+  const abyssSkinMat = getMat('cth_skin', () =>
+    new THREE.MeshStandardMaterial({ color: 0x1f4e5f, roughness: 0.52, metalness: 0.12 })
+  );
+  const darkCrestMat = getMat('cth_crest', () =>
+    new THREE.MeshStandardMaterial({ color: 0x133340, roughness: 0.58, metalness: 0.18 })
+  );
+  const runeMat = getMat('cth_cyan_rune', () =>
+    new THREE.MeshStandardMaterial({
+      color: 0xa5f3fc,
+      emissive: 0x06b6d4,
+      emissiveIntensity: 2.6,
+      roughness: 0.15
+    })
+  );
+
+  // Tall bulbous cephalopod cranium dome
+  const dome = new THREE.Mesh(
+    getGeo('cth_dome', () => new THREE.SphereGeometry(0.50, 16, 14)),
+    abyssSkinMat
+  );
+  dome.scale.set(1.02, 1.32, 1.14);
+  dome.position.set(0, 0.62, -0.04);
+
+  const brow = new THREE.Mesh(
+    getGeo('cth_brow', () => new THREE.BoxGeometry(0.62, 0.13, 0.28)),
+    darkCrestMat
+  );
+  brow.position.set(0, 0.48, 0.36);
+  brow.rotation.x = 0.22;
+
+  // Forehead glowing cyan elder rune (matches ad09b7c9.jpg #3!)
+  const runeV = new THREE.Mesh(getGeo('cth_rune_v', () => new THREE.BoxGeometry(0.042, 0.24, 0.04)), runeMat);
+  runeV.position.set(-0.03, 0.72, 0.46);
+  const runeDiag1 = new THREE.Mesh(getGeo('cth_rune_d', () => new THREE.BoxGeometry(0.14, 0.038, 0.04)), runeMat);
+  runeDiag1.position.set(0.03, 0.78, 0.46);
+  runeDiag1.rotation.z = -0.52;
+  const runeDiag2 = new THREE.Mesh(getGeo('cth_rune_d', () => new THREE.BoxGeometry(0.14, 0.038, 0.04)), runeMat);
+  runeDiag2.position.set(0.03, 0.66, 0.46);
+  runeDiag2.rotation.z = -0.62;
+
+  grp.add(dome, brow, runeV, runeDiag1, runeDiag2);
+  grp.add(createGlowingEyePair(0xff6a00, 0.17, 0.40, 0.42, 1.35, 0.78));
+
+  // 5 Sculpted Curling Face Tentacles hanging from face over chest!
+  const tentacles = [];
+  for (let i = 0; i < 5; i++) {
+    const frac = (i - 2) / 2; // -1 .. +1
+    const ox = frac * 0.24;
+    const oz = 0.38 - Math.abs(frac) * 0.08;
+    const tPivot = new THREE.Group();
+    tPivot.position.set(ox, 0.28, oz);
+
+    const curve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(ox * 0.35, -0.22, 0.10),
+      new THREE.Vector3(ox * 0.65, -0.48, 0.04),
+      new THREE.Vector3(ox * 0.95 + (i % 2 === 0 ? 0.08 : -0.08), -0.64, 0.16)
+    ]);
+    const tGeo = getGeo(`cth_face_tent_${i}`, () => new THREE.TubeGeometry(curve, 12, 0.068, 7, false));
+    const tMesh = new THREE.Mesh(tGeo, abyssSkinMat);
+    const tipCone = new THREE.Mesh(getGeo('cth_tent_tip', () => new THREE.ConeGeometry(0.064, 0.16, 6)), darkCrestMat);
+    const endPt = curve.getPoint(1);
+    tipCone.position.copy(endPt);
+    tipCone.rotation.x = Math.PI * 0.65;
+    tPivot.add(tMesh, tipCone);
+    grp.add(tPivot);
+    tentacles.push({ pivot: tPivot, phase: i * 1.15 });
+  }
+  grp.userData.tentacles = tentacles;
+  return grp;
+}
+
+function createCthulhuArmorAndBaseTentacles() {
+  const chestProps = new THREE.Group();
+  const baseProps = new THREE.Group();
+  const slateMat = getMat('cth_armor_slate', () =>
+    new THREE.MeshStandardMaterial({ color: 0x2a3444, metalness: 0.72, roughness: 0.36 })
+  );
+  const hornMat = getMat('cth_pauldron_horn', () =>
+    new THREE.MeshStandardMaterial({ color: 0xcbd5e1, roughness: 0.42, metalness: 0.2 })
+  );
+  const runeMat = getMat('cth_cyan_rune', () =>
+    new THREE.MeshStandardMaterial({ color: 0xa5f3fc, emissive: 0x06b6d4, emissiveIntensity: 2.6, roughness: 0.15 })
+  );
+  const tentMat = getMat('cth_skin', () =>
+    new THREE.MeshStandardMaterial({ color: 0x1f4e5f, roughness: 0.52, metalness: 0.12 })
+  );
+
+  for (const sx of [-1, 1]) {
+    const pauldron = new THREE.Mesh(
+      getGeo('cth_pauldron', () => new THREE.SphereGeometry(0.28, 10, 8, 0, Math.PI * 2, 0, Math.PI * 0.58)),
+      slateMat
+    );
+    pauldron.position.set(sx * 0.44, 0.36, 0.02);
+    pauldron.rotation.z = -sx * 0.42;
+    const spike = new THREE.Mesh(getGeo('cth_p_spike', () => new THREE.ConeGeometry(0.068, 0.26, 6)), hornMat);
+    spike.position.set(sx * 0.56, 0.54, 0.04);
+    spike.rotation.z = -sx * 0.32;
+    const runeStrip = new THREE.Mesh(getGeo('cth_p_rune', () => new THREE.BoxGeometry(0.14, 0.036, 0.04)), runeMat);
+    runeStrip.position.set(sx * 0.46, 0.38, 0.25);
+    chestProps.add(pauldron, spike, runeStrip);
+  }
+  const beltRune = new THREE.Mesh(getGeo('cth_belt_gem', () => new THREE.OctahedronGeometry(0.11, 0)), runeMat);
+  beltRune.scale.set(0.85, 1.35, 0.45);
+  beltRune.position.set(0, -0.05, 0.26);
+  chestProps.add(beltRune);
+
+  const baseTentacles = [];
+  for (let k = 0; k < 6; k++) {
+    const a = (k / 6) * Math.PI * 2 + 0.4;
+    const piv = new THREE.Group();
+    piv.rotation.y = a;
+    const curve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0, 0.18, 0.22),
+      new THREE.Vector3(0.08, 0.09, 0.58),
+      new THREE.Vector3(-0.08, 0.14, 0.92),
+      new THREE.Vector3(0.04, 0.34, 1.04)
+    ]);
+    const tg = getGeo('cth_base_tent', () => new THREE.TubeGeometry(curve, 12, 0.095, 7, false));
+    piv.add(new THREE.Mesh(tg, tentMat));
+    baseProps.add(piv);
+    baseTentacles.push({ pivot: piv, baseY: a, phase: k * 1.05 });
+  }
+  baseProps.userData.baseTentacles = baseTentacles;
+  return { chestProps, baseProps };
+}
+
+function createAshenDragonHead() {
+  const grp = new THREE.Group();
+  const obsMat = getMat('drg_obsidian', () =>
+    new THREE.MeshStandardMaterial({ color: 0x1c191e, roughness: 0.46, metalness: 0.34 })
+  );
+  const lavaMawMat = getMat('drg_lava_maw', () =>
+    new THREE.MeshStandardMaterial({
+      color: 0xfef08a,
+      emissive: 0xff5500,
+      emissiveIntensity: 2.8,
+      roughness: 0.15
+    })
+  );
+  const hornGlowMat = getMat('drg_horn_glow', () =>
+    new THREE.MeshStandardMaterial({
+      color: 0xfdba74,
+      emissive: 0xea580c,
+      emissiveIntensity: 2.0,
+      roughness: 0.24
+    })
+  );
+
+  // Sculpted dragon skull & upper snout
+  const skull = new THREE.Mesh(getGeo('drg_skull', () => new THREE.BoxGeometry(0.62, 0.46, 0.58)), obsMat);
+  skull.position.set(0, 0.48, 0.02);
+  const snout = new THREE.Mesh(getGeo('drg_snout', () => new THREE.BoxGeometry(0.44, 0.24, 0.48)), obsMat);
+  snout.position.set(0, 0.44, 0.42);
+  snout.rotation.x = 0.12;
+
+  // Wide-open lower jaw + glowing molten lava throat interior!
+  const lowerJaw = new THREE.Mesh(getGeo('drg_jaw_low', () => new THREE.BoxGeometry(0.40, 0.16, 0.46)), obsMat);
+  lowerJaw.position.set(0, 0.18, 0.38);
+  lowerJaw.rotation.x = 0.36;
+
+  const lavaCore = new THREE.Mesh(getGeo('drg_maw_fire', () => new THREE.SphereGeometry(0.21, 10, 10)), lavaMawMat);
+  lavaCore.scale.set(0.92, 0.85, 1.25);
+  lavaCore.position.set(0, 0.30, 0.36);
+
+  grp.add(skull, snout, lowerJaw, lavaCore);
+  grp.add(createGlowingEyePair(0xff7a00, 0.20, 0.52, 0.34, 1.42, 0.70));
+
+  // Jagged dragon fangs framing the molten maw
+  const toothGeo = getGeo('drg_tooth', () => new THREE.ConeGeometry(0.038, 0.12, 5));
+  for (const sx of [-0.15, -0.06, 0.06, 0.15]) {
+    const upT = new THREE.Mesh(toothGeo, obsMat);
+    upT.rotation.x = Math.PI;
+    upT.position.set(sx, 0.33, 0.56);
+    const dnT = new THREE.Mesh(toothGeo, obsMat);
+    dnT.position.set(sx, 0.22, 0.53);
+    dnT.rotation.x = 0.32;
+    grp.add(upT, dnT);
+  }
+
+  // 4 Swept-back horned dragon crests with glowing magma tips
+  for (const sx of [-1, 1]) {
+    const mainHorn = new THREE.Mesh(
+      getGeo('drg_main_horn', () => new THREE.ConeGeometry(0.095, 0.62, 7)),
+      obsMat
+    );
+    mainHorn.position.set(sx * 0.28, 0.84, -0.14);
+    mainHorn.rotation.x = -0.58;
+    mainHorn.rotation.z = -sx * 0.34;
+
+    const hornTip = new THREE.Mesh(
+      getGeo('drg_horn_tip', () => new THREE.ConeGeometry(0.065, 0.28, 6)),
+      hornGlowMat
+    );
+    hornTip.position.set(sx * 0.36, 1.06, -0.28);
+    hornTip.rotation.x = -0.58;
+    hornTip.rotation.z = -sx * 0.34;
+
+    const cheekFin = new THREE.Mesh(
+      getGeo('drg_cheek_fin', () => new THREE.ConeGeometry(0.065, 0.34, 5)),
+      hornGlowMat
+    );
+    cheekFin.position.set(sx * 0.38, 0.44, -0.06);
+    cheekFin.rotation.z = -sx * 1.15;
+    cheekFin.rotation.y = -sx * 0.45;
+    grp.add(mainHorn, hornTip, cheekFin);
+  }
+
+  return grp;
+}
+
+function createDragonTailWithFlame() {
+  const piv = new THREE.Group();
+  const obsMat = getMat('drg_obsidian', () =>
+    new THREE.MeshStandardMaterial({ color: 0x1c191e, roughness: 0.46, metalness: 0.34 })
+  );
+  const flameOuterMat = getMat('drg_tail_flame_out', () =>
+    new THREE.MeshStandardMaterial({
+      color: 0xff6a00,
+      emissive: 0xff4500,
+      emissiveIntensity: 2.5,
+      roughness: 0.18
+    })
+  );
+  const flameCoreMat = getMat('drg_tail_flame_in', () =>
+    new THREE.MeshStandardMaterial({
+      color: 0xfef08a,
+      emissive: 0xfacc15,
+      emissiveIntensity: 2.8,
+      roughness: 0.12
+    })
+  );
+
+  const curve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0, 0.05, -0.20),
+    new THREE.Vector3(0.18, -0.18, -0.62),
+    new THREE.Vector3(0.46, -0.12, -0.92),
+    new THREE.Vector3(0.62, 0.24, -0.98)
+  ]);
+  const tailMesh = new THREE.Mesh(
+    getGeo('drg_tail_tube', () => new THREE.TubeGeometry(curve, 14, 0.115, 8, false)),
+    obsMat
+  );
+  const flamePlume = new THREE.Mesh(
+    getGeo('drg_tail_plume', () => new THREE.ConeGeometry(0.18, 0.48, 7)),
+    flameOuterMat
+  );
+  flamePlume.position.set(0.64, 0.44, -0.98);
+  const flameInner = new THREE.Mesh(
+    getGeo('drg_tail_plume_in', () => new THREE.ConeGeometry(0.10, 0.32, 6)),
+    flameCoreMat
+  );
+  flameInner.position.set(0.64, 0.40, -0.96);
+  piv.add(tailMesh, flamePlume, flameInner);
+  return piv;
+}
+
+function createSpikedPauldronsAndMoltenCore(withMoltenCore = true) {
+  const grp = new THREE.Group();
+  const darkIron = getMat('sp_dark_iron', () =>
+    new THREE.MeshStandardMaterial({ color: 0x2d292e, metalness: 0.78, roughness: 0.34 })
+  );
+  const boneSpikeMat = getMat('sp_bone_spike', () =>
+    new THREE.MeshStandardMaterial({ color: 0xd6cbb8, roughness: 0.45, metalness: 0.12 })
+  );
+  for (const sx of [-1, 1]) {
+    const pad = new THREE.Mesh(
+      getGeo('sp_pad_dome', () => new THREE.SphereGeometry(0.28, 10, 8, 0, Math.PI * 2, 0, Math.PI * 0.56)),
+      darkIron
+    );
+    pad.position.set(sx * 0.45, 0.36, 0.02);
+    pad.rotation.z = -sx * 0.45;
+    const sp1 = new THREE.Mesh(getGeo('sp_cone_a', () => new THREE.ConeGeometry(0.065, 0.26, 6)), boneSpikeMat);
+    sp1.position.set(sx * 0.54, 0.56, 0.02);
+    sp1.rotation.z = -sx * 0.35;
+    const sp2 = new THREE.Mesh(getGeo('sp_cone_b', () => new THREE.ConeGeometry(0.052, 0.20, 6)), boneSpikeMat);
+    sp2.position.set(sx * 0.64, 0.42, 0.04);
+    sp2.rotation.z = -sx * 0.85;
+    grp.add(pad, sp1, sp2);
+  }
+
+  if (withMoltenCore) {
+    const magmaMat = getMat('molten_fissure_mat', () =>
+      new THREE.MeshStandardMaterial({
+        color: 0xfef08a,
+        emissive: 0xff5500,
+        emissiveIntensity: 2.75,
+        roughness: 0.16
+      })
+    );
+    const fissureV = new THREE.Mesh(
+      getGeo('molten_fissure_v', () => new THREE.OctahedronGeometry(0.15, 0)),
+      magmaMat
+    );
+    fissureV.scale.set(0.62, 1.85, 0.45);
+    fissureV.position.set(0, 0.18, 0.24);
+    grp.add(fissureV);
+    const ribGeo = getGeo('molten_fissure_rib', () => new THREE.BoxGeometry(0.22, 0.032, 0.04));
+    for (let r = -1; r <= 1; r++) {
+      for (const sx of [-1, 1]) {
+        const vein = new THREE.Mesh(ribGeo, magmaMat);
+        vein.position.set(sx * 0.12, 0.18 + r * 0.08, 0.23);
+        vein.rotation.z = -sx * 0.28;
+        grp.add(vein);
+      }
+    }
+  }
+  return grp;
+}
+
+function createArchlichDarkCrown() {
+  const grp = new THREE.Group();
+  const darkCrownMat = getMat('lich_dark_iron', () =>
+    new THREE.MeshStandardMaterial({ color: 0x261d34, metalness: 0.82, roughness: 0.28 })
+  );
+  const violetGemMat = getMat('lich_violet_gem', () =>
+    new THREE.MeshStandardMaterial({
+      color: 0xf5d0fe,
+      emissive: 0xa855f7,
+      emissiveIntensity: 2.6,
+      roughness: 0.15
+    })
+  );
+  const circlet = new THREE.Mesh(
+    getGeo('lich_crown_band', () => new THREE.CylinderGeometry(0.45, 0.41, 0.20, 14)),
+    darkCrownMat
+  );
+  circlet.position.y = 0.78;
+  grp.add(circlet);
+
+  const tallSp = getGeo('lich_sp_tall', () => new THREE.ConeGeometry(0.09, 0.56, 4));
+  const midSp = getGeo('lich_sp_mid', () => new THREE.ConeGeometry(0.068, 0.34, 4));
+  const gemGeo = getGeo('lich_gem_oct', () => new THREE.OctahedronGeometry(0.075, 0));
+
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const isFront = i === 0;
+    const isTall = i % 2 === 0;
+    const sp = new THREE.Mesh(isTall ? tallSp : midSp, darkCrownMat);
+    sp.position.set(Math.sin(a) * 0.41, 0.96 + (isTall ? 0.16 : 0.04) + (isFront ? 0.12 : 0), Math.cos(a) * 0.41);
+    if (isFront) sp.scale.set(1.28, 1.32, 1.28);
+    sp.rotation.y = a;
+    grp.add(sp);
+    if (isTall) {
+      const gm = new THREE.Mesh(gemGeo, violetGemMat);
+      gm.scale.set(0.8, 1.35, 0.6);
+      gm.position.set(Math.sin(a) * 0.44, 0.84, Math.cos(a) * 0.44);
+      grp.add(gm);
+    }
+  }
+  return grp;
+}
+
+function createArchlichCollar() {
+  const grp = new THREE.Group();
+  const robeMat = getMat('lich_collar_robe', () =>
+    new THREE.MeshStandardMaterial({ color: 0x4c1d95, roughness: 0.58, metalness: 0.15, side: THREE.DoubleSide })
+  );
+  const trimMat = getMat('lich_dark_iron', () =>
+    new THREE.MeshStandardMaterial({ color: 0x261d34, metalness: 0.82, roughness: 0.28 })
+  );
+  const gemMat = getMat('lich_violet_gem', () =>
+    new THREE.MeshStandardMaterial({ color: 0xf5d0fe, emissive: 0xa855f7, emissiveIntensity: 2.6, roughness: 0.15 })
+  );
+  const collarCone = new THREE.Mesh(
+    getGeo('lich_high_collar', () => new THREE.CylinderGeometry(0.58, 0.34, 0.38, 12, 1, true, Math.PI * 0.55, Math.PI * 0.9)),
+    robeMat
+  );
+  collarCone.position.set(0, 0.46, -0.04);
+  grp.add(collarCone);
+
+  for (const sx of [-1, 1]) {
+    const wingPad = new THREE.Mesh(getGeo('lich_sh_pad', () => new THREE.ConeGeometry(0.24, 0.48, 5)), trimMat);
+    wingPad.position.set(sx * 0.48, 0.42, 0.02);
+    wingPad.rotation.z = -sx * 1.18;
+    const clasp = new THREE.Mesh(getGeo('lich_clasp_gem', () => new THREE.SphereGeometry(0.085, 8, 8)), gemMat);
+    clasp.position.set(sx * 0.24, 0.32, 0.22);
+    grp.add(wingPad, clasp);
+  }
+  return grp;
+}
+
+function createHandSpellOrb(coreHex = 0xf5d0fe, glowHex = 0xa855f7) {
+  const grp = new THREE.Group();
+  const coreMat = getMat(`orb_core_${coreHex}_${glowHex}`, () =>
+    new THREE.MeshStandardMaterial({
+      color: coreHex,
+      emissive: glowHex,
+      emissiveIntensity: 2.8,
+      roughness: 0.12
+    })
+  );
+  const auraMat = getMat(`orb_aura_${glowHex}`, () =>
+    new THREE.MeshBasicMaterial({
+      color: glowHex,
+      transparent: true,
+      opacity: 0.52,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      toneMapped: false
+    })
+  );
+  const core = new THREE.Mesh(getGeo('hand_orb_core', () => new THREE.SphereGeometry(0.15, 12, 12)), coreMat);
+  const flame = new THREE.Mesh(getGeo('hand_orb_flame', () => new THREE.ConeGeometry(0.16, 0.38, 7)), auraMat);
+  flame.position.y = 0.14;
+  grp.add(core, flame);
+  grp.position.set(0, 0.16, 0.14);
+  return grp;
+}
+
+function createMoltenRibcageAndSkullPads() {
+  const grp = new THREE.Group();
+  const coreMat = getMat('ember_skel_core', () =>
+    new THREE.MeshStandardMaterial({
+      color: 0xfef08a,
+      emissive: 0xff5a00,
+      emissiveIntensity: 2.9,
+      roughness: 0.15
+    })
+  );
+  const boneMat = getMat('ember_skel_pad_bone', () =>
+    new THREE.MeshStandardMaterial({ color: 0xe7dfd3, roughness: 0.52, metalness: 0.08 })
+  );
+  const heart = new THREE.Mesh(
+    getGeo('ember_rib_heart', () => new THREE.SphereGeometry(0.18, 10, 10)),
+    coreMat
+  );
+  heart.scale.set(0.95, 1.25, 0.78);
+  heart.position.set(0, 0.19, 0.10);
+  grp.add(heart);
+
+  // Twin bone skull pauldrons on shoulders (matches ad09b7c9.jpg!)
+  const skullPadGeo = getGeo('ember_skull_pad', () => new THREE.SphereGeometry(0.19, 10, 10));
+  for (const sx of [-1, 1]) {
+    const sk = new THREE.Mesh(skullPadGeo, boneMat);
+    sk.scale.set(1.0, 1.08, 0.92);
+    sk.position.set(sx * 0.41, 0.34, 0.02);
+    grp.add(sk);
+  }
+  grp.userData.heart = heart;
+  return grp;
+}
+
+function createCultistHoodAndSkullClasp() {
+  const headGrp = new THREE.Group();
+  const chestGrp = new THREE.Group();
+  const hoodMat = getMat('cult_purple_hood', () =>
+    new THREE.MeshStandardMaterial({ color: 0x4c1d95, roughness: 0.68, metalness: 0.08 })
+  );
+  const goldTrim = getMat('cult_gold_trim', () =>
+    new THREE.MeshStandardMaterial({ color: 0xd99b26, metalness: 0.82, roughness: 0.28 })
+  );
+  const darkVoid = getMat('cult_hood_void', () =>
+    new THREE.MeshBasicMaterial({ color: 0x090514 })
+  );
+  const boneMat = getMat('ember_skel_pad_bone', () =>
+    new THREE.MeshStandardMaterial({ color: 0xe7dfd3, roughness: 0.52, metalness: 0.08 })
+  );
+
+  const cowl = new THREE.Mesh(
+    getGeo('cult_cowl_dome', () => new THREE.SphereGeometry(0.49, 12, 10)),
+    hoodMat
+  );
+  cowl.scale.set(1.04, 1.08, 1.08);
+  cowl.position.set(0, 0.48, -0.02);
+
+  const peak = new THREE.Mesh(
+    getGeo('cult_cowl_peak', () => new THREE.ConeGeometry(0.32, 0.52, 8)),
+    hoodMat
+  );
+  peak.position.set(0, 0.92, -0.10);
+  peak.rotation.x = -0.32;
+
+  const rim = new THREE.Mesh(
+    getGeo('cult_cowl_rim', () => new THREE.TorusGeometry(0.38, 0.045, 7, 16)),
+    goldTrim
+  );
+  rim.position.set(0, 0.44, 0.26);
+
+  const shadowFace = new THREE.Mesh(
+    getGeo('cult_void_face', () => new THREE.SphereGeometry(0.35, 10, 10)),
+    darkVoid
+  );
+  shadowFace.position.set(0, 0.44, 0.16);
+
+  headGrp.add(cowl, peak, rim, shadowFace);
+  headGrp.add(createGlowingEyePair(0xd946ef, 0.145, 0.44, 0.48, 1.35, 0.72));
+
+  const skullClasp = new THREE.Mesh(
+    getGeo('cult_skull_clasp', () => new THREE.SphereGeometry(0.12, 8, 8)),
+    boneMat
+  );
+  skullClasp.position.set(0, 0.34, 0.24);
+  chestGrp.add(skullClasp);
+  return { headGrp, chestGrp };
+}
+
+function createMummyHeadAndCollar() {
+  const headGrp = new THREE.Group();
+  const chestGrp = new THREE.Group();
+  const linenMat = getMat('mum_linen', () =>
+    new THREE.MeshStandardMaterial({ color: 0xd9c79e, roughness: 0.85, metalness: 0.04 })
+  );
+  const darkSlit = getMat('cult_hood_void', () => new THREE.MeshBasicMaterial({ color: 0x0b131e }));
+  const goldMat = getMat('mum_pharaoh_gold', () =>
+    new THREE.MeshStandardMaterial({ color: 0xfbbf24, metalness: 0.86, roughness: 0.22 })
+  );
+  const turqMat = getMat('mum_pharaoh_turq', () =>
+    new THREE.MeshStandardMaterial({ color: 0x22d3ee, emissive: 0x0891b2, emissiveIntensity: 0.85, roughness: 0.25 })
+  );
+
+  const wrapSkull = new THREE.Mesh(
+    getGeo('mum_wrap_dome', () => new THREE.SphereGeometry(0.45, 12, 10)),
+    linenMat
+  );
+  wrapSkull.position.set(0, 0.44, 0.02);
+  const bandTop = new THREE.Mesh(
+    getGeo('mum_band_top', () => new THREE.CylinderGeometry(0.45, 0.46, 0.16, 12)),
+    linenMat
+  );
+  bandTop.position.set(0, 0.60, 0.02);
+  bandTop.rotation.z = 0.08;
+  const bandLow = new THREE.Mesh(
+    getGeo('mum_band_low', () => new THREE.CylinderGeometry(0.44, 0.42, 0.18, 12)),
+    linenMat
+  );
+  bandLow.position.set(0, 0.24, 0.04);
+  bandLow.rotation.z = -0.06;
+  const eyeBand = new THREE.Mesh(
+    getGeo('mum_eye_slit', () => new THREE.BoxGeometry(0.56, 0.14, 0.28)),
+    darkSlit
+  );
+  eyeBand.position.set(0, 0.42, 0.30);
+
+  headGrp.add(wrapSkull, bandTop, bandLow, eyeBand);
+  headGrp.add(createGlowingEyePair(0x22d3ee, 0.15, 0.42, 0.46, 1.38, 0.72));
+
+  // Broad Golden & Turquoise Pharaoh Collar
+  const collarGold = new THREE.Mesh(
+    getGeo('mum_collar_disc', () => new THREE.CylinderGeometry(0.46, 0.56, 0.10, 14)),
+    goldMat
+  );
+  collarGold.position.set(0, 0.36, 0.02);
+  const collarTurq = new THREE.Mesh(
+    getGeo('mum_collar_ring', () => {
+      const tg = new THREE.TorusGeometry(0.49, 0.045, 6, 16);
+      tg.rotateX(Math.PI * 0.5);
+      return tg;
+    }),
+    turqMat
+  );
+  collarTurq.position.set(0, 0.35, 0.03);
+  chestGrp.add(collarGold, collarTurq);
+  return { headGrp, chestGrp };
+}
+
+function createVampireHeadAndCape() {
+  const headGrp = new THREE.Group();
+  const chestGrp = new THREE.Group();
+  const paleMat = getMat('vamp_pale_skin', () =>
+    new THREE.MeshStandardMaterial({ color: 0xd8d8e2, roughness: 0.55, metalness: 0.05 })
+  );
+  const hairMat = getMat('vamp_black_hair', () =>
+    new THREE.MeshStandardMaterial({ color: 0x111116, roughness: 0.42, metalness: 0.18 })
+  );
+  const crimsonMat = getMat('vamp_crimson_cloth', () =>
+    new THREE.MeshStandardMaterial({ color: 0x991b1b, roughness: 0.58, metalness: 0.08, side: THREE.DoubleSide })
+  );
+
+  const headSphere = new THREE.Mesh(
+    getGeo('cmh_cranium', () => new THREE.SphereGeometry(0.43, 14, 12)),
+    paleMat
+  );
+  headSphere.position.set(0, 0.42, 0.02);
+
+  // Slicked-back black hair dome + widow's peak on forehead
+  const hairDome = new THREE.Mesh(
+    getGeo('vamp_hair_dome', () => new THREE.SphereGeometry(0.455, 12, 10, 0, Math.PI * 2, 0, Math.PI * 0.56)),
+    hairMat
+  );
+  hairDome.position.set(0, 0.46, -0.02);
+  hairDome.rotation.x = -0.22;
+  const widowPeak = new THREE.Mesh(
+    getGeo('vamp_widow_peak', () => new THREE.ConeGeometry(0.11, 0.20, 4)),
+    hairMat
+  );
+  widowPeak.rotation.x = Math.PI;
+  widowPeak.position.set(0, 0.62, 0.39);
+
+  const earGeo = getGeo('vamp_ear', () => new THREE.ConeGeometry(0.09, 0.30, 5));
+  for (const sx of [-1, 1]) {
+    const ear = new THREE.Mesh(earGeo, paleMat);
+    ear.position.set(sx * 0.46, 0.43, 0.02);
+    ear.rotation.z = -sx * 1.15;
+    headGrp.add(ear);
+  }
+
+  headGrp.add(headSphere, hairDome, widowPeak);
+  headGrp.add(createGlowingEyePair(0xff1e1e, 0.15, 0.41, 0.44, 1.32, 0.72));
+
+  // Upstanding Crimson Vampire Collar + Crimson Waistcoat
+  const highCollar = new THREE.Mesh(
+    getGeo('vamp_collar', () => new THREE.CylinderGeometry(0.52, 0.32, 0.36, 12, 1, true, Math.PI * 0.52, Math.PI * 0.96)),
+    crimsonMat
+  );
+  highCollar.position.set(0, 0.46, -0.05);
+  const vest = new THREE.Mesh(
+    getGeo('vamp_vest', () => new THREE.BoxGeometry(0.36, 0.36, 0.08)),
+    crimsonMat
+  );
+  vest.position.set(0, 0.18, 0.21);
+  chestGrp.add(highCollar, vest);
+  return { headGrp, chestGrp };
 }
 
 function createIronTowerShield() {
   const grp = new THREE.Group();
-  const plateMat = getMat('ts_plate', () =>
-    new THREE.MeshStandardMaterial({ color: 0x1e3a5f, metalness: 0.78, roughness: 0.30 })
+  const plateMat = getMat('ts_rusted_plate', () =>
+    new THREE.MeshStandardMaterial({ color: 0x4b423b, metalness: 0.72, roughness: 0.42 })
   );
-  const rimMat = getMat('ts_rim', () =>
-    new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.86, roughness: 0.24 })
+  const rimMat = getMat('ts_rusted_rim', () =>
+    new THREE.MeshStandardMaterial({ color: 0x78716c, metalness: 0.80, roughness: 0.32 })
   );
-  const runeMat = getMat('ts_rune', () =>
-    new THREE.MeshStandardMaterial({ color: 0x93c5fd, emissive: 0x3b82f6, emissiveIntensity: 1.5, roughness: 0.2 })
-  );
-
-  // Heavy iron tower shield body + top/bottom beveled trim + ice-blue boss emblem
-  const mainPlate = new THREE.Mesh(
-    getGeo('ts_body', () => new THREE.BoxGeometry(0.68, 0.94, 0.075)),
-    plateMat
-  );
-  const borderV = new THREE.Mesh(
-    getGeo('ts_border_v', () => new THREE.BoxGeometry(0.74, 0.98, 0.045)),
-    rimMat
-  );
+  const mainPlate = new THREE.Mesh(getGeo('ts_body', () => new THREE.BoxGeometry(0.64, 0.86, 0.075)), plateMat);
+  const borderV = new THREE.Mesh(getGeo('ts_border_v', () => new THREE.BoxGeometry(0.70, 0.90, 0.045)), rimMat);
   borderV.position.z = -0.015;
-  const crossV = new THREE.Mesh(
-    getGeo('ts_cross_v', () => new THREE.BoxGeometry(0.08, 0.86, 0.09)),
-    rimMat
-  );
-  crossV.position.z = 0.01;
-  const crossH = new THREE.Mesh(
-    getGeo('ts_cross_h', () => new THREE.BoxGeometry(0.62, 0.08, 0.09)),
-    rimMat
-  );
-  crossH.position.set(0, 0.10, 0.01);
-  const centerGem = new THREE.Mesh(
-    getGeo('ts_gem', () => new THREE.OctahedronGeometry(0.13, 0)),
-    runeMat
-  );
-  centerGem.scale.set(1, 1.35, 0.55);
-  centerGem.position.set(0, 0.10, 0.055);
-
-  grp.add(mainPlate, borderV, crossV, crossH, centerGem);
+  const boss = new THREE.Mesh(getGeo('skel_buckler_boss', () => new THREE.SphereGeometry(0.11, 8, 8)), rimMat);
+  boss.position.set(0, 0.06, 0.055);
+  grp.add(mainPlate, borderV, boss);
   grp.position.set(0.08, 0.04, 0.16);
   grp.rotation.y = 0.18;
   return grp;
 }
 
-function createVolatilePowderBarrel() {
-  const grp = new THREE.Group();
-  const charredWoodMat = getMat('pb_wood', () =>
-    new THREE.MeshStandardMaterial({ color: 0x3b2316, roughness: 0.82, metalness: 0.08 })
-  );
-  const hoopMat = getMat('pb_hoop', () =>
-    new THREE.MeshStandardMaterial({ color: 0x27272a, metalness: 0.82, roughness: 0.34 })
-  );
-  const glowRuneMat = new THREE.MeshStandardMaterial({
-    color: 0xfdba74,
-    emissive: 0xf97316,
-    emissiveIntensity: 2.1,
-    roughness: 0.2
-  });
-  const sparkMat = getMat('pb_spark', () =>
-    new THREE.MeshBasicMaterial({ color: 0xfef08a, toneMapped: false })
-  );
-
-  const keg = new THREE.Mesh(
-    getGeo('pb_keg', () => {
-      const cg = new THREE.CylinderGeometry(0.23, 0.23, 0.48, 12);
-      cg.rotateZ(Math.PI / 2);
-      return cg;
-    }),
-    charredWoodMat
-  );
-
-  const hoopGeo = getGeo('pb_hoop_geo', () => {
-    const tg = new THREE.TorusGeometry(0.235, 0.022, 6, 16);
-    tg.rotateY(Math.PI / 2);
-    return tg;
-  });
-  const hoopL = new THREE.Mesh(hoopGeo, hoopMat);
-  hoopL.position.x = -0.15;
-  const hoopR = new THREE.Mesh(hoopGeo, hoopMat);
-  hoopR.position.x = 0.15;
-
-  // Glowing volatile powder seams & hazard core
-  const seamBand = new THREE.Mesh(
-    getGeo('pb_seam', () => {
-      const tg = new THREE.TorusGeometry(0.238, 0.020, 6, 16);
-      tg.rotateY(Math.PI / 2);
-      return tg;
-    }),
-    glowRuneMat
-  );
-  const frontRune = new THREE.Mesh(
-    getGeo('pb_rune_oct', () => new THREE.OctahedronGeometry(0.11, 0)),
-    glowRuneMat
-  );
-  frontRune.scale.set(1.1, 1.1, 0.45);
-  frontRune.position.set(0, 0.02, 0.23);
-
-  // Lit fuse + bright spark on top
-  const fuse = new THREE.Mesh(
-    getGeo('pb_fuse', () => new THREE.CylinderGeometry(0.018, 0.022, 0.16, 6)),
-    hoopMat
-  );
-  fuse.position.set(0, 0.28, 0.04);
-  fuse.rotation.z = -0.28;
-
-  const spark = new THREE.Mesh(
-    getGeo('pb_spark_oct', () => new THREE.OctahedronGeometry(0.075, 0)),
-    sparkMat
-  );
-  spark.position.set(0.03, 0.37, 0.04);
-
-  grp.add(keg, hoopL, hoopR, seamBand, frontRune, fuse, spark);
-  grp.userData.glowRuneMat = glowRuneMat;
-  grp.userData.spark = spark;
-  return grp;
-}
-
-function createButcherHornedHelm() {
-  const grp = new THREE.Group();
-  const helmMat = getMat('butcher_helm_iron', () =>
-    new THREE.MeshStandardMaterial({ color: 0x3f1515, metalness: 0.78, roughness: 0.32 })
-  );
-  const band = new THREE.Mesh(
-    getGeo('butcher_helm_band', () => new THREE.CylinderGeometry(0.46, 0.48, 0.22, 14)),
-    helmMat
-  );
-  band.position.y = 0.74;
-  const hornL = createCurvedHorn(1, true);
-  hornL.position.y = 0.66;
-  const hornR = createCurvedHorn(-1, true);
-  hornR.position.y = 0.66;
-  grp.add(band, hornL, hornR);
-  return grp;
-}
-
-function createRustedPotHelm() {
-  const grp = new THREE.Group();
-  const ironMat = getMat('skel_pothelm_iron', () =>
-    new THREE.MeshStandardMaterial({ color: 0x4b5563, metalness: 0.72, roughness: 0.38 })
-  );
-  const brassMat = getMat('skel_pothelm_brass', () =>
-    new THREE.MeshStandardMaterial({ color: 0xb45309, metalness: 0.68, roughness: 0.42 })
-  );
-  const dome = new THREE.Mesh(
-    getGeo('skel_pothelm_dome', () => new THREE.SphereGeometry(0.41, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.52)),
-    ironMat
-  );
-  dome.position.y = 0.64;
-  const brim = new THREE.Mesh(
-    getGeo('skel_pothelm_brim', () => new THREE.CylinderGeometry(0.43, 0.52, 0.08, 14)),
-    ironMat
-  );
-  brim.position.y = 0.64;
-  const band = new THREE.Mesh(
-    getGeo('skel_pothelm_band', () => new THREE.CylinderGeometry(0.42, 0.43, 0.06, 12)),
-    brassMat
-  );
-  band.position.y = 0.68;
-  grp.add(dome, brim, band);
-  return grp;
-}
-
-function createRustedBuckler() {
-  const grp = new THREE.Group();
-  const woodMat = getMat('skel_buckler_wood', () =>
-    new THREE.MeshStandardMaterial({ color: 0x5c3a21, roughness: 0.82, metalness: 0.08 })
-  );
-  const rimMat = getMat('skel_buckler_rim', () =>
-    new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.75, roughness: 0.36 })
-  );
-  const disc = new THREE.Mesh(
-    getGeo('skel_buckler_disc', () => {
-      const cg = new THREE.CylinderGeometry(0.32, 0.32, 0.06, 12);
-      cg.rotateX(Math.PI / 2);
-      return cg;
-    }),
-    woodMat
-  );
-  const boss = new THREE.Mesh(
-    getGeo('skel_buckler_boss', () => new THREE.SphereGeometry(0.10, 8, 8)),
-    rimMat
-  );
-  boss.position.z = 0.04;
-  const rim = new THREE.Mesh(
-    getGeo('skel_buckler_torus', () => new THREE.TorusGeometry(0.32, 0.036, 6, 14)),
-    rimMat
-  );
-  grp.add(disc, boss, rim);
-  grp.position.set(0.06, 0.04, 0.11);
-  grp.rotation.y = 0.25;
-  return grp;
-}
-
-function createAshlordCrown() {
-  const grp = new THREE.Group();
-  const crownGoldMat = getMat('ash_crown_gold', () =>
-    new THREE.MeshStandardMaterial({
-      color: 0xfacc15,
-      emissive: 0xd97706,
-      emissiveIntensity: 0.75,
-      metalness: 0.88,
-      roughness: 0.18
-    })
-  );
-  const rubyMat = getMat('ash_crown_ruby', () =>
-    new THREE.MeshStandardMaterial({
-      color: 0xfef08a,
-      emissive: 0xff3b00,
-      emissiveIntensity: 2.4,
-      roughness: 0.15
-    })
-  );
-
-  // Forged golden circlet seated cleanly atop Skeleton_Warrior skull (y_local ~ 0.82)
-  const circlet = new THREE.Mesh(
-    getGeo('ash_crown_band', () => new THREE.CylinderGeometry(0.44, 0.40, 0.18, 16)),
-    crownGoldMat
-  );
-  circlet.position.y = 0.84;
-
-  const tallSpikeGeo = getGeo('ash_spike_tall', () => new THREE.ConeGeometry(0.085, 0.46, 4));
-  const midSpikeGeo = getGeo('ash_spike_mid', () => new THREE.ConeGeometry(0.068, 0.30, 4));
-  const gemGeo = getGeo('ash_crown_gem', () => new THREE.OctahedronGeometry(0.065, 0));
-
-  const spikeCount = 8;
-  for (let i = 0; i < spikeCount; i++) {
-    const a = (i / spikeCount) * Math.PI * 2;
-    const isTall = i % 2 === 0;
-    const isFrontKingPeak = i === 0;
-    const spike = new THREE.Mesh(isTall ? tallSpikeGeo : midSpikeGeo, crownGoldMat);
-    const r = 0.40;
-    spike.position.set(
-      Math.sin(a) * r,
-      0.93 + (isTall ? 0.20 : 0.12) + (isFrontKingPeak ? 0.08 : 0),
-      Math.cos(a) * r
-    );
-    if (isFrontKingPeak) spike.scale.set(1.25, 1.28, 1.25);
-    spike.rotation.y = a;
-    // Slight outward regal flare
-    spike.rotation.x = Math.cos(a) * 0.12;
-    spike.rotation.z = -Math.sin(a) * 0.12;
-    grp.add(spike);
-
-    if (isTall) {
-      const gem = new THREE.Mesh(gemGeo, rubyMat);
-      gem.position.set(Math.sin(a) * 0.435, 0.85, Math.cos(a) * 0.435);
-      grp.add(gem);
-    }
-  }
-
-  return grp;
-}
-
-function createAshlordMagmaArmorCracks() {
-  const grp = new THREE.Group();
-  const magmaMat = getMat('ash_magma_veins', () =>
-    new THREE.MeshStandardMaterial({
-      color: 0xfef08a,
-      emissive: 0xff4500,
-      emissiveIntensity: 2.3,
-      roughness: 0.18
-    })
-  );
-  const coreHeart = new THREE.Mesh(
-    getGeo('ash_chest_core', () => new THREE.OctahedronGeometry(0.14, 0)),
-    magmaMat
-  );
-  coreHeart.scale.set(1.1, 1.35, 0.55);
-  coreHeart.position.set(0, 0.20, 0.23);
-
-  const ribGeo = getGeo('ash_magma_rib', () => new THREE.BoxGeometry(0.24, 0.032, 0.04));
-  for (let r = -1; r <= 1; r++) {
-    for (const side of [-1, 1]) {
-      const vein = new THREE.Mesh(ribGeo, magmaMat);
-      vein.position.set(side * 0.14, 0.20 + r * 0.075, 0.21);
-      vein.rotation.z = side * -0.28;
-      vein.rotation.y = side * -0.25;
-      grp.add(vein);
-    }
-  }
-  grp.add(coreHeart);
-  return grp;
-}
-
 function makeEnemyWeaponProp(kind) {
   const g = new THREE.Group();
-  const darkWoodMat = getMat('ew_wood', () => new THREE.MeshStandardMaterial({ color: 0x3b2416, roughness: 0.75, metalness: 0.1 }));
-  const darkIronMat = getMat('ew_dark_iron', () => new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.78, roughness: 0.32 }));
-  const rustedMat = getMat('ew_rusted', () => new THREE.MeshStandardMaterial({ color: 0x785a46, metalness: 0.62, roughness: 0.55 }));
-  const steelMat = getMat('ew_steel', () => new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.82, roughness: 0.26 }));
-  const goldMat = getMat('ew_gold', () => new THREE.MeshStandardMaterial({ color: 0xfbbf24, metalness: 0.86, roughness: 0.22 }));
-  const boneMat = getMat('ew_bone', () => new THREE.MeshStandardMaterial({ color: 0xd6cfc2, roughness: 0.5, metalness: 0.1 }));
+  const darkWoodMat = getMat('ew_wood', () => new THREE.MeshStandardMaterial({ color: 0x452b1a, roughness: 0.78, metalness: 0.08 }));
+  const darkIronMat = getMat('ew_dark_iron', () => new THREE.MeshStandardMaterial({ color: 0x333842, metalness: 0.80, roughness: 0.32 }));
+  const stoneMat = getMat('ew_stone', () => new THREE.MeshStandardMaterial({ color: 0x6b7280, roughness: 0.72, metalness: 0.18 }));
+  const steelMat = getMat('ew_steel', () => new THREE.MeshStandardMaterial({ color: 0x9ca3af, metalness: 0.82, roughness: 0.26 }));
+  const goldMat = getMat('ew_gold', () => new THREE.MeshStandardMaterial({ color: 0xfbbf24, metalness: 0.88, roughness: 0.20 }));
+  const boneMat = getMat('ew_bone', () => new THREE.MeshStandardMaterial({ color: 0xe2dacb, roughness: 0.50, metalness: 0.08 }));
 
-  if (kind === 'scythe') {
-    const pole = new THREE.Mesh(
-      getGeo('scythe_pole', () => new THREE.CylinderGeometry(0.045, 0.055, 2.5, 8)),
-      getMat('scythe_pole_mat', () => new THREE.MeshStandardMaterial({ color: 0x1e1b2e, roughness: 0.6, metalness: 0.3 }))
-    );
-    pole.position.y = 0.75;
-    g.add(pole);
-
-    const shape = new THREE.Shape();
-    shape.moveTo(0, 0);
-    shape.quadraticCurveTo(0.85, 0.22, 1.55, -0.32);
-    shape.quadraticCurveTo(0.82, -0.05, 0, -0.22);
-    shape.closePath();
-    const bladeGeo = getGeo('scythe_blade', () =>
-      new THREE.ExtrudeGeometry(shape, {
-        depth: 0.04,
-        bevelEnabled: true,
-        bevelThickness: 0.018,
-        bevelSize: 0.018,
-        bevelSegments: 2
-      })
-    );
-    const bladeMat = getMat('scythe_blade_mat', () =>
-      new THREE.MeshStandardMaterial({
-        color: 0xa5f3fc,
-        emissive: 0x06b6d4,
-        emissiveIntensity: 1.55,
-        metalness: 0.65,
-        roughness: 0.2
-      })
-    );
-    const blade = new THREE.Mesh(bladeGeo, bladeMat);
-    blade.position.set(0, 1.88, -0.02);
-    blade.rotation.y = Math.PI * 0.5;
-    g.add(blade);
-    return g;
-  }
-
-  if (kind === 'butcher_cleaver') {
-    // Giant Blood-Soaked Butcher Cleaver
-    const handle = new THREE.Mesh(
-      getGeo('bc_handle', () => new THREE.CylinderGeometry(0.048, 0.055, 0.42, 8)),
-      darkWoodMat
-    );
-    handle.position.y = 0.06;
-    const guard = new THREE.Mesh(
-      getGeo('bc_guard', () => new THREE.BoxGeometry(0.32, 0.08, 0.12)),
-      darkIronMat
-    );
-    guard.position.y = 0.26;
-    const cleaverMat = getMat('bc_blade_mat', () =>
-      new THREE.MeshStandardMaterial({
-        color: 0xd1d5db,
-        emissive: 0x991b1b,
-        emissiveIntensity: 0.55,
-        metalness: 0.80,
-        roughness: 0.26
-      })
-    );
-    const bloodEdgeMat = getMat('bc_blood_edge', () =>
-      new THREE.MeshStandardMaterial({
-        color: 0xef4444,
-        emissive: 0xdc2626,
-        emissiveIntensity: 1.35,
-        roughness: 0.25
-      })
-    );
-    const blade = new THREE.Mesh(
-      getGeo('bc_blade', () => new THREE.BoxGeometry(0.36, 1.06, 0.055)),
-      cleaverMat
-    );
-    blade.position.set(0.06, 0.82, 0);
-    const bloodEdge = new THREE.Mesh(
-      getGeo('bc_edge', () => new THREE.BoxGeometry(0.08, 1.08, 0.062)),
-      bloodEdgeMat
-    );
-    bloodEdge.position.set(0.21, 0.82, 0);
-    g.add(handle, guard, blade, bloodEdge);
+  if (kind === 'goblin_stone_axe') {
+    const shaft = new THREE.Mesh(getGeo('ga_shaft', () => new THREE.CylinderGeometry(0.042, 0.048, 0.92, 7)), darkWoodMat);
+    shaft.position.y = 0.34;
+    const headStone = new THREE.Mesh(getGeo('ga_stone', () => new THREE.BoxGeometry(0.42, 0.26, 0.11)), stoneMat);
+    headStone.position.set(0.10, 0.68, 0);
+    const edge = new THREE.Mesh(getGeo('ga_edge', () => new THREE.BoxGeometry(0.12, 0.32, 0.06)), steelMat);
+    edge.position.set(0.28, 0.68, 0);
+    const wrap = new THREE.Mesh(getGeo('ga_wrap', () => new THREE.BoxGeometry(0.15, 0.14, 0.14)), darkWoodMat);
+    wrap.position.set(0, 0.68, 0);
+    g.add(shaft, headStone, edge, wrap);
     g.rotation.y = Math.PI * 0.5;
     return g;
   }
 
-  if (kind === 'warden_hammer') {
-    // Royal Cobalt-Gold Inquisitor Warhammer / Greatsword-Maul
-    const shaft = new THREE.Mesh(
-      getGeo('wh_shaft', () => new THREE.CylinderGeometry(0.046, 0.054, 1.68, 8)),
-      darkIronMat
-    );
-    shaft.position.y = 0.62;
-    const collar = new THREE.Mesh(
-      getGeo('wh_collar', () => new THREE.CylinderGeometry(0.095, 0.08, 0.18, 8)),
+  if (kind === 'mummy_crescent_staff') {
+    const pole = new THREE.Mesh(getGeo('mc_pole', () => new THREE.CylinderGeometry(0.040, 0.048, 1.68, 8)), goldMat);
+    pole.position.y = 0.58;
+    const collar = new THREE.Mesh(getGeo('mc_collar', () => new THREE.CylinderGeometry(0.09, 0.06, 0.14, 8)), goldMat);
+    collar.position.y = 1.38;
+    const crescent = new THREE.Mesh(
+      getGeo('mc_crescent', () => new THREE.TorusGeometry(0.23, 0.052, 8, 18, Math.PI * 1.42)),
       goldMat
     );
-    collar.position.y = 1.25;
-    const headBlock = new THREE.Mesh(
-      getGeo('wh_head', () => new THREE.BoxGeometry(0.64, 0.34, 0.32)),
-      getMat('wh_cobalt_mat', () =>
-        new THREE.MeshStandardMaterial({
-          color: 0x1e3a8a,
-          emissive: 0x2563eb,
-          emissiveIntensity: 0.65,
-          metalness: 0.85,
-          roughness: 0.22
-        })
-      )
-    );
-    headBlock.position.y = 1.44;
-    const goldBand = new THREE.Mesh(
-      getGeo('wh_gold_band', () => new THREE.BoxGeometry(0.68, 0.11, 0.35)),
-      goldMat
-    );
-    goldBand.position.y = 1.44;
-    const topSpike = new THREE.Mesh(
-      getGeo('wh_spike', () => new THREE.ConeGeometry(0.085, 0.34, 6)),
-      goldMat
-    );
-    topSpike.position.y = 1.76;
-    g.add(shaft, collar, headBlock, goldBand, topSpike);
-    g.rotation.y = Math.PI * 0.5;
+    crescent.position.set(0.04, 1.62, 0);
+    crescent.rotation.z = 0.42;
+    g.add(pole, collar, crescent);
     return g;
   }
 
-  if (kind === 'necro_staff' || kind === 'archlich_staff') {
-    const isBoss = kind === 'archlich_staff';
-    const poleH = isBoss ? 1.95 : 1.62;
+  if (kind === 'cultist_skull_staff' || kind === 'archlich_violet_staff') {
+    const isBoss = kind === 'archlich_violet_staff';
+    const poleH = isBoss ? 1.98 : 1.62;
     const pole = new THREE.Mesh(
-      getGeo(isBoss ? 'ns_pole_boss' : 'ns_pole', () => new THREE.CylinderGeometry(0.042, 0.052, poleH, 8)),
-      darkWoodMat
+      getGeo(isBoss ? 'cs_pole_boss' : 'cs_pole', () => new THREE.CylinderGeometry(0.042, 0.054, poleH, 8)),
+      isBoss ? darkIronMat : darkWoodMat
     );
     pole.position.y = poleH * 0.36;
 
-    const skull = new THREE.Mesh(
-      getGeo('ns_skull', () => new THREE.SphereGeometry(0.14, 10, 10)),
-      boneMat
-    );
-    skull.scale.set(0.95, 1.12, 0.95);
-    skull.position.y = poleH * 0.82;
+    const skull = new THREE.Mesh(getGeo('ns_skull', () => new THREE.SphereGeometry(0.15, 10, 10)), boneMat);
+    skull.scale.set(0.96, 1.12, 0.96);
+    skull.position.y = poleH * 0.80;
 
-    const emeraldMat = getMat('ns_emerald_glow', () =>
+    const violetMat = getMat('cs_violet_flame', () =>
       new THREE.MeshStandardMaterial({
-        color: 0x6ee7b7,
-        emissive: 0x10b981,
-        emissiveIntensity: 2.1,
-        roughness: 0.15
+        color: 0xf5d0fe,
+        emissive: 0xa855f7,
+        emissiveIntensity: 2.5,
+        roughness: 0.14
       })
     );
     const orb = new THREE.Mesh(
-      getGeo(isBoss ? 'ns_orb_boss' : 'ns_orb', () => new THREE.OctahedronGeometry(isBoss ? 0.24 : 0.17, 0)),
-      emeraldMat
+      getGeo(isBoss ? 'cs_orb_boss' : 'cs_orb', () => new THREE.SphereGeometry(isBoss ? 0.21 : 0.14, 10, 10)),
+      violetMat
     );
-    orb.scale.set(0.88, 1.45, 0.88);
-    orb.position.y = poleH * 0.82 + (isBoss ? 0.32 : 0.24);
-
-    g.add(pole, skull, orb);
+    orb.position.y = poleH * 0.80 + (isBoss ? 0.30 : 0.20);
+    const flameTip = new THREE.Mesh(
+      getGeo('cs_flame_cone', () => new THREE.ConeGeometry(isBoss ? 0.20 : 0.12, isBoss ? 0.42 : 0.26, 7)),
+      violetMat
+    );
+    flameTip.position.y = orb.position.y + (isBoss ? 0.20 : 0.12);
+    g.add(pole, skull, orb, flameTip);
     if (isBoss) {
-      const ring = new THREE.Mesh(
-        getGeo('ns_lich_ring', () => new THREE.TorusGeometry(0.28, 0.025, 6, 18)),
-        emeraldMat
-      );
-      ring.position.y = orb.position.y;
-      g.add(ring);
+      for (const sx of [-1, 1]) {
+        const prong = new THREE.Mesh(getGeo('cs_prong', () => new THREE.ConeGeometry(0.055, 0.46, 5)), darkIronMat);
+        prong.position.set(sx * 0.22, orb.position.y + 0.02, 0);
+        prong.rotation.z = -sx * 0.28;
+        g.add(prong);
+      }
     }
     return g;
   }
 
-  if (kind === 'molten_greatsword') {
-    // Act V Ultra-Boss «Владыка Вечного Пепла» Giant Molten Flaming Greatsword
+  if (kind === 'ogre_colossal_warhammer') {
+    // Act IV Boss «Огр-Костолом» Colossal Forged Iron Warhammer (matches ad09b7c9.jpg #4!)
+    const shaft = new THREE.Mesh(
+      getGeo('og_wh_shaft', () => new THREE.CylinderGeometry(0.056, 0.064, 1.85, 8)),
+      darkWoodMat
+    );
+    shaft.position.y = 0.68;
+    const gripBand = new THREE.Mesh(
+      getGeo('og_wh_collar', () => new THREE.CylinderGeometry(0.10, 0.09, 0.20, 8)),
+      darkIronMat
+    );
+    gripBand.position.y = 1.32;
+    const headBlock = new THREE.Mesh(
+      getGeo('og_wh_head', () => new THREE.BoxGeometry(0.78, 0.44, 0.42)),
+      darkIronMat
+    );
+    headBlock.position.y = 1.56;
+    const steelFaces = new THREE.Mesh(
+      getGeo('og_wh_faces', () => new THREE.BoxGeometry(0.84, 0.36, 0.36)),
+      steelMat
+    );
+    steelFaces.position.y = 1.56;
+    const midStrap = new THREE.Mesh(
+      getGeo('og_wh_strap', () => new THREE.BoxGeometry(0.24, 0.48, 0.46)),
+      steelMat
+    );
+    midStrap.position.y = 1.56;
+    g.add(shaft, gripBand, headBlock, steelFaces, midStrap);
+    g.rotation.y = Math.PI * 0.5;
+    return g;
+  }
+
+  if (kind === 'demon_magma_greatsword') {
+    // Act I Boss «Демон Преисподней» Blazing Magma Greatsword (matches ad09b7c9.jpg #1!)
     const hilt = new THREE.Mesh(
       getGeo('mg_hilt', () => new THREE.CylinderGeometry(0.055, 0.062, 0.48, 8)),
       darkIronMat
     );
     hilt.position.y = 0.05;
-    const pommel = new THREE.Mesh(
-      getGeo('mg_pommel', () => new THREE.OctahedronGeometry(0.10, 0)),
-      goldMat
-    );
-    pommel.position.y = -0.20;
-
     const guard = new THREE.Mesh(
-      getGeo('mg_guard', () => new THREE.BoxGeometry(0.66, 0.11, 0.16)),
-      goldMat
+      getGeo('mg_guard', () => new THREE.BoxGeometry(0.68, 0.13, 0.16)),
+      darkIronMat
     );
     guard.position.y = 0.28;
+    const skullGuard = new THREE.Mesh(getGeo('ns_skull', () => new THREE.SphereGeometry(0.14, 9, 9)), boneMat);
+    skullGuard.position.set(0, 0.29, 0.06);
 
     const obsidianCore = new THREE.Mesh(
-      getGeo('mg_core_blade', () => new THREE.BoxGeometry(0.22, 1.56, 0.075)),
+      getGeo('mg_core_blade', () => new THREE.BoxGeometry(0.22, 1.54, 0.075)),
       getMat('mg_obs_mat', () =>
-        new THREE.MeshStandardMaterial({ color: 0x290909, emissive: 0x7c2d12, emissiveIntensity: 0.6, metalness: 0.75, roughness: 0.3 })
+        new THREE.MeshStandardMaterial({ color: 0x290909, emissive: 0x9a3412, emissiveIntensity: 0.75, metalness: 0.72, roughness: 0.3 })
       )
     );
     obsidianCore.position.y = 1.10;
@@ -1733,19 +3833,18 @@ function makeEnemyWeaponProp(kind) {
       new THREE.MeshStandardMaterial({
         color: 0xfef08a,
         emissive: 0xff4500,
-        emissiveIntensity: 2.35,
-        roughness: 0.18
+        emissiveIntensity: 2.6,
+        roughness: 0.16
       })
     );
     const flameBlade = new THREE.Mesh(
-      getGeo('mg_flame_blade', () => new THREE.BoxGeometry(0.36, 1.52, 0.042)),
+      getGeo('mg_flame_blade', () => new THREE.BoxGeometry(0.38, 1.50, 0.044)),
       magmaEdgeMat
     );
     flameBlade.position.y = 1.10;
-
     const flameTip = new THREE.Mesh(
       getGeo('mg_flame_tip', () => {
-        const cg = new THREE.ConeGeometry(0.20, 0.40, 4);
+        const cg = new THREE.ConeGeometry(0.22, 0.42, 4);
         cg.rotateY(Math.PI / 4);
         return cg;
       }),
@@ -1754,28 +3853,22 @@ function makeEnemyWeaponProp(kind) {
     flameTip.scale.set(1, 1, 0.32);
     flameTip.position.y = 2.04;
 
-    g.add(hilt, pommel, guard, obsidianCore, flameBlade, flameTip);
+    g.add(hilt, guard, skullGuard, obsidianCore, flameBlade, flameTip);
     g.rotation.x = 0.22;
     g.rotation.y = Math.PI * 0.5;
     return g;
   }
 
-  // Default 'rusted_sword' / 'broadsword'
+  // Default 'bone_sword' / 'broadsword'
   const isBroad = kind === 'broadsword';
-  const bladeLen = isBroad ? 1.02 : 0.86;
-  const bladeW = isBroad ? 0.16 : 0.11;
-  const grip = new THREE.Mesh(
-    getGeo('ew_sw_grip', () => new THREE.CylinderGeometry(0.038, 0.042, 0.26, 8)),
-    darkWoodMat
-  );
-  const cross = new THREE.Mesh(
-    getGeo('ew_sw_cross', () => new THREE.BoxGeometry(isBroad ? 0.30 : 0.22, 0.06, 0.09)),
-    darkIronMat
-  );
+  const bladeLen = isBroad ? 0.98 : 0.86;
+  const bladeW = isBroad ? 0.16 : 0.12;
+  const grip = new THREE.Mesh(getGeo('ew_sw_grip', () => new THREE.CylinderGeometry(0.038, 0.042, 0.26, 8)), darkWoodMat);
+  const cross = new THREE.Mesh(getGeo('ew_sw_cross', () => new THREE.BoxGeometry(isBroad ? 0.30 : 0.24, 0.06, 0.09)), darkIronMat);
   cross.position.y = 0.14;
   const blade = new THREE.Mesh(
-    getGeo(`eblade_v2_${kind}`, () => new THREE.BoxGeometry(bladeW, bladeLen, 0.038)),
-    isBroad ? steelMat : rustedMat
+    getGeo(`eblade_v3_${kind}`, () => new THREE.BoxGeometry(bladeW, bladeLen, 0.040)),
+    isBroad ? steelMat : boneMat
   );
   blade.position.y = bladeLen * 0.5 + 0.17;
   g.add(grip, cross, blade);
@@ -1784,182 +3877,928 @@ function makeEnemyWeaponProp(kind) {
   return g;
 }
 
+// ============================================================================
+// Custom Multi-Part Animated 3D Creature Rigs (Spider, Slime, Ghost, Wisp, Mimic, Treant)
+// ============================================================================
+function buildProceduralMonsterRig(rigType, scale = 1.0, flashSlots = []) {
+  const grp = new THREE.Group();
+  grp.scale.setScalar(scale);
+
+  const regMesh = (mesh, skipFlash = false) => {
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    if (!skipFlash && mesh.material) {
+      flashSlots.push({ mesh, origMat: mesh.material });
+    }
+    return mesh;
+  };
+
+  let attackTimer = 0;
+
+  if (rigType === 'dark_spider') {
+    const bodyGrp = new THREE.Group();
+    bodyGrp.position.y = 0.42;
+    grp.add(bodyGrp);
+
+    const chitinMat = getMat('spid_chitin', () =>
+      new THREE.MeshStandardMaterial({ color: 0x1c1e26, roughness: 0.46, metalness: 0.26 })
+    );
+    const legMat = getMat('spid_leg', () =>
+      new THREE.MeshStandardMaterial({ color: 0x111318, roughness: 0.42, metalness: 0.30 })
+    );
+    const redEyeMat = getMat('spid_red_eye', () =>
+      new THREE.MeshStandardMaterial({ color: 0xff2a2a, emissive: 0xff0000, emissiveIntensity: 3.0, roughness: 0.12 })
+    );
+
+    const abdomen = regMesh(new THREE.Mesh(getGeo('spid_abd', () => new THREE.SphereGeometry(0.46, 14, 12)), chitinMat));
+    abdomen.scale.set(1.06, 0.88, 1.24);
+    abdomen.position.set(0, 0.10, -0.34);
+
+    const head = regMesh(new THREE.Mesh(getGeo('spid_head', () => new THREE.SphereGeometry(0.32, 12, 10)), chitinMat));
+    head.scale.set(1.05, 0.85, 1.02);
+    head.position.set(0, 0.0, 0.24);
+    bodyGrp.add(abdomen, head);
+
+    // Cluster of 6 glowing crimson spider eyes!
+    const mainEyeGeo = getGeo('spid_eye_lg', () => new THREE.SphereGeometry(0.056, 8, 8));
+    const subEyeGeo = getGeo('spid_eye_sm', () => new THREE.SphereGeometry(0.036, 7, 7));
+    const eyeSpecs = [
+      [-0.10, 0.04, 0.52, mainEyeGeo],
+      [0.10, 0.04, 0.52, mainEyeGeo],
+      [-0.20, 0.07, 0.46, subEyeGeo],
+      [0.20, 0.07, 0.46, subEyeGeo],
+      [-0.06, 0.13, 0.49, subEyeGeo],
+      [0.06, 0.13, 0.49, subEyeGeo]
+    ];
+    for (const [ex, ey, ez, eg] of eyeSpecs) {
+      const em = regMesh(new THREE.Mesh(eg, redEyeMat), true);
+      em.position.set(ex, ey, ez);
+      bodyGrp.add(em);
+    }
+
+    // 2 Snapping Front Fangs (Chelicerae)
+    const fangGeo = getGeo('spid_fang', () => new THREE.ConeGeometry(0.048, 0.22, 6));
+    const fangs = [];
+    for (const sx of [-1, 1]) {
+      const f = regMesh(new THREE.Mesh(fangGeo, legMat));
+      f.position.set(sx * 0.12, -0.10, 0.52);
+      f.rotation.x = Math.PI * 0.78;
+      f.rotation.z = sx * 0.25;
+      bodyGrp.add(f);
+      fangs.push({ mesh: f, sx });
+    }
+
+    // 8 Articulated 2-Segment Spider Legs
+    const femurGeo = getGeo('spid_femur', () => {
+      const cg = new THREE.CylinderGeometry(0.042, 0.052, 0.56, 7);
+      cg.translate(0, 0.28, 0);
+      return cg;
+    });
+    const tibiaGeo = getGeo('spid_tibia', () => {
+      const cg = new THREE.ConeGeometry(0.044, 0.68, 7);
+      cg.rotateX(Math.PI);
+      cg.translate(0, -0.34, 0);
+      return cg;
+    });
+    const legs = [];
+    const legZ = [0.24, 0.07, -0.10, -0.27];
+    const legYaw = [0.58, 0.18, -0.22, -0.62];
+    for (let li = 0; li < 4; li++) {
+      for (const sx of [-1, 1]) {
+        const hip = new THREE.Group();
+        hip.position.set(sx * 0.24, -0.02, legZ[li]);
+        hip.rotation.y = sx * legYaw[li];
+
+        const femur = regMesh(new THREE.Mesh(femurGeo, legMat));
+        femur.rotation.z = -sx * 0.96;
+
+        const knee = new THREE.Group();
+        knee.position.set(sx * 0.46, 0.31, 0);
+        const tibia = regMesh(new THREE.Mesh(tibiaGeo, legMat));
+        tibia.rotation.z = -sx * 0.32;
+        knee.add(tibia);
+
+        hip.add(femur, knee);
+        bodyGrp.add(hip);
+        legs.push({ hip, baseYaw: sx * legYaw[li], sx, phase: (li % 2 === 0 ? 0 : Math.PI) + (sx < 0 ? Math.PI : 0) });
+      }
+    }
+
+    return {
+      root: grp,
+      triggerAttack() { attackTimer = 0.26; },
+      update(dt, t, isDying) {
+        if (isDying) return;
+        if (attackTimer > 0) attackTimer = Math.max(0, attackTimer - dt);
+        const atkSnap = attackTimer > 0 ? Math.sin((attackTimer / 0.26) * Math.PI) : 0;
+        bodyGrp.position.y = 0.42 + Math.sin(t * 16) * 0.03 + atkSnap * 0.12;
+        for (let i = 0; i < legs.length; i++) {
+          const lg = legs[i];
+          const cyc = Math.sin(t * 17.0 + lg.phase);
+          lg.hip.rotation.y = lg.baseYaw + cyc * 0.26;
+          lg.hip.rotation.z = lg.sx * Math.max(0, cyc) * 0.18;
+        }
+        for (const fg of fangs) {
+          fg.mesh.rotation.z = fg.sx * (0.25 - atkSnap * 0.55);
+        }
+      }
+    };
+  }
+
+  if (rigType === 'toxic_slime') {
+    const slimeMat = getMat('slime_purple', () =>
+      new THREE.MeshStandardMaterial({ color: 0x3b1d5e, roughness: 0.16, metalness: 0.12 })
+    );
+    const acidGlowMat = getMat('slime_acid_glow', () =>
+      new THREE.MeshStandardMaterial({ color: 0x86efac, emissive: 0x22c55e, emissiveIntensity: 3.0, roughness: 0.12 })
+    );
+    const cavityMat = getMat('slime_cavity', () =>
+      new THREE.MeshStandardMaterial({ color: 0x150826, roughness: 0.8 })
+    );
+    const boneMat = getMat('ew_bone', () =>
+      new THREE.MeshStandardMaterial({ color: 0xe2dacb, roughness: 0.5, metalness: 0.08 })
+    );
+
+    const jelly = new THREE.Group();
+    grp.add(jelly);
+
+    const puddle = regMesh(new THREE.Mesh(getGeo('slime_puddle', () => new THREE.CylinderGeometry(0.62, 0.78, 0.22, 16)), slimeMat));
+    puddle.position.y = 0.11;
+    const dome = regMesh(new THREE.Mesh(getGeo('slime_dome', () => new THREE.SphereGeometry(0.58, 16, 14)), slimeMat));
+    dome.scale.set(1.02, 1.18, 0.98);
+    dome.position.y = 0.56;
+    jelly.add(puddle, dome);
+
+    // Glossy ooze blisters around base
+    const blisterGeo = getGeo('slime_blister', () => new THREE.SphereGeometry(0.18, 10, 10));
+    for (let b = 0; b < 6; b++) {
+      const a = (b / 6) * Math.PI * 2 + 0.3;
+      const bl = regMesh(new THREE.Mesh(blisterGeo, slimeMat));
+      bl.position.set(Math.cos(a) * 0.56, 0.18 + (b % 2) * 0.12, Math.sin(a) * 0.54);
+      jelly.add(bl);
+    }
+
+    // Protruding pale bones sticking out of the ooze (matches ad09b7c9.jpg!)
+    const topBone = regMesh(new THREE.Mesh(getGeo('slime_femur', () => new THREE.CylinderGeometry(0.045, 0.05, 0.42, 7)), boneMat));
+    topBone.position.set(-0.22, 1.14, -0.04);
+    topBone.rotation.z = 0.45;
+    const sideBone = regMesh(new THREE.Mesh(getGeo('slime_rib', () => new THREE.ConeGeometry(0.055, 0.28, 6)), boneMat));
+    sideBone.position.set(0.46, 0.62, 0.12);
+    sideBone.rotation.z = -0.85;
+    jelly.add(topBone, sideBone);
+
+    // Glowing Toxic-Green Eyes & Jagged Acid Maw
+    for (const sx of [-0.18, 0.18]) {
+      const eye = regMesh(new THREE.Mesh(getGeo('slime_eye', () => new THREE.SphereGeometry(0.085, 8, 8)), acidGlowMat), true);
+      eye.scale.set(1.25, 0.82, 0.65);
+      eye.position.set(sx, 0.78, 0.51);
+      eye.rotation.z = sx < 0 ? -0.25 : 0.25;
+      jelly.add(eye);
+    }
+    const mawBack = regMesh(new THREE.Mesh(getGeo('slime_maw_back', () => new THREE.SphereGeometry(0.24, 10, 8)), cavityMat));
+    mawBack.scale.set(1.25, 0.82, 0.45);
+    mawBack.position.set(0, 0.48, 0.49);
+    const mawGlow = regMesh(new THREE.Mesh(getGeo('slime_maw_glow', () => new THREE.SphereGeometry(0.20, 10, 8)), acidGlowMat), true);
+    mawGlow.scale.set(1.20, 0.74, 0.42);
+    mawGlow.position.set(0, 0.48, 0.51);
+    jelly.add(mawBack, mawGlow);
+
+    return {
+      root: grp,
+      triggerAttack() { attackTimer = 0.28; },
+      update(dt, t, isDying) {
+        if (isDying) return;
+        if (attackTimer > 0) attackTimer = Math.max(0, attackTimer - dt);
+        const sq = Math.sin(t * 9.5) * 0.11 + (attackTimer > 0 ? 0.18 : 0);
+        jelly.scale.set(1 - sq * 0.55, 1 + sq, 1 - sq * 0.55);
+      }
+    };
+  }
+
+  if (rigType === 'phantom_ghost') {
+    const floatGrp = new THREE.Group();
+    floatGrp.position.y = 0.26;
+    grp.add(floatGrp);
+
+    const sheetMat = getMat('ghost_sheet', () =>
+      new THREE.MeshStandardMaterial({
+        color: 0xf1f5f9,
+        emissive: 0x64748b,
+        emissiveIntensity: 0.36,
+        roughness: 0.38,
+        metalness: 0.04,
+        side: THREE.DoubleSide
+      })
+    );
+    const hollowMat = getMat('ghost_hollow', () => new THREE.MeshBasicMaterial({ color: 0x09090d }));
+    const pupilMat = getMat('ghost_pupil', () =>
+      new THREE.MeshStandardMaterial({ color: 0xffb703, emissive: 0xff6a00, emissiveIntensity: 2.9, roughness: 0.12 })
+    );
+
+    const ghostBodyGeo = getGeo('ghost_draped_sheet', () => {
+      const g = new THREE.CylinderGeometry(0.36, 0.64, 1.08, 24, 10, true);
+      const pos = g.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const vy = pos.getY(i); // -0.54 .. +0.54
+        const vx = pos.getX(i);
+        const vz = pos.getZ(i);
+        const ang = Math.atan2(vz, vx);
+        const bottomFactor = Math.max(0, (0.20 - vy) / 0.74);
+        const ruffle = Math.sin(ang * 7) * 0.08 * bottomFactor;
+        const scallopY = Math.cos(ang * 7) * 0.065 * bottomFactor;
+        pos.setX(i, vx * (1 + ruffle));
+        pos.setZ(i, vz * (1 + ruffle));
+        pos.setY(i, vy + scallopY + 0.54);
+      }
+      g.computeVertexNormals();
+      return g;
+    });
+
+    const sheet = regMesh(new THREE.Mesh(ghostBodyGeo, sheetMat));
+    const headDome = regMesh(new THREE.Mesh(getGeo('ghost_head_cap', () => new THREE.SphereGeometry(0.365, 16, 12)), sheetMat));
+    headDome.position.y = 1.06;
+    floatGrp.add(sheet, headDome);
+
+    // 2 Draped Ghost Arms
+    const armGeo = getGeo('ghost_arm', () => new THREE.ConeGeometry(0.15, 0.44, 8));
+    const arms = [];
+    for (const sx of [-1, 1]) {
+      const arm = regMesh(new THREE.Mesh(armGeo, sheetMat));
+      arm.position.set(sx * 0.46, 0.72, 0.06);
+      arm.rotation.z = sx * 2.15;
+      arm.rotation.x = 0.25;
+      floatGrp.add(arm);
+      arms.push({ mesh: arm, sx });
+    }
+
+    // Dark oval eye sockets + glowing orange pupils + wailing open mouth (matches ad09b7c9.jpg!)
+    for (const sx of [-0.14, 0.14]) {
+      const sock = new THREE.Mesh(getGeo('ghost_sock', () => new THREE.SphereGeometry(0.085, 9, 9)), hollowMat);
+      sock.scale.set(0.85, 1.35, 0.45);
+      sock.position.set(sx, 0.98, 0.35);
+      const pup = regMesh(new THREE.Mesh(getGeo('ghost_pup', () => new THREE.SphereGeometry(0.052, 8, 8)), pupilMat), true);
+      pup.position.set(sx, 0.96, 0.38);
+      floatGrp.add(sock, pup);
+    }
+    const wailMouth = new THREE.Mesh(getGeo('ghost_wail', () => new THREE.SphereGeometry(0.095, 9, 9)), hollowMat);
+    wailMouth.scale.set(0.78, 1.48, 0.45);
+    wailMouth.position.set(0, 0.72, 0.42);
+    floatGrp.add(wailMouth);
+
+    return {
+      root: grp,
+      triggerAttack() { attackTimer = 0.25; },
+      update(dt, t, isDying) {
+        if (isDying) return;
+        if (attackTimer > 0) attackTimer = Math.max(0, attackTimer - dt);
+        floatGrp.position.y = 0.24 + Math.sin(t * 4.4) * 0.10;
+        floatGrp.rotation.z = Math.sin(t * 2.8) * 0.06;
+        for (const a of arms) {
+          a.mesh.rotation.z = a.sx * (2.15 + Math.sin(t * 5.2) * 0.16 - (attackTimer > 0 ? 0.45 : 0));
+        }
+      }
+    };
+  }
+
+  if (rigType === 'vampire_bat') {
+    const batGrp = new THREE.Group();
+    batGrp.position.y = 1.05;
+    grp.add(batGrp);
+
+    const furMat = getMat('vbat_fur', () =>
+      new THREE.MeshStandardMaterial({ color: 0x1e1429, roughness: 0.78, metalness: 0.12 })
+    );
+    const wingMat = getMat('vbat_wing', () =>
+      new THREE.MeshStandardMaterial({ color: 0x4c1028, emissive: 0x881337, emissiveIntensity: 0.25, roughness: 0.55, side: THREE.DoubleSide })
+    );
+    const fangMat = getMat('vbat_fang', () =>
+      new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.3 })
+    );
+
+    const torso = regMesh(new THREE.Mesh(getGeo('vbat_body', () => new THREE.SphereGeometry(0.24, 12, 10)), furMat));
+    torso.scale.set(0.95, 0.9, 1.35);
+    const head = regMesh(new THREE.Mesh(getGeo('vbat_head', () => new THREE.SphereGeometry(0.18, 12, 10)), furMat));
+    head.position.set(0, 0.08, 0.24);
+    const earGeo = getGeo('vbat_ear', () => new THREE.ConeGeometry(0.06, 0.18, 5));
+    const earL = regMesh(new THREE.Mesh(earGeo, furMat));
+    earL.position.set(-0.09, 0.24, 0.22);
+    earL.rotation.z = 0.28;
+    const earR = regMesh(new THREE.Mesh(earGeo, furMat));
+    earR.position.set(0.09, 0.24, 0.22);
+    earR.rotation.z = -0.28;
+
+    const fangGeo = getGeo('vbat_f', () => new THREE.ConeGeometry(0.022, 0.075, 4));
+    const fL = regMesh(new THREE.Mesh(fangGeo, fangMat));
+    fL.rotation.x = Math.PI;
+    fL.position.set(-0.045, -0.02, 0.40);
+    const fR = regMesh(new THREE.Mesh(fangGeo, fangMat));
+    fR.rotation.x = Math.PI;
+    fR.position.set(0.045, -0.02, 0.40);
+
+    head.add(createGlowingEyePair(0xff1e1e, 0.07, 0.04, 0.16, 0.65, 0.42));
+    batGrp.add(torso, head, earL, earR, fL, fR);
+
+    const wingGeo = getGeo('vbat_wing_geo', () => {
+      const sh = new THREE.Shape();
+      sh.moveTo(0, 0);
+      sh.lineTo(0.42, 0.14);
+      sh.lineTo(0.68, -0.02);
+      sh.lineTo(0.46, -0.18);
+      sh.lineTo(0.24, -0.12);
+      sh.lineTo(0, -0.18);
+      sh.closePath();
+      return new THREE.ShapeGeometry(sh);
+    });
+    const wingLPiv = new THREE.Group();
+    wingLPiv.position.set(-0.14, 0.06, 0.05);
+    const wingL = regMesh(new THREE.Mesh(wingGeo, wingMat));
+    wingL.rotation.x = -Math.PI * 0.5;
+    wingL.scale.x = -1;
+    wingLPiv.add(wingL);
+
+    const wingRPiv = new THREE.Group();
+    wingRPiv.position.set(0.14, 0.06, 0.05);
+    const wingR = regMesh(new THREE.Mesh(wingGeo, wingMat));
+    wingR.rotation.x = -Math.PI * 0.5;
+    wingRPiv.add(wingR);
+
+    batGrp.add(wingLPiv, wingRPiv);
+
+    return {
+      root: grp,
+      triggerAttack() { attackTimer = 0.25; },
+      update(dt, t, isDying) {
+        if (isDying) return;
+        if (attackTimer > 0) attackTimer = Math.max(0, attackTimer - dt);
+        const flap = Math.sin(t * 25.0 + (grp.id || 0));
+        batGrp.position.y = 1.05 + flap * 0.11 + (attackTimer > 0 ? 0.16 : 0);
+        wingLPiv.rotation.z = flap * 0.85;
+        wingRPiv.rotation.z = -flap * 0.85;
+        batGrp.rotation.x = 0.22 + (attackTimer > 0 ? 0.35 : 0);
+      }
+    };
+  }
+
+  if (rigType === 'shadow_wisp') {
+    const floatGrp = new THREE.Group();
+    floatGrp.position.y = 0.28;
+    grp.add(floatGrp);
+
+    const shadowMat = getMat('wisp_pitch_black', () =>
+      new THREE.MeshStandardMaterial({ color: 0x09090f, roughness: 0.90, metalness: 0.05 })
+    );
+    const eyeMat = getMat('wisp_blaze_eye', () =>
+      new THREE.MeshStandardMaterial({ color: 0xfef08a, emissive: 0xff6a00, emissiveIntensity: 3.2, roughness: 0.10 })
+    );
+
+    const head = regMesh(new THREE.Mesh(getGeo('wisp_head', () => new THREE.SphereGeometry(0.40, 14, 12)), shadowMat));
+    head.position.y = 0.88;
+    const torso = regMesh(new THREE.Mesh(getGeo('wisp_torso', () => new THREE.ConeGeometry(0.32, 0.82, 12)), shadowMat));
+    torso.rotation.x = Math.PI;
+    torso.position.y = 0.46;
+    const tailTip = regMesh(new THREE.Mesh(getGeo('wisp_tail', () => new THREE.ConeGeometry(0.15, 0.42, 8)), shadowMat));
+    tailTip.rotation.x = Math.PI;
+    tailTip.position.set(0.08, 0.14, -0.08);
+    tailTip.rotation.z = 0.35;
+    floatGrp.add(head, torso, tailTip);
+
+    // Crown of 5 pitch-black shadow flame tongues on head
+    const flames = [];
+    const flameGeo = getGeo('wisp_crown_flame', () => new THREE.ConeGeometry(0.13, 0.46, 6));
+    for (let i = 0; i < 5; i++) {
+      const f = regMesh(new THREE.Mesh(flameGeo, shadowMat));
+      const frac = (i - 2) * 0.14;
+      f.position.set(frac, 1.28 + (i === 2 ? 0.10 : 0), (i % 2 === 0 ? -0.04 : 0.04));
+      f.rotation.z = -frac * 1.4;
+      floatGrp.add(f);
+      flames.push({ mesh: f, phase: i * 1.3 });
+    }
+
+    // 2 Shadow Arms
+    const armGeo = getGeo('wisp_arm', () => new THREE.ConeGeometry(0.10, 0.42, 6));
+    for (const sx of [-1, 1]) {
+      const arm = regMesh(new THREE.Mesh(armGeo, shadowMat));
+      arm.position.set(sx * 0.38, 0.62, 0.08);
+      arm.rotation.z = sx * 2.25;
+      floatGrp.add(arm);
+    }
+
+    // 2 Large Slanted Blazing Orange Eyes
+    for (const sx of [-0.15, 0.15]) {
+      const eye = regMesh(new THREE.Mesh(getGeo('wisp_eye', () => new THREE.SphereGeometry(0.088, 9, 9)), eyeMat), true);
+      eye.scale.set(1.38, 0.78, 0.55);
+      eye.position.set(sx, 0.86, 0.36);
+      eye.rotation.z = sx < 0 ? -0.28 : 0.28;
+      floatGrp.add(eye);
+    }
+
+    return {
+      root: grp,
+      triggerAttack() { attackTimer = 0.24; },
+      update(dt, t, isDying) {
+        if (isDying) return;
+        if (attackTimer > 0) attackTimer = Math.max(0, attackTimer - dt);
+        floatGrp.position.y = 0.26 + Math.sin(t * 5.2) * 0.11;
+        tailTip.rotation.z = 0.32 + Math.sin(t * 7.5) * 0.22;
+        for (const fl of flames) {
+          fl.mesh.scale.y = 0.88 + Math.sin(t * 11.0 + fl.phase) * 0.20;
+        }
+      }
+    };
+  }
+
+  if (rigType === 'mimic_chest') {
+    const hopGrp = new THREE.Group();
+    grp.add(hopGrp);
+
+    const woodMat = getMat('mim_wood', () =>
+      new THREE.MeshStandardMaterial({ color: 0x5c361c, roughness: 0.72, metalness: 0.10 })
+    );
+    const goldMat = getMat('mim_brass', () =>
+      new THREE.MeshStandardMaterial({ color: 0xd99b26, metalness: 0.82, roughness: 0.26 })
+    );
+    const mawMat = getMat('mim_maw_dark', () =>
+      new THREE.MeshStandardMaterial({ color: 0x1e0b24, roughness: 0.85 })
+    );
+    const tongueMat = getMat('mim_purple_tongue', () =>
+      new THREE.MeshStandardMaterial({ color: 0x9333ea, roughness: 0.24, metalness: 0.08 })
+    );
+    const fangMat = getMat('cmh_fang_ivory', () =>
+      new THREE.MeshStandardMaterial({ color: 0xf5efe0, roughness: 0.38, metalness: 0.06 })
+    );
+
+    // Lower Chest Box + Gold Trim + Maw Cavity
+    const baseBox = regMesh(new THREE.Mesh(getGeo('mim_base', () => new THREE.BoxGeometry(0.96, 0.52, 0.74)), woodMat));
+    baseBox.position.y = 0.26;
+    const baseRim = regMesh(new THREE.Mesh(getGeo('mim_base_rim', () => new THREE.BoxGeometry(1.02, 0.10, 0.80)), goldMat));
+    baseRim.position.y = 0.48;
+    const mawCavity = new THREE.Mesh(getGeo('mim_cavity', () => new THREE.BoxGeometry(0.84, 0.12, 0.62)), mawMat);
+    mawCavity.position.y = 0.50;
+    const lockPlate = regMesh(new THREE.Mesh(getGeo('mim_lock', () => new THREE.BoxGeometry(0.18, 0.20, 0.06)), goldMat));
+    lockPlate.position.set(0, 0.40, 0.40);
+    hopGrp.add(baseBox, baseRim, mawCavity, lockPlate);
+
+    // Lower Row of Sharp Ivory Fangs
+    const fangGeo = getGeo('mim_fang', () => new THREE.ConeGeometry(0.048, 0.18, 5));
+    for (let i = 0; i < 6; i++) {
+      const fx = -0.35 + (i / 5) * 0.70;
+      const lf = regMesh(new THREE.Mesh(fangGeo, fangMat));
+      lf.position.set(fx, 0.58, 0.32);
+      hopGrp.add(lf);
+    }
+
+    // Curling Glossy Purple Tongue
+    const tonguePivot = new THREE.Group();
+    tonguePivot.position.set(0, 0.48, 0.10);
+    const tCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(0.06, 0.08, 0.28),
+      new THREE.Vector3(0.14, -0.06, 0.54),
+      new THREE.Vector3(0.08, -0.22, 0.62)
+    ]);
+    const tongueMesh = regMesh(
+      new THREE.Mesh(getGeo('mim_tongue_tube', () => new THREE.TubeGeometry(tCurve, 12, 0.095, 8, false)), tongueMat)
+    );
+    tonguePivot.add(tongueMesh);
+    hopGrp.add(tonguePivot);
+
+    // Hinged Upper Treasure Lid + Upper Row of Fangs + Glowing Eyes
+    const lidPivot = new THREE.Group();
+    lidPivot.position.set(0, 0.52, -0.35);
+    const lidVault = regMesh(
+      new THREE.Mesh(
+        getGeo('mim_lid_vault', () => {
+          const cg = new THREE.CylinderGeometry(0.37, 0.37, 0.96, 12, 1, false, 0, Math.PI);
+          cg.rotateZ(Math.PI * 0.5);
+          return cg;
+        }),
+        woodMat
+      )
+    );
+    lidVault.position.set(0, 0.02, 0.35);
+    const lidRim = regMesh(new THREE.Mesh(getGeo('mim_base_rim', () => new THREE.BoxGeometry(1.02, 0.10, 0.80)), goldMat));
+    lidRim.position.set(0, 0.02, 0.35);
+    lidPivot.add(lidVault, lidRim);
+
+    for (let i = 0; i < 6; i++) {
+      const fx = -0.35 + (i / 5) * 0.70;
+      const uf = regMesh(new THREE.Mesh(fangGeo, fangMat));
+      uf.rotation.x = Math.PI;
+      uf.position.set(fx, -0.08, 0.67);
+      lidPivot.add(uf);
+    }
+    lidPivot.add(createGlowingEyePair(0xff7a00, 0.22, 0.18, 0.70, 1.25, 0.70));
+    lidPivot.rotation.x = -0.68;
+    hopGrp.add(lidPivot);
+
+    return {
+      root: grp,
+      triggerAttack() { attackTimer = 0.28; },
+      update(dt, t, isDying) {
+        if (isDying) return;
+        if (attackTimer > 0) attackTimer = Math.max(0, attackTimer - dt);
+        const hop = Math.abs(Math.sin(t * 8.5));
+        hopGrp.position.y = hop * 0.16;
+        const chomp = attackTimer > 0 ? Math.sin((attackTimer / 0.28) * Math.PI) * 0.52 : hop * 0.26;
+        lidPivot.rotation.x = -0.78 + chomp;
+        tonguePivot.rotation.y = Math.sin(t * 7.0) * 0.26;
+      }
+    };
+  }
+
+  // Default procedural rig: 'corrupted_treant' (Гнилой древень — Twisted dead tree with blazing orange jack-o'-lantern face!)
+  const swayGrp = new THREE.Group();
+  grp.add(swayGrp);
+
+  const barkMat = getMat('treant_bark', () =>
+    new THREE.MeshStandardMaterial({ color: 0x4a3222, roughness: 0.88, metalness: 0.04 })
+  );
+  const darkHollowMat = getMat('treant_hollow', () =>
+    new THREE.MeshStandardMaterial({ color: 0x1a0d06, roughness: 0.9 })
+  );
+  const fireFaceMat = getMat('treant_fire_face', () =>
+    new THREE.MeshStandardMaterial({ color: 0xfde047, emissive: 0xff6a00, emissiveIntensity: 3.0, roughness: 0.14 })
+  );
+
+  // Fluted gnarled tree trunk
+  const trunkGeo = getGeo('treant_trunk', () => {
+    const cg = new THREE.CylinderGeometry(0.42, 0.64, 1.48, 12, 6);
+    const pos = cg.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const vx = pos.getX(i);
+      const vy = pos.getY(i);
+      const vz = pos.getZ(i);
+      const a = Math.atan2(vz, vx);
+      const flute = 1 + Math.sin(a * 5 + vy * 1.8) * 0.10;
+      pos.setX(i, vx * flute);
+      pos.setZ(i, vz * flute);
+      pos.setY(i, vy + 0.74);
+    }
+    cg.computeVertexNormals();
+    return cg;
+  });
+  const trunk = regMesh(new THREE.Mesh(trunkGeo, barkMat));
+  swayGrp.add(trunk);
+
+  // 5 Sprawling Root-Feet
+  const rootGeo = getGeo('treant_root', () => new THREE.ConeGeometry(0.16, 0.56, 6));
+  for (let r = 0; r < 5; r++) {
+    const a = (r / 5) * Math.PI * 2 + 0.3;
+    const rf = regMesh(new THREE.Mesh(rootGeo, barkMat));
+    rf.position.set(Math.cos(a) * 0.56, 0.14, Math.sin(a) * 0.56);
+    rf.rotation.z = -Math.cos(a) * 1.15;
+    rf.rotation.x = Math.sin(a) * 1.15;
+    swayGrp.add(rf);
+  }
+
+  // Crown of 6 Gnarled Dead Branches
+  for (let b = 0; b < 6; b++) {
+    const a = (b / 6) * Math.PI * 2 + 0.25;
+    const bCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(Math.cos(a) * 0.26, 1.38, Math.sin(a) * 0.26),
+      new THREE.Vector3(Math.cos(a) * 0.54, 1.78, Math.sin(a) * 0.54),
+      new THREE.Vector3(Math.cos(a + 0.3) * 0.72, 2.12 + (b % 2) * 0.16, Math.sin(a + 0.3) * 0.72)
+    ]);
+    const bMesh = regMesh(
+      new THREE.Mesh(getGeo(`treant_bough_${b}`, () => new THREE.TubeGeometry(bCurve, 8, 0.072, 6, false)), barkMat)
+    );
+    swayGrp.add(bMesh);
+  }
+
+  // 2 Swinging Clawed Branch Arms
+  const branchArms = [];
+  const armGeo = getGeo('treant_arm', () => {
+    const cg = new THREE.CylinderGeometry(0.08, 0.12, 0.78, 6);
+    cg.translate(0, -0.34, 0);
+    return cg;
+  });
+  for (const sx of [-1, 1]) {
+    const armPiv = new THREE.Group();
+    armPiv.position.set(sx * 0.50, 1.16, 0.06);
+    const arm = regMesh(new THREE.Mesh(armGeo, barkMat));
+    arm.rotation.z = sx * 0.42;
+    armPiv.add(arm);
+    swayGrp.add(armPiv);
+    branchArms.push({ piv: armPiv, sx });
+  }
+
+  // Blazing Orange Jack-o'-Lantern Eyes & Jagged Grin on Trunk!
+  const faceBack = new THREE.Mesh(getGeo('treant_face_back', () => new THREE.BoxGeometry(0.56, 0.46, 0.14)), darkHollowMat);
+  faceBack.position.set(0, 0.88, 0.42);
+  swayGrp.add(faceBack);
+
+  const triEyeGeo = getGeo('treant_tri_eye', () => new THREE.ConeGeometry(0.105, 0.18, 4));
+  for (const sx of [-0.16, 0.16]) {
+    const eye = regMesh(new THREE.Mesh(triEyeGeo, fireFaceMat), true);
+    eye.scale.set(1.25, 0.85, 0.5);
+    eye.position.set(sx, 1.00, 0.49);
+    eye.rotation.z = sx < 0 ? -0.35 : 0.35;
+    swayGrp.add(eye);
+  }
+  const grinGeo = getGeo('treant_grin_seg', () => new THREE.OctahedronGeometry(0.078, 0));
+  for (let m = -2; m <= 2; m++) {
+    const seg = regMesh(new THREE.Mesh(grinGeo, fireFaceMat), true);
+    seg.scale.set(1.1, 1.25, 0.45);
+    seg.position.set(m * 0.088, 0.74 + Math.abs(m) * 0.025, 0.50);
+    swayGrp.add(seg);
+  }
+
+  return {
+    root: grp,
+    triggerAttack() { attackTimer = 0.32; },
+    update(dt, t, isDying) {
+      if (isDying) return;
+      if (attackTimer > 0) attackTimer = Math.max(0, attackTimer - dt);
+      const atkSwing = attackTimer > 0 ? Math.sin((attackTimer / 0.32) * Math.PI) * 1.1 : 0;
+      swayGrp.rotation.z = Math.sin(t * 4.8) * 0.055;
+      swayGrp.position.y = Math.abs(Math.sin(t * 4.8)) * 0.04;
+      for (const ba of branchArms) {
+        ba.piv.rotation.x = Math.sin(t * 4.8 + (ba.sx < 0 ? 0 : Math.PI)) * 0.35 - atkSwing;
+      }
+    }
+  };
+}
+
+const ENEMY_TYPE_ALIASES = {
+  skeleton: 'ember_skeleton',
+  hound: 'goblin',
+  archer: 'vampire_lord',
+  shieldbearer: 'cursed_footman',
+  bomber: 'toxic_slime',
+  necromancer: 'mummy',
+  cultist: 'dark_cultist',
+  brute: 'iron_knight',
+  reaper: 'boss_cthulhu'
+};
+
 const ENEMY_MODEL_CFG = {
-  // === 8 Regular & Specialist Villains ===
-  skeleton: {
+  // === 16 Regular & Specialist Dark-Fantasy Monsters ===
+  ember_skeleton: {
     key: 'skel_minion',
-    scale: 0.88,
+    scale: 0.90,
     moveClip: 'Walking_D_Skeletons',
     atkClip: '1H_Melee_Attack_Slice_Horizontal',
-    weapon: 'rusted_sword',
-    tint: 0x3f6212,
-    tintLerp: 0.44,
-    eye: 0x84cc16
+    weapon: 'bone_sword',
+    tint: 0xe7dfd3,
+    tintLerp: 0.38,
+    eye: 0xff6a00
   },
-  hound: {
+  goblin: {
     key: 'barbarian',
-    scale: 0.82,
+    scale: 0.80,
     moveClip: 'Running_B',
-    atkClip: 'Dualwield_Melee_Attack_Slice',
-    weapon: null, // Uses built-in dual 1H_Axe & 1H_Axe_Offhand!
-    tint: 0x7f1d1d,
-    tintLerp: 0.58,
-    eye: 0xef4444,
+    atkClip: '1H_Melee_Attack_Chop',
+    weapon: 'goblin_stone_axe',
+    tint: 0x5c8a32,
+    tintLerp: 0.72,
+    eye: 0xff4500,
     moveSpeedAnim: 1.38
   },
-  archer: {
-    key: 'skel_rogue',
-    scale: 0.86,
-    moveClip: 'Walking_A',
-    atkClip: '2H_Ranged_Shoot',
-    weapon: null, // Custom forward 3D Crossbow at chest!
-    tint: 0x164e63,
-    tintLerp: 0.64,
-    eye: 0x22d3ee
+  werewolf: {
+    key: 'barbarian',
+    scale: 0.95,
+    moveClip: 'Running_B',
+    atkClip: 'Dualwield_Melee_Attack_Slice',
+    weapon: null,
+    tint: 0x2b2930,
+    tintLerp: 0.84,
+    eye: 0xff6a00,
+    moveSpeedAnim: 1.44
   },
-  shieldbearer: {
+  cursed_footman: {
     key: 'skel_warrior',
-    scale: 1.02,
+    scale: 1.00,
     moveClip: 'Walking_B',
     atkClip: '1H_Melee_Attack_Slice_Horizontal',
     weapon: 'broadsword',
-    tint: 0x1e3a5f,
-    tintLerp: 0.62,
-    eye: 0x60a5fa
+    tint: 0x5c6842,
+    tintLerp: 0.50,
+    eye: 0xf59e0b
   },
-  bomber: {
-    key: 'skel_minion',
-    scale: 0.86,
-    moveClip: 'Running_A',
-    atkClip: 'Dualwield_Melee_Attack_Chop',
-    weapon: null, // Pulsing volatile gunpowder barrel carried in front of chest!
-    tint: 0x292524,
+  plague_zombie: {
+    key: 'zombie_tripo',
+    scale: 2.02,
+    moveClip: 'Strut_Walking',
+    atkClip: 'Strut_Walking',
+    weapon: null,
+    tint: null,
+    eye: null
+  },
+  iron_knight: {
+    key: 'knight',
+    scale: 1.26,
+    moveClip: 'Walking_B',
+    atkClip: '2H_Melee_Attack_Chop',
+    weapon: null, // Uses built-in 2H_Sword!
+    tint: 0x523c2b,
+    tintLerp: 0.66,
+    eye: 0xff6a00
+  },
+  dark_cultist: {
+    key: 'skel_mage',
+    scale: 0.92,
+    moveClip: 'Walking_A',
+    atkClip: 'Spellcast_Shoot',
+    weapon: 'cultist_skull_staff',
+    tint: 0x4c1d95,
     tintLerp: 0.72,
-    eye: 0xf97316,
-    moveSpeedAnim: 1.32
+    eye: 0xd946ef
   },
-  necromancer: {
+  mummy: {
     key: 'skel_mage',
     scale: 0.94,
     moveClip: 'Walking_A',
     atkClip: 'Spellcast_Raise',
-    weapon: 'necro_staff',
-    tint: 0x064e3b,
-    tintLerp: 0.70,
-    eye: 0x10b981
+    weapon: 'mummy_crescent_staff',
+    tint: 0xd9c79e,
+    tintLerp: 0.78,
+    eye: 0x22d3ee
   },
-  cultist: {
-    key: 'mage',
-    scale: 0.90,
-    moveClip: 'Walking_A',
-    atkClip: 'Spellcast_Shoot',
-    weapon: null, // Uses built-in 2H_Staff!
-    tint: 0x3b0764,
-    tintLerp: 0.62,
-    eye: 0xc084fc
+  dark_spider: {
+    key: 'spider_tripo',
+    scale: 1.75,
+    moveClip: 'Scuttle_Walk',
+    idleClip: 'Idle',
+    atkClip: 'Bite_Lunge',
+    weapon: null,
+    tint: null,
+    eye: null,
+    moveSpeedAnim: 1.45
   },
-  brute: {
-    key: 'knight',
-    scale: 1.28,
-    moveClip: 'Walking_B',
-    atkClip: '2H_Melee_Attack_Chop',
-    weapon: null, // Uses built-in 2H_Sword!
-    tint: 0x1e293b,
-    tintLerp: 0.66,
-    eye: 0xef4444
+  succubus: {
+    key: 'succubus_tripo',
+    scale: 2.02,
+    moveClip: 'Walking',
+    idleClip: 'Idle',
+    atkClip: 'Cast_Attack',
+    weapon: null,
+    tint: null,
+    eye: null,
+    moveSpeedAnim: 1.12
+  },
+  toxic_slime: {
+    proceduralRig: 'toxic_slime',
+    scale: 0.92
+  },
+  gargoyle: {
+    key: 'barbarian',
+    scale: 0.88,
+    moveClip: 'Running_A',
+    atkClip: 'Dualwield_Melee_Attack_Chop',
+    weapon: null,
+    tint: 0x575a64,
+    tintLerp: 0.84,
+    eye: 0xef4444,
+    moveSpeedAnim: 1.24
+  },
+  hell_imp: {
+    key: 'barbarian',
+    scale: 0.76,
+    moveClip: 'Running_B',
+    atkClip: 'Dualwield_Melee_Attack_Slice',
+    weapon: null,
+    tint: 0xb91c1c,
+    tintLerp: 0.78,
+    eye: 0xff5500,
+    moveSpeedAnim: 1.42
+  },
+  phantom_ghost: {
+    proceduralRig: 'phantom_ghost',
+    scale: 0.96
+  },
+  vampire_lord: {
+    key: 'dracula_tripo',
+    scale: 2.08,
+    moveClip: 'Walking',
+    idleClip: 'Idle',
+    atkClip: 'Cloak_Slash',
+    weapon: null,
+    tint: null,
+    eye: null
+  },
+  vampire_bat: {
+    proceduralRig: 'vampire_bat',
+    scale: 0.92
+  },
+  mimic_chest: {
+    key: 'mimic_tripo',
+    scale: 1.92,
+    moveClip: 'Hop_Chomp',
+    idleClip: 'Hop_Chomp',
+    atkClip: 'Hop_Chomp',
+    weapon: null,
+    tint: null,
+    eye: null
+  },
+  corrupted_treant: {
+    key: 'tree_tripo',
+    scale: 2.12,
+    moveClip: 'Hop_Forward',
+    atkClip: 'Hop_Forward',
+    weapon: null,
+    tint: null,
+    eye: null
+  },
+  shadow_wisp: {
+    proceduralRig: 'shadow_wisp',
+    scale: 0.94
   },
 
-  // === 5 Distinct Milestone Act Bosses ===
+  // === 5 Distinct Milestone Act Bosses (Matches Top Row of ad09b7c9.jpg!) ===
   boss_butcher: {
     key: 'barbarian',
-    scale: 1.68,
+    scale: 1.72,
     moveClip: 'Running_B',
-    atkClip: 'Dualwield_Melee_Attack_Chop',
-    weapon: 'butcher_cleaver',
-    offhandWeapon: 'butcher_cleaver',
-    tint: 0x7f1d1d,
-    tintLerp: 0.66,
-    eye: 0xef4444,
-    isBossVisual: true,
-    bossRingColor: 0xdc2626,
-    bossRingScale: 1.75
-  },
-  boss_warden: {
-    key: 'knight',
-    scale: 1.82,
-    moveClip: 'Walking_B',
-    atkClip: '2H_Melee_Attack_Chop',
-    weapon: 'warden_hammer',
-    tint: 0x1e3a8a,
-    tintLerp: 0.68,
-    eye: 0x60a5fa,
-    isBossVisual: true,
-    bossRingColor: 0x2563eb,
-    bossInnerRingColor: 0xfbbf24,
-    bossRingScale: 1.85
+    atkClip: '2H_Melee_Attack_Slice',
+    weapon: 'demon_magma_greatsword',
+    tint: 0x262022,
+    tintLerp: 0.80,
+    baseEmissive: 0x9a3412,
+    baseEmissiveInt: 0.22,
+    eye: 0xff5500,
+    isBossVisual: true
   },
   boss_archlich: {
-    key: 'skel_mage',
-    scale: 1.88,
-    moveClip: 'Walking_A',
-    atkClip: 'Spellcast_Raise',
-    weapon: 'archlich_staff',
-    tint: 0x065f46,
-    tintLerp: 0.72,
-    eye: 0x34d399,
+    key: 'lich_tripo',
+    scale: 2.65,
+    moveClip: 'Running_A',
+    idleClip: 'Idle',
+    atkClip: 'Spellcast_Shoot',
+    weapon: null,
+    tint: null,
+    eye: null,
     isBossVisual: true,
-    bossRingColor: 0x10b981,
-    bossRingScale: 1.90
+    moveSpeedAnim: 1.05
   },
-  reaper: {
-    key: 'skel_warrior',
-    scale: 2.02,
-    moveClip: 'Walking_A',
-    atkClip: '2H_Melee_Attack_Slice',
-    weapon: 'scythe',
-    tint: 0x090d16,
-    tintLerp: 0.80,
-    eye: 0x22d3ee,
+  boss_cthulhu: {
+    key: 'barbarian',
+    scale: 1.92,
+    moveClip: 'Walking_B',
+    atkClip: 'Spellcast_Shoot',
+    weapon: null,
+    tint: 0x1b4552,
+    tintLerp: 0.82,
+    eye: 0xff6a00,
+    isBossVisual: true
+  },
+  boss_troll: {
+    key: 'troll_tripo',
+    scale: 2.85,
+    moveClip: 'Walking',
+    idleClip: 'Idle',
+    atkClip: 'Heavy_Cleave',
+    weapon: null,
+    tint: null,
+    eye: null,
     isBossVisual: true,
-    bossRingColor: 0x06b6d4,
-    bossRingScale: 2.00
+    moveSpeedAnim: 1.08
+  },
+  boss_warden: {
+    key: 'troll_tripo',
+    scale: 2.85,
+    moveClip: 'Walking',
+    idleClip: 'Idle',
+    atkClip: 'Heavy_Cleave',
+    weapon: null,
+    tint: null,
+    eye: null,
+    isBossVisual: true,
+    moveSpeedAnim: 1.08
   },
   boss_ashlord: {
-    key: 'skel_warrior',
-    scale: 2.38,
+    key: 'barbarian',
+    scale: 2.28,
     moveClip: 'Walking_B',
-    atkClip: '2H_Melee_Attack_Slice',
-    weapon: 'molten_greatsword',
-    tint: 0x450a0a,
-    tintLerp: 0.76,
+    atkClip: 'Dualwield_Melee_Attack_Chop',
+    weapon: null,
+    tint: 0x1c191e,
+    tintLerp: 0.86,
     baseEmissive: 0xd9480f,
-    baseEmissiveInt: 0.42,
-    eye: 0xfbbf24,
-    isBossVisual: true,
-    bossRingColor: 0xef4444,
-    bossInnerRingColor: 0xfbbf24,
-    bossRingScale: 2.35
+    baseEmissiveInt: 0.28,
+    eye: 0xff7a00,
+    isBossVisual: true
   }
 };
 
 const enemyMeshPool = new Map();
 
-export function createEnemyMesh(typeId = 'skeleton', eliteVariant = null, customScaleMult = 1.0) {
+export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, customScaleMult = 1.0) {
   if (typeId && typeof typeId === 'object') {
     const opts = typeId;
     eliteVariant = opts.eliteVariant ?? opts.eliteType ?? opts.variant ?? null;
     customScaleMult = opts.customScaleMult ?? opts.scaleMult ?? 1.0;
-    typeId = opts.typeId || opts.type || opts.enemyType || opts.id || 'skeleton';
+    typeId = opts.typeId || opts.type || opts.enemyType || opts.id || 'ember_skeleton';
   }
 
-  const cfg = ENEMY_MODEL_CFG[typeId] || ENEMY_MODEL_CFG.skeleton;
+  const canonicalType = ENEMY_TYPE_ALIASES[typeId] || typeId;
+  const cfg = ENEMY_MODEL_CFG[canonicalType] || ENEMY_MODEL_CFG.ember_skeleton;
   const rawMult = Number(customScaleMult);
   const validMult = Number.isFinite(rawMult) && rawMult > 0 ? rawMult : 1.0;
   const effectiveScaleMult =
     eliteVariant === 'miniboss' && Math.abs(validMult - 1.0) < 0.001 ? 0.72 : validMult;
 
   const canPool = eliteVariant !== 'warden' && !cfg.isBossVisual;
-  const poolKey = `${typeId}|${eliteVariant || 'std'}|${effectiveScaleMult.toFixed(2)}`;
+  const poolKey = `${canonicalType}|${eliteVariant || 'std'}|${effectiveScaleMult.toFixed(2)}`;
   if (canPool) {
     const bucket = enemyMeshPool.get(poolKey);
     if (bucket && bucket.length > 0) {
@@ -1969,10 +4808,9 @@ export function createEnemyMesh(typeId = 'skeleton', eliteVariant = null, custom
     }
   }
 
-  const asset = gltfCache.get(cfg.key);
   const root = new THREE.Group();
-
   let animCtrl = null;
+  let procRig = null;
   const instanceMats = [];
   const flashMeshSlots = [];
   const hitFlashMat = getMat('enemy_shared_hit_flash', () =>
@@ -1986,233 +4824,340 @@ export function createEnemyMesh(typeId = 'skeleton', eliteVariant = null, custom
   let flashTimer = 0;
   let spawnedInst = null;
 
-  let upperArmL = null;
-  let lowerArmL = null;
-  let upperArmR = null;
-  let lowerArmR = null;
-  let bomberBarrel = null;
+  let wingGroup = null;
+  let dragonTail = null;
+  let cthulhuHead = null;
+  let cthulhuBase = null;
+  let emberCoreGrp = null;
   let archlichOrbit = null;
   const archlichCrystals = [];
-  let stage1BreakNode = null; // ≤ 66% HP: Shield / Buckler / Offhand / Cloak detaches!
-  let stage2BreakNode = null; // ≤ 33% HP: Helmet / Pot-Helm / Hood / Hat pops off!
+  let stage1BreakNode = null;
+  let stage2BreakNode = null;
 
-  if (asset) {
-    const inst = cloneSkinned(asset.scene);
-    spawnedInst = inst;
-    inst.scale.setScalar(cfg.scale * effectiveScaleMult);
-    root.add(inst);
+  if (cfg.proceduralRig) {
+    procRig = buildProceduralMonsterRig(cfg.proceduralRig, cfg.scale * effectiveScaleMult, flashMeshSlots);
+    spawnedInst = procRig.root;
+    root.add(procRig.root);
+  } else {
+    const asset = gltfCache.get(cfg.key);
+    if (asset) {
+      const inst = cloneSkinned(asset.scene);
+      spawnedInst = inst;
+      inst.scale.setScalar(cfg.scale * effectiveScaleMult);
+      root.add(inst);
 
-    let handR = null;
-    let handL = null;
-    let headBone = null;
-    let chestBone = null;
-    let foundEyeMesh = false;
+      let handR = null;
+      let handL = null;
+      let headBone = null;
+      let chestBone = null;
+      let foundEyeMesh = false;
 
-    inst.traverse((n) => {
-      const nm = n.name || '';
-      if (/^handslot\.?r$/i.test(nm) || (!handR && /^hand\.?r$/i.test(nm))) handR = n;
-      if (/^handslot\.?l$/i.test(nm) || (!handL && /^hand\.?l$/i.test(nm))) handL = n;
-      if (/^head$/i.test(nm)) headBone = n;
-      if (/^chest$/i.test(nm)) chestBone = n;
-      if (/^upperarm\.?l$/i.test(nm)) upperArmL = n;
-      if (/^lowerarm\.?l$/i.test(nm)) lowerArmL = n;
-      if (/^upperarm\.?r$/i.test(nm)) upperArmR = n;
-      if (/^lowerarm\.?r$/i.test(nm)) lowerArmR = n;
+      const isTripoEnemy = /_tripo$/i.test(cfg.key || '');
+      const usesCustomHead =
+        !isTripoEnemy && (
+        canonicalType === 'goblin' ||
+        canonicalType === 'werewolf' ||
+        canonicalType === 'gargoyle' ||
+        canonicalType === 'hell_imp' ||
+        canonicalType === 'vampire_lord' ||
+        canonicalType === 'boss_butcher' ||
+        canonicalType === 'boss_cthulhu' ||
+        canonicalType === 'boss_warden' ||
+        canonicalType === 'boss_ashlord');
 
-      // Capture detachable Stage 1 (Cloak / Offhand) & Stage 2 (Helmet / Hat / Hood) meshes on non-bosses!
-      if (!cfg.isBossVisual) {
-        if (
-          nm === 'Skeleton_Warrior_Helmet' ||
-          nm === 'Barbarian_Hat' ||
-          nm === 'Skeleton_Rogue_Hood' ||
-          nm === 'Skeleton_Mage_Hat' ||
-          nm === 'Mage_Hat' ||
-          nm === 'Knight_Helmet'
-        ) {
-          stage2BreakNode = n;
-        }
-        if (
-          (typeId === 'hound' && nm === '1H_Axe_Offhand') ||
-          (typeId === 'archer' && nm === 'Skeleton_Rogue_Cape') ||
-          (typeId === 'cultist' && nm === 'Mage_Cape') ||
-          (typeId === 'brute' && nm === 'Knight_Cape')
-        ) {
-          stage1BreakNode = n;
-        }
-      }
+      inst.traverse((n) => {
+        const nm = n.name || '';
+        if (/^handslot\.?r$/i.test(nm) || (!handR && /^hand\.?r$/i.test(nm))) handR = n;
+        if (/^handslot\.?l$/i.test(nm) || (!handL && /^hand\.?l$/i.test(nm))) handL = n;
+        if (/^head$/i.test(nm)) headBone = n;
+        if (/^chest$/i.test(nm)) chestBone = n;
 
-      // Clean up extra built-in KayKit props per villain/boss archetype
-      if (nm === 'Mug' || nm === 'Spellbook_open' || nm === '1H_Wand') {
-        n.visible = false;
-      }
-      if (typeId === 'hound') {
-        // Keep 1H_Axe & 1H_Axe_Offhand visible!
-        if (nm === '2H_Axe' || nm === 'Barbarian_Round_Shield') n.visible = false;
-      } else if (typeId === 'boss_butcher') {
-        if (nm === '2H_Axe' || nm === 'Barbarian_Round_Shield' || nm === '1H_Axe' || nm === '1H_Axe_Offhand' || nm === 'Barbarian_Hat') {
-          n.visible = false;
-        }
-      } else if (typeId === 'brute') {
-        // Keep 2H_Sword visible!
-        if (
-          nm === '1H_Sword' ||
-          nm === '1H_Sword_Offhand' ||
-          nm === 'Round_Shield' ||
-          nm === 'Badge_Shield' ||
-          nm === 'Rectangle_Shield' ||
-          nm === 'Spike_Shield'
-        ) {
-          n.visible = false;
-        }
-      } else if (typeId === 'boss_warden') {
-        // Keep Spike_Shield visible in left hand + custom giant Inquisitor Warhammer in handR!
-        if (
-          nm === '1H_Sword' ||
-          nm === '1H_Sword_Offhand' ||
-          nm === '2H_Sword' ||
-          nm === 'Round_Shield' ||
-          nm === 'Badge_Shield' ||
-          nm === 'Rectangle_Shield'
-        ) {
-          n.visible = false;
-        }
-      } else if (typeId === 'boss_ashlord') {
-        // Hide standard horned helmet so the Golden Jagged King's Crown commands the silhouette!
-        if (/Skeleton_Warrior_Helmet/i.test(nm)) {
-          n.visible = false;
-        }
-      }
-
-      if (n.isMesh && n.material) {
-        if (/Eyes/i.test(nm)) {
-          foundEyeMesh = true;
-          n.material = getMat(`eye_mat_${cfg.eye}_${cfg.isBossVisual ? 'b' : 'n'}`, () =>
-            new THREE.MeshStandardMaterial({
-              color: cfg.eye,
-              emissive: cfg.eye,
-              emissiveIntensity: cfg.isBossVisual ? 2.6 : 2.1,
-              roughness: 0.15
-            })
-          );
-          return;
-        }
-        const needsUniqueInstanceMat = typeId === 'boss_ashlord';
-        const mapOneMat = (srcMat) => {
-          let baseEm = cfg.baseEmissive || 0x000000;
-          let baseEmInt = cfg.baseEmissiveInt || 0;
-          if (eliteVariant === 'purple' || eliteVariant === 'blue') {
-            baseEm = eliteVariant === 'purple' ? 0x6b21a8 : 0x0369a1;
-            baseEmInt = Math.max(baseEmInt, 0.28);
+        if (!cfg.isBossVisual) {
+          if (nm === 'Skeleton_Warrior_Helmet' || nm === 'Knight_Helmet') {
+            stage2BreakNode = n;
           }
-          const buildTinted = () => {
-            const m = srcMat.clone();
-            if (m.color && cfg.tint !== null) {
-              m.color.lerp(new THREE.Color(cfg.tint), cfg.tintLerp ?? 0.55);
+          if (canonicalType === 'iron_knight' && nm === 'Knight_Cape') {
+            stage1BreakNode = n;
+          }
+        }
+
+        // Hide unwanted built-in KayKit props so each archetype silhouette matches ad09b7c9.jpg!
+        if (nm === 'Mug' || nm === 'Spellbook' || nm === 'Spellbook_open' || nm === '1H_Wand') {
+          n.visible = false;
+        }
+        if (usesCustomHead && /^(Barbarian_Head|Barbarian_Hat|Mage_Head|Mage_Hat)$/i.test(nm)) {
+          n.visible = false;
+        }
+        if (canonicalType === 'ember_skeleton' && nm === 'Skeleton_Minion_Cloak') {
+          n.visible = false;
+        }
+        if ((canonicalType === 'dark_cultist' || canonicalType === 'mummy' || canonicalType === 'boss_archlich') && nm === 'Skeleton_Mage_Hat') {
+          n.visible = false;
+        }
+        if (canonicalType === 'vampire_lord' && nm === '2H_Staff') {
+          n.visible = false;
+        }
+        if (cfg.key === 'barbarian') {
+          if (nm === '2H_Axe' || nm === 'Barbarian_Round_Shield' || nm === '1H_Axe' || nm === '1H_Axe_Offhand' || nm === 'Barbarian_Hat') {
+            n.visible = false;
+          }
+          if (
+            (canonicalType === 'gargoyle' ||
+              canonicalType === 'hell_imp' ||
+              canonicalType === 'werewolf' ||
+              canonicalType === 'boss_ashlord' ||
+              canonicalType === 'boss_cthulhu' ||
+              canonicalType === 'boss_warden') &&
+            nm === 'Barbarian_Cape'
+          ) {
+            n.visible = false;
+          }
+        }
+        if (canonicalType === 'iron_knight') {
+          if (
+            nm === '1H_Sword' ||
+            nm === '1H_Sword_Offhand' ||
+            nm === 'Round_Shield' ||
+            nm === 'Badge_Shield' ||
+            nm === 'Rectangle_Shield' ||
+            nm === 'Spike_Shield'
+          ) {
+            n.visible = false;
+          }
+        }
+
+        if (n.isMesh && n.material) {
+          if (/Eyes/i.test(nm)) {
+            foundEyeMesh = true;
+            n.material = getMat(`eye_mat_${cfg.eye}_${cfg.isBossVisual ? 'b' : 'n'}`, () =>
+              new THREE.MeshStandardMaterial({
+                color: cfg.eye,
+                emissive: cfg.eye,
+                emissiveIntensity: cfg.isBossVisual ? 2.7 : 2.2,
+                roughness: 0.15
+              })
+            );
+            return;
+          }
+          const needsUniqueInstanceMat = canonicalType === 'boss_ashlord' || canonicalType === 'boss_butcher';
+          const isVampireCape = canonicalType === 'vampire_lord' && nm === 'Mage_Cape';
+          const mapOneMat = (srcMat) => {
+            let baseEm = cfg.baseEmissive || 0x000000;
+            let baseEmInt = cfg.baseEmissiveInt || 0;
+            if (eliteVariant === 'purple' || eliteVariant === 'blue') {
+              baseEm = eliteVariant === 'purple' ? 0x6b21a8 : 0x0369a1;
+              baseEmInt = Math.max(baseEmInt, 0.28);
             }
-            if (m.emissive && baseEmInt > 0) {
-              m.emissive.setHex(baseEm);
-              m.emissiveIntensity = baseEmInt;
+            const buildTinted = () => {
+              const m = srcMat.clone();
+              if (m.color) {
+                if (isVampireCape) {
+                  m.color.setHex(0x991b1b);
+                } else if (cfg.tint !== null && cfg.tint !== undefined) {
+                  m.color.lerp(new THREE.Color(cfg.tint), cfg.tintLerp ?? 0.55);
+                }
+              }
+              if (m.emissive && baseEmInt > 0) {
+                m.emissive.setHex(baseEm);
+                m.emissiveIntensity = baseEmInt;
+              }
+              return m;
+            };
+            if (needsUniqueInstanceMat) {
+              const uniqueMat = buildTinted();
+              instanceMats.push({ mat: uniqueMat, baseEmissive: baseEm, baseEmissiveInt: baseEmInt, owned: true });
+              return uniqueMat;
             }
-            return m;
+            return getMat(`enemy_tint_v3_${canonicalType}_${isVampireCape ? 'cape' : 'b'}_${eliteVariant || 'std'}_${srcMat.uuid}`, buildTinted);
           };
-          if (needsUniqueInstanceMat) {
-            const uniqueMat = buildTinted();
-            instanceMats.push({ mat: uniqueMat, baseEmissive: baseEm, baseEmissiveInt: baseEmInt, owned: true });
-            return uniqueMat;
+          const mapped = Array.isArray(n.material) ? n.material.map(mapOneMat) : mapOneMat(n.material);
+          n.material = mapped;
+          if (!needsUniqueInstanceMat && n.visible) {
+            flashMeshSlots.push({ mesh: n, origMat: mapped });
           }
-          return getMat(`enemy_tint_${typeId}_${eliteVariant || 'std'}_${srcMat.uuid}`, buildTinted);
-        };
-        const mapped = Array.isArray(n.material) ? n.material.map(mapOneMat) : mapOneMat(n.material);
-        n.material = mapped;
-        if (!needsUniqueInstanceMat) {
-          flashMeshSlots.push({ mesh: n, origMat: mapped });
+        }
+      });
+
+      if (!foundEyeMesh && !usesCustomHead && headBone && cfg.eye) {
+        const visorForward = cfg.key === 'knight';
+        headBone.add(createGlowingEyePair(cfg.eye, 0.155, visorForward ? 0.38 : 0.40, visorForward ? 0.52 : 0.45));
+      }
+
+      if (handR && cfg.weapon) {
+        handR.add(makeEnemyWeaponProp(cfg.weapon));
+      }
+
+      // === Archetype & Act Boss Signature 3D Sculpted Attachments ===
+      if (canonicalType === 'ember_skeleton') {
+        if (chestBone) {
+          emberCoreGrp = createMoltenRibcageAndSkullPads();
+          chestBone.add(emberCoreGrp);
+        }
+      } else if (canonicalType === 'goblin' && headBone) {
+        headBone.add(createChibiMonsterHead({
+          skinHex: 0x659a38,
+          eyeHex: 0xff4500,
+          ears: 'pointed',
+          goblinNose: true
+        }));
+      } else if (canonicalType === 'werewolf') {
+        if (headBone) {
+          headBone.add(createChibiMonsterHead({
+            skinHex: 0x2f2d36,
+            eyeHex: 0xff6a00,
+            ears: 'wolf',
+            wolfSnout: true
+          }));
+        }
+        if (chestBone) {
+          const tail = new THREE.Mesh(
+            getGeo('wolf_tail', () => new THREE.ConeGeometry(0.14, 0.54, 7)),
+            getMat('wolf_tail_mat', () => new THREE.MeshStandardMaterial({ color: 0x26252c, roughness: 0.8 }))
+          );
+          tail.position.set(0, -0.05, -0.34);
+          tail.rotation.x = -0.95;
+          chestBone.add(tail);
+        }
+      } else if (canonicalType === 'cursed_footman' && handL) {
+        const shield = createIronTowerShield();
+        handL.add(shield);
+        stage1BreakNode = shield;
+      } else if (canonicalType === 'iron_knight' && chestBone) {
+        chestBone.add(createSpikedPauldronsAndMoltenCore(false));
+      } else if (canonicalType === 'dark_cultist') {
+        const { headGrp, chestGrp } = createCultistHoodAndSkullClasp();
+        if (headBone) headBone.add(headGrp);
+        if (chestBone) chestBone.add(chestGrp);
+        if (handL) handL.add(createHandSpellOrb(0xf5d0fe, 0xa855f7));
+      } else if (canonicalType === 'mummy') {
+        const { headGrp, chestGrp } = createMummyHeadAndCollar();
+        if (headBone) headBone.add(headGrp);
+        if (chestBone) chestBone.add(chestGrp);
+      } else if (canonicalType === 'gargoyle') {
+        if (headBone) {
+          headBone.add(createChibiMonsterHead({
+            skinHex: 0x575a64,
+            eyeHex: 0xff1e1e,
+            ears: 'pointed',
+            horns: 'gargoyle'
+          }));
+        }
+        if (chestBone) {
+          wingGroup = createBatWings(0x4b4e57, 0x3b3e47, 0.96, false);
+          chestBone.add(wingGroup);
+        }
+      } else if (canonicalType === 'hell_imp') {
+        if (headBone) {
+          headBone.add(createChibiMonsterHead({
+            skinHex: 0xc82222,
+            eyeHex: 0xff6a00,
+            ears: 'pointed',
+            horns: 'imp'
+          }));
+        }
+        if (chestBone) {
+          wingGroup = createBatWings(0x7f1d1d, 0x991b1b, 0.88, false);
+          chestBone.add(wingGroup);
+        }
+      } else if (canonicalType === 'vampire_lord') {
+        const { headGrp, chestGrp } = createVampireHeadAndCape();
+        if (headBone) headBone.add(headGrp);
+        if (chestBone) chestBone.add(chestGrp);
+        if (handR) handR.add(createHandSpellOrb(0xfecdd3, 0xe11d48));
+      } else if (canonicalType === 'boss_butcher') {
+        // Act I Boss: Демон Преисподней
+        if (headBone) {
+          headBone.add(createChibiMonsterHead({
+            skinHex: 0x332b2e,
+            eyeHex: 0xff5500,
+            ears: 'pointed',
+            horns: 'demon_magma',
+            tusks: true
+          }));
+        }
+        if (chestBone) {
+          chestBone.add(createSpikedPauldronsAndMoltenCore(true));
+        }
+      } else if (canonicalType === 'boss_archlich') {
+        // Act II / Stage 10 Boss: Король-Лич Тёмного Пламени
+        if (!isTripoEnemy) {
+          if (headBone) headBone.add(createArchlichDarkCrown());
+          if (chestBone) chestBone.add(createArchlichCollar());
+          if (handL) handL.add(createHandSpellOrb(0xf5d0fe, 0xa855f7));
+        }
+
+        archlichOrbit = new THREE.Group();
+        archlichOrbit.position.y = (isTripoEnemy ? 1.55 : 1.28) * effectiveScaleMult;
+        const crystalGeo = getGeo('lich_orbit_crystal', () => new THREE.OctahedronGeometry(0.18, 0));
+        const crystalMat = getMat('lich_orbit_violet_mat', () =>
+          new THREE.MeshStandardMaterial({
+            color: 0xf5d0fe,
+            emissive: 0xa855f7,
+            emissiveIntensity: 2.4,
+            roughness: 0.15
+          })
+        );
+        const orbitR = 1.15 * effectiveScaleMult;
+        for (let i = 0; i < 4; i++) {
+          const a = (i / 4) * Math.PI * 2;
+          const shard = new THREE.Mesh(crystalGeo, crystalMat);
+          shard.scale.set(0.82 * effectiveScaleMult, 1.42 * effectiveScaleMult, 0.82 * effectiveScaleMult);
+          shard.position.set(Math.cos(a) * orbitR, 0, Math.sin(a) * orbitR);
+          archlichOrbit.add(shard);
+          archlichCrystals.push(shard);
+        }
+        root.add(archlichOrbit);
+      } else if (canonicalType === 'boss_cthulhu') {
+        // Act III Boss: Вестник Бездны
+        if (headBone) {
+          cthulhuHead = createCthulhuHeadAndTentacles();
+          headBone.add(cthulhuHead);
+        }
+        const { chestProps, baseProps } = createCthulhuArmorAndBaseTentacles();
+        if (chestBone) chestBone.add(chestProps);
+        baseProps.scale.setScalar(cfg.scale * effectiveScaleMult);
+        cthulhuBase = baseProps;
+        root.add(baseProps);
+        if (handL) handL.add(createHandSpellOrb(0x090d16, 0x06b6d4));
+      } else if (canonicalType === 'boss_warden' || canonicalType === 'boss_troll') {
+        // Act IV / Stage 10 Co-Boss: Тролль-Костолом с боевым молотом
+        if (!isTripoEnemy) {
+          if (headBone) {
+            headBone.add(createChibiMonsterHead({
+              skinHex: 0xa87654,
+              eyeHex: 0xff6a00,
+              ears: 'ogre',
+              tusks: true
+            }));
+          }
+          if (chestBone) {
+            chestBone.add(createSpikedPauldronsAndMoltenCore(false));
+          }
+        }
+      } else if (canonicalType === 'boss_ashlord') {
+        // Act V Boss: Пепельный Дракон
+        if (headBone) {
+          headBone.add(createAshenDragonHead());
+        }
+        if (chestBone) {
+          wingGroup = createBatWings(0x18151a, 0x7c2d12, 1.42, true);
+          dragonTail = createDragonTailWithFlame();
+          chestBone.add(wingGroup, dragonTail, createSpikedPauldronsAndMoltenCore(true));
         }
       }
-    });
 
-    // Humanoid KayKit rigs (Barbarian, Knight, Mage) lack a separate Eyes mesh — add glowing eyes on head!
-    if (!foundEyeMesh && headBone && cfg.eye) {
-      const visorForward = cfg.key === 'knight';
-      headBone.add(createHumanoidGlowingEyes(cfg.eye, visorForward));
-    }
-
-    // Primary & Off-hand Weapons
-    if (handR && cfg.weapon) {
-      handR.add(makeEnemyWeaponProp(cfg.weapon));
-    }
-    if (handL && cfg.offhandWeapon) {
-      handL.add(makeEnemyWeaponProp(cfg.offhandWeapon));
-    }
-
-    // Archetype & Boss Signature Equipment
-    if (typeId === 'skeleton') {
-      if (handL) {
-        const buckler = createRustedBuckler();
-        handL.add(buckler);
-        stage1BreakNode = buckler;
-      }
-      if (headBone) {
-        const potHelm = createRustedPotHelm();
-        headBone.add(potHelm);
-        stage2BreakNode = potHelm;
-      }
-    } else if (typeId === 'archer') {
-      const crossbow = createEnemyCrossbow();
-      crossbow.position.set(0, 0.72 * effectiveScaleMult, 0.25 * effectiveScaleMult);
-      crossbow.scale.setScalar(effectiveScaleMult);
-      root.add(crossbow);
-    } else if (typeId === 'shieldbearer' && handL) {
-      const towerShield = createIronTowerShield();
-      handL.add(towerShield);
-      stage1BreakNode = towerShield;
-    } else if (typeId === 'bomber') {
-      bomberBarrel = createVolatilePowderBarrel();
-      bomberBarrel.position.set(0, 0.78 * effectiveScaleMult, 0.30 * effectiveScaleMult);
-      bomberBarrel.scale.setScalar(effectiveScaleMult);
-      root.add(bomberBarrel);
-    } else if (typeId === 'boss_butcher' && headBone) {
-      headBone.add(createButcherHornedHelm());
-    } else if (typeId === 'boss_archlich') {
-      archlichOrbit = new THREE.Group();
-      archlichOrbit.position.y = 1.28 * effectiveScaleMult;
-      const crystalGeo = getGeo('lich_orbit_crystal', () => new THREE.OctahedronGeometry(0.20, 0));
-      const crystalMat = getMat('lich_orbit_mat', () =>
-        new THREE.MeshStandardMaterial({
-          color: 0x6ee7b7,
-          emissive: 0x10b981,
-          emissiveIntensity: 2.3,
-          roughness: 0.15
-        })
-      );
-      const orbitR = 1.18 * effectiveScaleMult;
-      for (let i = 0; i < 4; i++) {
-        const a = (i / 4) * Math.PI * 2;
-        const shard = new THREE.Mesh(crystalGeo, crystalMat);
-        shard.scale.set(0.85 * effectiveScaleMult, 1.45 * effectiveScaleMult, 0.85 * effectiveScaleMult);
-        shard.position.set(Math.cos(a) * orbitR, 0, Math.sin(a) * orbitR);
-        archlichOrbit.add(shard);
-        archlichCrystals.push(shard);
-      }
-      root.add(archlichOrbit);
-    } else if (typeId === 'boss_ashlord') {
-      if (headBone) {
-        headBone.add(createAshlordCrown());
-      }
-      if (chestBone) {
-        chestBone.add(createAshlordMagmaArmorCracks());
-      }
-      if (handL) {
-        handL.add(createSkullShield(true));
+      animCtrl = createAnimController(inst, asset.clips, 'Idle', cfg.moveClip);
+      if (canonicalType === 'corrupted_treant' || canonicalType === 'mimic_chest') {
+        animCtrl.syncPhase(cfg.moveClip, 0);
+      } else {
+        animCtrl.mixer.update(Math.random() * 1.2);
       }
     }
-
-    animCtrl = createAnimController(inst, asset.clips, 'Idle', cfg.moveClip);
-    animCtrl.mixer.update(Math.random() * 1.2);
   }
 
   // Clean Artistic Elite Indicator (ZERO flat red circles on Bosses; delicate feathered sigil + floating 3D crystal crest on Elites!)
   let halo = null;
-  let innerBossHalo = null; // Kept null: Bosses stand cleanly on cobblestones without plastic rings!
+  let innerBossHalo = null;
   let eliteCrest = null;
   const eliteCrestBaseY = (cfg.scale || 0.9) * effectiveScaleMult * 2.18;
 
@@ -2222,7 +5167,6 @@ export function createEnemyMesh(typeId = 'skeleton', eliteVariant = null, custom
     const glowColor =
       eliteVariant === 'purple' ? 0x9333ea : eliteVariant === 'warden' ? 0xd97706 : 0x0284c7;
 
-    // 1. Delicate feathered radial rune aura underfoot (soft additive glow, zero hard edges!)
     const sigilTex = getMat('elite_feathered_sigil_tex', () => {
       const sz = 192;
       const cv = document.createElement('canvas');
@@ -2288,7 +5232,6 @@ export function createEnemyMesh(typeId = 'skeleton', eliteVariant = null, custom
     halo.scale.setScalar(effectiveScaleMult);
     root.add(halo);
 
-    // 2. Crisp floating 3D Diamond Soul-Crest above Elite's head so player immediately reads Elite status!
     eliteCrest = new THREE.Group();
     const gemMesh = new THREE.Mesh(
       getGeo('elite_crest_gem', () => new THREE.OctahedronGeometry(0.135, 0)),
@@ -2329,10 +5272,15 @@ export function createEnemyMesh(typeId = 'skeleton', eliteVariant = null, custom
   let isDying = false;
   let proceduralFall = false;
   let hitJoltTimer = 0;
+  let baseClipOverride = null;
 
   const handle = {
     root,
+    setClipOverride(clipName = null) {
+      baseClipOverride = typeof clipName === 'string' && clipName ? clipName : null;
+    },
     _markActive() {
+      baseClipOverride = null;
       inPool = false;
       isDying = false;
       proceduralFall = false;
@@ -2402,9 +5350,13 @@ export function createEnemyMesh(typeId = 'skeleton', eliteVariant = null, custom
         }
       }
     },
-    playAttackAnim() {
+    playAttackAnim(overrideClip = null) {
       if (isDying) return;
-      animCtrl?.triggerOneShot(cfg.atkClip, cfg.isBossVisual ? 1.42 : 1.65);
+      procRig?.triggerAttack?.();
+      const targetClip = typeof overrideClip === 'string' && overrideClip ? overrideClip : cfg.atkClip;
+      if (animCtrl && targetClip) {
+        animCtrl.triggerOneShot(targetClip, cfg.isBossVisual ? 1.42 : 1.55);
+      }
     },
     flashHit() {
       flashTimer = 0.10;
@@ -2441,7 +5393,7 @@ export function createEnemyMesh(typeId = 'skeleton', eliteVariant = null, custom
         animCtrl.mixer.stopAllAction();
         animCtrl.mixer.uncacheRoot(spawnedInst);
       }
-      if (spawnedInst) {
+      if (spawnedInst && !procRig) {
         spawnedInst.traverse((n) => {
           if (n.isSkinnedMesh && n.skeleton) {
             n.skeleton.dispose();
@@ -2454,13 +5406,24 @@ export function createEnemyMesh(typeId = 'skeleton', eliteVariant = null, custom
       instanceMats.length = 0;
       flashMeshSlots.length = 0;
     },
+    syncCyclePhase(phase01) {
+      if (animCtrl && !isDying && typeof animCtrl.syncPhase === 'function') {
+        animCtrl.syncPhase(cfg.moveClip, phase01);
+      }
+    },
     update(dt, arg2, arg3) {
       const safeDt = Math.min(Math.max(dt || 0.016, 0), 0.1);
+      const isMoving = typeof arg2 === 'boolean' ? arg2 : true;
       const elapsedTime = typeof arg2 === 'boolean' ? (arg3 || 0) : (arg2 || 0);
-      if (animCtrl && !isDying) {
-        animCtrl.setBaseState(cfg.moveClip, cfg.moveSpeedAnim || 1.1);
+      if (animCtrl && !isDying && canonicalType !== 'corrupted_treant' && canonicalType !== 'mimic_chest') {
+        const baseClip = baseClipOverride || (isMoving ? cfg.moveClip : (cfg.idleClip || cfg.moveClip));
+        animCtrl.setBaseState(baseClip, baseClipOverride ? 1.35 : isMoving ? (cfg.moveSpeedAnim || 1.1) : 1.0);
         animCtrl.mixer.update(safeDt);
       }
+      if (procRig) {
+        procRig.update(safeDt, elapsedTime, isDying);
+      }
+
       if (hitJoltTimer > 0 && spawnedInst && !isDying) {
         hitJoltTimer = Math.max(0, hitJoltTimer - safeDt);
         spawnedInst.rotation.x = -Math.sin((hitJoltTimer / 0.12) * Math.PI) * 0.24;
@@ -2468,36 +5431,41 @@ export function createEnemyMesh(typeId = 'skeleton', eliteVariant = null, custom
         spawnedInst.rotation.x = 0;
       }
 
-      // Forward arm overrides for Crossbow Archer & Barrel-Carrying Bomber
-      if (typeId === 'archer') {
-        if (upperArmL) upperArmL.quaternion.slerp(GUN_UPPER_ARM_L_Q, 0.86);
-        if (lowerArmL) lowerArmL.quaternion.slerp(GUN_LOWER_ARM_L_Q, 0.86);
-        if (upperArmR) upperArmR.quaternion.slerp(GUN_UPPER_ARM_R_Q, 0.86);
-        if (lowerArmR) lowerArmR.quaternion.slerp(GUN_LOWER_ARM_R_Q, 0.86);
-      } else if (typeId === 'bomber') {
-        if (upperArmL) upperArmL.quaternion.slerp(BOMBER_UPPER_ARM_L_Q, 0.88);
-        if (lowerArmL) lowerArmL.quaternion.slerp(BOMBER_LOWER_ARM_L_Q, 0.88);
-        if (upperArmR) upperArmR.quaternion.slerp(BOMBER_UPPER_ARM_R_Q, 0.88);
-        if (lowerArmR) lowerArmR.quaternion.slerp(BOMBER_LOWER_ARM_R_Q, 0.88);
-        if (bomberBarrel) {
-          const pulse = 1 + Math.sin(elapsedTime * 12.0) * 0.10;
-          bomberBarrel.scale.setScalar(effectiveScaleMult * pulse);
-          if (bomberBarrel.userData.glowRuneMat) {
-            bomberBarrel.userData.glowRuneMat.emissiveIntensity = 1.9 + Math.sin(elapsedTime * 16.0) * 0.75;
-          }
-          if (bomberBarrel.userData.spark) {
-            bomberBarrel.userData.spark.rotation.y = elapsedTime * 14.0;
-          }
+      if (wingGroup?.userData?.wingPivots && !isDying) {
+        const flapSpeed = canonicalType === 'boss_ashlord' ? 5.6 : 9.2;
+        const flapAmp = canonicalType === 'boss_ashlord' ? 0.36 : 0.42;
+        const flap = Math.sin(elapsedTime * flapSpeed) * flapAmp;
+        for (const wp of wingGroup.userData.wingPivots) {
+          wp.pivot.rotation.y = -wp.side * (0.38 + flap);
         }
-      } else if (typeId === 'boss_archlich' && archlichOrbit) {
+      }
+      if (dragonTail && !isDying) {
+        dragonTail.rotation.y = Math.sin(elapsedTime * 4.4) * 0.24;
+      }
+      if (emberCoreGrp?.userData?.heart && !isDying) {
+        const p = 1 + Math.sin(elapsedTime * 7.5) * 0.10;
+        emberCoreGrp.userData.heart.scale.set(0.95 * p, 1.25 * p, 0.78 * p);
+      }
+      if (cthulhuHead?.userData?.tentacles && !isDying) {
+        for (const tt of cthulhuHead.userData.tentacles) {
+          tt.pivot.rotation.x = Math.sin(elapsedTime * 4.8 + tt.phase) * 0.16;
+          tt.pivot.rotation.z = Math.cos(elapsedTime * 3.9 + tt.phase) * 0.12;
+        }
+      }
+      if (cthulhuBase?.userData?.baseTentacles && !isDying) {
+        for (const bt of cthulhuBase.userData.baseTentacles) {
+          bt.pivot.rotation.y = bt.baseY + Math.sin(elapsedTime * 3.6 + bt.phase) * 0.18;
+        }
+      }
+      if (canonicalType === 'boss_archlich' && archlichOrbit) {
         archlichOrbit.rotation.y = elapsedTime * 1.95;
         for (let i = 0; i < archlichCrystals.length; i++) {
           const c = archlichCrystals[i];
           c.position.y = Math.sin(elapsedTime * 4.2 + i * 1.57) * 0.14 * effectiveScaleMult;
           c.rotation.y = elapsedTime * 3.2 + i;
         }
-      } else if (typeId === 'boss_ashlord' && flashTimer <= 0) {
-        const magmaPulse = 0.36 + Math.sin(elapsedTime * 5.5) * 0.16;
+      } else if ((canonicalType === 'boss_ashlord' || canonicalType === 'boss_butcher') && flashTimer <= 0) {
+        const magmaPulse = 0.28 + Math.sin(elapsedTime * 5.5) * 0.14;
         for (const item of instanceMats) {
           if (item.mat.emissive) {
             item.mat.emissiveIntensity = magmaPulse;
@@ -2580,17 +5548,22 @@ export function createPickupMesh(pickupType = 'xp') {
     grp.position.y = 0.5;
     floatingPart = grp;
     visualPivot.add(grp);
-  } else if (pickupType === 'supply_crate' || pickupType === 'companion_crate') {
+  } else if (pickupType === 'supply_crate' || pickupType === 'companion_crate' || pickupType === 'mimic_disguise') {
     const isComp = pickupType === 'companion_crate';
-    const chestAsset = gltfCache.get(isComp ? 'chest_gold' : 'chest');
+    const chestAsset = gltfCache.get('chest_disguise_tripo') || gltfCache.get(isComp ? 'chest_gold' : 'chest');
+    const isTripoChest = !!gltfCache.get('chest_disguise_tripo');
     if (chestAsset?.scene) {
       const cloned = chestAsset.scene.clone(true);
-      cloned.scale.setScalar(0.85);
+      cloned.scale.setScalar(isTripoChest ? 1.85 : 0.85);
       cloned.traverse((n) => {
         if (n.isMesh && n.material) {
-          n.material = n.material.clone();
-          if (isComp) n.material.color.lerp(new THREE.Color(0xa855f7), 0.35);
-          damageMats.push(n.material);
+          const cloneOne = (m) => {
+            const c = m.clone();
+            if (isComp && c.color) c.color.lerp(new THREE.Color(0xa855f7), 0.35);
+            damageMats.push(c);
+            return c;
+          };
+          n.material = Array.isArray(n.material) ? n.material.map(cloneOne) : cloneOne(n.material);
           n.castShadow = true;
           n.receiveShadow = true;
         }
@@ -2616,12 +5589,21 @@ export function createPickupMesh(pickupType = 'xp') {
       visualPivot.add(box, band);
     }
   } else if (pickupType === 'relic_weapon_crate') {
-    const goldChestAsset = gltfCache.get('chest_gold');
+    const goldChestAsset = gltfCache.get('chest_disguise_tripo') || gltfCache.get('chest_gold');
+    const isTripoGold = !!gltfCache.get('chest_disguise_tripo');
     if (goldChestAsset?.scene) {
       const cloned = goldChestAsset.scene.clone(true);
-      cloned.scale.setScalar(1.05);
+      cloned.scale.setScalar(isTripoGold ? 2.15 : 1.05);
       cloned.traverse((n) => {
         if (n.isMesh) {
+          if (isTripoGold && n.material) {
+            const warmGold = (m) => {
+              const c = m.clone();
+              if (c.color) c.color.lerp(new THREE.Color(0xfbbf24), 0.24);
+              return c;
+            };
+            n.material = Array.isArray(n.material) ? n.material.map(warmGold) : warmGold(n.material);
+          }
           n.castShadow = true;
           n.receiveShadow = true;
         }

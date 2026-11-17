@@ -4,23 +4,42 @@
 export function createAudioEngine() {
   let ctx = null;
   let masterGain = null;
+  let sfxGain = null;
+  let musicGain = null;
+  let musicFilter = null;
   let compressor = null;
   let whiteNoiseBuffer = null;
   let brownNoiseBuffer = null;
   let distortionCurve = null;
 
   let muted = false;
-  let userVolume = 0.5;
+  let userVolume = 0.72;
+  let sfxVolume = 0.75;
+  let musicVolume = 0.38;
   try {
     const savedVol = localStorage.getItem('grimborne_volume');
     if (savedVol !== null && Number.isFinite(Number(savedVol))) {
       userVolume = Math.max(0, Math.min(1, Number(savedVol)));
+    }
+    const savedSfx = localStorage.getItem('grimborne_sfx_volume');
+    if (savedSfx !== null && Number.isFinite(Number(savedSfx))) {
+      sfxVolume = Math.max(0, Math.min(1, Number(savedSfx)));
+    } else if (savedVol !== null && Number.isFinite(Number(savedVol))) {
+      sfxVolume = userVolume;
+    }
+    const savedMusic = localStorage.getItem('grimborne_music_volume');
+    if (savedMusic !== null && Number.isFinite(Number(savedMusic))) {
+      musicVolume = Math.max(0, Math.min(1, Number(savedMusic)));
     }
     const savedMute = localStorage.getItem('grimborne_muted');
     if (savedMute === '1') muted = true;
   } catch {}
   let suspendedBySystem = false;
   let unlocked = false;
+  let musicMode = 'hub'; // 'hub' | 'combat' | 'boss' | 'off'
+  let musicStep = 0;
+  let musicTimerId = null;
+  let nextNoteTime = 0;
 
   const lastTriggerAt = Object.create(null);
 
@@ -58,9 +77,26 @@ export function createAudioEngine() {
       compressor.release.setValueAtTime(0.16, ctx.currentTime);
 
       masterGain = ctx.createGain();
-      masterGain.gain.setValueAtTime(muted || suspendedBySystem ? 0.0001 : Math.max(0.0001, userVolume * 0.72), ctx.currentTime);
+      masterGain.gain.setValueAtTime(muted || suspendedBySystem ? 0.0001 : 0.92, ctx.currentTime);
 
-      compressor.connect(masterGain);
+      sfxGain = ctx.createGain();
+      sfxGain.gain.setValueAtTime(Math.max(0.0001, sfxVolume * 0.85), ctx.currentTime);
+
+      musicFilter = ctx.createBiquadFilter();
+      musicFilter.type = 'lowpass';
+      musicFilter.frequency.setValueAtTime(musicMode === 'hub' ? 520 : 4400, ctx.currentTime);
+      musicFilter.Q.setValueAtTime(1.1, ctx.currentTime);
+
+      musicGain = ctx.createGain();
+      musicGain.gain.setValueAtTime(
+        muted || suspendedBySystem || musicMode === 'off' ? 0.0001 : Math.max(0.0001, musicVolume * 0.44),
+        ctx.currentTime
+      );
+
+      compressor.connect(sfxGain);
+      sfxGain.connect(masterGain);
+      musicFilter.connect(musicGain);
+      musicGain.connect(masterGain);
       masterGain.connect(ctx.destination);
 
       // Reusable 1.2s white & brown noise buffers (zero runtime buffer allocations)
@@ -86,10 +122,194 @@ export function createAudioEngine() {
 
   function syncGain() {
     if (!ctx || !masterGain) return;
-    const target = muted || suspendedBySystem ? 0.0001 : Math.max(0.0001, userVolume * 0.72);
     const t = ctx.currentTime;
+    const targetMaster = muted || suspendedBySystem ? 0.0001 : 0.92;
     masterGain.gain.cancelScheduledValues(t);
-    masterGain.gain.setTargetAtTime(target, t, 0.018);
+    masterGain.gain.setTargetAtTime(targetMaster, t, 0.018);
+
+    if (sfxGain) {
+      const targetSfx = muted || suspendedBySystem ? 0.0001 : Math.max(0.0001, sfxVolume * 0.85);
+      sfxGain.gain.cancelScheduledValues(t);
+      sfxGain.gain.setTargetAtTime(targetSfx, t, 0.018);
+    }
+    if (musicGain) {
+      const modeMult = musicMode === 'off' ? 0 : musicMode === 'hub' ? 0.34 : musicMode === 'boss' ? 0.56 : 0.46;
+      const targetMusic = muted || suspendedBySystem || musicVolume <= 0.001 ? 0.0001 : Math.max(0.0001, musicVolume * modeMult);
+      musicGain.gain.cancelScheduledValues(t);
+      musicGain.gain.setTargetAtTime(targetMusic, t, 0.05);
+    }
+    if (musicFilter) {
+      const targetCutoff = musicMode === 'hub' ? 540 : musicMode === 'boss' ? 5200 : 4200;
+      musicFilter.frequency.setTargetAtTime(targetCutoff, t, 0.08);
+    }
+  }
+
+  // =========================================================================
+  // Procedural DOOM-Inspired Argent/Thrash Metal & Dark-Fantasy Music Sequencer
+  // =========================================================================
+  // Iconic E1M1 / Argent chromatic drop-E guitar steps (frequencies in Hz, 0 = rest)
+  const DOOM_COMBAT_RIFF = [
+    82.41, 0, 82.41, 164.81, 82.41, 0, 82.41, 146.83,
+    82.41, 0, 82.41, 130.81, 82.41, 0, 116.54, 123.47,
+    82.41, 0, 82.41, 164.81, 82.41, 0, 82.41, 146.83,
+    82.41, 0, 82.41, 130.81, 82.41, 116.54, 98.00, 110.00
+  ];
+  const DOOM_BOSS_RIFF = [
+    73.42, 73.42, 146.83, 73.42, 110.00, 73.42, 155.56, 73.42,
+    73.42, 73.42, 146.83, 138.59, 130.81, 116.54, 98.00, 110.00,
+    73.42, 73.42, 164.81, 73.42, 146.83, 73.42, 174.61, 164.81,
+    146.83, 130.81, 116.54, 98.00, 87.31, 82.41, 73.42, 92.50
+  ];
+  const HUB_DARK_PULSE = [
+    82.41, 0, 0, 0, 0, 0, 98.00, 0,
+    110.00, 0, 0, 0, 98.00, 0, 87.31, 0,
+    82.41, 0, 0, 0, 0, 0, 123.47, 0,
+    110.00, 0, 98.00, 0, 92.50, 0, 87.31, 0
+  ];
+
+  function scheduleMusicNote(stepIdx, t) {
+    if (!ctx || !musicFilter || !distortionCurve || muted || suspendedBySystem || musicMode === 'off' || musicVolume <= 0.001) {
+      return;
+    }
+
+    const isBoss = musicMode === 'boss';
+    const isHub = musicMode === 'hub';
+    const table = isBoss ? DOOM_BOSS_RIFF : isHub ? HUB_DARK_PULSE : DOOM_COMBAT_RIFF;
+    const freq = table[stepIdx % table.length];
+
+    // 1. Heavily distorted Argent Drop-E Chug Guitar / Synth Bass
+    if (freq > 0) {
+      const dur = isHub ? 0.34 : freq > 105 ? 0.145 : 0.115;
+      const osc = ctx.createOscillator();
+      const sub = ctx.createOscillator();
+      const shaper = ctx.createWaveShaper();
+      const toneLp = ctx.createBiquadFilter();
+      const g = ctx.createGain();
+
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(freq, t);
+      sub.type = 'square';
+      sub.frequency.setValueAtTime(freq * 0.5, t);
+
+      shaper.curve = distortionCurve;
+      shaper.oversample = '2x';
+      toneLp.type = 'lowpass';
+      toneLp.frequency.setValueAtTime(isHub ? 480 : freq > 105 ? 2400 : 1450, t);
+      toneLp.frequency.exponentialRampToValueAtTime(isHub ? 220 : 520, t + dur);
+
+      const amp = isHub ? 0.22 : isBoss ? 0.30 : 0.26;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(amp, t + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+
+      osc.connect(shaper);
+      sub.connect(shaper);
+      shaper.connect(toneLp);
+      toneLp.connect(g);
+      g.connect(musicFilter);
+
+      osc.start(t);
+      sub.start(t);
+      osc.stop(t + dur + 0.015);
+      sub.stop(t + dur + 0.015);
+    }
+
+    if (isHub) return;
+
+    // 2. Punchy Industrial Kick (downbeats & syncopated double-kick on Boss!)
+    const s16 = stepIdx % 16;
+    const hitKick = isBoss
+      ? s16 === 0 || s16 === 2 || s16 === 6 || s16 === 8 || s16 === 10 || s16 === 14
+      : s16 === 0 || s16 === 6 || s16 === 8 || s16 === 14;
+    if (hitKick) {
+      const kOsc = ctx.createOscillator();
+      const kGain = ctx.createGain();
+      kOsc.type = 'sine';
+      kOsc.frequency.setValueAtTime(132, t);
+      kOsc.frequency.exponentialRampToValueAtTime(34, t + 0.11);
+      kGain.gain.setValueAtTime(0.0001, t);
+      kGain.gain.linearRampToValueAtTime(isBoss ? 0.42 : 0.36, t + 0.003);
+      kGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
+      kOsc.connect(kGain);
+      kGain.connect(musicFilter);
+      kOsc.start(t);
+      kOsc.stop(t + 0.14);
+    }
+
+    // 3. Industrial Snare Backbeat (beats 2 & 4: steps 4, 12)
+    if (s16 === 4 || s16 === 12) {
+      if (whiteNoiseBuffer) {
+        const ns = ctx.createBufferSource();
+        ns.buffer = whiteNoiseBuffer;
+        ns.loop = true;
+        const bp = ctx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.setValueAtTime(1950, t);
+        bp.Q.setValueAtTime(0.95, t);
+        const sg = ctx.createGain();
+        sg.gain.setValueAtTime(0.0001, t);
+        sg.gain.linearRampToValueAtTime(0.24, t + 0.003);
+        sg.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+        ns.connect(bp);
+        bp.connect(sg);
+        sg.connect(musicFilter);
+        ns.start(t, Math.random() * 0.4, 0.14);
+        ns.stop(t + 0.14);
+      }
+      const st = ctx.createOscillator();
+      const stg = ctx.createGain();
+      st.type = 'triangle';
+      st.frequency.setValueAtTime(210, t);
+      st.frequency.exponentialRampToValueAtTime(95, t + 0.07);
+      stg.gain.setValueAtTime(0.18, t);
+      stg.gain.exponentialRampToValueAtTime(0.0001, t + 0.08);
+      st.connect(stg);
+      stg.connect(musicFilter);
+      st.start(t);
+      st.stop(t + 0.09);
+    }
+
+    // 4. Driving Metallic Hi-Hat (every 8th note)
+    if (s16 % 2 === 0 && whiteNoiseBuffer) {
+      const hs = ctx.createBufferSource();
+      hs.buffer = whiteNoiseBuffer;
+      hs.loop = true;
+      const hp = ctx.createBiquadFilter();
+      hp.type = 'highpass';
+      hp.frequency.setValueAtTime(6200, t);
+      const hg = ctx.createGain();
+      hg.gain.setValueAtTime(0.0001, t);
+      hg.gain.linearRampToValueAtTime(s16 % 4 === 2 ? 0.07 : 0.045, t + 0.002);
+      hg.gain.exponentialRampToValueAtTime(0.0001, t + 0.038);
+      hs.connect(hp);
+      hp.connect(hg);
+      hg.connect(musicFilter);
+      hs.start(t, Math.random() * 0.5, 0.045);
+      hs.stop(t + 0.048);
+    }
+  }
+
+  function startMusicLoop() {
+    if (musicTimerId !== null) return;
+    if (!ctx) return;
+    nextNoteTime = Math.max(ctx.currentTime + 0.04, nextNoteTime || ctx.currentTime + 0.04);
+    musicTimerId = setInterval(() => {
+      if (!ctx || ctx.state !== 'running' || muted || suspendedBySystem || musicMode === 'off') {
+        if (ctx) nextNoteTime = ctx.currentTime + 0.05;
+        return;
+      }
+      const bpm = musicMode === 'boss' ? 168 : musicMode === 'hub' ? 96 : 154;
+      const stepSec = 60 / bpm / 4; // 16th-note resolution (classic ~154 BPM thrash!)
+      const horizon = ctx.currentTime + 0.14;
+      if (nextNoteTime < ctx.currentTime - 0.12) {
+        nextNoteTime = ctx.currentTime + 0.03;
+      }
+      while (nextNoteTime < horizon) {
+        scheduleMusicNote(musicStep, nextNoteTime);
+        musicStep = (musicStep + 1) % 64;
+        nextNoteTime += stepSec;
+      }
+    }, 32);
   }
 
   function unlock() {
@@ -99,6 +319,7 @@ export function createAudioEngine() {
       audio.resume().catch(() => {});
     }
     unlocked = true;
+    startMusicLoop();
   }
 
   // Unlock AudioContext on first user gesture
@@ -253,52 +474,345 @@ export function createAudioEngine() {
   return {
     unlock,
 
-    playMeleeSwing(heavy = false) {
-      if (!readyToPlay() || !canTrigger('melee', 45)) return;
-      const isHeavy = Boolean(heavy && heavy !== 'club');
+    playMeleeSwing(weaponOrHeavy = 'club', isCrit = false) {
+      if (!readyToPlay() || !canTrigger('melee', 42)) return;
+      const weaponId = typeof weaponOrHeavy === 'string' ? weaponOrHeavy : weaponOrHeavy ? 'axe' : 'club';
       const jitter = 0.94 + Math.random() * 0.12;
 
-      // Air blade whoosh
+      if (weaponId === 'spear') {
+        // Fast aerodynamic spear lunge tear + crisp wooden shaft snap
+        playFilteredNoise({
+          brown: false,
+          filterType: 'bandpass',
+          freqStart: 1580 * jitter,
+          freqEnd: 410 * jitter,
+          q: 2.2,
+          duration: 0.13,
+          gainPeak: 0.30,
+          attack: 0.008
+        });
+        playTone({
+          type: 'triangle',
+          freqStart: 320 * jitter,
+          freqEnd: 92,
+          startTime: 0.01,
+          duration: 0.11,
+          gainPeak: 0.24,
+          attack: 0.003
+        });
+        playTone({
+          type: 'sine',
+          freqStart: 1320 * jitter,
+          freqEnd: 640,
+          startTime: 0.02,
+          duration: 0.08,
+          gainPeak: isCrit ? 0.14 : 0.09,
+          attack: 0.002
+        });
+        return;
+      }
+
+      if (weaponId === 'zweihander') {
+        // Massive heavy two-handed greatsword air cleave + resonant steel ring
+        playFilteredNoise({
+          brown: false,
+          filterType: 'bandpass',
+          freqStart: 620 * jitter,
+          freqEnd: 118 * jitter,
+          q: 1.75,
+          duration: 0.29,
+          gainPeak: 0.38,
+          attack: 0.018
+        });
+        playDistortedThump({
+          type: 'triangle',
+          freqStart: 158 * jitter,
+          freqEnd: 32,
+          startTime: 0.03,
+          duration: 0.25,
+          gainPeak: 0.36,
+          attack: 0.006,
+          filterFreq: 480
+        });
+        playTone({
+          type: 'sawtooth',
+          freqStart: 270 * jitter,
+          freqEnd: 98,
+          startTime: 0.035,
+          duration: 0.19,
+          gainPeak: 0.15,
+          attack: 0.004
+        });
+        return;
+      }
+
+      if (weaponId === 'axe' || weaponId === 'cleaver') {
+        // Brutal heavy double-blade axe cleave + iron chop
+        playFilteredNoise({
+          brown: true,
+          filterType: 'lowpass',
+          freqStart: 920 * jitter,
+          freqEnd: 140 * jitter,
+          q: 1.3,
+          duration: 0.25,
+          gainPeak: 0.42,
+          attack: 0.012
+        });
+        playFilteredNoise({
+          brown: false,
+          filterType: 'bandpass',
+          freqStart: 1150 * jitter,
+          freqEnd: 260,
+          q: 1.5,
+          duration: 0.17,
+          gainPeak: 0.26,
+          attack: 0.010
+        });
+        playDistortedThump({
+          type: 'sawtooth',
+          freqStart: 185 * jitter,
+          freqEnd: 38,
+          startTime: 0.02,
+          duration: 0.20,
+          gainPeak: 0.34,
+          attack: 0.004,
+          filterFreq: 540
+        });
+        return;
+      }
+
+      if (weaponId === 'boss_hammer' || weaponId === 'flail') {
+        // Seismic warhammer wind roar + deep stone/anvil impact boom
+        playFilteredNoise({
+          brown: true,
+          filterType: 'lowpass',
+          freqStart: 540 * jitter,
+          freqEnd: 85 * jitter,
+          q: 1.1,
+          duration: 0.32,
+          gainPeak: 0.46,
+          attack: 0.018
+        });
+        playDistortedThump({
+          type: 'sine',
+          freqStart: 132 * jitter,
+          freqEnd: 24,
+          startTime: 0.04,
+          duration: 0.32,
+          gainPeak: 0.50,
+          attack: 0.004,
+          filterFreq: 380
+        });
+        playTone({
+          type: 'triangle',
+          freqStart: 420 * jitter,
+          freqEnd: 165,
+          startTime: 0.045,
+          duration: 0.18,
+          gainPeak: 0.16,
+          attack: 0.002
+        });
+        return;
+      }
+
+      // Default / 'club' (Рыцарский меч): agile broadsword cut + steel flash
       playFilteredNoise({
         brown: false,
         filterType: 'bandpass',
-        freqStart: (isHeavy ? 680 : 960) * jitter,
-        freqEnd: (isHeavy ? 150 : 230) * jitter,
-        q: isHeavy ? 1.8 : 1.4,
-        duration: isHeavy ? 0.24 : 0.16,
-        gainPeak: isHeavy ? 0.34 : 0.26,
-        attack: 0.014
+        freqStart: (isCrit ? 1160 : 980) * jitter,
+        freqEnd: 230 * jitter,
+        q: 1.5,
+        duration: 0.15,
+        gainPeak: 0.27,
+        attack: 0.010
       });
-
-      // Meaty low impact thud
       playTone({
         type: 'triangle',
-        freqStart: (isHeavy ? 148 : 185) * jitter,
-        freqEnd: isHeavy ? 36 : 48,
-        startTime: 0.025,
-        duration: isHeavy ? 0.21 : 0.14,
-        gainPeak: isHeavy ? 0.42 : 0.30,
-        attack: 0.005
+        freqStart: 195 * jitter,
+        freqEnd: 52,
+        startTime: 0.02,
+        duration: 0.13,
+        gainPeak: 0.26,
+        attack: 0.004
       });
-
-      if (isHeavy) {
-        // Subtle iron cleave ring for Cleaver / Maul
-        playTone({
-          type: 'sawtooth',
-          freqStart: 310 * jitter,
-          freqEnd: 110,
-          startTime: 0.03,
-          duration: 0.16,
-          gainPeak: 0.12,
-          attack: 0.004
-        });
-      }
+      playTone({
+        type: 'sine',
+        freqStart: 690 * jitter,
+        freqEnd: 290,
+        startTime: 0.015,
+        duration: 0.09,
+        gainPeak: isCrit ? 0.14 : 0.08,
+        attack: 0.002
+      });
     },
 
-    playGunshot(weaponId = 'pistol') {
-      const minGap = weaponId === 'gatling' ? 35 : 48;
+    playGunshot(weaponId = 'usp_pistol') {
+      const minGap = weaponId === 'smg' ? 24 : weaponId === 'ak47' ? 35 : weaponId === 'usp_pistol' ? 42 : 52;
       if (!readyToPlay() || !canTrigger('gun', minGap)) return;
       const jitter = 0.95 + Math.random() * 0.10;
+
+      if (weaponId === 'usp_pistol') {
+        // Crisp tactical .45 USP snap (sharp slide crack + compact punch + brass casing tink, ZERO shotgun boom!)
+        playTone({
+          type: 'triangle',
+          freqStart: 220 * jitter,
+          freqEnd: 54,
+          duration: 0.095,
+          gainPeak: 0.34,
+          attack: 0.001
+        });
+        playFilteredNoise({
+          brown: false,
+          filterType: 'bandpass',
+          freqStart: 3600 * jitter,
+          freqEnd: 1150,
+          q: 1.4,
+          duration: 0.075,
+          gainPeak: 0.34,
+          attack: 0.001
+        });
+        playFilteredNoise({
+          brown: false,
+          filterType: 'highpass',
+          freqStart: 4200 * jitter,
+          freqEnd: 1900,
+          q: 1.6,
+          startTime: 0.002,
+          duration: 0.032,
+          gainPeak: 0.22,
+          attack: 0.001
+        });
+        playTone({
+          type: 'sine',
+          freqStart: 2950 * jitter,
+          freqEnd: 2450,
+          startTime: 0.045,
+          duration: 0.028,
+          gainPeak: 0.06,
+          attack: 0.001
+        });
+        return;
+      }
+
+      if (weaponId === 'colt') {
+        // Heavy .44 Magnum Colt Revolver thunder-crack + resonant brass cylinder ring!
+        playTone({
+          type: 'triangle',
+          freqStart: 2600 * jitter,
+          freqEnd: 1120,
+          duration: 0.015,
+          gainPeak: 0.14,
+          attack: 0.001
+        });
+        playDistortedThump({
+          type: 'sawtooth',
+          freqStart: 215 * jitter,
+          freqEnd: 38,
+          startTime: 0.004,
+          duration: 0.19,
+          gainPeak: 0.44,
+          attack: 0.0015,
+          filterFreq: 880
+        });
+        playFilteredNoise({
+          brown: false,
+          filterType: 'highpass',
+          freqStart: 3400 * jitter,
+          freqEnd: 1200,
+          q: 1.2,
+          startTime: 0.004,
+          duration: 0.14,
+          gainPeak: 0.36,
+          attack: 0.001
+        });
+        playFilteredNoise({
+          brown: true,
+          filterType: 'bandpass',
+          freqStart: 1250 * jitter,
+          freqEnd: 320,
+          q: 1.0,
+          startTime: 0.01,
+          duration: 0.22,
+          gainPeak: 0.30,
+          attack: 0.002
+        });
+        return;
+      }
+
+      if (weaponId === 'smg') {
+        // Rapid crisp 9mm SMG chatter + light high-speed bolt tick
+        playTone({
+          type: 'square',
+          freqStart: 270 * jitter,
+          freqEnd: 74,
+          duration: 0.062,
+          gainPeak: 0.20,
+          attack: 0.001
+        });
+        playFilteredNoise({
+          brown: false,
+          filterType: 'bandpass',
+          freqStart: 3200 * jitter,
+          freqEnd: 1050,
+          q: 1.35,
+          duration: 0.055,
+          gainPeak: 0.27,
+          attack: 0.001
+        });
+        playTone({
+          type: 'triangle',
+          freqStart: 2150 * jitter,
+          freqEnd: 1450,
+          startTime: 0.022,
+          duration: 0.020,
+          gainPeak: 0.055,
+          attack: 0.001
+        });
+        return;
+      }
+
+      if (weaponId === 'ak47') {
+        // Punchy 7.62x39 Kalashnikov bark + steel gas-piston carrier slam
+        playDistortedThump({
+          type: 'sawtooth',
+          freqStart: 192 * jitter,
+          freqEnd: 42,
+          duration: 0.135,
+          gainPeak: 0.38,
+          attack: 0.001,
+          filterFreq: 980
+        });
+        playFilteredNoise({
+          brown: false,
+          filterType: 'bandpass',
+          freqStart: 2800 * jitter,
+          freqEnd: 680,
+          q: 1.15,
+          duration: 0.11,
+          gainPeak: 0.34,
+          attack: 0.001
+        });
+        playFilteredNoise({
+          brown: false,
+          filterType: 'highpass',
+          freqStart: 3600 * jitter,
+          freqEnd: 1650,
+          q: 1.5,
+          duration: 0.04,
+          gainPeak: 0.20,
+          attack: 0.001
+        });
+        playTone({
+          type: 'triangle',
+          freqStart: 1680 * jitter,
+          freqEnd: 920,
+          startTime: 0.036,
+          duration: 0.028,
+          gainPeak: 0.085,
+          attack: 0.001
+        });
+        return;
+      }
 
       if (weaponId === 'blunderbuss') {
         // Massive twin-barrel black-powder cannon boom
@@ -404,95 +918,169 @@ export function createAudioEngine() {
         return;
       }
 
-      // Default / 'pistol' («Охотничье ружьё»): heavy chest-thumping pump shotgun + two-click pump rack!
+      // Default / 'pistol' («Охотничье ружьё»): Video-matched heavy 12-gauge blast + crisp trigger click + steel pump rack!
+      // 1. Crisp metallic trigger/hammer pre-snap
+      playTone({
+        type: 'triangle',
+        freqStart: 2450 * jitter,
+        freqEnd: 980,
+        duration: 0.018,
+        gainPeak: 0.14,
+        attack: 0.001
+      });
+      // 2. Massive sub-chest cannon thump + waveshaped low-mid punch
       playTone({
         type: 'sine',
-        freqStart: 135 * jitter,
-        freqEnd: 28,
-        duration: 0.26,
-        gainPeak: 0.52,
+        freqStart: 156 * jitter,
+        freqEnd: 27,
+        startTime: 0.006,
+        duration: 0.30,
+        gainPeak: 0.60,
         attack: 0.002
       });
       playDistortedThump({
         type: 'triangle',
-        freqStart: 124 * jitter,
+        freqStart: 142 * jitter,
         freqEnd: 28,
-        duration: 0.20,
-        gainPeak: 0.35,
-        attack: 0.002,
-        filterFreq: 500
+        startTime: 0.006,
+        duration: 0.23,
+        gainPeak: 0.42,
+        attack: 0.0015,
+        filterFreq: 620
+      });
+      // 3. Sharp supersonic muzzle crack + warm gunpowder echo tail
+      playFilteredNoise({
+        brown: false,
+        filterType: 'highpass',
+        freqStart: 2900 * jitter,
+        freqEnd: 1350,
+        q: 1.35,
+        startTime: 0.005,
+        duration: 0.045,
+        gainPeak: 0.28,
+        attack: 0.001
+      });
+      playFilteredNoise({
+        brown: false,
+        filterType: 'bandpass',
+        freqStart: 3650 * jitter,
+        freqEnd: 680,
+        q: 1.10,
+        startTime: 0.006,
+        duration: 0.135,
+        gainPeak: 0.34,
+        attack: 0.0015
       });
       playFilteredNoise({
         brown: true,
         filterType: 'lowpass',
-        freqStart: 2150,
-        freqEnd: 220,
-        q: 0.95,
-        duration: 0.25,
-        gainPeak: 0.45,
+        freqStart: 2450,
+        freqEnd: 195,
+        q: 0.92,
+        startTime: 0.008,
+        duration: 0.34,
+        gainPeak: 0.50,
         attack: 0.002
       });
-      playFilteredNoise({
-        brown: false,
-        filterType: 'bandpass',
-        freqStart: 3500 * jitter,
-        freqEnd: 740,
-        q: 1.15,
-        duration: 0.115,
-        gainPeak: 0.29,
-        attack: 0.0015
-      });
-      playTone({
-        type: 'square',
-        freqStart: 1700 * jitter,
-        freqEnd: 560,
-        duration: 0.022,
-        gainPeak: 0.09,
-        attack: 0.001
-      });
 
-      // Crisp two-click mechanical pump-action rack (chk-chk at +0.22s and +0.31s)
+      // 4. Crisp two-click mechanical pump-action rack (chk-clack at +0.20s and +0.29s)
       playFilteredNoise({
         brown: false,
         filterType: 'bandpass',
-        freqStart: 2450 * jitter,
-        freqEnd: 1350 * jitter,
-        q: 2.6,
-        startTime: 0.22,
-        duration: 0.055,
-        gainPeak: 0.15,
-        attack: 0.003
-      });
-      playTone({
-        type: 'triangle',
-        freqStart: 1480 * jitter,
-        freqEnd: 780,
-        startTime: 0.22,
-        duration: 0.032,
-        gainPeak: 0.11,
-        attack: 0.0015
-      });
-
-      playFilteredNoise({
-        brown: false,
-        filterType: 'bandpass',
-        freqStart: 1650 * jitter,
-        freqEnd: 2900 * jitter,
-        q: 2.8,
-        startTime: 0.31,
-        duration: 0.058,
+        freqStart: 2550 * jitter,
+        freqEnd: 1380 * jitter,
+        q: 2.7,
+        startTime: 0.20,
+        duration: 0.052,
         gainPeak: 0.17,
-        attack: 0.003
+        attack: 0.0025
       });
       playTone({
         type: 'triangle',
-        freqStart: 1940 * jitter,
-        freqEnd: 1080,
-        startTime: 0.31,
-        duration: 0.036,
-        gainPeak: 0.13,
+        freqStart: 1540 * jitter,
+        freqEnd: 790,
+        startTime: 0.20,
+        duration: 0.032,
+        gainPeak: 0.12,
         attack: 0.0015
       });
+
+      playFilteredNoise({
+        brown: false,
+        filterType: 'bandpass',
+        freqStart: 1720 * jitter,
+        freqEnd: 3050 * jitter,
+        q: 2.8,
+        startTime: 0.29,
+        duration: 0.056,
+        gainPeak: 0.19,
+        attack: 0.0025
+      });
+      playTone({
+        type: 'triangle',
+        freqStart: 2020 * jitter,
+        freqEnd: 1120,
+        startTime: 0.29,
+        duration: 0.036,
+        gainPeak: 0.14,
+        attack: 0.0015
+      });
+    },
+
+    playFootstep(classId = 'gunslinger', stepParity = 0) {
+      if (!readyToPlay() || !canTrigger('footstep', 135)) return;
+      const alt = stepParity % 2 === 0 ? 0.96 : 1.04;
+      const jitter = alt * (0.97 + Math.random() * 0.06);
+      const isHeavy = classId === 'warrior';
+      const isLight = classId === 'mage';
+
+      // 1. Grounded leather-boot heel thud on dark cobblestones (matching reference video stride!)
+      playTone({
+        type: 'sine',
+        freqStart: (isHeavy ? 118 : isLight ? 148 : 134) * jitter,
+        freqEnd: (isHeavy ? 38 : 44) * jitter,
+        duration: isHeavy ? 0.085 : 0.072,
+        gainPeak: isHeavy ? 0.20 : isLight ? 0.13 : 0.17,
+        attack: 0.002
+      });
+
+      // 2. Crisp cobblestone sole tap / grit crunch
+      playFilteredNoise({
+        brown: false,
+        filterType: 'bandpass',
+        freqStart: (isLight ? 1380 : 1140) * jitter,
+        freqEnd: 440 * jitter,
+        q: 1.85,
+        startTime: 0.004,
+        duration: 0.052,
+        gainPeak: isLight ? 0.10 : 0.135,
+        attack: 0.002
+      });
+
+      // 3. Subtle gear / backpack strap / armor micro-detail
+      if (isHeavy) {
+        playTone({
+          type: 'triangle',
+          freqStart: 1420 * jitter,
+          freqEnd: 980 * jitter,
+          startTime: 0.014,
+          duration: 0.035,
+          gainPeak: 0.045,
+          attack: 0.002
+        });
+      } else if (classId === 'gunslinger') {
+        playFilteredNoise({
+          brown: false,
+          filterType: 'bandpass',
+          freqStart: 2350 * jitter,
+          freqEnd: 1650 * jitter,
+          q: 3.2,
+          startTime: 0.012,
+          duration: 0.036,
+          gainPeak: 0.055,
+          attack: 0.003
+        });
+      }
     },
 
     playReloadShell() {
@@ -597,29 +1185,48 @@ export function createAudioEngine() {
       const jitter = 0.94 + Math.random() * 0.12;
 
       if (styleOrWeaponId === 'water') {
-        // 💧 WATER: Flowing liquid wave splash + bubbling water droplets!
-        playFilteredNoise({
-          brown: false,
-          filterType: 'bandpass',
-          freqStart: 320 * jitter,
-          freqEnd: 1580 * jitter,
-          q: 3.4,
-          duration: 0.25,
-          gainPeak: 0.42,
-          attack: 0.016
+        // 💧 WATER: Video-matched pressurized hydro-jet surge + rushing wave whoosh + bubbling orb droplets!
+        playTone({
+          type: 'sine',
+          freqStart: 165 * jitter,
+          freqEnd: 52,
+          duration: 0.24,
+          gainPeak: 0.34,
+          attack: 0.006
         });
         playFilteredNoise({
           brown: true,
           filterType: 'lowpass',
-          freqStart: 880 * jitter,
-          freqEnd: 290,
-          q: 2.2,
-          startTime: 0.03,
-          duration: 0.22,
-          gainPeak: 0.28,
+          freqStart: 1450 * jitter,
+          freqEnd: 320,
+          q: 1.6,
+          duration: 0.30,
+          gainPeak: 0.44,
+          attack: 0.008
+        });
+        playFilteredNoise({
+          brown: false,
+          filterType: 'bandpass',
+          freqStart: 420 * jitter,
+          freqEnd: 2150 * jitter,
+          q: 2.6,
+          startTime: 0.012,
+          duration: 0.26,
+          gainPeak: 0.42,
           attack: 0.012
         });
-        // Two crisp water-bubble pops
+        // Crisp water-spray hiss & bubble pops
+        playFilteredNoise({
+          brown: false,
+          filterType: 'highpass',
+          freqStart: 2400 * jitter,
+          freqEnd: 1200,
+          q: 1.2,
+          startTime: 0.02,
+          duration: 0.16,
+          gainPeak: 0.18,
+          attack: 0.005
+        });
         playTone({
           type: 'sine',
           freqStart: 540 * jitter,
@@ -1315,15 +1922,65 @@ export function createAudioEngine() {
       strikeBell(1.05, 0.68);
     },
 
+    setMusicMode(mode = 'hub') {
+      const next = mode === 'combat' || mode === 'boss' || mode === 'off' ? mode : 'hub';
+      musicMode = next;
+      syncGain();
+    },
+
+    getMusicMode() {
+      return musicMode;
+    },
+
+    setMusicVolume(val) {
+      const num = Number(val);
+      if (Number.isFinite(num)) {
+        musicVolume = Math.max(0, Math.min(1, num));
+        try {
+          localStorage.setItem('grimborne_music_volume', String(musicVolume));
+        } catch {}
+        syncGain();
+      }
+      return musicVolume;
+    },
+
+    getMusicVolume() {
+      return musicVolume;
+    },
+
+    setSfxVolume(val) {
+      const num = Number(val);
+      if (Number.isFinite(num)) {
+        sfxVolume = Math.max(0, Math.min(1, num));
+        userVolume = sfxVolume;
+        if (sfxVolume > 0 && muted) {
+          muted = false;
+        }
+        try {
+          localStorage.setItem('grimborne_sfx_volume', String(sfxVolume));
+          localStorage.setItem('grimborne_volume', String(sfxVolume));
+          localStorage.setItem('grimborne_muted', muted ? '1' : '0');
+        } catch {}
+        syncGain();
+      }
+      return sfxVolume;
+    },
+
+    getSfxVolume() {
+      return sfxVolume;
+    },
+
     setVolume(val) {
       const num = Number(val);
       if (Number.isFinite(num)) {
         userVolume = Math.max(0, Math.min(1, num));
+        sfxVolume = userVolume;
         if (userVolume > 0 && muted) {
           muted = false;
         }
         try {
           localStorage.setItem('grimborne_volume', String(userVolume));
+          localStorage.setItem('grimborne_sfx_volume', String(sfxVolume));
           localStorage.setItem('grimborne_muted', muted ? '1' : '0');
         } catch {}
         syncGain();
@@ -1332,7 +1989,7 @@ export function createAudioEngine() {
     },
 
     getVolume() {
-      return userVolume;
+      return sfxVolume;
     },
 
     setMuted(bool) {

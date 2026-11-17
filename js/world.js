@@ -3,7 +3,7 @@
 
 import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
-import { ARENA_HALF_SIZE } from './config.js?v=20261116m';
+import { ARENA_HALF_SIZE } from './config.js?v=20261117z16';
 
 // ============================================================================
 // Procedural Textures: Gothic Slate Cobblestone Floor & Soft Radial Glow Sprite
@@ -80,6 +80,38 @@ function createCourtyardStoneTexture() {
   return tex;
 }
 
+function createForestMistTexture() {
+  const size = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const lobes = [
+    [0.50, 0.50, 0.47, 0.48],
+    [0.35, 0.45, 0.35, 0.36],
+    [0.65, 0.53, 0.36, 0.35],
+    [0.45, 0.35, 0.31, 0.28],
+    [0.55, 0.65, 0.33, 0.28],
+    [0.32, 0.60, 0.26, 0.22],
+    [0.68, 0.38, 0.26, 0.22]
+  ];
+  for (const [ux, uy, ur, alpha] of lobes) {
+    const lx = ux * size;
+    const ly = uy * size;
+    const lr = ur * size;
+    const g = ctx.createRadialGradient(lx, ly, 2, lx, ly, lr);
+    g.addColorStop(0.0, `rgba(255, 255, 255, ${alpha})`);
+    g.addColorStop(0.45, `rgba(255, 255, 255, ${(alpha * 0.55).toFixed(3)})`);
+    g.addColorStop(0.78, `rgba(255, 255, 255, ${(alpha * 0.16).toFixed(3)})`);
+    g.addColorStop(1.0, 'rgba(255, 255, 255, 0.0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 function createSoftGlowTexture() {
   const size = 64;
   const canvas = document.createElement('canvas');
@@ -95,6 +127,46 @@ function createSoftGlowTexture() {
   ctx.fillRect(0, 0, size, size);
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function createTerrainMicroDetailTexture() {
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = 'rgb(128, 128, 128)';
+  ctx.fillRect(0, 0, size, size);
+
+  let seed = 918273;
+  const rand = () => {
+    seed = (seed * 16807) % 2147483647;
+    return (seed - 1) / 2147483646;
+  };
+
+  // Seamless tiled soil grit, tiny pebbles & moss micro-tufts so ground never feels blurry or slippery!
+  for (let i = 0; i < 2400; i++) {
+    const x = rand() * size;
+    const y = rand() * size;
+    const r = 0.8 + rand() * 2.4;
+    const v = rand() > 0.48 ? Math.floor(146 + rand() * 52) : Math.floor(72 + rand() * 44);
+    const a = (0.16 + rand() * 0.24).toFixed(3);
+    ctx.fillStyle = `rgba(${v}, ${v}, ${Math.min(255, v + 6)}, ${a})`;
+    for (const ox of [-size, 0, size]) {
+      for (const oy of [-size, 0, size]) {
+        if (x + ox + r < 0 || x + ox - r > size || y + oy + r < 0 || y + oy - r > size) continue;
+        ctx.beginPath();
+        ctx.arc(x + ox, y + oy, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 8;
   return tex;
 }
 
@@ -140,9 +212,10 @@ function createArcaneCircleTexture() {
 // Tapered 3D Crescent Slash Geometry Cache
 // ============================================================================
 const slashGeoCache = new Map();
-function getSlashCrescentGeo(arcAngle = Math.PI * 0.8) {
+function getSlashCrescentGeo(arcAngle = Math.PI * 0.8, thickness = 0.42) {
   const clampedArc = Math.max(0.4, Math.min(Math.PI * 1.95, arcAngle || Math.PI * 0.8));
-  const key = clampedArc.toFixed(2);
+  const clampedThick = Math.max(0.05, Math.min(0.65, thickness));
+  const key = `${clampedArc.toFixed(2)}_${clampedThick.toFixed(2)}`;
   if (slashGeoCache.has(key)) return slashGeoCache.get(key);
 
   const segs = 32;
@@ -155,8 +228,8 @@ function getSlashCrescentGeo(arcAngle = Math.PI * 0.8) {
     const a = (u - 0.5) * clampedArc;
     const taper = Math.sin(u * Math.PI);
     const rOut = 1.0;
-    const rIn = 1.0 - 0.42 * Math.pow(taper, 0.72);
-    const lift = 0.06 * taper;
+    const rIn = 1.0 - clampedThick * Math.pow(taper, 0.72);
+    const lift = 0.04 * taper;
 
     positions.push(Math.sin(a) * rIn, -lift * 0.5, Math.cos(a) * rIn);
     uvs.push(u, 0);
@@ -183,44 +256,61 @@ function getSlashCrescentGeo(arcAngle = Math.PI * 0.8) {
 // Main 3D Arena World Factory
 // ============================================================================
 export function createArenaWorld(canvas) {
-  const maxDpr = 2;
+  const isMobileDevice =
+    typeof navigator !== 'undefined' &&
+    (/iPhone|iPod|Android/i.test(navigator.userAgent || '') ||
+      ((navigator.maxTouchPoints || 0) > 0 && Math.min(window.innerWidth || 1280, window.innerHeight || 720) <= 600));
+  const maxDpr = isMobileDevice ? 1.5 : 2;
 
   const renderer = new THREE.WebGLRenderer({
     canvas: canvas || undefined,
-    antialias: true,
+    alpha: true,
+    antialias: !isMobileDevice,
     powerPreference: 'high-performance'
   });
+  renderer.setClearColor(0x181326, 1);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxDpr));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.48;
+  renderer.toneMappingExposure = 1.28;
 
   const scene = new THREE.Scene();
 
   const PALETTE_NORMAL = {
     bg: new THREE.Color(0x181a2c),
     fog: new THREE.Color(0x181a2c),
-    hemiSky: new THREE.Color(0x9cb2ff),
-    hemiGround: new THREE.Color(0x3d324f),
-    dir: new THREE.Color(0xdbe6ff),
+    hemiSky: new THREE.Color(0xa6bcff),
+    hemiGround: new THREE.Color(0x453959),
+    dir: new THREE.Color(0xe2ebff),
     plazaRune: new THREE.Color(0xa855f7)
   };
+  const PALETTE_FOREST = PALETTE_NORMAL;
   const PALETTE_BOSS = {
     bg: new THREE.Color(0x281320),
-    fog: new THREE.Color(0x281320),
-    hemiSky: new THREE.Color(0xff758f),
-    hemiGround: new THREE.Color(0x472135),
-    dir: new THREE.Color(0xffd6e0),
+    fog: new THREE.Color(0x2c1625),
+    hemiSky: new THREE.Color(0xff8fa3),
+    hemiGround: new THREE.Color(0x582c42),
+    dir: new THREE.Color(0xffe0e8),
     plazaRune: new THREE.Color(0xf43f5e)
   };
+  const PALETTE_HUB = {
+    bg: new THREE.Color(0x221630),
+    fog: new THREE.Color(0x2d1c38),
+    hemiSky: new THREE.Color(0xb896ff),
+    hemiGround: new THREE.Color(0x4b2824),
+    dir: new THREE.Color(0xffe6d8),
+    plazaRune: new THREE.Color(0xf97316)
+  };
+  let currentBiome = 'courtyard';
+  const getCombatBasePalette = () => PALETTE_NORMAL;
 
   scene.background = PALETTE_NORMAL.bg.clone();
   scene.fog = new THREE.Fog(PALETTE_NORMAL.fog.clone(), 48, 112);
 
-  const COMBAT_CAM_OFFSET = new THREE.Vector3(0, 20.5, 15.5);
+  const COMBAT_CAM_OFFSET = new THREE.Vector3(0, 17.4, 13.15);
   const HUB_CAM_POS = new THREE.Vector3(0, 2.45, 4.9);
   const HUB_LOOK_TARGET = new THREE.Vector3(0, 1.15, 0);
 
@@ -237,22 +327,23 @@ export function createArenaWorld(canvas) {
   // Crisp Moonlit Dark-Fantasy Lighting Rig
   // ==========================================================================
   const hemiLight = new THREE.HemisphereLight(
-    PALETTE_NORMAL.hemiSky.getHex(),
-    PALETTE_NORMAL.hemiGround.getHex(),
-    1.52
+    PALETTE_FOREST.hemiSky.getHex(),
+    PALETTE_FOREST.hemiGround.getHex(),
+    1.95
   );
   scene.add(hemiLight);
 
-  const ambientLight = new THREE.AmbientLight(0x63709e, 0.68);
+  const ambientLight = new THREE.AmbientLight(0x858cb8, 0.96);
   scene.add(ambientLight);
 
-  const dirLight = new THREE.DirectionalLight(PALETTE_NORMAL.dir.getHex(), 2.45);
+  const dirLight = new THREE.DirectionalLight(PALETTE_FOREST.dir.getHex(), 2.82);
   dirLight.position.set(14, 28, 16);
   dirLight.castShadow = true;
-  dirLight.shadow.mapSize.set(2048, 2048);
+  const shadMapRes = isMobileDevice ? 1024 : 2048;
+  dirLight.shadow.mapSize.set(shadMapRes, shadMapRes);
   dirLight.shadow.camera.near = 4;
   dirLight.shadow.camera.far = 75;
-  const shadowExtent = 28;
+  const shadowExtent = 21;
   dirLight.shadow.camera.left = -shadowExtent;
   dirLight.shadow.camera.right = shadowExtent;
   dirLight.shadow.camera.top = shadowExtent;
@@ -284,11 +375,117 @@ export function createArenaWorld(canvas) {
   const arenaGroup = new THREE.Group();
   scene.add(arenaGroup);
 
+  const courtyardPropsGroup = new THREE.Group();
+  courtyardPropsGroup.visible = true;
+  arenaGroup.add(courtyardPropsGroup);
+
+  const forestPropsGroup = new THREE.Group();
+  forestPropsGroup.visible = false;
+  arenaGroup.add(forestPropsGroup);
+
+  const forestMistPatches = [];
+
   const B = ARENA_HALF_SIZE; // 27
   const arenaSpan = B * 2;
   const cobbleTex = createCourtyardStoneTexture();
+  const forestMistTex = createForestMistTexture();
   const softGlowTex = createSoftGlowTexture();
+  const terrainMicroDetailTex = createTerrainMicroDetailTexture();
   const arcaneCircleTex = createArcaneCircleTexture();
+
+  // Fast 129x129 terrain height grid sampled from Necropolis_Terrain so characters stay 100% planted on uneven 3D ground!
+  const TERRAIN_GRID_RES = 129;
+  const TERRAIN_GRID_HALF = 32;
+  const terrainHeightGrid = new Float32Array(TERRAIN_GRID_RES * TERRAIN_GRID_RES);
+  let hasTerrainGrid = false;
+
+  function getGroundHeight(x = 0, z = 0) {
+    if (!hasTerrainGrid || currentBiome !== 'misty_forest') return 0;
+    const u = ((x + TERRAIN_GRID_HALF) / (TERRAIN_GRID_HALF * 2)) * (TERRAIN_GRID_RES - 1);
+    const v = ((z + TERRAIN_GRID_HALF) / (TERRAIN_GRID_HALF * 2)) * (TERRAIN_GRID_RES - 1);
+    const ix = Math.max(0, Math.min(TERRAIN_GRID_RES - 2, Math.floor(u)));
+    const iz = Math.max(0, Math.min(TERRAIN_GRID_RES - 2, Math.floor(v)));
+    const fx = Math.max(0, Math.min(1, u - ix));
+    const fz = Math.max(0, Math.min(1, v - iz));
+    const h00 = terrainHeightGrid[iz * TERRAIN_GRID_RES + ix];
+    const h10 = terrainHeightGrid[iz * TERRAIN_GRID_RES + ix + 1];
+    const h01 = terrainHeightGrid[(iz + 1) * TERRAIN_GRID_RES + ix];
+    const h11 = terrainHeightGrid[(iz + 1) * TERRAIN_GRID_RES + ix + 1];
+    const hx0 = h00 + (h10 - h00) * fx;
+    const hx1 = h01 + (h11 - h01) * fx;
+    return hx0 + (hx1 - hx0) * fz;
+  }
+
+  // Crisp Grounding Contact Shadow Disc right under the Hero's boots in Combat (eliminates any floating illusion!)
+  const combatContactShadowMat = new THREE.MeshBasicMaterial({
+    map: softGlowTex,
+    color: 0x05030a,
+    transparent: true,
+    opacity: 0.62,
+    depthWrite: false
+  });
+  const combatHeroContactShadow = new THREE.Mesh(new THREE.PlaneGeometry(1.42, 1.42), combatContactShadowMat);
+  combatHeroContactShadow.rotation.x = -Math.PI / 2;
+  combatHeroContactShadow.position.set(0, 0.02, 0);
+  combatHeroContactShadow.renderOrder = 2;
+  arenaGroup.add(combatHeroContactShadow);
+
+  // Custom GLSL Dark Reflective Mire Water Shader for the 4 Cursed Necropolis Lakes (Level >= 11)
+  const necropolisWaterUniforms = {
+    uTime: { value: 0 }
+  };
+  const necropolisMireWaterMat = new THREE.ShaderMaterial({
+    uniforms: necropolisWaterUniforms,
+    transparent: true,
+    depthWrite: false,
+    vertexShader: `
+      varying vec2 vUv;
+      varying vec3 vWorldPos;
+      varying vec3 vViewDir;
+      void main() {
+        vUv = uv;
+        vec4 worldPos = modelMatrix * vec4(position, 1.0);
+        vWorldPos = worldPos.xyz;
+        vViewDir = normalize(cameraPosition - worldPos.xyz);
+        gl_Position = projectionMatrix * viewMatrix * worldPos;
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      varying vec2 vUv;
+      varying vec3 vWorldPos;
+      varying vec3 vViewDir;
+      void main() {
+        vec2 p = vWorldPos.xz;
+        float w1 = sin(p.x * 2.35 + uTime * 1.15 + p.y * 1.45);
+        float w2 = cos(p.y * 2.85 - uTime * 0.92 - p.x * 1.65);
+        float w3 = sin((p.x - p.y) * 4.40 + uTime * 1.65) * 0.55;
+        vec3 nrm = normalize(vec3((w1 + w3) * 0.048, 1.0, (w2 - w3) * 0.048));
+        vec3 V = normalize(vViewDir);
+
+        float edgeR = length(vUv - vec2(0.5)) * 2.0;
+        float shoreAlpha = smoothstep(1.0, 0.72, edgeR);
+        float deepMask = 1.0 - smoothstep(0.05, 0.85, edgeR);
+
+        float fresnel = pow(1.0 - clamp(dot(nrm, V), 0.0, 1.0), 2.85);
+        vec3 deepWater = vec3(0.024, 0.018, 0.048);
+        vec3 mirrorTint = vec3(0.24, 0.17, 0.44);
+        vec3 col = mix(deepWater, mirrorTint, clamp(fresnel * 0.88 + 0.08, 0.0, 1.0));
+
+        // Soft drifting bioluminescent amethyst mist reflection beneath the mire water
+        float bioWave = 0.58 + 0.42 * sin(uTime * 1.35 + p.x * 0.55 + p.y * 0.48 + w1 * 0.6);
+        col += vec3(0.56, 0.22, 0.94) * deepMask * bioWave * 0.28;
+
+        // Crisp moonlit micro-ripple glints
+        vec3 lightDir = normalize(vec3(0.36, 0.78, 0.42));
+        vec3 halfV = normalize(lightDir + V);
+        float spec = pow(max(dot(nrm, halfV), 0.0), 42.0);
+        col += vec3(0.76, 0.72, 1.0) * spec * 0.42 * deepMask;
+
+        gl_FragColor = vec4(col, shoreAlpha * 0.94);
+      }
+    `
+  });
 
   const outerGround = new THREE.Mesh(
     new THREE.PlaneGeometry(210, 210),
@@ -310,6 +507,7 @@ export function createArenaWorld(canvas) {
   );
   groundMesh.rotation.x = -Math.PI / 2;
   groundMesh.receiveShadow = true;
+  groundMesh.visible = true;
   arenaGroup.add(groundMesh);
 
   // Hub Showcase Raised Stone Pedestal + Pedestal Mystic Circle (visible ONLY in 'hub' mode — zero confusing floor circles in combat!)
@@ -322,34 +520,221 @@ export function createArenaWorld(canvas) {
     depthWrite: false
   });
 
+  const HUB_PEDESTAL_TOP_Y = 0.0;
+
   const hubBackdropGroup = new THREE.Group();
   hubBackdropGroup.visible = false;
   scene.add(hubBackdropGroup);
 
-  const hubRuneDisc = new THREE.Mesh(new THREE.PlaneGeometry(6.4, 6.4), plazaRuneMat);
-  hubRuneDisc.rotation.x = -Math.PI / 2;
-  hubRuneDisc.position.set(0, 0.02, 0);
-  hubBackdropGroup.add(hubRuneDisc);
+  // Hero cast shadow & contact AO disabled in Hub per user request (preserve ONLY scene's own shadows!)
+  const hubShadowCatcher = new THREE.Object3D();
+  hubShadowCatcher.visible = false;
+  const hubContactAoMesh = new THREE.Object3D();
+  hubContactAoMesh.visible = false;
 
-  const stoneMat = new THREE.MeshStandardMaterial({ color: 0x555e75, roughness: 0.74, metalness: 0.14 });
-  const darkStoneMat = new THREE.MeshStandardMaterial({ color: 0x363d52, roughness: 0.80, metalness: 0.15 });
-  const hubPedestalRim = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.45, 0.14, 36), darkStoneMat);
-  hubPedestalRim.position.y = 0.02;
-  hubPedestalRim.receiveShadow = true;
-  const hubPedestalTop = new THREE.Mesh(new THREE.CylinderGeometry(2.0, 2.1, 0.16, 36), stoneMat);
-  hubPedestalTop.position.y = 0.04;
-  hubPedestalTop.receiveShadow = true;
-  hubBackdropGroup.add(hubPedestalRim, hubPedestalTop);
+  // Soft Golden Arsenal Forge Pool & Feathered Volumetric Mist (ZERO hard ring / trapezoid edges!)
+  const hubArsenalGlowGroup = new THREE.Group();
+  hubArsenalGlowGroup.visible = false;
+  hubBackdropGroup.add(hubArsenalGlowGroup);
+
+  const arsenalDiscMat = new THREE.MeshBasicMaterial({
+    map: softGlowTex,
+    color: 0xffb836,
+    transparent: true,
+    opacity: 0.86,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    toneMapped: false
+  });
+  const arsenalGlowDisc = new THREE.Mesh(new THREE.PlaneGeometry(1.92, 1.18), arsenalDiscMat);
+  arsenalGlowDisc.rotation.x = -Math.PI / 2;
+  arsenalGlowDisc.position.set(0, 0.012, 0.06);
+
+  const arsenalCoreDiscMat = new THREE.MeshBasicMaterial({
+    map: softGlowTex,
+    color: 0xfff3b0,
+    transparent: true,
+    opacity: 0.58,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    toneMapped: false
+  });
+  const arsenalCoreDisc = new THREE.Mesh(new THREE.PlaneGeometry(1.12, 0.68), arsenalCoreDiscMat);
+  arsenalCoreDisc.rotation.x = -Math.PI / 2;
+  arsenalCoreDisc.position.set(0, 0.015, 0.06);
+
+  const arsenalMistUniforms = {
+    uTime: { value: 0 },
+    uOpacity: { value: 0.34 }
+  };
+  const arsenalBeamMat = new THREE.ShaderMaterial({
+    uniforms: arsenalMistUniforms,
+    transparent: true,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    vertexShader: `
+      varying vec2 vUv;
+      varying vec3 vNormalV;
+      varying vec3 vViewDir;
+      void main() {
+        vUv = uv;
+        vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+        vNormalV = normalize(normalMatrix * normal);
+        vViewDir = normalize(-mvPos.xyz);
+        gl_Position = projectionMatrix * mvPos;
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      uniform float uOpacity;
+      varying vec2 vUv;
+      varying vec3 vNormalV;
+      varying vec3 vViewDir;
+      void main() {
+        float edgeFade = pow(abs(dot(normalize(vNormalV), normalize(vViewDir))), 1.85);
+        float bottomFade = smoothstep(0.0, 0.18, vUv.y);
+        float topFade = pow(clamp(1.0 - vUv.y, 0.0, 1.0), 2.75);
+        float shimmer = 0.86 + 0.14 * sin(vUv.x * 18.8495 - uTime * 1.9 + vUv.y * 4.0);
+        vec3 col = mix(vec3(1.0, 0.62, 0.14), vec3(1.0, 0.92, 0.58), clamp(1.0 - vUv.y * 0.85, 0.0, 1.0));
+        float alpha = edgeFade * bottomFade * topFade * shimmer * uOpacity;
+        gl_FragColor = vec4(col, alpha);
+      }
+    `
+  });
+  const arsenalBeamCone = new THREE.Mesh(new THREE.CylinderGeometry(0.92, 0.76, 1.48, 36, 1, true), arsenalBeamMat);
+  arsenalBeamCone.position.set(0, 0.72, 0.06);
+
+  const ARSENAL_SPARK_COUNT = 28;
+  const arsenalSparkPos = new Float32Array(ARSENAL_SPARK_COUNT * 3);
+  const arsenalSparkSeeds = new Float32Array(ARSENAL_SPARK_COUNT * 2);
+  for (let i = 0; i < ARSENAL_SPARK_COUNT; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const r = Math.random() * 0.68;
+    arsenalSparkPos[i * 3] = Math.cos(a) * r;
+    arsenalSparkPos[i * 3 + 1] = 0.05 + Math.random() * 1.35;
+    arsenalSparkPos[i * 3 + 2] = 0.06 + Math.sin(a) * r * 0.65;
+    arsenalSparkSeeds[i * 2] = 0.28 + Math.random() * 0.42;
+    arsenalSparkSeeds[i * 2 + 1] = Math.random() * Math.PI * 2;
+  }
+  const arsenalSparkGeo = new THREE.BufferGeometry();
+  arsenalSparkGeo.setAttribute('position', new THREE.BufferAttribute(arsenalSparkPos, 3));
+  const arsenalSparkMat = new THREE.PointsMaterial({
+    map: softGlowTex,
+    color: 0xffe58f,
+    size: 0.085,
+    transparent: true,
+    opacity: 0.88,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    toneMapped: false
+  });
+  const arsenalSparkPoints = new THREE.Points(arsenalSparkGeo, arsenalSparkMat);
+
+  const arsenalForgeLight = new THREE.PointLight(0xffb732, 3.6, 7.5, 1.25);
+  arsenalForgeLight.position.set(0, 0.62, 0.42);
+  hubArsenalGlowGroup.add(arsenalGlowDisc, arsenalCoreDisc, arsenalBeamCone, arsenalSparkPoints, arsenalForgeLight);
+
+  // Warm Flickering Left Cliff Brazier Fire & Smoldering Ash Fountain + Waving 3D Ruin War Banners!
+  const hubCampfireLight = new THREE.PointLight(0xff6b1a, 4.4, 12.0, 1.3);
+  hubCampfireLight.position.set(-2.55, 0.85, 1.25);
+  hubBackdropGroup.add(hubCampfireLight);
+
+  const hubLeftFireGlow = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.55, 1.15),
+    new THREE.MeshBasicMaterial({
+      map: softGlowTex,
+      color: 0xff5a00,
+      transparent: true,
+      opacity: 0.46,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      toneMapped: false
+    })
+  );
+  hubLeftFireGlow.position.set(-2.32, 0.24, 0.72);
+  hubLeftFireGlow.rotation.y = 0.32;
+  hubBackdropGroup.add(hubLeftFireGlow);
+
+  const HUB_LEFT_ASH_COUNT = 54;
+  const hubLeftAshPos = new Float32Array(HUB_LEFT_ASH_COUNT * 3);
+  const hubLeftAshSeeds = new Float32Array(HUB_LEFT_ASH_COUNT * 3);
+  for (let i = 0; i < HUB_LEFT_ASH_COUNT; i++) {
+    hubLeftAshPos[i * 3] = -2.65 + (Math.random() - 0.5) * 1.15;
+    hubLeftAshPos[i * 3 + 1] = -0.08 + Math.random() * 2.45;
+    hubLeftAshPos[i * 3 + 2] = 0.35 + (Math.random() - 0.5) * 1.1;
+    hubLeftAshSeeds[i * 3] = 0.45 + Math.random() * 0.82;
+    hubLeftAshSeeds[i * 3 + 1] = Math.random() * Math.PI * 2;
+    hubLeftAshSeeds[i * 3 + 2] = 0.18 + Math.random() * 0.36;
+  }
+  const hubLeftAshGeo = new THREE.BufferGeometry();
+  hubLeftAshGeo.setAttribute('position', new THREE.BufferAttribute(hubLeftAshPos, 3));
+  const hubLeftAshMat = new THREE.PointsMaterial({
+    map: softGlowTex,
+    color: 0xff7b1c,
+    size: 0.125,
+    transparent: true,
+    opacity: 0.92,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    toneMapped: false
+  });
+  const hubLeftAshPoints = new THREE.Points(hubLeftAshGeo, hubLeftAshMat);
+  hubBackdropGroup.add(hubLeftAshPoints);
+
+  // Existing flags inside hub_stage_bg.jpg are animated directly via UV cloth-wave shader on #hub-bg-plate (ZERO extra 3D flags!)
+  const hubFlagUniforms = { uTime: { value: 0 } };
+
+  const hubBackFillLight = new THREE.PointLight(0xd8b4fe, 2.25, 12.0, 1.25);
+  hubBackFillLight.position.set(1.6, 2.6, -3.2);
+  hubBackdropGroup.add(hubBackFillLight);
+
+  // Floating Rising 3D Fire Embers & Drifting Ash across the Hub Stage
+  const HUB_EMBER_COUNT = 115;
+  const hubEmberPositions = new Float32Array(HUB_EMBER_COUNT * 3);
+  const hubEmberSeeds = new Float32Array(HUB_EMBER_COUNT * 3);
+  for (let i = 0; i < HUB_EMBER_COUNT; i++) {
+    hubEmberPositions[i * 3] = (Math.random() - 0.5) * 8.2;
+    hubEmberPositions[i * 3 + 1] = -0.15 + Math.random() * 3.8;
+    hubEmberPositions[i * 3 + 2] = -2.8 + Math.random() * 5.2;
+    hubEmberSeeds[i * 3] = 0.28 + Math.random() * 0.65;
+    hubEmberSeeds[i * 3 + 1] = Math.random() * Math.PI * 2;
+    hubEmberSeeds[i * 3 + 2] = 0.22 + Math.random() * 0.48;
+  }
+  const hubEmberGeo = new THREE.BufferGeometry();
+  hubEmberGeo.setAttribute('position', new THREE.BufferAttribute(hubEmberPositions, 3));
+  const hubEmberMat = new THREE.PointsMaterial({
+    map: softGlowTex,
+    color: 0xff8c2b,
+    size: 0.11,
+    transparent: true,
+    opacity: 0.88,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    toneMapped: false
+  });
+  const hubEmbersPoints = new THREE.Points(hubEmberGeo, hubEmberMat);
+  hubBackdropGroup.add(hubEmbersPoints);
 
   // ==========================================================================
   // Dynamic Flickering Campfire & Torch/Altar PointLights
   // ==========================================================================
   const lanterns = [];
 
-  function addFlickerLight(x, y, z, colorHex, intensity, distance, phase = 0, withFireCone = false) {
+  function addFlickerLight(
+    x,
+    y,
+    z,
+    colorHex,
+    intensity,
+    distance,
+    phase = 0,
+    withFireCone = false,
+    parentGrp = courtyardPropsGroup
+  ) {
     const pl = new THREE.PointLight(colorHex, intensity, distance, 1.45);
     pl.position.set(x, y, z);
-    arenaGroup.add(pl);
+    parentGrp.add(pl);
 
     let flameGrp = null;
     if (withFireCone) {
@@ -399,34 +784,97 @@ export function createArenaWorld(canvas) {
       glowSprite.scale.set(2.2, 2.2, 1);
       glowSprite.position.y = 0.48;
       flameGrp.add(outerFlame, innerFlame, glowSprite);
-      arenaGroup.add(flameGrp);
+      parentGrp.add(flameGrp);
     }
 
     lanterns.push({
       pointLight: pl,
       flameGrp,
+      parentGrp,
       baseIntensity: intensity,
       phase
     });
   }
 
-  // Interior Landmark Colliders (well-spaced, leaving central spawn (0,0) wide open!)
-  const obstacles = [
-    { x: -11.5, z: -9.0, radius: 2.35 }, // 1. Ruined Purple-Rune Altar Shrine
-    { x: 13.0,  z: -6.5, radius: 2.25 }, // 2. Gnarled Dead Lantern Tree & Ribcage
-    { x: -14.5, z: 5.5,  radius: 2.05 }, // 3. Campfire Cauldron & Pillars
-    { x: 1.5,   z: -15.5,radius: 1.95 }, // 4. North Skull Candle Shrine
-    { x: -6.5,  z: 12.5, radius: 1.85 }, // 5. South-West Coffin & Pillar Ruin
-    { x: 9.5,   z: 11.5, radius: 1.85 }, // 6. South-East Rune Pillar Grave
-    { x: 17.5,  z: 6.0,  radius: 1.90 }  // 7. East Ribcage & Stacked Crates
+  // Interior Landmark Colliders (well-spaced, snugly matched to visible 3D props!)
+  const COURTYARD_OBSTACLES = [
+    { x: -11.5, z: -9.0, radius: 1.95 }, // 1. Ruined Purple-Rune Altar Shrine
+    { x: 13.0,  z: -6.5, radius: 1.85 }, // 2. Gnarled Dead Lantern Tree & Ribcage
+    { x: -14.5, z: 5.5,  radius: 1.80 }, // 3. Campfire Cauldron & Pillars
+    { x: 1.5,   z: -15.5,radius: 1.65 }, // 4. North Skull Candle Shrine
+    { x: -6.5,  z: 12.5, radius: 1.65 }, // 5. South-West Coffin & Pillar Ruin
+    { x: 9.5,   z: 11.5, radius: 1.55 }, // 6. South-East Rune Pillar Grave
+    { x: 17.5,  z: 6.0,  radius: 1.70 }  // 7. East Ribcage & Stacked Crates
   ];
 
-  addFlickerLight(-14.5, 2.4, 5.5, 0xff8c24, 3.2, 18, 0.5, true);    // Campfire with real 3D logs & flames!
-  addFlickerLight(-11.5, 2.8, -9.0, 0xa855f7, 2.8, 17, 1.7, false);  // Purple Rune Altar glow
-  addFlickerLight(13.0, 3.0, -6.5, 0xff9f38, 2.5, 16, 2.9, false);   // Dead Lantern Tree warm glow
-  addFlickerLight(-22.0, 3.6, -22.0, 0xff8520, 2.6, 20, 4.1, false); // NW Crypt Mausoleum torches
-  addFlickerLight(22.0, 3.2, -22.0, 0xff9838, 2.2, 18, 5.2, false);  // NE Corner shrine glow
-  addFlickerLight(20.0, 2.8, 19.0, 0xa855f7, 2.4, 17, 3.6, false);   // SE Arcane portal glow
+  // Cursed Necropolis Woods Obstacles (Level >= 11 — Matches 3722935d.jpg & Necropolis_Arena_3D.glb 1-to-1; keeps (0,0) spawn 100% clear!)
+  const FOREST_OBSTACLES = [
+    // 1. Central Ritual Circle: 2 Carved Gothic Sarcophagi (wide >3.0m clear spawn gap through (0, 0)!)
+    { x: -3.12, z:  0.10, radius: 0.78 },
+    { x: -2.58, z:  1.60, radius: 0.78 },
+    { x:  1.92, z: -2.75, radius: 0.78 },
+    { x:  3.38, z: -2.15, radius: 0.78 },
+    // 2. NW Sculpted Ruined Stone Archway Wall + Crimson Banner Pier + Monolith
+    { x: -18.4, z: -14.9, radius: 1.80 },
+    { x: -16.0, z: -16.2, radius: 1.65 },
+    { x: -13.6, z: -17.5, radius: 1.80 },
+    { x:  -9.8, z: -17.2, radius: 0.95 },
+    // 3. SE Sculpted Ruined Stone Archway Wall + Tumbled Stone Block
+    { x:  14.3, z: 11.9,  radius: 1.70 },
+    { x:  16.8, z: 13.6,  radius: 1.70 },
+    { x:  19.2, z: 15.3,  radius: 1.70 },
+    { x:  12.2, z: 12.6,  radius: 1.05 },
+    // 4. West Mossy Stone Lintel Portal Gate & 2 Interior Low Ruined Wall Stubs
+    { x: -21.1, z: -2.4,  radius: 1.35 },
+    { x: -19.3, z: -1.2,  radius: 1.35 },
+    { x:  -8.3, z: -7.8,  radius: 1.15 },
+    { x:  -9.8, z: -6.5,  radius: 1.15 },
+    { x: -10.6, z:  6.6,  radius: 1.45 },
+    // 5. NE Tilted Classical Fluted Column + Fallen Block & South-Center Fallen Column Drum
+    { x:  15.2, z: -15.2, radius: 1.55 },
+    { x:  12.6, z: -15.1, radius: 1.50 },
+    { x:   4.1, z:  13.5, radius: 0.95 },
+    { x:   5.1, z:  11.7, radius: 0.95 },
+    // 6. Interior East-Central 3D Twisted Dead Tree + Low Masonry Wall Stub + South Sapling & Boulder
+    { x:  12.5, z:  2.5,  radius: 1.35 },
+    { x:  14.3, z:  3.4,  radius: 1.35 },
+    { x:  -2.2, z: 17.5,  radius: 1.05 },
+    { x:  -6.0, z: 19.2,  radius: 1.80 },
+    // 7. 4 Dark Reflective Mire Lakes / Ponds
+    { x: -16.5, z: -9.5,  radius: 2.45 }, // NW Pond
+    { x:  19.0, z: -7.0,  radius: 2.40 }, // NE Pond
+    { x:  11.2, z: 17.6,  radius: 2.95 }, // SE Stone-Rimmed Mire Lake
+    { x: -13.5, z: 12.2,  radius: 2.65 }, // SW Misty Hollow Pond
+    // 8. Massive Ancient Corner & Perimeter Gnarled Trees
+    { x: -20.8, z: 15.0,  radius: 2.25 },
+    { x: -23.2, z: -9.2,  radius: 1.95 },
+    { x: -21.8, z: -20.8, radius: 2.05 },
+    { x:  -1.2, z: -22.8, radius: 2.20 },
+    { x:  22.4, z: -12.6, radius: 2.25 },
+    { x:  22.4, z: 17.6,  radius: 2.05 },
+    { x:  23.6, z:  5.6,  radius: 1.85 }
+  ];
+
+  const obstacles = COURTYARD_OBSTACLES.map((o) => ({ ...o }));
+
+  addFlickerLight(-14.5, 2.4, 5.5, 0xff8c24, 3.2, 18, 0.5, true, courtyardPropsGroup);    // Campfire with real 3D logs & flames!
+  addFlickerLight(-11.5, 2.8, -9.0, 0xa855f7, 2.8, 17, 1.7, false, courtyardPropsGroup);  // Purple Rune Altar glow
+  addFlickerLight(13.0, 3.0, -6.5, 0xff9f38, 2.5, 16, 2.9, false, courtyardPropsGroup);   // Dead Lantern Tree warm glow
+  addFlickerLight(-22.0, 3.6, -22.0, 0xff8520, 2.6, 20, 4.1, false, courtyardPropsGroup); // NW Crypt Mausoleum torches
+  addFlickerLight(22.0, 3.2, -22.0, 0xff9838, 2.2, 18, 5.2, false, courtyardPropsGroup);  // NE Corner shrine glow
+  addFlickerLight(20.0, 2.8, 19.0, 0xa855f7, 2.4, 17, 3.6, false, courtyardPropsGroup);   // SE Arcane portal glow
+
+  // Cursed Necropolis Woods Dynamic Lights: 7 Warm Flickering Candle Clusters + 3 Bioluminescent Purple Mushroom Glows!
+  addFlickerLight(-0.45, 1.05, -3.55, 0xff9d2e, 2.55, 12.5, 0.4, false, forestPropsGroup);  // Central Circle North Candles
+  addFlickerLight( 0.45, 1.05,  3.35, 0xff9d2e, 2.55, 12.5, 1.9, false, forestPropsGroup);  // Central Circle South Candles
+  addFlickerLight(-13.85,1.25, -14.25,0xff9624, 2.85, 14.5, 0.9, false, forestPropsGroup);  // NW Archway Crimson Banner Candles
+  addFlickerLight(-19.05,1.10, -0.85, 0xff9624, 2.65, 13.5, 2.4, false, forestPropsGroup);  // West Stone Lintel Gate Candles
+  addFlickerLight( 13.85,1.10, -13.85,0xff9d2e, 2.75, 14.0, 3.3, false, forestPropsGroup);  // NE Tilted Classical Column Candles
+  addFlickerLight( 11.05,1.05,  3.15, 0xff9624, 2.65, 13.5, 4.1, false, forestPropsGroup);  // East Interior Gnarled Tree Candles
+  addFlickerLight( 15.65,1.10, 14.35, 0xff9624, 2.75, 14.0, 5.0, false, forestPropsGroup);  // SE Ruined Stone Archway Candles
+  addFlickerLight(-18.6, 1.35, 15.2,  0xa855f7, 2.60, 15.5, 1.2, false, forestPropsGroup);  // SW Glowing Purple Mushrooms
+  addFlickerLight( -0.6, 1.25, 18.5,  0xa855f7, 2.35, 14.0, 2.8, false, forestPropsGroup);  // South Glowing Purple Mushrooms
+  addFlickerLight( 23.6, 1.35, -11.2, 0xa855f7, 2.45, 15.0, 4.4, false, forestPropsGroup);  // NE Glowing Purple Mushrooms
 
   // ==========================================================================
   // Load & Assemble Genuine 3D KayKit Environment Models (Zero 2D distortion!)
@@ -467,85 +915,110 @@ export function createArenaWorld(canvas) {
         ([key, url]) =>
           new Promise((resolve) => {
             let settled = false;
+            let attempt = 0;
             const finish = () => {
               if (settled) return;
               settled = true;
               resolve();
             };
-            const timer = setTimeout(finish, 8000);
-            loader.load(
-              url,
-              (gltf) => {
-                clearTimeout(timer);
-                const isOuterOrTiny =
-                  key === 'pine_large' ||
-                  key === 'pine_med' ||
-                  key === 'candle_triple' ||
-                  key === 'skull_candle' ||
-                  key === 'fence' ||
-                  key === 'fence_broken';
-                gltf.scene.traverse((n) => {
-                  if (n.isMesh) {
-                    n.castShadow = !isOuterOrTiny;
-                    n.receiveShadow = key !== 'pine_large' && key !== 'pine_med';
-                    if ((key === 'pine_large' || key === 'pine_med') && n.geometry) {
-                      // Bake frosted dark-fantasy evergreen + snow-dusted upper needles!
-                      const pos = n.geometry.attributes.position;
-                      const nrm = n.geometry.attributes.normal;
-                      const colors = new Float32Array(pos.count * 3);
-                      const bark = new THREE.Color(0x382722);
-                      const pine = new THREE.Color(0x284052);
-                      const snow = new THREE.Color(0x9fb5d6);
-                      const cTmp = new THREE.Color();
-                      for (let i = 0; i < pos.count; i++) {
-                        const py = pos.getY(i);
-                        const ny = nrm ? nrm.getY(i) : 0;
-                        if (py < 1.25) {
-                          cTmp.copy(bark);
-                        } else if (ny > 0.42) {
-                          cTmp.copy(pine).lerp(snow, Math.min(1, (ny - 0.42) * 1.45));
-                        } else {
-                          cTmp.copy(pine);
+            const timer = setTimeout(finish, 30000);
+            const tryLoad = () => {
+              attempt += 1;
+              loader.load(
+                url,
+                (gltf) => {
+                  clearTimeout(timer);
+                  const isOuterOrTiny =
+                    key === 'pine_large' ||
+                    key === 'pine_med' ||
+                    key === 'candle_triple' ||
+                    key === 'skull_candle' ||
+                    key === 'fence' ||
+                    key === 'fence_broken';
+                  gltf.scene.traverse((n) => {
+                    if (n.isMesh) {
+                      n.castShadow = !isOuterOrTiny;
+                      n.receiveShadow = key !== 'pine_large' && key !== 'pine_med';
+                      if ((key === 'pine_large' || key === 'pine_med') && n.geometry) {
+                        // Bake frosted dark-fantasy evergreen + snow-dusted upper needles!
+                        const pos = n.geometry.attributes.position;
+                        const nrm = n.geometry.attributes.normal;
+                        const colors = new Float32Array(pos.count * 3);
+                        const bark = new THREE.Color(0x382722);
+                        const pine = new THREE.Color(0x284052);
+                        const snow = new THREE.Color(0x9fb5d6);
+                        const cTmp = new THREE.Color();
+                        for (let i = 0; i < pos.count; i++) {
+                          const py = pos.getY(i);
+                          const ny = nrm ? nrm.getY(i) : 0;
+                          if (py < 1.25) {
+                            cTmp.copy(bark);
+                          } else if (ny > 0.42) {
+                            cTmp.copy(pine).lerp(snow, Math.min(1, (ny - 0.42) * 1.45));
+                          } else {
+                            cTmp.copy(pine);
+                          }
+                          colors[i * 3] = cTmp.r;
+                          colors[i * 3 + 1] = cTmp.g;
+                          colors[i * 3 + 2] = cTmp.b;
                         }
-                        colors[i * 3] = cTmp.r;
-                        colors[i * 3 + 1] = cTmp.g;
-                        colors[i * 3 + 2] = cTmp.b;
-                      }
-                      n.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-                      n.material = new THREE.MeshStandardMaterial({
-                        vertexColors: true,
-                        roughness: 0.85,
-                        metalness: 0.05
-                      });
-                    } else if (n.material && key !== 'banner_red') {
-                      // Moody twilight slate stone tint so KayKit props match the dark courtyard
-                      const cloned = Array.isArray(n.material)
-                        ? n.material.map((m) => m.clone())
-                        : n.material.clone();
-                      n.material = cloned;
-                      const list = Array.isArray(cloned) ? cloned : [cloned];
-                      for (const m of list) {
-                        if (m.color) m.color.setHex(0x8c96b2);
+                        n.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+                        n.material = new THREE.MeshStandardMaterial({
+                          vertexColors: true,
+                          roughness: 0.85,
+                          metalness: 0.05
+                        });
+                      } else if (n.material && key !== 'banner_red') {
+                        // Moody twilight slate stone tint so KayKit props match the dark courtyard
+                        const cloned = Array.isArray(n.material)
+                          ? n.material.map((m) => m.clone())
+                          : n.material.clone();
+                        n.material = cloned;
+                        const list = Array.isArray(cloned) ? cloned : [cloned];
+                        for (const m of list) {
+                          if (m.color) m.color.setHex(0x8c96b2);
+                        }
                       }
                     }
+                  });
+                  templates.set(key, gltf.scene);
+                  finish();
+                },
+                undefined,
+                () => {
+                  if (attempt < 2 && !settled) {
+                    setTimeout(tryLoad, 180);
+                    return;
                   }
-                });
-                templates.set(key, gltf.scene);
-                finish();
-              },
-              undefined,
-              () => {
-                clearTimeout(timer);
-                finish();
-              }
-            );
+                  clearTimeout(timer);
+                  finish();
+                }
+              );
+            };
+            tryLoad();
           })
       )
     );
 
-    function placeProp(key, x, y, z, rotY = 0, scale = 1.0, parent = arenaGroup) {
+    const fallbackStoneMat = new THREE.MeshStandardMaterial({
+      color: 0x475569,
+      roughness: 0.85,
+      metalness: 0.1
+    });
+    function placeProp(key, x, y, z, rotY = 0, scale = 1.0, parent = courtyardPropsGroup) {
       const tpl = templates.get(key);
-      if (!tpl) return null;
+      if (!tpl) {
+        // Never leave a collider invisible if a structural prop asset ever failed!
+        if (key === 'shrine' || key === 'pillar' || key === 'shrine_candles' || key === 'coffin' || key === 'ribcage') {
+          const obelisk = new THREE.Mesh(new THREE.CylinderGeometry(0.45 * scale, 0.65 * scale, 1.85 * scale, 6), fallbackStoneMat);
+          obelisk.position.set(x, y + 0.92 * scale, z);
+          obelisk.castShadow = true;
+          obelisk.receiveShadow = true;
+          parent.add(obelisk);
+          return obelisk;
+        }
+        return null;
+      }
       const inst = tpl.clone(true);
       inst.position.set(x, y, z);
       inst.rotation.y = rotY;
@@ -670,7 +1143,7 @@ export function createArenaWorld(canvas) {
         shard.castShadow = true;
         grp.add(shard);
       }
-      arenaGroup.add(grp);
+      courtyardPropsGroup.add(grp);
     }
 
     addCrystalCluster(-9.6, -9.8, 0.95);
@@ -699,15 +1172,8 @@ export function createArenaWorld(canvas) {
       const sp = new THREE.Sprite(candleFlameMat);
       sp.position.set(fx, fy, fz);
       sp.scale.set(0.65, 0.75, 1);
-      arenaGroup.add(sp);
+      courtyardPropsGroup.add(sp);
     }
-
-    // Hub Stage Flanking Props (visible in Hub showcase behind pedestal)
-    placeProp('arch', 0, 0, -6.2, 0, 1.45, hubBackdropGroup);
-    placeProp('banner_red', -3.1, 0, -4.5, 0.35, 1.2, hubBackdropGroup);
-    placeProp('banner_red', 3.1, 0, -4.5, -0.35, 1.2, hubBackdropGroup);
-    placeProp('lantern_standing', -2.35, 0, -1.5, 0.3, 1.1, hubBackdropGroup);
-    placeProp('lantern_standing', 2.35, 0, -1.5, -0.3, 1.1, hubBackdropGroup);
   })();
 
   // Ambient floating spirit motes
@@ -820,32 +1286,88 @@ export function createArenaWorld(canvas) {
   const activeShockwaves = [];
   const activeDangerZones = [];
   const activeMuzzleFlashes = [];
+  const activeGunSmokes = [];
   const activeProjectiles = new Set();
 
   const muzzleConeGeo = (() => {
-    const g = new THREE.ConeGeometry(0.18, 0.85, 6);
+    const g = new THREE.ConeGeometry(0.21, 0.96, 8);
     g.rotateX(Math.PI / 2);
-    g.translate(0, 0, 0.42);
+    g.translate(0, 0, 0.48);
     return g;
   })();
 
-  // Pooled VFX (Muzzle Flashes, Shockwaves & Danger Zones — ZERO mid-combat Material allocate/dispose stutters!)
+  // Pooled VFX (Muzzle Flashes, Gunpowder Smoke Puffs, Shockwaves & Danger Zones — ZERO mid-combat allocate/dispose!)
   const freeMuzzleFlashes = [];
+  const freeGunSmokes = [];
   const freeShockwaves = [];
 
-  function spawnMuzzleFlash({ x = 0, y = 0.82, z = 0, angle = 0, color = 0xfbbf24, scale = 1.0 } = {}) {
-    const vividColor = new THREE.Color(color).offsetHSL(0, 0.16, -0.06);
+  function spawnGunSmokePuffs(x, y, z, angle, scale = 1.0) {
+    const dirX = Math.sin(angle);
+    const dirZ = Math.cos(angle);
+    for (let i = 0; i < 3; i++) {
+      let sm = freeGunSmokes.pop();
+      if (!sm) {
+        const mat = new THREE.SpriteMaterial({
+          map: softGlowTex,
+          color: 0xd6d3d1,
+          transparent: true,
+          opacity: 0.42,
+          depthWrite: false
+        });
+        const sprite = new THREE.Sprite(mat);
+        scene.add(sprite);
+        sm = { sprite, mat, vx: 0, vy: 0, vz: 0, startScale: 0.5, endScale: 1.5, age: 0, duration: 0.42 };
+      }
+      const fwd = (0.18 + i * 0.24) * scale;
+      const spreadX = (Math.random() - 0.5) * 0.18;
+      const spreadZ = (Math.random() - 0.5) * 0.18;
+      sm.sprite.position.set(x + dirX * fwd + spreadX, y + (Math.random() - 0.3) * 0.08, z + dirZ * fwd + spreadZ);
+      sm.vx = dirX * (2.2 - i * 0.45) + (Math.random() - 0.5) * 0.8;
+      sm.vy = 0.85 + Math.random() * 0.55;
+      sm.vz = dirZ * (2.2 - i * 0.45) + (Math.random() - 0.5) * 0.8;
+      sm.startScale = (0.42 + i * 0.14) * scale;
+      sm.endScale = (1.28 + i * 0.36) * scale;
+      sm.age = 0;
+      sm.duration = 0.36 + i * 0.07;
+      sm.mat.color.setHex(i === 0 ? 0xfed7aa : 0xa8a29e);
+      sm.mat.opacity = i === 0 ? 0.48 : 0.36;
+      sm.sprite.scale.set(sm.startScale, sm.startScale, 1);
+      sm.sprite.visible = true;
+      activeGunSmokes.push(sm);
+    }
+  }
+
+  function spawnMuzzleFlash({ x = 0, y = 0.84, z = 0, angle = 0, color = 0xfbbf24, scale = 1.0, smoke = false } = {}) {
+    const vividColor = new THREE.Color(color).offsetHSL(0, 0.18, -0.04);
     let mf = freeMuzzleFlashes.pop();
     if (!mf) {
       const group = new THREE.Group();
       const coreMat = new THREE.MeshBasicMaterial({
-        color: 0xfff8dc,
+        color: 0xfffbeb,
         transparent: true,
-        opacity: 0.9,
+        opacity: 0.96,
         depthWrite: false,
         toneMapped: false
       });
       const outerMat = new THREE.MeshBasicMaterial({
+        color: vividColor,
+        transparent: true,
+        opacity: 0.92,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        toneMapped: false
+      });
+      const mainJet = new THREE.Mesh(muzzleConeGeo, outerMat);
+      const coreJet = new THREE.Mesh(muzzleConeGeo, coreMat);
+      coreJet.scale.set(0.46, 0.46, 0.62);
+      const sideJetL = new THREE.Mesh(muzzleConeGeo, outerMat);
+      sideJetL.scale.set(0.54, 0.54, 0.52);
+      sideJetL.rotation.y = 0.48;
+      const sideJetR = new THREE.Mesh(muzzleConeGeo, outerMat);
+      sideJetR.scale.set(0.54, 0.54, 0.52);
+      sideJetR.rotation.y = -0.48;
+      const spriteMat = new THREE.SpriteMaterial({
+        map: softGlowTex,
         color: vividColor,
         transparent: true,
         opacity: 0.85,
@@ -853,35 +1375,17 @@ export function createArenaWorld(canvas) {
         depthWrite: false,
         toneMapped: false
       });
-      const mainJet = new THREE.Mesh(muzzleConeGeo, outerMat);
-      const coreJet = new THREE.Mesh(muzzleConeGeo, coreMat);
-      coreJet.scale.set(0.42, 0.42, 0.58);
-      const sideJetL = new THREE.Mesh(muzzleConeGeo, outerMat);
-      sideJetL.scale.set(0.5, 0.5, 0.48);
-      sideJetL.rotation.y = 0.52;
-      const sideJetR = new THREE.Mesh(muzzleConeGeo, outerMat);
-      sideJetR.scale.set(0.5, 0.5, 0.48);
-      sideJetR.rotation.y = -0.52;
-      const spriteMat = new THREE.SpriteMaterial({
-        map: softGlowTex,
-        color: vividColor,
-        transparent: true,
-        opacity: 0.72,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        toneMapped: false
-      });
       const flashSprite = new THREE.Sprite(spriteMat);
-      flashSprite.scale.set(1.25, 1.25, 1);
+      flashSprite.scale.set(1.48, 1.48, 1);
       group.add(mainJet, coreJet, sideJetL, sideJetR, flashSprite);
       scene.add(group);
-      mf = { group, coreMat, outerMat, spriteMat, baseScale: scale, age: 0, duration: 0.075 };
+      mf = { group, coreMat, outerMat, spriteMat, baseScale: scale, age: 0, duration: 0.095 };
     } else {
       mf.outerMat.color.copy(vividColor);
       mf.spriteMat.color.copy(vividColor);
-      mf.coreMat.opacity = 0.9;
-      mf.outerMat.opacity = 0.85;
-      mf.spriteMat.opacity = 0.72;
+      mf.coreMat.opacity = 0.96;
+      mf.outerMat.opacity = 0.92;
+      mf.spriteMat.opacity = 0.85;
       mf.group.visible = true;
     }
     mf.group.position.set(x, y, z);
@@ -889,8 +1393,12 @@ export function createArenaWorld(canvas) {
     mf.group.scale.setScalar(scale);
     mf.baseScale = scale;
     mf.age = 0;
-    mf.duration = 0.075;
+    mf.duration = 0.095;
     activeMuzzleFlashes.push(mf);
+
+    if (smoke) {
+      spawnGunSmokePuffs(x, y, z, angle, scale);
+    }
   }
 
   function spawnSlashArc({
@@ -901,15 +1409,15 @@ export function createArenaWorld(canvas) {
     arcAngle = Math.PI * 0.8,
     color = 0xfbbf24
   } = {}) {
-    const geo = getSlashCrescentGeo(arcAngle);
+    const geo = getSlashCrescentGeo(arcAngle, 0.12);
     const group = new THREE.Group();
-    group.position.set(x, 0.82, z);
+    group.position.set(x, 0.88, z);
     group.rotation.y = angle;
 
     const mainMat = new THREE.MeshBasicMaterial({
       color,
       transparent: true,
-      opacity: 0.95,
+      opacity: 0.62,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       side: THREE.DoubleSide
@@ -917,7 +1425,7 @@ export function createArenaWorld(canvas) {
     const edgeMat = new THREE.MeshBasicMaterial({
       color: 0xffffff,
       transparent: true,
-      opacity: 0.85,
+      opacity: 0.72,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       side: THREE.DoubleSide
@@ -925,11 +1433,11 @@ export function createArenaWorld(canvas) {
 
     const mainMesh = new THREE.Mesh(geo, mainMat);
     const edgeMesh = new THREE.Mesh(geo, edgeMat);
-    edgeMesh.scale.set(1.03, 1.15, 1.03);
-    edgeMesh.position.y = 0.02;
+    edgeMesh.scale.set(1.015, 1.08, 1.015);
+    edgeMesh.position.y = 0.015;
 
     group.add(mainMesh, edgeMesh);
-    const startRadius = radius * 0.82;
+    const startRadius = radius * 0.68;
     group.scale.set(startRadius, 1, startRadius);
     scene.add(group);
 
@@ -1891,10 +2399,10 @@ export function createArenaWorld(canvas) {
       spawnShockwaveRing({ x, y: 0.08, z, radius: Math.max(1.8, radius * 0.78), color: 0x38bdf8, duration: 0.24 });
       spawnParticles({ x, y: 0.75, z, color: 0xfef08a, count: 14, speed: 7.4, size: 0.14, life: 0.30, gravity: 4 });
     } else if (element === 'water') {
-      // Cresting sapphire-foam splash wave + fountain droplets!
-      spawnShockwaveRing({ x, y: 0.08, z, radius: radius * 1.05, color: 0x0ea5e9, duration: 0.34 });
-      spawnShockwaveRing({ x, y: 0.14, z, radius: radius * 0.68, color: 0xe0f2fe, duration: 0.26 });
-      spawnParticles({ x, y: 0.55, z, color: 0x38bdf8, count: 15, speed: 6.2, size: 0.16, life: 0.44, gravity: 13 });
+      // 3D Crown Splash of Arcing Water Droplets & Bright Cyan-White Foam (Matching Water_mage_shooting_projectile!)
+      spawnShockwaveRing({ x, y: 0.06, z, radius: Math.min(1.65, radius * 0.72), color: 0x38bdf8, duration: 0.28 });
+      spawnParticles({ x, y: 0.55, z, color: 0x38bdf8, count: 16, speed: 7.4, size: 0.17, life: 0.42, gravity: 14.5 });
+      spawnParticles({ x, y: 0.68, z, color: 0xe0faff, count: 10, speed: 5.8, size: 0.13, life: 0.36, gravity: 12.0 });
     } else {
       // 🔥 Fire: Blazing ground magma scorch patch + roaring flame burst!
       const group = new THREE.Group();
@@ -1968,6 +2476,108 @@ export function createArenaWorld(canvas) {
     g.translate(0, 0, -0.58);
     return g;
   })();
+
+  // Shared GLSL Glossy Water Orb & Undulating Tapered Liquid Ribbon Wake (Matches bcf5a263.mp4 1-to-1!)
+  const waterProjUniforms = { uTime: { value: 0 } };
+  const waterProjSphereGeo = new THREE.SphereGeometry(0.32, 26, 22);
+  const waterProjShaderMat = new THREE.ShaderMaterial({
+    uniforms: waterProjUniforms,
+    transparent: true,
+    depthWrite: false,
+    vertexShader: `
+      uniform float uTime;
+      varying vec3 vNormalV;
+      varying vec3 vViewDir;
+      void main() {
+        vec3 n = normalize(normal);
+        float w = sin(n.x * 5.0 + uTime * 11.0) * cos(n.z * 5.0 - uTime * 9.0) * 0.016;
+        vec4 mvPos = modelViewMatrix * vec4(position + n * w, 1.0);
+        vNormalV = normalize(normalMatrix * n);
+        vViewDir = normalize(-mvPos.xyz);
+        gl_Position = projectionMatrix * mvPos;
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      varying vec3 vNormalV;
+      varying vec3 vViewDir;
+      void main() {
+        vec3 N = normalize(vNormalV);
+        vec3 V = normalize(vViewDir);
+        float ndv = clamp(dot(N, V), 0.0, 1.0);
+        float fresnel = pow(1.0 - ndv, 2.05);
+
+        // Rotating glossy curved internal water crescents matching bcf5a263.mp4!
+        vec2 d = N.xy;
+        float r = length(d);
+        float a = atan(d.y, d.x);
+        float cresA = smoothstep(0.45, 0.92, sin(a * 1.0 - r * 4.5 + uTime * 8.5)) * smoothstep(0.18, 0.72, r) * smoothstep(0.98, 0.62, r);
+        float cresB = smoothstep(0.55, 0.95, cos(a * 2.0 + r * 5.2 - uTime * 10.5)) * smoothstep(0.12, 0.58, r);
+        float specTop = pow(max(dot(N, normalize(vec3(-0.35, 0.68, 0.64))), 0.0), 20.0);
+
+        vec3 deep = vec3(0.02, 0.44, 0.84);
+        vec3 mid = vec3(0.10, 0.78, 0.98);
+        vec3 foam = vec3(0.88, 0.99, 1.0);
+        vec3 col = mix(deep, mid, 0.35 + 0.65 * (1.0 - r * 0.55));
+        float highlight = clamp(fresnel * 0.82 + cresA * 0.75 + cresB * 0.42 + specTop * 0.85, 0.0, 1.0);
+        col = mix(col, foam, highlight);
+        gl_FragColor = vec4(col, clamp(0.76 + fresnel * 0.22 + highlight * 0.16, 0.0, 0.98));
+      }
+    `
+  });
+
+  // Smooth tapered 3D liquid comet wake extending behind the water sphere (-Z)
+  const waterWakeGeo = (() => {
+    const g = new THREE.CylinderGeometry(0.015, 0.24, 1.65, 14, 18, true);
+    g.rotateX(Math.PI * 0.5);
+    g.translate(0, 0, -0.86);
+    return g;
+  })();
+  const waterWakeMat = new THREE.ShaderMaterial({
+    uniforms: waterProjUniforms,
+    transparent: true,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    vertexShader: `
+      uniform float uTime;
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        vec3 p = position;
+        float tailFrac = clamp(-p.z / 1.68, 0.0, 1.0);
+        p.x += sin(tailFrac * 8.5 - uTime * 18.0) * 0.085 * tailFrac;
+        p.y += cos(tailFrac * 7.0 - uTime * 15.0) * 0.045 * tailFrac;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      varying vec2 vUv;
+      void main() {
+        // vUv.y = 1 near sphere, 0 at far tail tip
+        float headFade = smoothstep(1.0, 0.84, vUv.y);
+        float tailFade = pow(clamp(vUv.y, 0.0, 1.0), 1.65);
+        float streamA = 0.5 + 0.5 * sin(vUv.y * 16.0 + uTime * 18.0 + vUv.x * 6.2831);
+        float streamB = 0.5 + 0.5 * cos(vUv.y * 24.0 + uTime * 23.0 - vUv.x * 12.566);
+        float streak = clamp(streamA * 0.65 + streamB * 0.35, 0.0, 1.0);
+        vec3 col = mix(vec3(0.04, 0.64, 0.96), vec3(0.84, 0.99, 1.0), pow(streak, 2.0) * 0.75);
+        float alpha = headFade * tailFade * (0.26 + 0.52 * streak);
+        gl_FragColor = vec4(col, alpha);
+      }
+    `
+  });
+
+  // Coaxial hydro-ring around the front launch zone (matching 00:03 of bcf5a263.mp4!)
+  const waterCollarRingGeo = new THREE.TorusGeometry(0.35, 0.022, 8, 28);
+  const waterCollarRingMat = new THREE.MeshBasicMaterial({
+    color: 0xbae6fd,
+    transparent: true,
+    opacity: 0.58,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    toneMapped: false
+  });
 
   const projWhiteCoreMat = new THREE.MeshBasicMaterial({ color: 0xfffbeb, toneMapped: false });
   const projDarkCoreMat = new THREE.MeshBasicMaterial({ color: 0x3b0764, toneMapped: false });
@@ -2092,24 +2702,19 @@ export function createArenaWorld(canvas) {
       mesh.add(heart, midShell, flameWhirl, wake, haloSprite);
       mesh.scale.setScalar(scaleMult * 1.08);
     } else if (type === 'magic_water') {
-      // 💧 CRESTING TIDAL ORB: Glossy sapphire-aqua teardrop + 2 swirling foamy water rings + stream!
-      const aquaCoreMat = getProjMatBundle('mwat_core', 0x38bdf8, false, false).solidCoreMat;
-      const deepSeaMat = getProjMatBundle('mwat_deep', 0x0284c7, false, false).glowMat;
-      const dropCore = new THREE.Mesh(waterOrbGeo, projWhiteCoreMat);
-      dropCore.scale.setScalar(0.58);
-      const waterBody = new THREE.Mesh(waterOrbGeo, aquaCoreMat);
-      orbitRingA = new THREE.Mesh(spellOrbitRingGeo, projWhiteCoreMat);
-      orbitRingA.scale.set(1.08, 1.08, 1.08);
-      orbitRingB = new THREE.Mesh(spellOrbitRingGeo, deepSeaMat);
-      orbitRingB.rotation.x = Math.PI * 0.45;
-      orbitRingB.scale.set(1.25, 1.25, 1.25);
-      const stream = new THREE.Mesh(spellTailGeo, deepSeaMat);
-      stream.scale.set(0.95, 0.95, 0.95);
-      haloSprite.material = getProjMatBundle('mwat_deep', 0x0ea5e9, false, false).haloSpriteMat;
-      haloSprite.scale.set(1.05, 1.05, 1);
-      spinCore = waterBody;
-      mesh.add(dropCore, waterBody, orbitRingA, orbitRingB, stream, haloSprite);
-      mesh.scale.setScalar(scaleMult * 1.06);
+      // 💧 GLOSSY WATER BUBBLE + UNDULATING LIQUID WAKE RIBBON (Matches bcf5a263.mp4 1-to-1!):
+      const liquidOrb = new THREE.Mesh(waterProjSphereGeo, waterProjShaderMat);
+      const liquidWake = new THREE.Mesh(waterWakeGeo, waterWakeMat);
+      const collarRing = new THREE.Mesh(waterCollarRingGeo, waterCollarRingMat);
+      collarRing.position.z = -0.18;
+
+      haloSprite.material = getProjMatBundle('mwat_deep', 0x38bdf8, false, false).haloSpriteMat;
+      haloSprite.scale.set(1.18, 1.18, 1);
+      orbitRingA = collarRing;
+      spinCore = liquidOrb;
+      mesh.add(liquidOrb, liquidWake, collarRing, haloSprite);
+      // Scale water orb down 4x per user feedback while keeping shader/wake look intact
+      mesh.scale.setScalar(scaleMult * 0.295);
     } else if (type === 'magic_lightning') {
       // ⚡ CRACKLING BALL LIGHTNING & ZIG-ZAG SPEAR: Plasma core + 3 criss-crossing electric bolts!
       const elecCyanMat = getProjMatBundle('mlight_cy', 0x38bdf8, false, false).glowMat;
@@ -2201,6 +2806,8 @@ export function createArenaWorld(canvas) {
   // Camera Mode ('hub' Showcase vs 'combat' Isometric), Follow, Shake & Aim
   // ==========================================================================
   let cameraMode = 'combat';
+  let hubStageFocus = 'center'; // 'center' (Главная) | 'heroes' (Герои)
+  let currentHubShiftX = 0;
   let targetX = 0;
   let targetZ = 0;
   let hasFollowedOnce = false;
@@ -2210,36 +2817,43 @@ export function createArenaWorld(canvas) {
   let internalTime = 0;
   const hubCamGoal = new THREE.Vector3();
 
+  function setHubStageFocus(focusMode = 'center') {
+    hubStageFocus = focusMode === 'heroes' ? 'heroes' : focusMode === 'arsenal' ? 'arsenal' : 'center';
+    hubArsenalGlowGroup.visible = hubStageFocus === 'arsenal';
+    hubContactAoMesh.visible = false;
+    hubShadowCatcher.visible = false;
+  }
+
   function applyHubCameraPose(dt, snapNow = false) {
     const aspect = camera.aspect || 1;
     const isPortrait = aspect < 0.92;
-    const targetFov = isPortrait ? 52 : 43;
+    const targetFov = isPortrait ? 48 : 40;
     if (Math.abs(camera.fov - targetFov) > 0.05) {
       camera.fov = targetFov;
       camera.updateProjectionMatrix();
     }
-    // Frame full-height 3D Hero + Stone Pedestal cleanly in the open window between Left Roster Rail and Right Hero Card!
-    const stageShiftX = isPortrait ? 0 : 0.56 * Math.min(Math.max(aspect, 1.25), 2.22);
-    const camZ = isPortrait ? 6.35 : 5.68;
-    const camY = isPortrait ? 2.35 : 2.36;
-    const lookY = isPortrait ? 0.42 : 0.92;
 
-    const swayX = Math.sin(internalTime * 0.42) * 0.10;
-    const swayY = Math.sin(internalTime * 0.68) * 0.025;
-    const swayZ = Math.cos(internalTime * 0.42) * 0.05;
-    hubCamGoal.set(stageShiftX + swayX, camY + swayY, camZ + swayZ);
+    // Keep (0, 0, 0) locked dead-center onto the stone pedestal of hub_stage_bg.jpg!
+    currentHubShiftX = 0;
+
+    const camZ = isPortrait ? 5.65 : 4.88;
+    const camY = isPortrait ? 1.52 : 1.44;
+    const lookY = isPortrait ? 0.60 : 0.72;
+
+    const swayY = Math.sin(internalTime * 0.56) * 0.008;
+    hubCamGoal.set(0, camY + swayY, camZ);
 
     if (snapNow || !dt || dt <= 0) {
       camera.position.copy(hubCamGoal);
     } else {
-      const lerpFactor = 1 - Math.exp(-7.5 * Math.min(dt, 0.1));
+      const lerpFactor = 1 - Math.exp(-9.0 * Math.min(dt, 0.1));
       camera.position.lerp(hubCamGoal, lerpFactor);
     }
-    camera.lookAt(stageShiftX, lookY, 0);
+    camera.lookAt(0, lookY, 0);
 
-    heroAuraLight.position.set(0, 2.85, 1.4);
-    dirLight.position.set(8, 16, 12);
-    dirLight.target.position.set(0, 0.8, 0);
+    heroAuraLight.position.set(0, 2.85, 1.9);
+    dirLight.position.set(5.5, 13, 10);
+    dirLight.target.position.set(0, 0.75, 0);
     dirLight.target.updateMatrixWorld();
   }
 
@@ -2249,21 +2863,57 @@ export function createArenaWorld(canvas) {
     cameraMode = nextMode;
 
     if (cameraMode === 'hub') {
+      scene.background = null;
+      renderer.setClearColor(0x000000, 0);
+      arenaGroup.visible = false;
+      motesPoints.visible = false;
       hubKeySpotLight.visible = true;
       hubRimLight.visible = true;
       hubBackdropGroup.visible = true;
-      scene.fog.near = 16;
-      scene.fog.far = 56;
+      hubArsenalGlowGroup.visible = hubStageFocus === 'arsenal';
+      hubContactAoMesh.visible = false;
+      hubShadowCatcher.visible = false;
+      dirLight.castShadow = false;
+      // Tighten directional shadow frustum 10x around the Hub pedestal for razor-sharp, soft 2048px shadows!
+      const hubShadExt = 2.6;
+      dirLight.shadow.camera.left = -hubShadExt;
+      dirLight.shadow.camera.right = hubShadExt;
+      dirLight.shadow.camera.top = hubShadExt;
+      dirLight.shadow.camera.bottom = -hubShadExt;
+      dirLight.shadow.camera.near = 2;
+      dirLight.shadow.camera.far = 28;
+      dirLight.shadow.radius = 3.8;
+      dirLight.shadow.bias = -0.0002;
+      dirLight.shadow.camera.updateProjectionMatrix();
+      scene.fog.near = 40;
+      scene.fog.far = 120;
       targetX = 0;
       targetZ = 0;
       applyHubCameraPose(0.016, changed || !hasFollowedOnce);
       hasFollowedOnce = true;
     } else {
+      const basePal = getCombatBasePalette();
+      const isForest = currentBiome === 'misty_forest';
+      scene.background = (bossModeActive ? PALETTE_BOSS.bg : basePal.bg).clone();
+      renderer.setClearColor(basePal.bg.getHex(), 1);
+      arenaGroup.visible = true;
+      motesPoints.visible = true;
       hubKeySpotLight.visible = false;
       hubRimLight.visible = false;
       hubBackdropGroup.visible = false;
-      scene.fog.near = 48;
-      scene.fog.far = 112;
+      dirLight.castShadow = true;
+      const combatShadExt = 21;
+      dirLight.shadow.camera.left = -combatShadExt;
+      dirLight.shadow.camera.right = combatShadExt;
+      dirLight.shadow.camera.top = combatShadExt;
+      dirLight.shadow.camera.bottom = -combatShadExt;
+      dirLight.shadow.camera.near = 4;
+      dirLight.shadow.camera.far = 75;
+      dirLight.shadow.radius = 2.2;
+      dirLight.shadow.bias = -0.00035;
+      dirLight.shadow.camera.updateProjectionMatrix();
+      scene.fog.near = isForest ? 48 : 48;
+      scene.fog.far = isForest ? 122 : 112;
       hasFollowedOnce = false;
       const aspect = camera.aspect || 1;
       camera.fov = aspect < 1.0 ? Math.min(64, 44 + (1.0 - aspect) * 34) : 44;
@@ -2279,6 +2929,74 @@ export function createArenaWorld(canvas) {
     }
   }
 
+  function setArenaBiome(_biome = 'courtyard') {
+    currentBiome = 'courtyard';
+    courtyardPropsGroup.visible = true;
+    forestPropsGroup.visible = false;
+    obstacles.length = 0;
+    for (let i = 0; i < COURTYARD_OBSTACLES.length; i++) {
+      obstacles.push({ ...COURTYARD_OBSTACLES[i] });
+    }
+    groundMesh.visible = true;
+    groundMesh.material.map = cobbleTex;
+    groundMesh.material.color.setHex(0xd8dff2);
+    groundMesh.material.roughness = 0.80;
+    groundMesh.material.metalness = 0.08;
+    groundMesh.material.needsUpdate = true;
+    outerGround.position.y = -0.06;
+    outerGround.material.color.setHex(0x161728);
+    outerGround.material.roughness = 0.95;
+    outerGround.material.needsUpdate = true;
+
+    if (cameraMode !== 'hub') {
+      const pal = bossModeActive ? PALETTE_BOSS : PALETTE_NORMAL;
+      if (!scene.background) scene.background = pal.bg.clone();
+      else scene.background.copy(pal.bg);
+      renderer.setClearColor(pal.bg.getHex(), 1);
+      scene.fog.color.copy(pal.fog);
+      scene.fog.near = 48;
+      scene.fog.far = 112;
+      hemiLight.color.copy(pal.hemiSky);
+      hemiLight.groundColor.copy(pal.hemiGround);
+      dirLight.color.copy(pal.dir);
+      plazaRuneMat.color.copy(pal.plazaRune);
+      moteMat.color.copy(pal.plazaRune);
+    }
+  }
+
+  // Free 3D Orbital Combat Camera State (RMB drag: yaw left/right & pitch up/down; Mouse wheel: zoom in/out)
+  const DEFAULT_ORBIT_PITCH = Math.atan2(COMBAT_CAM_OFFSET.y - 0.5, COMBAT_CAM_OFFSET.z);
+  const DEFAULT_ORBIT_DIST = Math.hypot(COMBAT_CAM_OFFSET.y - 0.5, COMBAT_CAM_OFFSET.z);
+  let orbitYaw = 0;
+  let orbitPitch = DEFAULT_ORBIT_PITCH;
+  let orbitDist = DEFAULT_ORBIT_DIST;
+  let orbitTargetYaw = 0;
+  let orbitTargetPitch = DEFAULT_ORBIT_PITCH;
+  let orbitTargetDist = DEFAULT_ORBIT_DIST;
+
+  function adjustCombatOrbit(dYaw = 0, dPitch = 0) {
+    orbitTargetYaw += dYaw;
+    orbitTargetPitch = Math.max(0.10, Math.min(1.48, orbitTargetPitch + dPitch));
+  }
+
+  function zoomCombatOrbit(wheelDelta = 0) {
+    const step = Math.sign(wheelDelta) * Math.min(Math.abs(wheelDelta), 160) * 0.018;
+    orbitTargetDist = Math.max(3.0, Math.min(68.0, orbitTargetDist * Math.exp(step * 0.12)));
+  }
+
+  function getCombatOrbitYaw() {
+    return orbitYaw;
+  }
+
+  function resetCombatOrbit() {
+    orbitYaw = 0;
+    orbitPitch = DEFAULT_ORBIT_PITCH;
+    orbitDist = DEFAULT_ORBIT_DIST;
+    orbitTargetYaw = 0;
+    orbitTargetPitch = DEFAULT_ORBIT_PITCH;
+    orbitTargetDist = DEFAULT_ORBIT_DIST;
+  }
+
   function followTarget(x = 0, z = 0, dt = 0.016) {
     if (cameraMode === 'hub') {
       applyHubCameraPose(dt, false);
@@ -2288,12 +3006,22 @@ export function createArenaWorld(canvas) {
     if (!hasFollowedOnce || !dt || dt <= 0) {
       targetX = x;
       targetZ = z;
+      orbitYaw = orbitTargetYaw;
+      orbitPitch = orbitTargetPitch;
+      orbitDist = orbitTargetDist;
       hasFollowedOnce = true;
     } else {
-      const factor = 1 - Math.exp(-11 * Math.min(dt, 0.1));
+      const factor = 1 - Math.exp(-26 * Math.min(dt, 0.1));
       targetX += (x - targetX) * factor;
       targetZ += (z - targetZ) * factor;
+      const orbitSmooth = 1 - Math.exp(-18 * Math.min(dt, 0.1));
+      orbitYaw += (orbitTargetYaw - orbitYaw) * orbitSmooth;
+      orbitPitch += (orbitTargetPitch - orbitPitch) * orbitSmooth;
+      orbitDist += (orbitTargetDist - orbitDist) * orbitSmooth;
     }
+
+    const groundY = getGroundHeight(x, z);
+    combatHeroContactShadow.position.set(x, groundY + 0.022, z);
 
     let sx = 0, sy = 0, sz = 0;
     if (shakeIntensity > 0.002) {
@@ -2302,12 +3030,15 @@ export function createArenaWorld(canvas) {
       sz = (Math.cos(shakeTime * 41) + (Math.random() - 0.5) * 0.8) * shakeIntensity * 0.55;
     }
 
-    camera.position.set(
-      targetX + COMBAT_CAM_OFFSET.x * (camera.aspect < 0.92 ? 1.15 : 1) + sx,
-      COMBAT_CAM_OFFSET.y * (camera.aspect < 0.92 ? 1.15 : 1) + sy,
-      targetZ + COMBAT_CAM_OFFSET.z * (camera.aspect < 0.92 ? 1.15 : 1) + sz
-    );
-    camera.lookAt(targetX + sx * 0.35, 0.5, targetZ + sz * 0.35);
+    const mult = camera.aspect < 0.92 ? 1.15 : 1;
+    const effDist = orbitDist * mult;
+    const horizDist = Math.cos(orbitPitch) * effDist;
+    const camY = groundY + 0.5 + Math.sin(orbitPitch) * effDist;
+    const camX = targetX + Math.sin(orbitYaw) * horizDist;
+    const camZ = targetZ + Math.cos(orbitYaw) * horizDist;
+
+    camera.position.set(camX + sx, Math.max(groundY + 0.65, camY + sy), camZ + sz);
+    camera.lookAt(targetX + sx * 0.35, groundY + 0.85, targetZ + sz * 0.35);
 
     heroAuraLight.position.set(targetX, 3.2, targetZ);
 
@@ -2332,6 +3063,18 @@ export function createArenaWorld(canvas) {
   const ndcMouse = new THREE.Vector2();
   const aimPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.7);
   const aimHit = new THREE.Vector3();
+
+  const _visCheckVec = new THREE.Vector3();
+  function isWorldPointVisible(wx, wz, wy = 0.85, ndcMargin = 0.94) {
+    camera.updateMatrixWorld();
+    _visCheckVec.set(wx, wy, wz).project(camera);
+    return (
+      _visCheckVec.z >= -1 &&
+      _visCheckVec.z <= 1 &&
+      Math.abs(_visCheckVec.x) <= ndcMargin &&
+      Math.abs(_visCheckVec.y) <= ndcMargin
+    );
+  }
 
   function getAimPointOnGround(clientX, clientY) {
     const vp = window.__getGameViewportSize?.();
@@ -2364,9 +3107,11 @@ export function createArenaWorld(canvas) {
       shakeIntensity = Math.max(0, shakeIntensity - safeDt * 3.4);
     }
 
-    const pal = bossModeActive ? PALETTE_BOSS : PALETTE_NORMAL;
-    const atmLerp = Math.min(1, safeDt * 2.4);
-    scene.background.lerp(pal.bg, atmLerp);
+    const pal = cameraMode === 'hub' ? PALETTE_HUB : bossModeActive ? PALETTE_BOSS : getCombatBasePalette();
+    const atmLerp = Math.min(1, safeDt * 2.8);
+    if (cameraMode !== 'hub' && scene.background) {
+      scene.background.lerp(pal.bg, atmLerp);
+    }
     scene.fog.color.lerp(pal.fog, atmLerp);
     hemiLight.color.lerp(pal.hemiSky, atmLerp);
     hemiLight.groundColor.lerp(pal.hemiGround, atmLerp);
@@ -2378,15 +3123,94 @@ export function createArenaWorld(canvas) {
     motesPoints.position.y = Math.sin(t * 0.9) * 0.28;
     motesPoints.rotation.y = t * 0.03;
 
+    waterProjUniforms.uTime.value = t;
+    necropolisWaterUniforms.uTime.value = t;
+
+    if (cameraMode === 'hub') {
+      hubFlagUniforms.uTime.value = t;
+      const hf = 0.86 + Math.sin(t * 10.5) * 0.10 + Math.sin(t * 24.0) * 0.06;
+      hubCampfireLight.intensity = 4.4 * hf;
+      hubLeftFireGlow.material.opacity = 0.44 * hf;
+      if (hubArsenalGlowGroup.visible) {
+        const gf = 0.92 + Math.sin(t * 3.6) * 0.08;
+        arsenalDiscMat.opacity = 0.84 * gf;
+        arsenalCoreDiscMat.opacity = 0.56 * gf;
+        arsenalMistUniforms.uTime.value = t;
+        arsenalMistUniforms.uOpacity.value = 0.34 * gf;
+        arsenalForgeLight.intensity = 3.6 * gf;
+
+        const spArr = arsenalSparkGeo.attributes.position.array;
+        for (let i = 0; i < ARSENAL_SPARK_COUNT; i++) {
+          const idx = i * 3;
+          const spd = arsenalSparkSeeds[i * 2];
+          const ph = arsenalSparkSeeds[i * 2 + 1];
+          spArr[idx + 1] += spd * safeDt;
+          spArr[idx] += Math.sin(t * 2.4 + ph) * 0.14 * safeDt;
+          if (spArr[idx + 1] > 1.42) {
+            const a = Math.random() * Math.PI * 2;
+            const r = Math.random() * 0.65;
+            spArr[idx] = Math.cos(a) * r;
+            spArr[idx + 1] = 0.04;
+            spArr[idx + 2] = 0.06 + Math.sin(a) * r * 0.65;
+          }
+        }
+        arsenalSparkGeo.attributes.position.needsUpdate = true;
+      }
+
+      const lArr = hubLeftAshGeo.attributes.position.array;
+      for (let i = 0; i < HUB_LEFT_ASH_COUNT; i++) {
+        const idx = i * 3;
+        const spd = hubLeftAshSeeds[idx];
+        const ph = hubLeftAshSeeds[idx + 1];
+        const drift = hubLeftAshSeeds[idx + 2];
+        lArr[idx + 1] += spd * safeDt;
+        lArr[idx] += (0.14 + Math.sin(t * 2.5 + ph) * drift) * safeDt;
+        if (lArr[idx + 1] > 2.55) {
+          lArr[idx] = -2.65 + (Math.random() - 0.5) * 1.1;
+          lArr[idx + 1] = -0.06;
+          lArr[idx + 2] = 0.35 + (Math.random() - 0.5) * 1.05;
+        }
+      }
+      hubLeftAshGeo.attributes.position.needsUpdate = true;
+
+      const eArr = hubEmberGeo.attributes.position.array;
+      for (let i = 0; i < HUB_EMBER_COUNT; i++) {
+        const idx = i * 3;
+        const spd = hubEmberSeeds[idx];
+        const ph = hubEmberSeeds[idx + 1];
+        const drift = hubEmberSeeds[idx + 2];
+        eArr[idx + 1] += spd * safeDt;
+        eArr[idx] += Math.sin(t * 1.8 + ph) * drift * safeDt;
+        if (eArr[idx + 1] > 3.8) {
+          eArr[idx + 1] = -0.15;
+          eArr[idx] = (Math.random() - 0.5) * 8.2;
+          eArr[idx + 2] = -2.8 + Math.random() * 5.2;
+        }
+      }
+      hubEmberGeo.attributes.position.needsUpdate = true;
+    }
+
     // Flickering fires & rune lights
     for (let i = 0; i < lanterns.length; i++) {
       const l = lanterns[i];
+      if (l.parentGrp && !l.parentGrp.visible) continue;
       const flicker = 0.88 + Math.sin(t * 9.5 + l.phase) * 0.08 + Math.sin(t * 23.0 + l.phase * 2.1) * 0.05;
       if (l.pointLight) l.pointLight.intensity = l.baseIntensity * flicker;
       if (l.flameGrp) {
         l.flameGrp.children.forEach((ch, idx) => {
           if (idx >= 3) ch.scale.y = flicker;
         });
+      }
+    }
+
+    // Gentle low-lying mist drift in Misty Forest biome
+    if (cameraMode !== 'hub' && currentBiome === 'misty_forest') {
+      for (let i = 0; i < forestMistPatches.length; i++) {
+        const mp = forestMistPatches[i];
+        mp.mesh.position.x = mp.baseX + Math.sin(t * mp.speed + mp.phase) * 1.25;
+        mp.mesh.position.z = mp.baseZ + Math.cos(t * mp.speed * 0.82 + mp.phase) * 1.05;
+        mp.mesh.rotation.y += safeDt * 0.04 * (i % 2 === 0 ? 1 : -1);
+        mp.mat.opacity = mp.baseOpacity * (0.84 + 0.16 * Math.sin(t * 1.35 + mp.phase));
       }
     }
 
@@ -2404,7 +3228,9 @@ export function createArenaWorld(canvas) {
       proj.prevZ = m.position.z;
 
       if (proj.spinCore) {
-        if (proj.visualKind !== 'magic_air') {
+        if (proj.visualKind === 'magic_water') {
+          proj.spinCore.rotation.z += safeDt * 11;
+        } else if (proj.visualKind !== 'magic_air') {
           proj.spinCore.rotation.z += safeDt * 14;
           proj.spinCore.rotation.x += safeDt * 9;
         }
@@ -2412,6 +3238,8 @@ export function createArenaWorld(canvas) {
       if (proj.orbitRingA) {
         if (proj.visualKind === 'magic_fire') {
           proj.orbitRingA.rotation.z += safeDt * 18;
+        } else if (proj.visualKind === 'magic_water') {
+          proj.orbitRingA.rotation.z -= safeDt * 20;
         } else if (proj.visualKind === 'magic_lightning') {
           proj.orbitRingA.rotation.z += safeDt * 34;
           proj.orbitRingA.rotation.x = Math.sin(t * 45) * 0.35;
@@ -2444,10 +3272,10 @@ export function createArenaWorld(canvas) {
             tGrav = -3.4;
           } else if (proj.visualKind === 'magic_water') {
             tColor = Math.random() < 0.4 ? 0xe0f2fe : 0x38bdf8;
-            tCount = 3;
-            tSpeed = 2.2;
-            tSize = 0.13;
-            tGrav = 6.5;
+            tCount = 2;
+            tSpeed = 1.4;
+            tSize = 0.045;
+            tGrav = 4.5;
           } else if (proj.visualKind === 'magic_lightning') {
             tColor = Math.random() < 0.5 ? 0xfef08a : 0x38bdf8;
             tCount = 3;
@@ -2491,6 +3319,27 @@ export function createArenaWorld(canvas) {
       mf.outerMat.opacity = p * 0.9;
       mf.spriteMat.opacity = p * 0.85;
       mf.group.scale.setScalar(mf.baseScale * (0.75 + p * 0.45));
+    }
+
+    // Update Gunpowder Smoke Puffs
+    for (let i = activeGunSmokes.length - 1; i >= 0; i--) {
+      const sm = activeGunSmokes[i];
+      sm.age += safeDt;
+      if (sm.age >= sm.duration) {
+        sm.sprite.visible = false;
+        activeGunSmokes.splice(i, 1);
+        freeGunSmokes.push(sm);
+        continue;
+      }
+      const t = sm.age / sm.duration;
+      sm.sprite.position.x += sm.vx * safeDt;
+      sm.sprite.position.y += sm.vy * safeDt;
+      sm.sprite.position.z += sm.vz * safeDt;
+      sm.vx *= Math.max(0, 1 - safeDt * 4.2);
+      sm.vz *= Math.max(0, 1 - safeDt * 4.2);
+      const curScale = sm.startScale + (sm.endScale - sm.startScale) * Math.pow(t, 0.65);
+      sm.sprite.scale.set(curScale, curScale, 1);
+      sm.mat.opacity = (1 - t) * (1 - t) * 0.44;
     }
 
     // Update Pooled Instanced Particles
@@ -2549,10 +3398,10 @@ export function createArenaWorld(canvas) {
         continue;
       }
       const p = sa.age / sa.duration;
-      const expand = sa.radius * (0.82 + 0.24 * (1 - (1 - p) * (1 - p)));
+      const expand = sa.radius * (0.68 + 0.18 * (1 - (1 - p) * (1 - p)));
       sa.group.scale.set(expand, 1, expand);
-      sa.mainMat.opacity = (1 - p) * 0.92;
-      sa.edgeMat.opacity = (1 - p) * (1 - p) * 0.85;
+      sa.mainMat.opacity = (1 - p) * 0.56;
+      sa.edgeMat.opacity = (1 - p) * (1 - p) * 0.68;
     }
 
     // Update Shockwave Rings
@@ -2814,12 +3663,16 @@ export function createArenaWorld(canvas) {
   function resetVfx() {
     shakeIntensity = 0;
     bossModeActive = false;
-    scene.background.copy(PALETTE_NORMAL.bg);
-    scene.fog.color.copy(PALETTE_NORMAL.fog);
-    hemiLight.color.copy(PALETTE_NORMAL.hemiSky);
-    hemiLight.groundColor.copy(PALETTE_NORMAL.hemiGround);
-    dirLight.color.copy(PALETTE_NORMAL.dir);
-    plazaRuneMat.color.copy(PALETTE_NORMAL.plazaRune);
+    const basePal = getCombatBasePalette();
+    if (cameraMode !== 'hub') {
+      if (!scene.background) scene.background = basePal.bg.clone();
+      else scene.background.copy(basePal.bg);
+    }
+    scene.fog.color.copy(basePal.fog);
+    hemiLight.color.copy(basePal.hemiSky);
+    hemiLight.groundColor.copy(basePal.hemiGround);
+    dirLight.color.copy(basePal.dir);
+    plazaRuneMat.color.copy(basePal.plazaRune);
 
     for (let i = 0; i < MAX_PARTICLES; i++) {
       particles[i].active = false;
@@ -2831,6 +3684,11 @@ export function createArenaWorld(canvas) {
       const mf = activeMuzzleFlashes.pop();
       mf.group.visible = false;
       freeMuzzleFlashes.push(mf);
+    }
+    while (activeGunSmokes.length > 0) {
+      const sm = activeGunSmokes.pop();
+      sm.sprite.visible = false;
+      freeGunSmokes.push(sm);
     }
     while (activeSlashArcs.length > 0) {
       const sa = activeSlashArcs.pop();
@@ -2887,8 +3745,16 @@ export function createArenaWorld(canvas) {
     camera,
     renderer,
     obstacles,
+    HUB_PEDESTAL_TOP_Y,
     followTarget,
+    getGroundHeight,
+    adjustCombatOrbit,
+    zoomCombatOrbit,
+    getCombatOrbitYaw,
+    resetCombatOrbit,
     setCameraMode,
+    setArenaBiome,
+    setHubStageFocus,
     addScreenShake,
     spawnParticles,
     spawnMuzzleFlash,
@@ -2905,6 +3771,7 @@ export function createArenaWorld(canvas) {
     createProjectileVisual,
     setBossAtmosphere,
     getAimPointOnGround,
+    isWorldPointVisible,
     update,
     render,
     resize,

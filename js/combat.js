@@ -8,7 +8,7 @@ import {
   ENEMY_TYPES,
   LEVELS,
   RUN_UPGRADES
-} from './config.js?v=20261116m';
+} from './config.js?v=20261117z16';
 
 const TWO_PI = Math.PI * 2;
 const ARENA_PLAYER_LIMIT = ARENA_HALF_SIZE - 1.4;
@@ -489,14 +489,14 @@ export function createCombatController({
     }
   }
 
-  function triggerModelAttack(modelWrap, weaponType = null) {
+  function triggerModelAttack(modelWrap, weaponType = null, attackDuration = 0) {
     if (!modelWrap) return;
     const { handle, obj } = modelWrap;
-    if (typeof handle?.playAttackAnim === 'function') handle.playAttackAnim(weaponType);
-    else if (typeof handle?.triggerAttack === 'function') handle.triggerAttack(weaponType);
-    else if (typeof handle?.playAttack === 'function') handle.playAttack(weaponType);
-    else if (typeof handle?.attack === 'function') handle.attack(weaponType);
-    else if (typeof obj?.userData?.triggerAttack === 'function') obj.userData.triggerAttack(weaponType);
+    if (typeof handle?.playAttackAnim === 'function') handle.playAttackAnim(weaponType, attackDuration);
+    else if (typeof handle?.triggerAttack === 'function') handle.triggerAttack(weaponType, attackDuration);
+    else if (typeof handle?.playAttack === 'function') handle.playAttack(weaponType, attackDuration);
+    else if (typeof handle?.attack === 'function') handle.attack(weaponType, attackDuration);
+    else if (typeof obj?.userData?.triggerAttack === 'function') obj.userData.triggerAttack(weaponType, attackDuration);
   }
 
   function triggerModelHitFlash(modelWrap) {
@@ -568,6 +568,7 @@ export function createCombatController({
 
   // === Live Run State ===
   let autoAim = true;
+  let attackEnabled = true;
   let runActive = false;
   let runEnded = false;
   let victoryDelayTimer = 0;
@@ -576,10 +577,12 @@ export function createCombatController({
   let currentClassId = 'warrior';
   let currentWeaponId = 'club';
   let currentLevelNumber = 1;
+  let currentDifficulty = 'normal';
   let currentLevelDef = LEVELS[0];
 
   let runLevel = 1;
   let xp = 0;
+  let xpFraction = 0;
   let xpNext = 125;
   let pendingLevelUps = 0;
   let awaitingLevelUpChoice = false;
@@ -601,6 +604,8 @@ export function createCombatController({
   let goldRun = 0;
   let kills = 0;
   let targetKills = 30;
+  let levelSpawnQueue = [];
+  let bossSpawnCountdown = 0;
   let nextEntityUid = 1;
   let critFloaterCooldown = 0;
   let shieldSparkCooldown = 0;
@@ -622,15 +627,17 @@ export function createCombatController({
     maxMana: 0,
     reloadTimer: 0,
     reloadDuration: 0,
+    reloadShellAccum: 0,
     isReloading: false,
     reloadMidShellPlayed: false,
+    standStillTimer: 0,
     invulnTimer: 0,
     attackCooldown: 0,
     attackAnimTimer: 0,
     seals: 0,
     beastTimeLeft: 0,
     overdriveAmmo: 0,
-    overdriveMax: 35,
+    overdriveMax: 5,
     vampiricKills: 0,
     soulNovaTimer: 9.0,
     relicBumpTimer: 0
@@ -697,10 +704,17 @@ export function createCombatController({
     if (player.ammo >= player.maxAmmo) return false;
     if (player.overdriveAmmo > 0 || player.beastTimeLeft > 0) return false;
 
-    const wpn = WEAPONS[currentWeaponId] || WEAPONS.pistol;
+    const wpn = WEAPONS[currentWeaponId] || WEAPONS.usp_pistol;
     player.isReloading = true;
-    player.reloadDuration = Math.max(0.25, stats.reloadTime || wpn.reloadTime || 1.2);
+    const perShell = stats.reloadPerShellTime || 0;
+    if (perShell > 0) {
+      const missingShells = Math.max(1, player.maxAmmo - player.ammo);
+      player.reloadDuration = Math.max(perShell, +(missingShells * perShell).toFixed(3));
+    } else {
+      player.reloadDuration = Math.max(0.25, stats.reloadTime || wpn.reloadTime || 1.2);
+    }
     player.reloadTimer = player.reloadDuration;
+    player.reloadShellAccum = 0;
     player.reloadMidShellPlayed = false;
 
     audio?.playReloadShell?.();
@@ -786,21 +800,25 @@ export function createCombatController({
   }
 
   // === Start Run ===
-  function startRun({ classId, levelNumber } = {}) {
+  function startRun({ classId, levelNumber, difficultyMode } = {}) {
     disposeRun();
 
     world?.resetVfx?.();
     world?.setBossAtmosphere?.(false);
 
     currentClassId = CLASSES[classId] ? classId : progression.getState().selectedClass || 'warrior';
+    currentDifficulty = difficultyMode === 'hard' ? 'hard' : 'normal';
     const lvlIdx = clamp((Number(levelNumber) || 1) - 1, 0, LEVELS.length - 1);
     currentLevelDef = LEVELS[lvlIdx];
     currentLevelNumber = currentLevelDef.level;
+    world?.setArenaBiome?.(currentLevelNumber >= 11 ? 'misty_forest' : 'courtyard');
 
     currentWeaponId = progression.getEquippedWeaponId(currentClassId);
-    runLevel = 1;
-    xp = 0;
-    xpNext = 125;
+    const progInit = progression.getState();
+    runLevel = progInit.heroLevel || 1;
+    xp = progInit.heroXp || 0;
+    xpFraction = 0;
+    xpNext = progInit.heroXpNext || 95;
     pendingLevelUps = 0;
     awaitingLevelUpChoice = false;
 
@@ -815,6 +833,21 @@ export function createCombatController({
     const initialMag = stats.magSize || 0;
     const initialMana = stats.usesMana ? (stats.maxMana || 120) : 0;
     targetKills = currentLevelDef.targetKills || (26 + currentLevelNumber * 4);
+    bossSpawnCountdown = currentLevelDef.hasBoss ? (currentLevelDef.bossSpawnTimerSec || 45) : 0;
+    levelSpawnQueue = [];
+    if (currentLevelDef.enemyQuotas) {
+      for (const [eType, qty] of Object.entries(currentLevelDef.enemyQuotas)) {
+        for (let q = 0; q < (qty || 0); q++) {
+          levelSpawnQueue.push(eType);
+        }
+      }
+      for (let i = levelSpawnQueue.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const tmp = levelSpawnQueue[i];
+        levelSpawnQueue[i] = levelSpawnQueue[j];
+        levelSpawnQueue[j] = tmp;
+      }
+    }
     player = {
       x: startSpot.x,
       z: startSpot.z,
@@ -830,15 +863,17 @@ export function createCombatController({
       maxMana: initialMana,
       reloadTimer: 0,
       reloadDuration: stats.reloadTime || 0,
+      reloadShellAccum: 0,
       isReloading: false,
       reloadMidShellPlayed: false,
+      standStillTimer: 0,
       invulnTimer: 1.0,
       attackCooldown: 0,
       attackAnimTimer: 0,
       seals: 0,
       beastTimeLeft: 0,
       overdriveAmmo: 0,
-      overdriveMax: 35,
+      overdriveMax: 5,
       vampiricKills: 0,
       soulNovaTimer: 9.0,
       relicBumpTimer: 0,
@@ -921,6 +956,7 @@ export function createCombatController({
   }
 
   function spawnRelicWeaponEvent() {
+    if (currentClassId === 'warrior' || currentClassId === 'gunslinger') return;
     const tier = currentLevelDef.unlockWeaponTier;
     if (!tier) return;
     const targetWeaponId = findClassWeaponByTier(currentClassId, tier);
@@ -945,14 +981,14 @@ export function createCombatController({
     emitParticles(bestSpot.x, 0.9, bestSpot.z, 0xfde047, 22, 6.5, 0.2);
 
     // Guarding Elite Champion beside the Relic Crate
-    const guardType = currentLevelNumber >= 7 ? 'brute' : 'shieldbearer';
+    const guardType = currentLevelNumber >= 7 ? 'iron_knight' : 'cursed_footman';
     spawnEnemy(guardType, bestSpot.x + 1.8, bestSpot.z + 1.2, 'purple');
     floatText('✨ РУННЫЙ ЯЩИК ОРУЖИЯ!', player.x, player.z - 1.2, '#fde047');
   }
 
   // === Enemy & Boss Spawning ===
   function spawnEnemy(typeId, x, z, forcedElite = null, customOverrides = null) {
-    const def = ENEMY_TYPES[typeId] || ENEMY_TYPES.skeleton;
+    const def = ENEMY_TYPES[typeId] || ENEMY_TYPES.ember_skeleton || ENEMY_TYPES.skeleton;
 
     let eliteType = forcedElite;
     if (
@@ -969,8 +1005,10 @@ export function createCombatController({
 
     const progress = clamp(elapsedRunTime / Math.max(1, currentLevelDef.durationSec), 0, 1);
     const waveRamp = 1 + progress * 0.22;
-    const baseHpScale = (currentLevelDef.hpScale || 1) * (def.isBoss ? 0.85 : waveRamp);
-    const baseDmgScale = currentLevelDef.dmgScale || 1;
+    const diffHpMult = currentDifficulty === 'hard' ? 1.45 : 1.0;
+    const diffDmgMult = currentDifficulty === 'hard' ? 1.25 : 1.0;
+    const baseHpScale = (currentLevelDef.hpScale || 1) * (def.isBoss ? 0.85 : waveRamp) * diffHpMult;
+    const baseDmgScale = (currentLevelDef.dmgScale || 1) * diffDmgMult;
 
     const eliteHpMult =
       eliteType === 'purple' ? 1.65 : eliteType === 'blue' ? 1.55 : 1.0;
@@ -1004,7 +1042,15 @@ export function createCombatController({
           : 0.52 * scale;
 
     const spot = resolveObstaclesAndBounds(x, z, baseRadius * 0.85, ARENA_ENTITY_LIMIT);
-    model.obj.position.set(spot.x, 0, spot.z);
+    const emergeDuration = isBossUnit || customOverrides?.noEmerge ? 0 : 0.85;
+    model.obj.position.set(spot.x, emergeDuration > 0 ? -1.9 : 0, spot.z);
+    if (emergeDuration > 0) {
+      const ringCol = typeId === 'corrupted_treant' ? 0xf97316 : 0x65a30d;
+      world?.spawnShockwaveRing?.({ x: spot.x, y: 0.045, z: spot.z, radius: 1.25, color: ringCol, duration: 0.65 });
+      world?.spawnShockwaveRing?.({ x: spot.x, y: 0.055, z: spot.z, radius: 0.72, color: 0xfef08a, duration: 0.50 });
+      emitParticles(spot.x, 0.18, spot.z, ringCol, 8, 3.6, 0.13);
+      emitParticles(spot.x, 0.10, spot.z, 0x57534e, 6, 2.8, 0.11);
+    }
     if (customOverrides?.scale) {
       model.obj.scale.multiplyScalar(customOverrides.scale / (def.scale || 1));
     } else if (eliteType === 'purple' || eliteType === 'blue') {
@@ -1031,6 +1077,19 @@ export function createCombatController({
       speed: customOverrides?.speed ?? def.speed,
       damage,
       ranged: Boolean(def.ranged),
+      canDash: Boolean(def.canDash),
+      dashMult: def.dashMult || 1.65,
+      canCharge: Boolean(def.canCharge),
+      summoner: Boolean(def.summoner),
+      canSummonBats: Boolean(def.canSummonBats || typeId === 'vampire_lord'),
+      cloakMelee: Boolean(def.cloakMelee || typeId === 'vampire_lord'),
+      batSummonCooldown: 2.0 + Math.random() * 1.4,
+      castPauseTimer: 0,
+      cloakAttackTimer: 0,
+      keepDistance: def.keepDistance || 10.2,
+      projColor: def.projColor || 0xa855f7,
+      hazardColor: def.hazardColor || 0x22c55e,
+      armor: def.armor || 0,
       frontArmor: def.frontArmor || 0,
       explodesOnDeath: Boolean(def.explodesOnDeath),
       bomberTriggered: false,
@@ -1044,9 +1103,9 @@ export function createCombatController({
       aimDirX: 0,
       aimDirZ: 1,
       specialCooldown:
-        typeId === 'necromancer'
+        def.summoner
           ? 2.8 + Math.random() * 1.6
-          : typeId === 'brute'
+          : def.canCharge
             ? 2.2 + Math.random() * 1.4
             : 1.4 + Math.random() * 1.2,
       lungeTimer: 0,
@@ -1068,6 +1127,11 @@ export function createCombatController({
       contactCooldown: 0,
       trampleCooldown: 0,
       stunTimer: 0,
+      disarmTimer: 0,
+      emergeTimer: emergeDuration,
+      emergeDuration,
+      hopCycle: Math.random(),
+      _hopLandedDust: false,
       // Boss state machine
       bossPhase: 0,
       bossSubState: 'stalk',
@@ -1085,81 +1149,85 @@ export function createCombatController({
   }
 
   function spawnWavePack() {
-    if (enemies.length >= MAX_ACTIVE_ENEMIES) return;
+    const lvl = currentLevelDef?.level || 1;
+    const maxConcurrentForLvl =
+      lvl === 1 ? 4 : lvl === 2 ? 5 : lvl === 3 ? 6 : Math.min(MAX_ACTIVE_ENEMIES, 5 + Math.min(lvl, 12) * 2);
+    if (enemies.length >= maxConcurrentForLvl) return;
     waveCount += 1;
 
-    const pool = currentLevelDef.enemyPool || ['skeleton'];
-    const meleePool = pool.filter((id) => id !== 'archer' && id !== 'cultist');
-    const rangedPool = pool.filter((id) => id === 'archer' || id === 'cultist');
-    const safeMeleePool = meleePool.length > 0 ? meleePool : ['skeleton'];
+    const pool = currentLevelDef.enemyPool || ['plague_zombie'];
+    const meleePool = pool.filter((id) => !ENEMY_TYPES[id]?.ranged);
+    const rangedPool = pool.filter((id) => Boolean(ENEMY_TYPES[id]?.ranged));
+    const safeMeleePool = meleePool.length > 0 ? meleePool : ['plague_zombie'];
 
     let aliveRanged = 0;
     for (let i = 0; i < enemies.length; i++) {
-      if (enemies[i]?.hp > 0 && (enemies[i].type === 'archer' || enemies[i].type === 'cultist')) {
+      if (enemies[i]?.hp > 0 && enemies[i].ranged) {
         aliveRanged += 1;
       }
     }
 
-    // Minigore-2 Authentic Directional Horde Waves:
-    // Distinct surging waves from a single clear flank/gate (or 2-flank pincer later in chapter),
-    // escalating wave size over time so pressure mounts steadily without 360° random spawns!
     const timePressure = clamp(elapsedRunTime / 55, 0, 1.35);
-    const totalWaveSize = finaleStarted
-      ? 5
+    const basePack = lvl === 1 ? 2 : lvl === 2 ? 3 : lvl === 3 ? 3 : Math.min(5, 2 + Math.floor((lvl - 1) * 0.45));
+    let totalWaveSize = finaleStarted
+      ? Math.min(4, basePack + 1)
       : Math.min(
-          11,
-          Math.round(5 + timePressure * 4.2 + (waveCount >= 3 ? 1 : 0))
+          lvl <= 3 ? 4 : 9,
+          Math.round(basePack + timePressure * (lvl === 1 ? 0.9 : 1.2 + Math.min(2.4, (lvl - 1) * 0.2)))
         );
+    if (!finaleStarted && currentLevelDef.enemyQuotas && levelSpawnQueue.length > 0) {
+      totalWaveSize = Math.min(totalWaveSize, levelSpawnQueue.length);
+    }
 
-    // Pick a distinct courtyard flank direction (rotates 90°/135° from previous wave so waves come from clear gates!)
+    // Pick a distinct courtyard flank direction (rotates 90°/135° from previous wave so waves emerge visibly from gates!)
     lastWaveSector = (lastWaveSector + 1 + (Math.random() < 0.45 ? 1 : 0)) % 4;
     const primarySectorAngle = lastWaveSector * (Math.PI * 0.5) + (Math.random() - 0.5) * 0.34;
-    const usePincer = !finaleStarted && waveCount >= 4 && timePressure > 0.55 && Math.random() < 0.35;
+    const usePincer = !finaleStarted && lvl >= 2 && waveCount >= 4 && timePressure > 0.55 && Math.random() < 0.35;
     const secondarySectorAngle = primarySectorAngle + Math.PI * (0.72 + Math.random() * 0.35);
 
     let spawnedRangedInWave = false;
 
     for (let n = 0; n < totalWaveSize; n++) {
-      if (enemies.length >= MAX_ACTIVE_ENEMIES) break;
+      if (enemies.length >= maxConcurrentForLvl) break;
+      if (!finaleStarted && currentLevelDef.enemyQuotas && levelSpawnQueue.length === 0 && kills + enemies.length >= targetKills) {
+        break;
+      }
 
       const inSecondSquad = usePincer && n >= Math.ceil(totalWaveSize * 0.62);
       const baseAngle = inSecondSquad ? secondarySectorAngle : primarySectorAngle;
       const localIdx = inSecondSquad ? n - Math.ceil(totalWaveSize * 0.62) : n;
 
-      // At most 1 ranged specialist at the very back of the wave, capped at 2 alive total!
       let isRangedUnit = false;
       let chosen;
-      if (
+      if (levelSpawnQueue.length > 0 && !finaleStarted) {
+        chosen = levelSpawnQueue.pop();
+        isRangedUnit = Boolean(ENEMY_TYPES[chosen]?.ranged);
+      } else if (
         !spawnedRangedInWave &&
         rangedPool.length > 0 &&
         aliveRanged < 2 &&
         n === totalWaveSize - 1 &&
-        waveCount >= 2 &&
-        Math.random() < 0.52
+        waveCount >= 1 &&
+        Math.random() < 0.85
       ) {
         chosen = rangedPool[Math.floor(Math.random() * rangedPool.length)];
         aliveRanged += 1;
         spawnedRangedInWave = true;
         isRangedUnit = true;
       } else {
-        chosen = safeMeleePool[Math.floor(Math.random() * safeMeleePool.length)];
-        if (chosen === 'brute' && Math.random() < 0.55) {
-          chosen = safeMeleePool[0] || 'skeleton';
-        } else if (chosen === 'necromancer' && Math.random() < 0.45) {
-          chosen = safeMeleePool[0] || 'skeleton';
-        }
+        chosen = safeMeleePool[(waveCount + n) % safeMeleePool.length];
       }
 
-      // Cohesive wedge/phalanx offsets so the wave visibly marches in together from that direction!
       const row = Math.floor(localIdx / 3);
-      const col = (localIdx % 3) - 1; // -1, 0, +1
+      const col = (localIdx % 3) - 1;
       const fwdX = Math.sin(baseAngle);
       const fwdZ = Math.cos(baseAngle);
       const sideX = fwdZ;
       const sideZ = -fwdX;
 
-      const baseDist = (isRangedUnit ? 22.0 : 18.5) + row * 1.65 + Math.random() * 0.7;
-      const lateralSpread = col * 1.55 + (Math.random() - 0.5) * 0.55;
+      // Keep spawn distance in [10.8m .. 14.5m] so underground rise portals are clearly visible near the hero without ambushing!
+      const baseDist = (isRangedUnit ? 14.5 : 10.8) + row * 1.85 + Math.random() * 0.8;
+      const lateralSpread = col * 1.9 + (Math.random() - 0.5) * 0.6;
 
       const sx = clamp(
         player.x + fwdX * baseDist + sideX * lateralSpread,
@@ -1177,26 +1245,41 @@ export function createCombatController({
         emitParticles(spawned.x, 0.35, spawned.z, 0xa855f7, 8, 3.6, 0.14);
       }
     }
+
+    // Field Chests (genuine 3D supply_crate & stealth 3D mimic_disguise that shares exact mesh!)
+    if (!finaleStarted && (waveCount === 1 || waveCount % 2 === 1)) {
+      let activeCrates = 0;
+      for (let i = 0; i < pickups.length; i++) {
+        const pt = pickups[i]?.type;
+        if (pt === 'supply_crate' || pt === 'mimic_disguise') activeCrates += 1;
+      }
+      if (activeCrates < 2) {
+        const crateAng = primarySectorAngle + Math.PI * (0.45 + Math.random() * 0.4);
+        const crateDist = 7.4 + Math.random() * 3.6;
+        const cx = clamp(player.x + Math.sin(crateAng) * crateDist, -ARENA_ENTITY_LIMIT + 1.5, ARENA_ENTITY_LIMIT - 1.5);
+        const cz = clamp(player.z + Math.cos(crateAng) * crateDist, -ARENA_ENTITY_LIMIT + 1.5, ARENA_ENTITY_LIMIT - 1.5);
+        const hasMimicPool = lvl >= 2 || (currentLevelDef.enemyPool || []).includes('mimic_chest');
+        const kind = waveCount === 1 ? (hasMimicPool ? 'mimic_disguise' : 'supply_crate') : (hasMimicPool && Math.random() < 0.5 ? 'mimic_disguise' : 'supply_crate');
+        spawnPickup(kind, cx, cz);
+      }
+    }
   }
 
   // Spawn previous-Act Boss as a Field or Finale Mini-Boss (Acts II–V non-boss chapters!)
   function spawnMiniBossFromPool(isFinale = false) {
     const pool = currentLevelDef.miniBossPool || [];
-    if (pool.length === 0) return null;
-
-    const bossTypeId = isFinale
-      ? pool[pool.length - 1]
-      : pool[Math.floor(Math.random() * pool.length)];
-    const bossDef = ENEMY_TYPES[bossTypeId] || ENEMY_TYPES.boss_butcher;
+    const bossTypeId = currentLevelDef.finaleMiniBossType || (isFinale ? pool[pool.length - 1] : pool[Math.floor(Math.random() * pool.length)]);
+    if (!bossTypeId) return null;
+    const bossDef = ENEMY_TYPES[bossTypeId] || ENEMY_TYPES.toxic_slime;
 
     const hpScale = currentLevelDef.hpScale || 1;
     const dmgScale = currentLevelDef.dmgScale || 1;
     const miniHp = Math.max(
-      220,
-      Math.round(bossDef.hp * hpScale * 0.85 * 0.38 * (isFinale ? 1.15 : 1.0))
+      115,
+      Math.round((bossDef.hp || 90) * hpScale * (isFinale ? 2.25 : 1.75))
     );
-    const miniDmg = Math.max(14, Math.round(bossDef.damage * dmgScale * 0.78));
-    const miniScale = +((bossDef.scale || 1.9) * 0.72).toFixed(2);
+    const miniDmg = Math.max(12, Math.round((bossDef.damage || 14) * dmgScale * 1.15));
+    const miniScale = +((bossDef.scale || 1.0) * 1.42).toFixed(2);
 
     const angle = Math.random() * TWO_PI;
     const dist = 15.5;
@@ -1233,25 +1316,52 @@ export function createCombatController({
     return mini;
   }
 
-  // === Bomber Death / Contact Hazard ===
-  function spawnBomberHazard(x, z) {
+  // === Toxic Slime / Bomber Acid Hazard Pool ===
+  function spawnBomberHazard(x, z, hzColor = 0x22c55e) {
     const hpScale = currentLevelDef.hpScale || 1;
     const dmgScale = currentLevelDef.dmgScale || 1;
-    emitDangerZone(x, z, 3.1, 0.80, 0xf97316);
-    emitParticles(x, 0.65, z, 0xf97316, 10, 4.2, 0.14);
+    emitDangerZone(x, z, 3.1, 0.80, hzColor);
+    emitParticles(x, 0.55, z, hzColor, 12, 4.4, 0.15);
     bomberHazards.push({
       x,
       z,
       radius: 3.1,
       timer: 0.80,
+      color: hzColor,
       playerDamage: Math.max(12, Math.round(24 * dmgScale)),
       enemyDamage: Math.max(45, Math.round(85 * hpScale))
     });
   }
 
-  // === Crate Destruction & Unlocks ===
+  // === Crate Destruction, Mimic Ambush & Unlocks ===
+  function awakenMimicDisguise(crate, idx = -1) {
+    if (!crate) return;
+    crate.hp = 0;
+    const mx = crate.x;
+    const mz = crate.z;
+    if (idx >= 0 && pickups[idx] === crate) {
+      removeSceneObject(crate.model.obj, crate.model.handle);
+      pickups.splice(idx, 1);
+    } else {
+      const found = pickups.indexOf(crate);
+      if (found >= 0) {
+        removeSceneObject(crate.model.obj, crate.model.handle);
+        pickups.splice(found, 1);
+      }
+    }
+    world?.spawnShockwaveRing?.({ x: mx, y: 0.05, z: mz, radius: 1.9, color: 0xc084fc, duration: 0.42 });
+    emitParticles(mx, 0.55, mz, 0xc084fc, 16, 5.4, 0.15);
+    floatText('👹 МИМИК!', mx, mz, '#e879f9');
+    audio?.playHit?.();
+    spawnEnemy('mimic_chest', mx, mz, null, { noEmerge: true });
+  }
+
   function hitCrate(crate) {
     if (!crate || crate.hp <= 0) return;
+    if (crate.type === 'mimic_disguise') {
+      awakenMimicDisguise(crate);
+      return;
+    }
     crate.hp -= 1;
     crate.hitWobble = 0.28;
     audio?.playHit?.();
@@ -1297,7 +1407,22 @@ export function createCombatController({
     }
   }
 
+  function maybeDropSpearBlueprint(x, z) {
+    if (currentLevelNumber < 3) return;
+    if (progression.isWeaponUnlocked('spear') || progression.isBlueprintUnlocked?.('spear')) return;
+    if (Math.random() < 0.20) {
+      progression.unlockBlueprint?.('spear');
+      audio?.playWeaponUnlock?.();
+      world?.addScreenShake?.(0.42, 0.25);
+      emitShockwave(x, z, 5.2, 0x38bdf8, 0.45);
+      emitParticles(x, 0.85, z, 0x38bdf8, 26, 7.2, 0.20);
+      floatText('📜 ЧЕРТЁЖ: БОЕВОЕ КОПЬЁ! (в Магазине)', player.x, player.z - 0.8, '#38bdf8');
+      callbacks?.onBlueprintUnlocked?.('spear');
+    }
+  }
+
   function detonateSupplyCrate(crate) {
+    maybeDropSpearBlueprint(crate.x, crate.z);
     audio?.playExplosion?.();
     world?.addScreenShake?.(0.68, 0.36);
     emitShockwave(crate.x, crate.z, 6.2, 0xef4444, 0.42);
@@ -1403,8 +1528,8 @@ export function createCombatController({
   }
 
   function activateOverdrive(x, z) {
-    player.overdriveAmmo = 35;
-    player.overdriveMax = 35;
+    player.overdriveAmmo = 5;
+    player.overdriveMax = 5;
     if (player.maxAmmo > 0) {
       player.ammo = player.maxAmmo;
       if (player.isReloading) {
@@ -1416,12 +1541,7 @@ export function createCombatController({
     audio?.playPickup?.('crate');
     emitShockwave(x, z, 4.0, 0xfbbf24, 0.32);
     emitParticles(x, 0.6, z, 0xfbbf24, 18, 5.5, 0.16);
-    floatText('🔥 СУПЕР-ЗАРЯД (35)!', player.x, player.z, '#fbbf24');
-
-    if (!overdriveCrateVisual && world?.scene) {
-      overdriveCrateVisual = new THREE.Mesh(sharedMiniCrateGeo, getProjMaterial(0xf59e0b));
-      world.scene.add(overdriveCrateVisual);
-    }
+    floatText('🔥 СУПЕР-ЗАРЯД (5)!', player.x, player.z, '#fbbf24');
   }
 
   function activateBeastMode() {
@@ -1452,37 +1572,32 @@ export function createCombatController({
     damageEnemiesInRadius(player.x, player.z, 5.5, Math.round(stats.damage * 1.8), 11.0, null);
   }
 
-  // === Slower Earned Soul XP Curve (125 * 1.46^(L-1)) & Tarot Blessings ===
-  function grantXp(amount, suppressModal = false) {
+  // === Persistent Hero XP Progression (10x slower curve for gradual multi-stage progression, ZERO Combat Pause) ===
+  function grantXp(amount, _suppressModal = false) {
     if (runEnded || pendingVictoryPayload) return;
-    const gain = Math.max(0, Number(amount) || 0);
+    const scaled = Math.max(0, (Number(amount) || 0) * 0.1) + xpFraction;
+    const gain = Math.floor(scaled);
+    xpFraction = scaled - gain;
     if (gain <= 0) return;
 
-    xp += gain;
-    while (xp >= xpNext) {
-      xp -= xpNext;
-      runLevel += 1;
-      xpNext = Math.round(125 * Math.pow(1.46, runLevel - 1));
-      if (!suppressModal) {
-        pendingLevelUps += 1;
-      }
-    }
-    if (!suppressModal) {
-      triggerNextLevelUpIfReady();
+    const res = progression.addHeroXp?.(gain);
+    xp = res ? res.heroXp : xp + gain;
+    xpNext = res ? res.heroXpNext : xpNext;
+    runLevel = res ? res.newLevel : runLevel;
+
+    if (res?.leveledUp) {
+      audio?.playLevelUp?.();
+      emitShockwave(player.x, player.z, 4.6, 0xfde047, 0.36);
+      emitParticles(player.x, 0.9, player.z, 0xfde047, 18, 5.5, 0.16);
+      floatText(`⭐ УРОВЕНЬ ${res.newLevel}! +1 Очко таланта`, player.x, player.z, '#fde047');
+      callbacks?.onHeroLevelUp?.(res);
     }
   }
 
   function triggerNextLevelUpIfReady() {
-    if (awaitingLevelUpChoice || pendingLevelUps <= 0 || runEnded || pendingVictoryPayload) return;
-    pendingLevelUps -= 1;
-    awaitingLevelUpChoice = true;
-    audio?.playLevelUp?.();
-    emitShockwave(player.x, player.z, 4.8, 0xfde047, 0.4);
-    emitParticles(player.x, 0.9, player.z, 0xfde047, 20, 6.0, 0.18);
-
-    const wpnDef = WEAPONS[currentWeaponId] || WEAPONS.club;
-    const choices = progression.rollLevelUpChoices(wpnDef, weaponRunLevel, perks, runLevel);
-    callbacks?.onLevelUpReady?.(choices);
+    // "Благословение душ" combat modal disabled per design: skill points are spent in Menu Talents only.
+    pendingLevelUps = 0;
+    awaitingLevelUpChoice = false;
   }
 
   function applyLevelUpChoice(choiceId) {
@@ -1606,6 +1721,13 @@ export function createCombatController({
       finalAmount *= 1 + enemy.napalmStacks * 0.12;
     }
 
+    // General Mob Armor vs Hero Weapon Armor Penetration (armorPierce)
+    const pierce = clamp(hitMeta?.armorPierceOverride ?? stats?.armorPierce ?? 0, 0, 1);
+    if (!isDoT && enemy.armor > 0) {
+      const effArmor = Math.max(0, enemy.armor * (1 - pierce));
+      finalAmount *= 1 - effArmor;
+    }
+
     // Shieldbearer Frontal Steel Shield (±75° dot-product check!)
     if (isProjectile && !isCrit && enemy.frontArmor > 0) {
       const fx = Math.sin(enemy.facing);
@@ -1616,9 +1738,10 @@ export function createCombatController({
       const dot = fx * toSourceX + fz * toSourceZ;
 
       if (dot >= COS_75_DEG) {
-        // Point-blank < 3.2m shotgun blasts bypass half the shield!
+        // Point-blank < 3.2m shotgun blasts bypass half the shield, plus armorPierce penetrates shields!
         const isPointBlankBuckshot = Boolean(hitMeta.isShotgunPellet && (hitMeta.traveled || 0) < 3.2);
-        const armorMult = isPointBlankBuckshot ? enemy.frontArmor * 0.5 : enemy.frontArmor;
+        const baseFront = isPointBlankBuckshot ? enemy.frontArmor * 0.5 : enemy.frontArmor;
+        const armorMult = baseFront * (1 - pierce * 0.55);
         finalAmount *= 1 - armorMult;
         kx *= isPointBlankBuckshot ? 0.65 : 0.35;
         kz *= isPointBlankBuckshot ? 0.65 : 0.35;
@@ -1641,7 +1764,7 @@ export function createCombatController({
         ? 0.14
         : enemy.isWarden
           ? 0.32
-          : enemy.type === 'brute'
+          : enemy.canCharge
             ? 0.52
             : 1.0;
     enemy.vx += kx * resistMult;
@@ -1892,10 +2015,10 @@ export function createCombatController({
       dyingCorpses.push({ model: enemy.model, age: 0, duration: 0.66 });
     }
 
-    // Bomber spawns 0.80s orange explosive barrel hazard on death!
+    // Toxic Slime / Bomber spawns 0.80s acid/explosive hazard pool on death!
     if (enemy.explodesOnDeath && !enemy.bomberTriggered) {
       enemy.bomberTriggered = true;
-      spawnBomberHazard(enemy.x, enemy.z);
+      spawnBomberHazard(enemy.x, enemy.z, enemy.hazardColor || 0x22c55e);
     }
 
     // 🩸 Казнь Кровопийцы (war_blood_cleave): heal +12 HP per stack every 9 kills!
@@ -1914,6 +2037,23 @@ export function createCombatController({
     const earnedGold = Math.max(1, Math.round((enemy.gold || 1) * (stats?.goldMult || 1)));
     progression.addGold(earnedGold);
     goldRun += earnedGold;
+
+    // Hammer Boss 10% Exclusive Boss Hammer Drop (first clear of milestone Stages 5, 10, 15, 20, 25 ONLY!)
+    if ((enemy.type === 'boss_troll' || enemy.type === 'boss_warden') && [5, 10, 15, 20, 25].includes(currentLevelNumber)) {
+      if (!progression.hasAttemptedBossHammerStage?.(currentLevelNumber)) {
+        progression.markBossHammerAttempted?.(currentLevelNumber);
+        if (!progression.isWeaponUnlocked('boss_hammer') && Math.random() < 0.10) {
+          progression.unlockWeapon('boss_hammer');
+          unlockedWeaponThisRun = WEAPONS.boss_hammer || unlockedWeaponThisRun;
+          audio?.playWeaponUnlock?.();
+          world?.addScreenShake?.(0.68, 0.40);
+          emitShockwave(enemy.x, enemy.z, 7.5, 0xfde047, 0.58);
+          emitParticles(enemy.x, 1.0, enemy.z, 0xfde047, 36, 9.0, 0.24);
+          floatText('🔨 ВЫБИТ ТРОФЕЙ: МОЛОТ КОСТОЛОМА!', player.x, player.z - 1.1, '#fde047');
+          if (WEAPONS.boss_hammer) callbacks?.onWeaponUnlocked?.(WEAPONS.boss_hammer);
+        }
+      }
+    }
 
     // Check if this enemy is a Finale Target (Milestone Boss, Finale Mini-Boss, or Elite Finale Champion)
     let triggersChapterVictory = false;
@@ -1952,7 +2092,7 @@ export function createCombatController({
       return;
     }
 
-    // Rare tactical drops ONLY (Supply Crate, Companion Crate, Heart, Clover — Beast Seals slowed down!)
+    // Rare tactical drops ONLY (Supply Crate, Companion Crate, Heart, Clover)
     const beastNow = player.beastTimeLeft > 0;
     if (enemy.eliteType === 'purple') {
       const dropCompanion = !companion && Math.random() < 0.48 ? 'companion_crate' : 'supply_crate';
@@ -1986,8 +2126,8 @@ export function createCombatController({
     emitParticles(defeatedBoss.x, 0.9, defeatedBoss.z, 0xfbbf24, 34, 8.8, 0.20);
     emitParticles(defeatedBoss.x, 1.1, defeatedBoss.z, 0xfde047, 22, 6.5, 0.16);
 
-    // Reward chapter tier weapon if player hadn't cracked the Relic Crate yet
-    if (currentLevelDef.unlockWeaponTier) {
+    // Reward chapter tier weapon ONLY for classes without Shop weapon purchases
+    if (currentLevelDef.unlockWeaponTier && currentClassId !== 'warrior' && currentClassId !== 'gunslinger') {
       const tierWeapon = findClassWeaponByTier(currentClassId, currentLevelDef.unlockWeaponTier);
       if (tierWeapon && !progression.isWeaponUnlocked(tierWeapon)) {
         unlockTierWeaponIfNeeded(tierWeapon, defeatedBoss.x, defeatedBoss.z, true);
@@ -2013,11 +2153,23 @@ export function createCombatController({
     bossHazards.length = 0;
     bomberHazards.length = 0;
 
+    const hpRatio = player.maxHp > 0 ? clamp(player.hp / player.maxHp, 0, 1) : 1;
+    const elapsedSec = Math.round(elapsedRunTime);
+    const star2 = hpRatio >= 0.55;
+    const star3 = elapsedSec <= 95;
+    const stars = 1 + (star2 ? 1 : 0) + (star3 ? 1 : 0);
+    progression.recordLevelStars?.(currentLevelNumber, stars);
+
     pendingVictoryPayload = {
       victory: true,
       level: currentLevelNumber,
       goldEarned: goldRun,
       kills,
+      hpRatio: +hpRatio.toFixed(2),
+      elapsedSec,
+      stars,
+      starDetails: { win: true, highHp: star2, fastClear: star3 },
+      difficulty: currentDifficulty,
       unlockedWeapon: unlockedWeaponThisRun
     };
     victoryDelayTimer = 0.8;
@@ -2058,13 +2210,6 @@ export function createCombatController({
       floatText('БЛОК!', player.x, player.z, '#fbbf24');
     }
 
-    // ⚔️ Шипованный Бастион (war_shield_thorns): retaliates with steel shrapnel blast!
-    if ((stats?.warThornsStacks || 0) > 0) {
-      const thornDmg = Math.round(stats.damage * (0.75 + stats.warThornsStacks * 0.40));
-      emitShockwave(player.x, player.z, 3.8, 0xfbbf24, 0.28);
-      damageEnemiesInRadius(player.x, player.z, 3.8, thornDmg, 11.5, null, false);
-    }
-
     const finalDmg = Math.max(1, Math.round(dmg));
     player.hp = Math.max(0, player.hp - finalDmg);
     player.invulnTimer = 0.44;
@@ -2083,6 +2228,8 @@ export function createCombatController({
         level: currentLevelNumber,
         goldEarned: goldRun,
         kills,
+        elapsedSec: Math.round(elapsedRunTime),
+        difficulty: currentDifficulty,
         unlockedWeapon: unlockedWeaponThisRun
       });
     }
@@ -2097,6 +2244,7 @@ export function createCombatController({
     damage,
     maxDist,
     pierce = 1,
+    pierceDecay = null,
     splashRadius = 0,
     knockback = 3.0,
     kind = 'ranged',
@@ -2123,6 +2271,8 @@ export function createCombatController({
       traveled: 0,
       maxDist,
       pierceLeft: pierce,
+      pierceDecay,
+      hitsLanded: 0,
       splashRadius,
       knockback,
       kind,
@@ -2140,30 +2290,34 @@ export function createCombatController({
 
   function findAutoAimTarget(maxRange) {
     let bestTarget = null;
-    let bestScore = maxRange * maxRange;
+    let bestScore = maxRange;
+    const arenaCap = ARENA_HALF_SIZE - 0.35;
 
     for (let i = 0; i < enemies.length; i++) {
       const e = enemies[i];
       if (e.hp <= 0) continue;
+      if (Math.abs(e.x) > arenaCap || Math.abs(e.z) > arenaCap) continue;
+      if (!stats?.clampToArenaBounds && world?.isWorldPointVisible && !world.isWorldPointVisible(e.x, e.z, 0.85, 0.93)) continue;
       const dx = e.x - player.x;
       const dz = e.z - player.z;
-      const dSq = dx * dx + dz * dz;
-      if (dSq <= bestScore) {
-        bestScore = dSq;
+      const edgeDist = Math.max(0, Math.hypot(dx, dz) - (e.radius || 0));
+      if (edgeDist <= bestScore) {
+        bestScore = edgeDist;
         bestTarget = e;
       }
     }
 
     if (bestTarget) return bestTarget;
 
-    // Auto-target Relic Weapon Crate when nearby so player can crack its seal cleanly
+    // Auto-target Relic Weapon Crate when nearby AND visible on screen
     for (let i = 0; i < pickups.length; i++) {
       const p = pickups[i];
       if (p.type === 'relic_weapon_crate' && p.hp > 0) {
+        if (world?.isWorldPointVisible && !world.isWorldPointVisible(p.x, p.z, 0.75, 0.93)) continue;
         const dx = p.x - player.x;
         const dz = p.z - player.z;
-        const dSq = dx * dx + dz * dz;
-        if (dSq <= maxRange * maxRange) {
+        const edgeDist = Math.max(0, Math.hypot(dx, dz) - (p.radius || 0));
+        if (edgeDist <= maxRange) {
           return p;
         }
       }
@@ -2192,7 +2346,17 @@ export function createCombatController({
 
     let ammoBeforeShot = player.ammo;
     if (!isOverdrive && usesMag) {
-      if (player.isReloading) return;
+      if (player.isReloading) {
+        // Interruptible shell-by-shell partial reload: firing with loaded shell(s) cancels reload!
+        if ((stats?.reloadPerShellTime || 0) > 0 && player.ammo > 0) {
+          player.isReloading = false;
+          player.reloadTimer = 0;
+          player.reloadShellAccum = 0;
+          syncHeroReloadModel(false);
+        } else {
+          return;
+        }
+      }
       if (player.ammo <= 0) {
         triggerReload();
         return;
@@ -2218,7 +2382,7 @@ export function createCombatController({
     player.facing = aimAngle;
     player.attackAnimTimer = 0.22;
     player.attackCooldown = (isOverdrive ? stats.cooldown / 1.55 : stats.cooldown) / berserkBoost;
-    triggerModelAttack(heroModel, wpn.type);
+    triggerModelAttack(heroModel, wpn.type, player.attackCooldown);
 
     const dirX = Math.sin(aimAngle);
     const dirZ = Math.cos(aimAngle);
@@ -2232,44 +2396,29 @@ export function createCombatController({
       player.recoilVz -= dirZ * wpn.recoilKick * kickScale;
     }
 
-    // 1. WARRIOR MELEE (Visceral Execution Crit Swing with wider blazing crimson-gold arc, blood splatter & crunch — NO flat red rings!)
+    // 1. WARRIOR MELEE:
+    //   - club (Sword): strict single-target precision strike (1 enemy max)
+    //   - spear (Spear): narrow linear thrust piercing up to 2 enemies inline (1st 100%, 2nd 50%; side-by-side mobs NOT hit)
+    //   - axe (Axe): heavy frontal cleave hitting up to 3 enemies IN FRONT at 100% splash damage
+    //   - boss_hammer: heavy seismic shockwave smash
     if (wpn.type === 'melee') {
       player.meleeSwingCount = (player.meleeSwingCount || 0) + 1;
       const effCritChance = Math.max(0.14, stats.critChance || 0.14);
       const isCritSwing = Math.random() < effCritChance;
 
-      audio?.playMeleeSwing?.(wpn.id !== 'club' || isCritSwing);
+      audio?.playMeleeSwing?.(wpn.id, isCritSwing);
       const swingColor = isCritSwing ? 0xdc2626 : isOverdrive ? 0xf97316 : wpn.color;
-      const effRange = isCritSwing ? stats.range * 1.14 : stats.range;
-      const effArc = isCritSwing ? Math.min(Math.PI * 1.65, stats.arcAngle * 1.24) : stats.arcAngle;
-      emitSlashArc(player.x, player.z, aimAngle, effRange, effArc, swingColor);
-      if (isCritSwing) {
-        // Double-layered golden-crimson execution crescent for distinct critical strike silhouette!
-        emitSlashArc(player.x, player.z, aimAngle, effRange * 0.92, effArc * 0.88, 0xfde047);
-      }
-
-      const halfArc = effArc * 0.5 + 0.16;
+      const effRange = isCritSwing ? stats.range * 1.12 : stats.range;
+      const effArc = stats.arcAngle;
+      const halfArc = effArc * 0.5 + 0.14;
       const baseMeleeDmg = Math.round((isOverdrive ? stats.damage * 1.25 : stats.damage) * berserkBoost);
 
-      // 🌋 Раскол Брусчатки (war_seismic_slam): every 3rd sword swing shatters the ground!
-      if ((stats.warSeismicStacks || 0) > 0 && player.meleeSwingCount % 3 === 0) {
-        const slamX = player.x + dirX * 1.8;
-        const slamZ = player.z + dirZ * 1.8;
-        const slamDmg = Math.round(baseMeleeDmg * (0.85 + stats.warSeismicStacks * 0.35));
-        emitShockwave(slamX, slamZ, 4.4, 0xfbbf24, 0.34);
-        emitParticles(slamX, 0.5, slamZ, 0xfde047, 16, 6.8, 0.18);
-        world?.addScreenShake?.(0.28, 0.15);
-        for (let si = enemies.length - 1; si >= 0; si--) {
-          const se = enemies[si];
-          if (!se || se.hp <= 0) continue;
-          const sDist = Math.hypot(se.x - slamX, se.z - slamZ);
-          if (sDist <= 4.4 + se.radius) {
-            se.stunTimer = Math.max(se.stunTimer || 0, se.isBoss ? 0.08 : 0.35);
-            applyDamageToEnemy(se, slamDmg, (se.x - slamX) * 2.5, (se.z - slamZ) * 2.5, false, { isSplash: true });
-          }
-        }
-      }
-
+      // Pick the single best aligned enemy in melee reach (closest + most centered on aim)
+      let bestTarget = null;
+      let bestScore = Infinity;
+      let bestDx = dirX;
+      let bestDz = dirZ;
+      let bestDist = effRange * 0.8;
       for (let i = enemies.length - 1; i >= 0; i--) {
         const e = enemies[i];
         if (!e || e.hp <= 0) continue;
@@ -2280,62 +2429,180 @@ export function createCombatController({
           const angToEnemy = Math.atan2(dx, dz);
           const angDiff = Math.abs(normalizeAngle(angToEnemy - aimAngle));
           if (angDiff <= halfArc || dist <= 1.35) {
-            const nx = dist > 0.001 ? dx / dist : dirX;
-            const nz = dist > 0.001 ? dz / dist : dirZ;
-            const hitDmg = isCritSwing ? Math.round(baseMeleeDmg * (stats.critMult || 1.85)) : baseMeleeDmg;
-            const kbMult = isCritSwing ? 1.32 : 1.0;
-            applyDamageToEnemy(e, hitDmg, nx * stats.knockback * kbMult, nz * stats.knockback * kbMult, true, { isCrit: isCritSwing });
+            const score = dist + angDiff * 1.35;
+            if (score < bestScore) {
+              bestScore = score;
+              bestTarget = e;
+              bestDx = dx;
+              bestDz = dz;
+              bestDist = dist;
+            }
           }
         }
       }
 
-      // Cleave shock damage for Cleaver / Greatsword (sparks & screen punch ONLY — NO confusing red ground circle!)
-      const smashRadius = isOverdrive ? Math.max(2.6, stats.splashRadius * 1.2) : stats.splashRadius;
-      if (smashRadius > 0) {
-        const smashX = player.x + dirX * Math.min(2.4, stats.range * 0.55);
-        const smashZ = player.z + dirZ * Math.min(2.4, stats.range * 0.55);
-        emitParticles(smashX, 0.55, smashZ, 0xfbbf24, 10, 5.8, 0.14);
-        world?.addScreenShake?.(wpn.id === 'flail' ? 0.24 : 0.12, 0.12);
-        damageEnemiesInRadius(smashX, smashZ, smashRadius, Math.round(baseMeleeDmg * 0.55), stats.knockback * 0.6, null, false);
+      const isSpear = wpn.id === 'spear';
+      const isAxe = wpn.id === 'axe';
+      const isZwei = wpn.id === 'zweihander';
+      const isHammer = wpn.id === 'boss_hammer';
+      const isCleaveMelee = isAxe || isZwei || isHammer;
+      const strikeAng = bestTarget ? Math.atan2(bestDx, bestDz) : aimAngle;
+      const strikeVisualArc = isCleaveMelee
+        ? effArc
+        : isSpear
+          ? Math.min(Math.PI * 0.22, effArc * 0.55)
+          : Math.min(Math.PI * 0.36, effArc * 0.55);
+      const strikeVisualRange = isSpear
+        ? Math.max(1.85, effRange)
+        : bestTarget
+          ? Math.min(effRange, Math.max(1.6, bestDist + 0.45))
+          : effRange * 0.92;
+      emitSlashArc(player.x, player.z, strikeAng, isCleaveMelee ? Math.max(1.5, effRange) : strikeVisualRange, strikeVisualArc, swingColor);
+      if (isCritSwing) {
+        emitSlashArc(player.x, player.z, strikeAng, (isCleaveMelee ? Math.max(1.5, effRange) : strikeVisualRange) * 0.94, strikeVisualArc * 0.82, 0xfde047);
       }
 
-      if (isOverdrive) {
-        for (let b = -1; b <= 1; b++) {
-          const bAng = aimAngle + b * 0.22;
-          spawnProjectile({
-            x: muzzleX,
-            z: muzzleZ,
-            vx: Math.sin(bAng) * 20,
-            vz: Math.cos(bAng) * 20,
-            damage: Math.round(stats.damage * 0.65),
-            maxDist: stats.range * 1.9,
-            pierce: 2,
-            splashRadius: 0,
-            knockback: 4.5,
-            kind: 'bullet',
-            visualType: 'buckshot',
-            color: 0xf97316,
-            isEnemy: false
-          });
+      const hitDmg = isCritSwing ? Math.round(baseMeleeDmg * (stats.critMult || 1.85)) : baseMeleeDmg;
+      const kbMult = isCritSwing ? 1.32 : 1.0;
+
+      const findInlineBehindTarget = (ux, uz, primary, primaryDist, maxProjReach) => {
+        let found = null;
+        let bestInlineScore = Infinity;
+        for (let i = enemies.length - 1; i >= 0; i--) {
+          const e = enemies[i];
+          if (!e || e.hp <= 0 || e === primary) continue;
+          const ex = e.x - player.x;
+          const ez = e.z - player.z;
+          const projAlong = ex * ux + ez * uz;
+          const lateralDist = Math.abs(ex * (-uz) + ez * ux);
+          const cap = Math.max(maxProjReach + (e.radius || 0.45), primaryDist + (e.radius || 0.45) * 2.1 + 0.45);
+          if (
+            projAlong > primaryDist + 0.15 &&
+            projAlong <= cap &&
+            lateralDist <= Math.min(0.72, (e.radius || 0.45) + 0.24)
+          ) {
+            const inlineScore = projAlong + lateralDist * 2.0;
+            if (inlineScore < bestInlineScore) {
+              bestInlineScore = inlineScore;
+              found = e;
+            }
+          }
+        }
+        return found;
+      };
+
+      const collectFrontalTargets = (maxCount) => {
+        const extras = [];
+        for (let i = enemies.length - 1; i >= 0; i--) {
+          const e = enemies[i];
+          if (!e || e.hp <= 0 || e === bestTarget) continue;
+          const dx = e.x - player.x;
+          const dz = e.z - player.z;
+          const dist = Math.hypot(dx, dz);
+          if (dist <= effRange + e.radius) {
+            const angDiffFromStrike = Math.abs(normalizeAngle(Math.atan2(dx, dz) - strikeAng));
+            if (angDiffFromStrike <= halfArc) {
+              extras.push({ enemy: e, dx, dz, dist, score: angDiffFromStrike * 1.35 + dist });
+            }
+          }
+        }
+        extras.sort((a, b) => a.score - b.score);
+        const list = [];
+        if (bestTarget) {
+          list.push({ enemy: bestTarget, dx: bestDx, dz: bestDz, dist: bestDist });
+        }
+        const slots = Math.max(0, maxCount - list.length);
+        for (let i = 0; i < Math.min(slots, extras.length); i++) {
+          list.push(extras[i]);
+        }
+        return list;
+      };
+
+      if (isSpear) {
+        const ux = Math.sin(strikeAng);
+        const uz = Math.cos(strikeAng);
+        if (bestTarget) {
+          const nx = bestDist > 0.001 ? bestDx / bestDist : ux;
+          const nz = bestDist > 0.001 ? bestDz / bestDist : uz;
+          const inlineSecond = findInlineBehindTarget(ux, uz, bestTarget, bestDist, effRange + 0.25);
+          applyDamageToEnemy(bestTarget, hitDmg, nx * stats.knockback * kbMult, nz * stats.knockback * kbMult, true, { isCrit: isCritSwing });
+          if (inlineSecond && inlineSecond.hp > 0) {
+            const secDmg = Math.max(1, Math.round(hitDmg * 0.5));
+            applyDamageToEnemy(inlineSecond, secDmg, ux * stats.knockback * 0.72 * kbMult, uz * stats.knockback * 0.72 * kbMult, true, { isCrit: isCritSwing, armorPierceOverride: 0.15 });
+            emitParticles(inlineSecond.x, 0.75, inlineSecond.z, wpn.color || 0x38bdf8, 8, 4.5, 0.18);
+          }
+        }
+        // Bold forward spear-lunge piercing streak VFX along thrust line
+        for (let step = 1; step <= 4; step++) {
+          const d = 0.55 + (step / 4) * Math.max(1.5, effRange);
+          emitParticles(player.x + ux * d, 0.88, player.z + uz * d, wpn.color || 0x38bdf8, 3, 2.8, 0.14);
+        }
+      } else if (isCleaveMelee) {
+        const targetsToHit = collectFrontalTargets(Math.max(1, wpn.maxTargets || (isZwei ? 2 : 3)));
+        if (isHammer && bestTarget) {
+          const ux = Math.sin(strikeAng);
+          const uz = Math.cos(strikeAng);
+          const inlineSecond = findInlineBehindTarget(ux, uz, bestTarget, bestDist, effRange + 0.45);
+          if (inlineSecond && !targetsToHit.some((t) => t.enemy === inlineSecond)) {
+            const idx = inlineSecond.x - player.x;
+            const idz = inlineSecond.z - player.z;
+            targetsToHit.push({ enemy: inlineSecond, dx: idx, dz: idz, dist: Math.hypot(idx, idz) });
+          }
+        }
+        for (const t of targetsToHit) {
+          if (!t.enemy || t.enemy.hp <= 0) continue;
+          const nx = t.dist > 0.001 ? t.dx / t.dist : Math.sin(strikeAng);
+          const nz = t.dist > 0.001 ? t.dz / t.dist : Math.cos(strikeAng);
+          applyDamageToEnemy(t.enemy, hitDmg, nx * stats.knockback * kbMult, nz * stats.knockback * kbMult, true, { isCrit: isCritSwing });
+          if (isHammer && t.enemy.hp > 0 && (wpn.stunChance || 0) > 0 && Math.random() < wpn.stunChance) {
+            t.enemy.stunTimer = Math.max(t.enemy.stunTimer || 0, wpn.stunDuration || 0.5);
+            emitParticles(t.enemy.x, 1.38, t.enemy.z, 0xfacc15, 7, 3.6, 0.14);
+            world?.spawnShockwaveRing?.({ x: t.enemy.x, y: 0.08, z: t.enemy.z, radius: 0.95, color: 0xfacc15, duration: 0.28 });
+          }
+          if (isZwei && t.enemy.hp > 0 && (wpn.disarmChance || 0) > 0 && Math.random() < wpn.disarmChance) {
+            t.enemy.disarmTimer = Math.max(t.enemy.disarmTimer || 0, wpn.disarmDuration || 2.0);
+            emitParticles(t.enemy.x, 1.32, t.enemy.z, 0x93c5fd, 7, 3.6, 0.14);
+            floatText('🗡️ ОБЕЗОРУЖЕН!', t.enemy.x, t.enemy.z, '#93c5fd');
+          }
+        }
+        const cleaveX = bestTarget ? bestTarget.x : player.x + dirX * Math.min(2.0, effRange * 0.75);
+        const cleaveZ = bestTarget ? bestTarget.z : player.z + dirZ * Math.min(2.0, effRange * 0.75);
+        emitParticles(cleaveX, 0.55, cleaveZ, wpn.color || 0xef4444, isHammer ? 14 : 11, 6.0, 0.15);
+        world?.addScreenShake?.(isHammer ? 0.24 : 0.14, 0.12);
+      } else {
+        // Starter Sword ('club'): strict 1-target precision hit
+        if (bestTarget) {
+          const nx = bestDist > 0.001 ? bestDx / bestDist : dirX;
+          const nz = bestDist > 0.001 ? bestDz / bestDist : dirZ;
+          applyDamageToEnemy(bestTarget, hitDmg, nx * stats.knockback * kbMult, nz * stats.knockback * kbMult, true, { isCrit: isCritSwing });
         }
       }
-
-      for (let i = pickups.length - 1; i >= 0; i--) {
-        const p = pickups[i];
-        if (!p || p.hp <= 0) continue;
-        if (p.type !== 'relic_weapon_crate' && p.type !== 'supply_crate') continue;
-        const dx = p.x - player.x;
-        const dz = p.z - player.z;
-        const dist = Math.hypot(dx, dz);
-        if (p.type === 'supply_crate' && dist < 1.65) continue;
-        if (dist <= stats.range + p.radius) {
-          const angDiff = Math.abs(normalizeAngle(Math.atan2(dx, dz) - aimAngle));
-          if (angDiff <= halfArc || dist <= 1.7) {
-            hitCrate(p);
-            if (p.hp <= 0) {
-              removeSceneObject(p.model.obj, p.model.handle);
-              pickups.splice(i, 1);
+      if (!bestTarget) {
+        let bestCrate = null;
+        let bestCrateIdx = -1;
+        let bestCrateDist = Infinity;
+        for (let i = pickups.length - 1; i >= 0; i--) {
+          const p = pickups[i];
+          if (!p || p.hp <= 0) continue;
+          if (p.type !== 'relic_weapon_crate' && p.type !== 'supply_crate' && p.type !== 'mimic_disguise') continue;
+          const dx = p.x - player.x;
+          const dz = p.z - player.z;
+          const dist = Math.hypot(dx, dz);
+          if (p.type === 'supply_crate' && dist < 1.65) continue;
+          if (dist <= stats.range + p.radius) {
+            const angDiff = Math.abs(normalizeAngle(Math.atan2(dx, dz) - aimAngle));
+            if ((angDiff <= halfArc || dist <= 1.7) && dist < bestCrateDist) {
+              bestCrateDist = dist;
+              bestCrate = p;
+              bestCrateIdx = i;
             }
+          }
+        }
+        if (bestCrate) {
+          hitCrate(bestCrate);
+          if (bestCrate.hp <= 0) {
+            removeSceneObject(bestCrate.model.obj, bestCrate.model.handle);
+            pickups.splice(bestCrateIdx, 1);
           }
         }
       }
@@ -2345,31 +2612,42 @@ export function createCombatController({
     // 2. GUNSLINGER HEAVY SHOTGUNS (Buckshot Cloud, Distance Falloff, Recoil & Auto-Reload!)
     if (wpn.type === 'ranged') {
       audio?.playGunshot?.(wpn.id);
-      const flashColor = isOverdrive ? 0xf97316 : wpn.color;
+      const flashColor = isOverdrive ? 0xf97316 : 0xff9f1c;
+      const gunMuzzleX = player.x + dirX * 0.90;
+      const gunMuzzleZ = player.z + dirZ * 0.90;
       world?.spawnMuzzleFlash?.({
-        x: muzzleX,
-        y: 0.82,
-        z: muzzleZ,
+        x: gunMuzzleX,
+        y: 0.86,
+        z: gunMuzzleZ,
         angle: aimAngle,
         color: flashColor,
-        scale: wpn.id === 'blunderbuss' ? 1.48 : 1.18
+        scale: wpn.id === 'blunderbuss' ? 1.56 : 1.28,
+        smoke: true
       });
       if (wpn.isShotgun) {
         world?.addScreenShake?.(wpn.id === 'blunderbuss' ? 0.36 : 0.22, 0.16);
       }
 
-      emitParticles(muzzleX, 0.80, muzzleZ, flashColor, wpn.id === 'blunderbuss' ? 12 : 8, 9.0, 0.11);
+      // Hot fiery muzzle sparks + glowing orange-gold ember droplets matching reference video!
+      emitParticles(gunMuzzleX, 0.86, gunMuzzleZ, flashColor, wpn.id === 'blunderbuss' ? 16 : 12, 10.5, 0.11);
+      emitParticles(gunMuzzleX + dirX * 0.22, 0.86, gunMuzzleZ + dirZ * 0.22, 0xfef08a, 6, 7.5, 0.08);
       const rightX = Math.cos(aimAngle);
       const rightZ = -Math.sin(aimAngle);
-      emitParticles(player.x + rightX * 0.45, 0.78, player.z + rightZ * 0.45, 0xfbbf24, 3, 4.0, 0.08);
+      emitParticles(player.x + rightX * 0.42 + dirX * 0.25, 0.80, player.z + rightZ * 0.42 + dirZ * 0.25, 0xfbbf24, 3, 4.4, 0.08);
 
       player.gunShotCount = (player.gunShotCount || 0) + 1;
       const isLastShell = usesMag && !isOverdrive && ammoBeforeShot === 1 && (stats.ammoPouchStacks || 0) > 0;
       const expSlugStacks = stats.gunExplosiveStacks || 0;
       const isExplosiveShot = expSlugStacks > 0 && player.gunShotCount % (expSlugStacks >= 3 ? 2 : 3) === 0;
 
-      const count = stats.pellets + (isOverdrive ? 2 : 0);
-      const totalSpread = stats.spread + (isOverdrive ? 0.06 : 0);
+      const count = wpn.isShotgun ? stats.pellets + (isOverdrive ? 2 : 0) : stats.pellets;
+      const moveSp = stats.moveSpread ?? stats.spread ?? 0;
+      const focusSp = stats.focusSpread ?? moveSp;
+      const focusT = stats.focusTime || 0;
+      const focusRatio = focusT > 0 ? clamp((player.standStillTimer || 0) / focusT, 0, 1) : 1;
+      const activeSpreadPct = moveSp + (focusSp - moveSp) * focusRatio;
+      const totalSpread =
+        (wpn.isShotgun ? activeSpreadPct * 0.95 : activeSpreadPct * 0.90) + (isOverdrive ? 0.06 : 0);
       const projSplash = isExplosiveShot
         ? 2.25
         : isOverdrive
@@ -2390,10 +2668,10 @@ export function createCombatController({
         const jitter = (Math.random() - 0.5) * (count > 1 ? totalSpread * 0.30 : totalSpread);
         const shotAngle = aimAngle + frac * totalSpread + jitter;
         const pelletSpeed = wpn.isShotgun
-          ? stats.projectileSpeed * (0.88 + Math.random() * 0.24)
+          ? stats.projectileSpeed * (0.90 + Math.random() * 0.20)
           : stats.projectileSpeed;
         const pelletMaxDist = wpn.isShotgun
-          ? stats.range * (0.90 + Math.random() * 0.16)
+          ? stats.range * (0.92 + Math.random() * 0.14)
           : stats.range;
 
         spawnProjectile({
@@ -2404,6 +2682,7 @@ export function createCombatController({
           damage: pelletDmg,
           maxDist: pelletMaxDist,
           pierce: stats.pierce + (isOverdrive ? 1 : 0),
+          pierceDecay: stats.pierceDecay || null,
           splashRadius: projSplash,
           knockback: stats.knockback,
           kind: 'ranged',
@@ -2421,14 +2700,19 @@ export function createCombatController({
       return;
     }
 
-    // 3. MAGE ELEMENTAL STAVES (Fire = Burn DoT, Water = Slow + 7% 3D Water Sphere, Lightning = Chain, Air = Small Wind Gust!)
+    // 3. MAGE ELEMENTAL STAVES (Fire = Burn DoT, Water = Charged Swirling Sphere + 7% Water Prison, Lightning = Chain, Air = Wind Gust!)
     const mageElem = stats.mageElement || 'fire';
     player.mageCastCount = (player.mageCastCount || 0) + 1;
     audio?.playMagicCast?.(mageElem);
     const castColor = isOverdrive ? 0xf43f5e : (stats.mageElementColor || wpn.color);
-    world?.spawnMuzzleFlash?.({ x: muzzleX, y: 0.85, z: muzzleZ, angle: aimAngle, color: castColor, scale: 1.24 });
+    const staffTipX = player.x + dirX * 1.04;
+    const staffTipZ = player.z + dirZ * 1.04;
+    world?.spawnMuzzleFlash?.({ x: staffTipX, y: 0.92, z: staffTipZ, angle: aimAngle, color: castColor, scale: mageElem === 'water' ? 1.42 : 1.24 });
     world?.addScreenShake?.(wpn.id === 'void_orb' ? 0.16 : 0.08, 0.10);
-    emitParticles(muzzleX, 0.84, muzzleZ, castColor, 8, 5.2, 0.14);
+    emitParticles(staffTipX, 0.92, staffTipZ, castColor, mageElem === 'water' ? 12 : 8, 6.2, 0.14);
+    if (mageElem === 'water') {
+      emitParticles(staffTipX, 0.92, staffTipZ, 0xe0faff, 6, 4.8, 0.10);
+    }
 
     // 💧 Астральный Колодец (mage_mana_font): every 6th cast restores +16 Mana & pulses arcane wave!
     if ((stats.mageManaFontStacks || 0) > 0 && player.mageCastCount % 6 === 0) {
@@ -2449,8 +2733,8 @@ export function createCombatController({
       const frac = orbCount > 1 ? i / (orbCount - 1) - 0.5 : 0;
       const shotAngle = aimAngle + frac * orbSpread + (Math.random() - 0.5) * 0.025;
       spawnProjectile({
-        x: muzzleX,
-        z: muzzleZ,
+        x: staffTipX,
+        z: staffTipZ,
         vx: Math.sin(shotAngle) * stats.projectileSpeed,
         vz: Math.cos(shotAngle) * stats.projectileSpeed,
         damage: stats.damage,
@@ -2476,30 +2760,40 @@ export function createCombatController({
   function startWaveFinale() {
     finaleStarted = true;
 
-    // 1. Milestone Act Boss Chapters (Levels 5, 10, 15, 20, 25)
-    if (currentLevelDef.hasBoss && currentLevelDef.bossId) {
-      const bossId = currentLevelDef.bossId;
-      const bossDef = ENEMY_TYPES[bossId] || ENEMY_TYPES.boss_butcher;
+    // 1. Milestone Act Boss Chapters (Levels 5, 10, 15, 20, 25 — including paired/squad Bosses!)
+    if (currentLevelDef.hasBoss && (currentLevelDef.finaleBosses?.length > 0 || currentLevelDef.bossId)) {
+      const bossIds =
+        currentLevelDef.finaleBosses?.length > 0
+          ? currentLevelDef.finaleBosses
+          : [currentLevelDef.bossId, ...(currentLevelDef.coBossId ? [currentLevelDef.coBossId] : [])];
 
       world?.setBossAtmosphere?.(true);
       audio?.playBossSpawn?.();
       world?.addScreenShake?.(0.82, 0.5);
 
-      const angle = Math.random() * TWO_PI;
-      const bx = clamp(player.x + Math.sin(angle) * 16, -ARENA_HALF_SIZE + 5, ARENA_HALF_SIZE - 5);
-      const bz = clamp(player.z + Math.cos(angle) * 16, -ARENA_HALF_SIZE + 5, ARENA_HALF_SIZE - 5);
-
-      bossEntity = spawnEnemy(bossId, bx, bz, null, {
-        isFinaleTarget: true
-      });
-      emitShockwave(bossEntity.x, bossEntity.z, 8.8, bossDef.color || 0xdc2626, 0.6);
-      emitParticles(bossEntity.x, 1.2, bossEntity.z, bossDef.color || 0xdc2626, 36, 8.2, 0.24);
-      floatText(`💀 ${bossDef.nameRu.toUpperCase()}!`, player.x, player.z - 1.2, '#ef4444');
+      const baseAngle = Math.random() * TWO_PI;
+      const spawnedNames = [];
+      for (let bi = 0; bi < bossIds.length; bi++) {
+        const bId = bossIds[bi];
+        const bDef = ENEMY_TYPES[bId] || ENEMY_TYPES.boss_troll;
+        const ang = baseAngle + (bi / Math.max(1, bossIds.length)) * TWO_PI;
+        const bx = clamp(player.x + Math.sin(ang) * 16, -ARENA_HALF_SIZE + 5, ARENA_HALF_SIZE - 5);
+        const bz = clamp(player.z + Math.cos(ang) * 16, -ARENA_HALF_SIZE + 5, ARENA_HALF_SIZE - 5);
+        const spawnedBoss = spawnEnemy(bId, bx, bz, null, { isFinaleTarget: true });
+        if (bi === 0) bossEntity = spawnedBoss;
+        emitShockwave(spawnedBoss.x, spawnedBoss.z, 8.5, bDef.color || 0xdc2626, 0.58);
+        emitParticles(spawnedBoss.x, 1.2, spawnedBoss.z, bDef.color || 0xdc2626, 34, 8.0, 0.22);
+        spawnedNames.push(bDef.nameRu);
+      }
+      const uniqueSummary = spawnedNames.length > 1
+        ? `💀 БОССЫ (${spawnedNames.length}): ${spawnedNames[0].toUpperCase()}...`
+        : `💀 ${(spawnedNames[0] || 'БОСС').toUpperCase()}!`;
+      floatText(uniqueSummary, player.x, player.z - 1.2, '#ef4444');
       return;
     }
 
-    // 2. Non-Boss Chapters in Acts II–V (Levels 6-9, 11-14, 16-19, 21-24): Finale Mini-Boss!
-    if (currentLevelDef.miniBossPool && currentLevelDef.miniBossPool.length > 0) {
+    // 2. Non-Boss Chapters (Stage 1: Slime, Stage 2: Treant, Stage 3: Mimic, etc.): Finale Mini-Boss!
+    if (currentLevelDef.finaleMiniBossType || (currentLevelDef.miniBossPool && currentLevelDef.miniBossPool.length > 0)) {
       spawnMiniBossFromPool(true);
       return;
     }
@@ -2508,10 +2802,10 @@ export function createCombatController({
     audio?.playBossSpawn?.();
     world?.addScreenShake?.(0.45, 0.30);
 
-    const pool = currentLevelDef.enemyPool || ['skeleton', 'hound'];
+    const pool = currentLevelDef.enemyPool || ['ember_skeleton', 'goblin'];
     const champTypes = [
-      pool[pool.length - 1] || 'hound',
-      pool[Math.max(0, pool.length - 2)] || 'skeleton'
+      pool[pool.length - 1] || 'goblin',
+      pool[Math.max(0, pool.length - 2)] || 'ember_skeleton'
     ];
     const hpScale = currentLevelDef.hpScale || 1;
     const dmgScale = currentLevelDef.dmgScale || 1;
@@ -2519,7 +2813,7 @@ export function createCombatController({
     let leadChamp = null;
     for (let c = 0; c < 2; c++) {
       const cType = champTypes[c];
-      const cDef = ENEMY_TYPES[cType] || ENEMY_TYPES.skeleton;
+      const cDef = ENEMY_TYPES[cType] || ENEMY_TYPES.ember_skeleton || ENEMY_TYPES.skeleton;
       const angle = (c === 0 ? 0.35 : Math.PI + 0.35) + Math.random() * 0.5;
       const cx = clamp(player.x + Math.sin(angle) * 14.5, -ARENA_HALF_SIZE + 4, ARENA_HALF_SIZE - 4);
       const cz = clamp(player.z + Math.cos(angle) * 14.5, -ARENA_HALF_SIZE + 4, ARENA_HALF_SIZE - 4);
@@ -2554,7 +2848,7 @@ export function createCombatController({
     const mbScale = boss.isMiniBoss ? 0.82 : 1.0;
 
     // ------------------------------------------------------------------------
-    // 1. BOSS_BUTCHER (Act I): Double-Leap Shockwaves + Twin-Cleaver Frenzy
+    // 1. BOSS_BUTCHER (Act I — Демон Преисподней): Double-Leap Magma Shockwaves + Greatsword Frenzy
     // ------------------------------------------------------------------------
     if (boss.type === 'boss_butcher') {
       if (boss.bossPhase === 0) {
@@ -2574,11 +2868,11 @@ export function createCombatController({
             boss.dashTargetX = clamp(boss.x + (dx / dist) * jumpDist, -ARENA_ENTITY_LIMIT, ARENA_ENTITY_LIMIT);
             boss.dashTargetZ = clamp(boss.z + (dz / dist) * jumpDist, -ARENA_ENTITY_LIMIT, ARENA_ENTITY_LIMIT);
             boss.facing = angleToPlayer;
-            emitDangerZone(boss.dashTargetX, boss.dashTargetZ, 3.4 * mbScale, 0.62, 0xdc2626);
-            floatText('⚠️ ПРЫЖОК МЯСНИКА!', boss.x, boss.z, '#f87171');
+            emitDangerZone(boss.dashTargetX, boss.dashTargetZ, 3.4 * mbScale, 0.62, 0xea580c);
+            floatText('🔥 ПРЫЖОК ДЕМОНА!', boss.x, boss.z, '#fb923c');
           }
         } else if (boss.bossSubState === 'leap_telegraph') {
-          emitParticles(boss.x, 0.8, boss.z, 0xdc2626, 1, 2.8, 0.13);
+          emitParticles(boss.x, 0.8, boss.z, 0xf97316, 1, 2.8, 0.13);
           if (boss.bossStateTimer <= 0) {
             boss.bossSubState = 'leaping';
             boss.bossStateTimer = 0.32;
@@ -2597,8 +2891,8 @@ export function createCombatController({
             const slamRad = 3.4 * mbScale;
             audio?.playExplosion?.();
             world?.addScreenShake?.(boss.isMiniBoss ? 0.34 : 0.52, 0.24);
-            emitShockwave(boss.x, boss.z, slamRad, 0xdc2626, 0.36);
-            emitParticles(boss.x, 0.4, boss.z, 0xef4444, 18, 6.8, 0.18);
+            emitShockwave(boss.x, boss.z, slamRad, 0xea580c, 0.36);
+            emitParticles(boss.x, 0.4, boss.z, 0xf97316, 18, 6.8, 0.18);
 
             if (Math.hypot(player.x - boss.x, player.z - boss.z) <= slamRad + player.radius * 0.45) {
               applyDamageToPlayer(boss.damage);
@@ -2618,7 +2912,7 @@ export function createCombatController({
               boss.dashTargetX = clamp(boss.x + (ndx / ndist) * jump2, -ARENA_ENTITY_LIMIT, ARENA_ENTITY_LIMIT);
               boss.dashTargetZ = clamp(boss.z + (ndz / ndist) * jump2, -ARENA_ENTITY_LIMIT, ARENA_ENTITY_LIMIT);
               boss.facing = Math.atan2(ndx, ndz);
-              emitDangerZone(boss.dashTargetX, boss.dashTargetZ, slamRad, 0.56, 0xdc2626);
+              emitDangerZone(boss.dashTargetX, boss.dashTargetZ, slamRad, 0.56, 0xea580c);
             } else {
               boss.bossPhase = 1;
               boss.bossSubState = 'cleave_chase';
@@ -2638,7 +2932,7 @@ export function createCombatController({
             triggerModelAttack(boss.model);
             audio?.playMeleeSwing?.(true);
             const reach = 4.7 * mbScale;
-            emitSlashArc(boss.x, boss.z, angleToPlayer, reach, Math.PI * 1.35, 0xef4444);
+            emitSlashArc(boss.x, boss.z, angleToPlayer, reach, Math.PI * 1.35, 0xf97316);
             if (dist <= reach + player.radius * 0.4) {
               applyDamageToPlayer(boss.damage);
             }
@@ -2653,124 +2947,115 @@ export function createCombatController({
     }
 
     // ------------------------------------------------------------------------
-    // 2. BOSS_WARDEN (Act II): Bull-Charge & 2 Expanding Quake Rings
+    // 2. BOSS_TROLL / BOSS_WARDEN (Тролль-Костолом): Hammer Cleave & Juggernaut Whirlwind Spin (NO jumps/leaps!)
     // ------------------------------------------------------------------------
-    if (boss.type === 'boss_warden') {
+    if (boss.type === 'boss_warden' || boss.type === 'boss_troll') {
+      boss.meleeCooldown = Math.max(0, (boss.meleeCooldown || 0) - dt);
+      boss.spinHitTimer = Math.max(0, (boss.spinHitTimer || 0) - dt);
+      boss.spinVfxTimer = Math.max(0, (boss.spinVfxTimer || 0) - dt);
+
       if (boss.bossPhase === 0) {
         if (boss.bossSubState === 'stalk') {
-          boss.facing = lerpAngle(boss.facing, angleToPlayer, dt * 7);
-          boss.x += (dx / dist) * effSpeed * dt;
-          boss.z += (dz / dist) * effSpeed * dt;
+          boss.model?.handle?.setClipOverride?.(null);
+          boss.facing = lerpAngle(boss.facing, angleToPlayer, dt * 7.5);
+          if (dist > 2.2) {
+            boss.x += (dx / dist) * effSpeed * dt;
+            boss.z += (dz / dist) * effSpeed * dt;
+          }
 
-          if (boss.bossStateTimer <= 0 || dist < 9.5) {
-            boss.bossSubState = 'charge_telegraph';
-            boss.bossStateTimer = 0.65;
-            boss.dashStartX = dx / dist;
-            boss.dashStartZ = dz / dist;
-            boss.facing = angleToPlayer;
-            emitDangerZone(
-              clamp(boss.x + boss.dashStartX * 5.2, -ARENA_ENTITY_LIMIT, ARENA_ENTITY_LIMIT),
-              clamp(boss.z + boss.dashStartZ * 5.2, -ARENA_ENTITY_LIMIT, ARENA_ENTITY_LIMIT),
-              2.6 * mbScale,
-              0.65,
-              0x3b82f6
-            );
-            floatText('⚠️ ЖЕЛЕЗНЫЙ ТАРАН!', boss.x, boss.z, '#60a5fa');
-          }
-        } else if (boss.bossSubState === 'charge_telegraph') {
-          emitParticles(boss.x, 0.9, boss.z, 0x60a5fa, 2, 3.2, 0.14);
-          if (boss.bossStateTimer <= 0) {
-            boss.bossSubState = 'charging';
-            boss.bossStateTimer = 0.54;
-            triggerModelAttack(boss.model);
+          if (dist <= 3.1 * mbScale && boss.meleeCooldown <= 0) {
+            boss.meleeCooldown = 1.65;
+            triggerModelAttack(boss.model, 'Heavy_Cleave');
             audio?.playMeleeSwing?.(true);
+            emitSlashArc(boss.x, boss.z, boss.facing, 3.25 * mbScale, Math.PI * 0.95, 0xf59e0b);
+            if (dist <= 2.95 * mbScale) {
+              applyDamageToPlayer(boss.damage);
+            }
           }
-        } else if (boss.bossSubState === 'charging') {
-          boss.x += boss.dashStartX * 19.0 * slowMult * dt;
-          boss.z += boss.dashStartZ * 19.0 * slowMult * dt;
-          if (Math.random() < 0.6) {
-            emitParticles(boss.x, 0.3, boss.z, 0x60a5fa, 2, 3.0, 0.14);
+
+          if (boss.bossStateTimer <= 0 && dist <= 13.5) {
+            boss.bossSubState = 'whirl_windup';
+            boss.bossStateTimer = 0.62;
+            boss.facing = angleToPlayer;
+            emitDangerZone(boss.x, boss.z, 2.95 * mbScale, 0.62, 0xd97706);
+            emitParticles(boss.x, 1.0, boss.z, 0xf59e0b, 14, 4.5, 0.16);
+            floatText('🌀 ВИХРЬ МОЛОТА!', boss.x, boss.z, '#fbbf24');
+          }
+        } else if (boss.bossSubState === 'whirl_windup') {
+          boss.facing = lerpAngle(boss.facing, angleToPlayer, dt * 8);
+          boss.x += (dx / dist) * (effSpeed * 0.25) * dt;
+          boss.z += (dz / dist) * (effSpeed * 0.25) * dt;
+          if (Math.random() < 0.55) {
+            emitParticles(boss.x, 0.9, boss.z, 0xf59e0b, 2, 3.2, 0.14);
           }
           if (boss.bossStateTimer <= 0) {
             boss.bossPhase = 1;
-            boss.bossSubState = 'quake_prep_1';
-            boss.bossStateTimer = 0.65;
-            emitDangerZone(boss.x, boss.z, 4.2 * mbScale, 0.65, 0x3b82f6);
-            floatText('💥 РАСКОЛ ЗЕМЛИ!', boss.x, boss.z, '#93c5fd');
+            boss.bossSubState = 'whirl_spin';
+            boss.bossStateTimer = 3.2;
+            boss.spinHitTimer = 0;
+            boss.spinVfxTimer = 0;
+            boss.model?.handle?.setClipOverride?.('Whirl_Spin');
+            audio?.playMeleeSwing?.(true);
+            emitShockwave(boss.x, boss.z, 3.1 * mbScale, 0xf59e0b, 0.35);
           }
         }
       } else {
-        boss.facing = lerpAngle(boss.facing, angleToPlayer, dt * 5);
-        if (boss.bossSubState === 'quake_prep_1' && boss.bossStateTimer <= 0) {
-          const r1 = 4.2 * mbScale;
-          triggerModelAttack(boss.model);
-          audio?.playExplosion?.();
-          world?.addScreenShake?.(boss.isMiniBoss ? 0.35 : 0.55, 0.25);
-          emitShockwave(boss.x, boss.z, r1, 0x3b82f6, 0.4);
-          if (Math.hypot(player.x - boss.x, player.z - boss.z) <= r1 + player.radius * 0.4) {
-            applyDamageToPlayer(boss.damage);
+        if (boss.bossSubState === 'whirl_spin') {
+          boss.model?.handle?.setClipOverride?.('Whirl_Spin');
+          // Rapidly spins around like Juggernaut while chasing with a mild speed boost slower than the hero!
+          boss.facing += dt * 11.4;
+          const spinSpeed = Math.min(4.15, effSpeed * 1.24);
+          boss.x += (dx / dist) * spinSpeed * dt;
+          boss.z += (dz / dist) * spinSpeed * dt;
+
+          if (boss.spinVfxTimer <= 0) {
+            boss.spinVfxTimer = 0.28;
+            audio?.playMeleeSwing?.(false);
+            emitSlashArc(boss.x, boss.z, boss.facing, 3.05 * mbScale, Math.PI * 1.5, 0xf97316);
+            emitParticles(boss.x, 0.65, boss.z, 0xfbbf24, 5, 4.5, 0.13);
           }
-          const shardCount = boss.isMiniBoss ? 4 : 6;
-          for (let s = 0; s < shardCount; s++) {
-            const sa = angleToPlayer + (s / shardCount) * TWO_PI;
-            spawnProjectile({
-              x: boss.x,
-              z: boss.z,
-              vx: Math.sin(sa) * 12.5,
-              vz: Math.cos(sa) * 12.5,
-              damage: Math.round(boss.damage * 0.78),
-              maxDist: 17,
-              kind: 'enemy',
-              color: 0x60a5fa,
-              isEnemy: true
-            });
+
+          if (dist <= 2.75 * mbScale && boss.spinHitTimer <= 0) {
+            boss.spinHitTimer = 0.52;
+            world?.addScreenShake?.(0.32, 0.18);
+            applyDamageToPlayer(Math.round(boss.damage * 0.85));
           }
-          boss.bossSubState = 'quake_prep_2';
-          boss.bossStateTimer = 0.62;
-          emitDangerZone(boss.x, boss.z, 5.6 * mbScale, 0.62, 0x2563eb);
-        } else if (boss.bossSubState === 'quake_prep_2' && boss.bossStateTimer <= 0) {
-          const r2 = 5.6 * mbScale;
-          triggerModelAttack(boss.model);
-          audio?.playExplosion?.();
-          world?.addScreenShake?.(boss.isMiniBoss ? 0.38 : 0.60, 0.28);
-          emitShockwave(boss.x, boss.z, r2, 0x60a5fa, 0.45);
-          if (Math.hypot(player.x - boss.x, player.z - boss.z) <= r2 + player.radius * 0.4) {
-            applyDamageToPlayer(boss.damage);
+
+          if (boss.bossStateTimer <= 0) {
+            boss.model?.handle?.setClipOverride?.(null);
+            boss.bossSubState = 'recover';
+            boss.bossStateTimer = 1.25;
+            emitShockwave(boss.x, boss.z, 2.8 * mbScale, 0xd97706, 0.3);
           }
-          const shardCount = boss.isMiniBoss ? 4 : 6;
-          for (let s = 0; s < shardCount; s++) {
-            const sa = angleToPlayer + ((s + 0.5) / shardCount) * TWO_PI;
-            spawnProjectile({
-              x: boss.x,
-              z: boss.z,
-              vx: Math.sin(sa) * 13.5,
-              vz: Math.cos(sa) * 13.5,
-              damage: Math.round(boss.damage * 0.78),
-              maxDist: 18,
-              kind: 'enemy',
-              color: 0x93c5fd,
-              isEnemy: true
-            });
-          }
-          boss.bossSubState = 'recover';
-          boss.bossStateTimer = 1.05;
         } else if (boss.bossSubState === 'recover' && boss.bossStateTimer <= 0) {
+          boss.model?.handle?.setClipOverride?.(null);
           boss.bossPhase = 0;
           boss.bossSubState = 'stalk';
-          boss.bossStateTimer = 1.8;
+          boss.bossStateTimer = 3.6;
         }
       }
       return;
     }
 
     // ------------------------------------------------------------------------
-    // 3. BOSS_ARCHLICH (Act III): 8-Bolt Spiral Volleys + Plague Zones + Summons
+    // 3. BOSS_ARCHLICH (Stage 10 Co-Boss — Король-Лич): Dark Flame Spiral + Cursed Rune Zones + Shadow Blink + Undead Raise
     // ------------------------------------------------------------------------
     if (boss.type === 'boss_archlich') {
+      boss.blinkCooldown = Math.max(0, (boss.blinkCooldown || 0) - dt);
       boss.facing = lerpAngle(boss.facing, angleToPlayer, dt * 7);
       if (dist > 9.5) {
         boss.x += (dx / dist) * effSpeed * dt;
         boss.z += (dz / dist) * effSpeed * dt;
+      } else if (dist < 4.3 && boss.blinkCooldown <= 0) {
+        boss.blinkCooldown = 7.5;
+        emitShockwave(boss.x, boss.z, 3.2, 0xa855f7, 0.35);
+        emitParticles(boss.x, 1.0, boss.z, 0xc084fc, 18, 6.0, 0.16);
+        const blinkAng = angleToPlayer + Math.PI + (Math.random() - 0.5) * 1.1;
+        boss.x = clamp(player.x - Math.sin(blinkAng) * 9.5, -ARENA_ENTITY_LIMIT, ARENA_ENTITY_LIMIT);
+        boss.z = clamp(player.z - Math.cos(blinkAng) * 9.5, -ARENA_ENTITY_LIMIT, ARENA_ENTITY_LIMIT);
+        emitShockwave(boss.x, boss.z, 3.6, 0xd946ef, 0.42);
+        emitParticles(boss.x, 1.0, boss.z, 0xd946ef, 22, 6.5, 0.18);
+        floatText('🌑 ТЕНЕВОЙ ШАГ!', boss.x, boss.z, '#e879f9');
       } else if (dist < 5.5) {
         boss.x -= (dx / dist) * (effSpeed * 0.55) * dt;
         boss.z -= (dz / dist) * (effSpeed * 0.55) * dt;
@@ -2779,10 +3064,10 @@ export function createCombatController({
       if (boss.bossPhase === 0) {
         if (boss.bossSubState === 'stalk' && boss.bossStateTimer <= 0) {
           boss.bossSubState = 'spiral_1';
-          boss.bossStateTimer = 0.48;
-          triggerModelAttack(boss.model);
+          boss.bossStateTimer = 0.52;
+          triggerModelAttack(boss.model, 'Spellcast_Shoot');
           audio?.playMagicCast?.('spark_staff');
-          floatText('☠️ СПИРАЛЬ МОРА!', boss.x, boss.z, '#34d399');
+          floatText('🔮 СПИРАЛЬ ПЛАМЕНИ!', boss.x, boss.z, '#c084fc');
 
           const boltCount = boss.isMiniBoss ? 6 : 8;
           for (let b = 0; b < boltCount; b++) {
@@ -2790,12 +3075,12 @@ export function createCombatController({
             spawnProjectile({
               x: boss.x,
               z: boss.z,
-              vx: Math.sin(ba) * 11.5,
-              vz: Math.cos(ba) * 11.5,
-              damage: Math.round(boss.damage * 0.80),
+              vx: Math.sin(ba) * 11.2,
+              vz: Math.cos(ba) * 11.2,
+              damage: Math.round(boss.damage * 0.78),
               maxDist: 20,
               kind: 'enemy',
-              color: 0x10b981,
+              color: 0xa855f7,
               isEnemy: true
             });
           }
@@ -2803,7 +3088,7 @@ export function createCombatController({
           boss.bossPhase = 1;
           boss.bossSubState = 'plague_cast';
           boss.bossStateTimer = 0.95;
-          triggerModelAttack(boss.model);
+          triggerModelAttack(boss.model, 'Spellcast_Shoot');
           audio?.playMagicCast?.('void_orb');
 
           const boltCount = boss.isMiniBoss ? 6 : 8;
@@ -2812,12 +3097,12 @@ export function createCombatController({
             spawnProjectile({
               x: boss.x,
               z: boss.z,
-              vx: Math.sin(ba) * 12.0,
-              vz: Math.cos(ba) * 12.0,
-              damage: Math.round(boss.damage * 0.80),
+              vx: Math.sin(ba) * 11.6,
+              vz: Math.cos(ba) * 11.6,
+              damage: Math.round(boss.damage * 0.78),
               maxDist: 20,
               kind: 'enemy',
-              color: 0x34d399,
+              color: 0xc084fc,
               isEnemy: true
             });
           }
@@ -2825,36 +3110,38 @@ export function createCombatController({
       } else if (boss.bossPhase === 1) {
         if (boss.bossSubState === 'plague_cast' && boss.bossStateTimer <= 0) {
           boss.bossSubState = 'plague_wait';
-          boss.bossStateTimer = 1.15;
+          boss.bossStateTimer = 1.25;
+          triggerModelAttack(boss.model, 'Spellcast_Shoot');
+          floatText('🟣 РУНЫ ИСТОЩЕНИЯ!', boss.x, boss.z, '#d8b4fe');
           const zoneCount = boss.isMiniBoss ? 2 : 3;
           for (let c = 0; c < zoneCount; c++) {
-            const offAng = angleToPlayer + (c - (zoneCount - 1) * 0.5) * 0.9;
-            const offDist = c === 0 ? 0 : 3.4;
+            const offAng = angleToPlayer + (c - (zoneCount - 1) * 0.5) * 0.95;
+            const offDist = c === 0 ? 0 : 3.6;
             const zx = clamp(player.x + Math.sin(offAng) * offDist, -ARENA_ENTITY_LIMIT, ARENA_ENTITY_LIMIT);
             const zz = clamp(player.z + Math.cos(offAng) * offDist, -ARENA_ENTITY_LIMIT, ARENA_ENTITY_LIMIT);
-            const zRad = 2.8 * mbScale;
-            emitDangerZone(zx, zz, zRad, 1.05, 0x10b981);
+            const zRad = 2.7 * mbScale;
+            emitDangerZone(zx, zz, zRad, 1.15, 0x9333ea);
             bossHazards.push({
               x: zx,
               z: zz,
               radius: zRad,
-              timer: 1.05,
-              damage: Math.round(boss.damage * 0.9),
-              color: 0x10b981
+              timer: 1.15,
+              damage: Math.round(boss.damage * 0.85),
+              color: 0xa855f7
             });
           }
         } else if (boss.bossSubState === 'plague_wait' && boss.bossStateTimer <= 0) {
           boss.bossPhase = 2;
           boss.bossSubState = 'summon';
-          boss.bossStateTimer = 0.6;
+          boss.bossStateTimer = 0.65;
         }
       } else {
         if (boss.bossSubState === 'summon' && boss.bossStateTimer <= 0) {
           boss.bossSubState = 'recover';
-          boss.bossStateTimer = 1.25;
-          triggerModelAttack(boss.model);
-          emitShockwave(boss.x, boss.z, 5.2 * mbScale, 0x10b981, 0.45);
-          floatText('💀 ВОССТАНЬТЕ!', boss.x, boss.z, '#6ee7b7');
+          boss.bossStateTimer = 1.45;
+          triggerModelAttack(boss.model, 'Spellcast_Shoot');
+          emitShockwave(boss.x, boss.z, 5.2 * mbScale, 0xa855f7, 0.45);
+          floatText('💀 ВОССТАНЬТЕ!', boss.x, boss.z, '#d8b4fe');
 
           const count = boss.isMiniBoss ? 2 : 3;
           for (let s = 0; s < count; s++) {
@@ -2862,20 +3149,20 @@ export function createCombatController({
             const sAng = (s / count) * TWO_PI + elapsedTime;
             const sx = clamp(boss.x + Math.cos(sAng) * 3.1, -ARENA_ENTITY_LIMIT, ARENA_ENTITY_LIMIT);
             const sz = clamp(boss.z + Math.sin(sAng) * 3.1, -ARENA_ENTITY_LIMIT, ARENA_ENTITY_LIMIT);
-            spawnEnemy('skeleton', sx, sz, null, { isSummoned: true, xp: 5, gold: 2 });
-            emitParticles(sx, 0.6, sz, 0x10b981, 8, 4.0, 0.14);
+            spawnEnemy(s % 2 === 0 ? 'plague_zombie' : 'vampire_bat', sx, sz, null, { isSummoned: true, xp: 5, gold: 2 });
+            emitParticles(sx, 0.6, sz, 0xa855f7, 8, 4.0, 0.14);
           }
         } else if (boss.bossSubState === 'recover' && boss.bossStateTimer <= 0) {
           boss.bossPhase = 0;
           boss.bossSubState = 'stalk';
-          boss.bossStateTimer = 1.65;
+          boss.bossStateTimer = 1.75;
         }
       }
       return;
     }
 
     // ------------------------------------------------------------------------
-    // 5. BOSS_ASHLORD (Act V Final Ultra-Boss): Blazing Dash + 5 Meteors + Elite Guard
+    // 5. BOSS_ASHLORD (Act V Final Ultra-Boss — Пепельный Дракон): Dragon Swoop + 5 Meteors + Dragon Guard
     // ------------------------------------------------------------------------
     if (boss.type === 'boss_ashlord') {
       if (boss.bossPhase === 0) {
@@ -2893,7 +3180,7 @@ export function createCombatController({
             boss.facing = angleToPlayer;
             emitDangerZone(boss.dashTargetX, boss.dashTargetZ, 4.2, 0.62, 0xf97316);
             emitParticles(boss.x, 1.3, boss.z, 0xf97316, 18, 6.0, 0.18);
-            floatText('🔥 НАТИСК ПЕПЛА!', boss.x, boss.z, '#fb923c');
+            floatText('🐉 ПИКЕ ДРАКОНА!', boss.x, boss.z, '#fb923c');
           }
         } else if (boss.bossSubState === 'telegraph_dash') {
           emitParticles(boss.x, 1.0, boss.z, 0xef4444, 2, 3.5, 0.14);
@@ -2957,7 +3244,7 @@ export function createCombatController({
           boss.bossStateTimer = 1.25;
           triggerModelAttack(boss.model);
           audio?.playMagicCast?.('cinder_tome');
-          floatText('☄️ МЕТЕОРЫ ПЕПЛА!', boss.x, boss.z, '#ef4444');
+          floatText('☄️ ДОЖДЬ ПЕПЛА!', boss.x, boss.z, '#ef4444');
 
           // 5 Meteor Danger Zones around player!
           for (let m = 0; m < 5; m++) {
@@ -2987,9 +3274,9 @@ export function createCombatController({
           boss.bossStateTimer = 1.2;
           triggerModelAttack(boss.model);
           emitShockwave(boss.x, boss.z, 5.8, 0xf59e0b, 0.48);
-          floatText('⚔️ ГВАРДИЯ ПРЕСТОЛА!', boss.x, boss.z, '#fbbf24');
+          floatText('🔥 СТРАЖА ДРАКОНА!', boss.x, boss.z, '#fbbf24');
 
-          const guards = ['shieldbearer', 'cultist'];
+          const guards = ['gargoyle', 'dark_cultist'];
           for (let g = 0; g < guards.length; g++) {
             if (enemies.length >= MAX_ACTIVE_ENEMIES + 6) break;
             const gAng = angleToPlayer + (g === 0 ? -0.9 : 0.9);
@@ -3008,7 +3295,7 @@ export function createCombatController({
     }
 
     // ------------------------------------------------------------------------
-    // 4. REAPER (Act IV & Default Boss): Scythe Dash + Dark Flame Circles + Summons
+    // 4. BOSS_CTHULHU / REAPER (Act III — Вестник Бездны & Default Boss): Tentacle Surge + Abyssal Rifts + Deep Summons
     // ------------------------------------------------------------------------
     if (boss.bossPhase === 0) {
       if (boss.bossSubState === 'stalk') {
@@ -3024,12 +3311,12 @@ export function createCombatController({
           boss.dashTargetZ = clamp(boss.z + (dz / dist) * dashDist, -ARENA_ENTITY_LIMIT, ARENA_ENTITY_LIMIT);
           boss.facing = angleToPlayer;
 
-          emitDangerZone(boss.dashTargetX, boss.dashTargetZ, 3.8 * mbScale, 0.66, 0xdc2626);
-          emitParticles(boss.x, 1.2, boss.z, 0xef4444, 16, 5.5, 0.18);
-          floatText('⚠️ РЫВОК КОСЫ!', boss.x, boss.z, '#f87171');
+          emitDangerZone(boss.dashTargetX, boss.dashTargetZ, 3.8 * mbScale, 0.66, 0x06b6d4);
+          emitParticles(boss.x, 1.2, boss.z, 0x22d3ee, 16, 5.5, 0.18);
+          floatText('🌊 НАТИСК БЕЗДНЫ!', boss.x, boss.z, '#22d3ee');
         }
       } else if (boss.bossSubState === 'telegraph_dash') {
-        emitParticles(boss.x, 1.0, boss.z, 0xdc2626, 2, 3.0, 0.14);
+        emitParticles(boss.x, 1.0, boss.z, 0x06b6d4, 2, 3.0, 0.14);
         if (boss.bossStateTimer <= 0) {
           boss.bossSubState = 'dashing';
           boss.bossStateTimer = 0.28;
@@ -3050,8 +3337,8 @@ export function createCombatController({
           audio?.playMeleeSwing?.(true);
           world?.addScreenShake?.(boss.isMiniBoss ? 0.36 : 0.52, 0.28);
           const reach = 5.4 * mbScale;
-          emitSlashArc(boss.x, boss.z, slashAngle, reach, Math.PI * 1.28, 0xdc2626);
-          emitShockwave(boss.x, boss.z, 4.4 * mbScale, 0xdc2626, 0.32);
+          emitSlashArc(boss.x, boss.z, slashAngle, reach, Math.PI * 1.28, 0x06b6d4);
+          emitShockwave(boss.x, boss.z, 4.4 * mbScale, 0x22d3ee, 0.32);
 
           const pDist = Math.hypot(player.x - boss.x, player.z - boss.z);
           if (pDist <= reach + 0.15) {
@@ -3076,7 +3363,7 @@ export function createCombatController({
         boss.bossStateTimer = 1.25;
         triggerModelAttack(boss.model);
         audio?.playMagicCast?.('void_orb');
-        floatText('🔥 ТЁМНОЕ ПЛАМЯ!', boss.x, boss.z, '#c084fc');
+        floatText('🌀 СФЕРЫ БЕЗДНЫ!', boss.x, boss.z, '#67e8f9');
 
         const count = boss.isMiniBoss ? 2 : 3;
         for (let c = 0; c < count; c++) {
@@ -3085,14 +3372,14 @@ export function createCombatController({
           const zx = clamp(player.x + Math.sin(offsetAng) * offsetDist, -ARENA_ENTITY_LIMIT, ARENA_ENTITY_LIMIT);
           const zz = clamp(player.z + Math.cos(offsetAng) * offsetDist, -ARENA_ENTITY_LIMIT, ARENA_ENTITY_LIMIT);
           const fRad = 2.9 * mbScale;
-          emitDangerZone(zx, zz, fRad, 1.08, 0x9333ea);
+          emitDangerZone(zx, zz, fRad, 1.08, 0x06b6d4);
           bossHazards.push({
             x: zx,
             z: zz,
             radius: fRad,
             timer: 1.08,
             damage: Math.round(boss.damage * 0.9),
-            color: 0x9333ea
+            color: 0x06b6d4
           });
         }
       } else if (boss.bossSubState === 'wait_flames' && boss.bossStateTimer <= 0) {
@@ -3106,8 +3393,8 @@ export function createCombatController({
         boss.bossSubState = 'recover';
         boss.bossStateTimer = 1.2;
         triggerModelAttack(boss.model);
-        emitShockwave(boss.x, boss.z, 5.0 * mbScale, 0x7e22ce, 0.45);
-        floatText('💀 ПРИЗЫВ СТРАЖИ!', boss.x, boss.z, '#d8b4fe');
+        emitShockwave(boss.x, boss.z, 5.0 * mbScale, 0x0891b2, 0.45);
+        floatText('🦑 ЗОВ БЕЗДНЫ!', boss.x, boss.z, '#67e8f9');
 
         const summonCount = boss.isMiniBoss ? 2 : 3;
         for (let s = 0; s < summonCount; s++) {
@@ -3115,8 +3402,9 @@ export function createCombatController({
           const sAng = (s / summonCount) * TWO_PI + elapsedTime;
           const sx = clamp(boss.x + Math.cos(sAng) * 3.2, -ARENA_ENTITY_LIMIT, ARENA_ENTITY_LIMIT);
           const sz = clamp(boss.z + Math.sin(sAng) * 3.2, -ARENA_ENTITY_LIMIT, ARENA_ENTITY_LIMIT);
-          spawnEnemy('skeleton', sx, sz, null, { isSummoned: true, xp: 5, gold: 2 });
-          emitParticles(sx, 0.6, sz, 0xa855f7, 8, 4.0, 0.15);
+          const abyssMinion = s % 2 === 0 ? 'shadow_wisp' : 'dark_spider';
+          spawnEnemy(abyssMinion, sx, sz, null, { isSummoned: true, xp: 5, gold: 2 });
+          emitParticles(sx, 0.6, sz, 0x22d3ee, 8, 4.0, 0.15);
         }
       } else if (boss.bossSubState === 'recover' && boss.bossStateTimer <= 0) {
         boss.bossPhase = 0;
@@ -3183,25 +3471,37 @@ export function createCombatController({
       triggerReload();
     }
 
-    // Reload timer progression (with mid-reload shotgun shell click!)
+    // Reload timer progression (with 0.5s/shell partial top-up for Shotgun!)
     if (player.isReloading) {
       if (player.overdriveAmmo > 0 || beastActive) {
         player.isReloading = false;
         player.reloadTimer = 0;
+        player.reloadShellAccum = 0;
         player.ammo = player.maxAmmo;
         syncHeroReloadModel(false);
       } else {
+        const perShell = stats?.reloadPerShellTime || 0;
         player.reloadTimer = Math.max(0, player.reloadTimer - dt);
-        const prog =
-          player.reloadDuration > 0 ? 1 - player.reloadTimer / player.reloadDuration : 1;
-        const curWpn = WEAPONS[currentWeaponId];
-        if (!player.reloadMidShellPlayed && prog >= 0.52 && curWpn?.isShotgun) {
-          player.reloadMidShellPlayed = true;
-          audio?.playReloadShell?.();
+        if (perShell > 0) {
+          player.reloadShellAccum = (player.reloadShellAccum || 0) + dt;
+          while (player.reloadShellAccum >= perShell && player.ammo < player.maxAmmo) {
+            player.reloadShellAccum -= perShell;
+            player.ammo = Math.min(player.maxAmmo, player.ammo + 1);
+            audio?.playReloadShell?.();
+          }
+        } else {
+          const prog =
+            player.reloadDuration > 0 ? 1 - player.reloadTimer / player.reloadDuration : 1;
+          const curWpn = WEAPONS[currentWeaponId];
+          if (!player.reloadMidShellPlayed && prog >= 0.52 && curWpn?.isShotgun) {
+            player.reloadMidShellPlayed = true;
+            audio?.playReloadShell?.();
+          }
         }
-        if (player.reloadTimer <= 0) {
+        if (player.reloadTimer <= 0 || player.ammo >= player.maxAmmo) {
           player.isReloading = false;
           player.reloadTimer = 0;
+          player.reloadShellAccum = 0;
           player.ammo = player.maxAmmo;
           audio?.playReloadReady?.();
           syncHeroReloadModel(false);
@@ -3223,7 +3523,7 @@ export function createCombatController({
 
     // ☄️ Звездопад Архонта (mage_meteor_shower)
     const meteorStacks = stats.mageMeteorStacks || 0;
-    if (meteorStacks > 0 && !beastActive && enemies.length > 0) {
+    if (attackEnabled && meteorStacks > 0 && !beastActive && enemies.length > 0) {
       player.meteorTimer -= dt;
       if (player.meteorTimer <= 0) {
         player.meteorTimer = Math.max(2.3, 4.4 - meteorStacks * 0.65);
@@ -3255,7 +3555,7 @@ export function createCombatController({
 
     // 💣 Шрапнельный Капкан (gun_shrapnel_mine)
     const mineStacks = stats.gunMineStacks || 0;
-    if (mineStacks > 0 && !beastActive && shrapnelMines.length < 6) {
+    if (attackEnabled && mineStacks > 0 && !beastActive && shrapnelMines.length < 6) {
       player.mineTimer -= dt;
       if (player.mineTimer <= 0) {
         player.mineTimer = Math.max(2.6, 5.2 - mineStacks * 0.75);
@@ -3304,7 +3604,7 @@ export function createCombatController({
 
     // 🌪️ Вихрь Жнеца (war_whirlwind): automatic 360° spin slash!
     const wwStacks = stats.warWhirlwindStacks || 0;
-    if (wwStacks > 0 && !beastActive) {
+    if (attackEnabled && wwStacks > 0 && !beastActive) {
       player.whirlwindTimer -= dt;
       if (player.whirlwindTimer <= 0) {
         player.whirlwindTimer = Math.max(2.6, 4.8 - wwStacks * 0.65);
@@ -3346,6 +3646,7 @@ export function createCombatController({
         const wx = player.x + bx;
         const wz = player.z + bz;
         for (let ei = enemies.length - 1; ei >= 0; ei--) {
+          if (!attackEnabled) break;
           const e = enemies[ei];
           if (!e || e.hp <= 0) continue;
           if (Math.hypot(e.x - wx, e.z - wz) <= 0.75 + e.radius) {
@@ -3374,6 +3675,10 @@ export function createCombatController({
     if (moveMag > 0.01) {
       player.x += mx * effectiveMoveSpeed * dt;
       player.z += mz * effectiveMoveSpeed * dt;
+      player.standStillTimer = Math.max(0, (player.standStillTimer || 0) - dt * 4.5);
+    } else {
+      const maxFocusTime = Math.max(0.05, stats?.focusTime || 1.0);
+      player.standStillTimer = Math.min(maxFocusTime, (player.standStillTimer || 0) + dt);
     }
 
     // Smooth decay of physical recoil over ~0.14s
@@ -3395,7 +3700,9 @@ export function createCombatController({
 
     // 2. Aiming & Combat Firing
     let engagedAimAngle = null;
-    if (!beastActive) {
+    if (!beastActive && attackEnabled) {
+      const canInterruptShellReload =
+        player.isReloading && (stats?.reloadPerShellTime || 0) > 0 && player.ammo > 0;
       const canShootNow = player.overdriveAmmo > 0 || !player.isReloading;
       const manualActive = Boolean(input?.firing) || (!autoAim && Boolean(input?.hasManualAim));
       if (manualActive) {
@@ -3411,14 +3718,16 @@ export function createCombatController({
         if (engagedAimAngle === null) {
           engagedAimAngle = moveMag > 0.05 ? Math.atan2(mx, mz) : player.facing;
         }
-        if (canShootNow && player.attackCooldown <= 0) {
+        if ((canShootNow || canInterruptShellReload) && player.attackCooldown <= 0) {
           performHeroAttack(engagedAimAngle, true);
         }
       } else if (autoAim) {
-        const target = findAutoAimTarget(stats.range * 1.06);
+        const target = findAutoAimTarget(stats.clampToArenaBounds ? stats.range : stats.range * 1.06);
         if (target) {
           engagedAimAngle = Math.atan2(target.x - player.x, target.z - player.z);
-          if (canShootNow && player.attackCooldown <= 0) {
+          const distToTarget = Math.hypot(target.x - player.x, target.z - player.z);
+          const emergencyShellShot = canInterruptShellReload && player.ammo >= 1 && distToTarget <= 3.6;
+          if ((canShootNow || emergencyShellShot) && player.attackCooldown <= 0) {
             performHeroAttack(engagedAimAngle, false);
           }
         }
@@ -3431,15 +3740,45 @@ export function createCombatController({
       player.facing = lerpAngle(player.facing, Math.atan2(mx, mz), dt * 14);
     }
 
+    if (moveMag > 0.08) {
+      const clampedStepRate = Math.max(0.75, Math.min(1.65, speedRatio || 1)) * 9.4;
+      const prevStepIdx = Math.floor((player.stepPhase || 0) / Math.PI);
+      player.stepPhase = (player.stepPhase || 0) + dt * clampedStepRate;
+      const nextStepIdx = Math.floor(player.stepPhase / Math.PI);
+      if (nextStepIdx > prevStepIdx) {
+        audio?.playFootstep?.(currentClassId, nextStepIdx);
+        if (currentClassId === 'mage') {
+          const sideSign = nextStepIdx % 2 === 0 ? -0.18 : 0.18;
+          const fx = player.x + Math.cos(player.facing) * sideSign;
+          const fz = player.z - Math.sin(player.facing) * sideSign;
+          const elemId = stats?.mageElement || 'water';
+          const stepCol =
+            elemId === 'fire' ? 0xf97316 : elemId === 'lightning' ? 0xfacc15 : elemId === 'air' ? 0x5eead4 : 0x38bdf8;
+          world?.spawnShockwaveRing?.({ x: fx, y: 0.035, z: fz, radius: 0.54, color: stepCol, duration: 0.30 });
+          if (elemId === 'water') {
+            emitParticles(fx, 0.08, fz, 0x7dd3fc, 3, 2.2, 0.07);
+          }
+        }
+      }
+    } else {
+      player.stepPhase = 0;
+    }
+
     if (heroModel?.obj) {
+      const heroGroundY = world?.getGroundHeight?.(player.x, player.z) ?? 0;
       heroModel.obj.position.x = player.x;
+      heroModel.obj.position.y = heroGroundY;
       heroModel.obj.position.z = player.z;
       heroModel.obj.rotation.y = player.facing;
+      heroModel.obj.rotation.x = 0;
+      heroModel.obj.rotation.z = 0;
+
+      const strideRatio = speedRatio * (effectiveMoveSpeed / 4.2);
       animateEntityModel(
         heroModel,
         dt,
         moveMag > 0.05,
-        speedRatio,
+        strideRatio,
         player.attackAnimTimer > 0,
         beastActive,
         elapsedTime
@@ -3447,21 +3786,7 @@ export function createCombatController({
     }
     syncFollowTarget(player.x, player.z, heroModel?.obj, dt);
 
-    // Update shrinking Overdrive mini-crate indicator
-    if (overdriveCrateVisual && player.overdriveAmmo > 0) {
-      const ammoFrac = player.overdriveAmmo / Math.max(1, player.overdriveMax);
-      const shrinkScale = 0.35 + ammoFrac * 0.75;
-      const orbitAng = elapsedTime * 3.6;
-      overdriveCrateVisual.position.set(
-        player.x + Math.cos(orbitAng) * 1.15,
-        1.25 + Math.sin(elapsedTime * 6) * 0.1,
-        player.z + Math.sin(orbitAng) * 1.15
-      );
-      overdriveCrateVisual.rotation.y = orbitAng;
-      overdriveCrateVisual.scale.setScalar(shrinkScale);
-    }
-
-    // 3. Companion AI
+    // 3. Companion AI (Mini Skeleton Squire)
     if (companion) {
       if (companion.boostTimer > 0) companion.boostTimer = Math.max(0, companion.boostTimer - dt);
       companion.orbitAngle += dt * 1.35;
@@ -3476,6 +3801,7 @@ export function createCombatController({
       for (let i = 0; i < enemies.length; i++) {
         const e = enemies[i];
         if (e.hp <= 0) continue;
+        if (world?.isWorldPointVisible && !world.isWorldPointVisible(e.x, e.z, 0.85, 0.94)) continue;
         const dSq = (e.x - companion.x) ** 2 + (e.z - companion.z) ** 2;
         if (dSq < compBestDistSq) {
           compBestDistSq = dSq;
@@ -3515,44 +3841,56 @@ export function createCombatController({
     }
 
     // 4. Kill-Quota Wave Spawner, Relic Crate, Mid-Quota Mini-Boss & Mandatory Boss Finale!
-    if (!relicCrateSpawned && currentLevelDef.unlockWeaponTier && (kills >= Math.max(8, Math.floor(targetKills * 0.28)) || elapsedRunTime >= 18.0)) {
-      relicCrateSpawned = true;
-      spawnRelicWeaponEvent();
-    }
-
-    // Mid-run Mini-Boss at 50% monster kill quota on Acts II–V non-boss chapters!
-    if (
-      !midMiniBossSpawned &&
-      !finaleStarted &&
-      !currentLevelDef.hasBoss &&
-      currentLevelDef.miniBossPool?.length > 0 &&
-      kills >= Math.floor(targetKills * 0.50)
-    ) {
-      midMiniBossSpawned = true;
-      spawnMiniBossFromPool(false);
-    }
-
-    // Mandatory Kill Quota: running away never completes the wave — player MUST slay targetKills monsters to summon the Boss!
-    if (!finaleStarted) {
-      if (kills >= targetKills) {
-        timeLeft = 0;
-        startWaveFinale();
-      } else {
-        timeLeft = Math.max(1, targetKills - kills);
+    // Temporary peaceful map-inspection mode turned OFF so monsters & new Tripo Zombie spawn normally!
+    const TEMP_PEACEFUL_MAP_INSPECT = false;
+    if (!TEMP_PEACEFUL_MAP_INSPECT) {
+      if (!relicCrateSpawned && currentLevelDef.unlockWeaponTier && (kills >= Math.max(8, Math.floor(targetKills * 0.28)) || elapsedRunTime >= 18.0)) {
+        relicCrateSpawned = true;
+        spawnRelicWeaponEvent();
       }
-    }
 
-    // Minigore-2 Wave Pacing: Distinct rhythmic horde waves that accelerate with time pressure,
-    // plus instant wave reinforcement if player wipes the field (< 3 enemies left)!
-    spawnTimer -= dt;
-    if (!finaleStarted && enemies.length <= 2 && spawnTimer > 0.55) {
-      spawnTimer = 0.55;
-    }
-    if (spawnTimer <= 0) {
-      const timeRamp = clamp(elapsedRunTime / 60, 0, 1);
-      const baseWaveGap = finaleStarted ? 9.5 : 6.4 - timeRamp * 1.65;
-      spawnTimer = Math.max(4.2, baseWaveGap * clamp(currentLevelDef.spawnInterval || 1, 0.72, 1.12));
-      spawnWavePack();
+      // Stage Mid-Run Mini-Boss: appears midway BEFORE the timed Boss on Boss chapters (5,10,15,20,25)!
+      if (
+        !midMiniBossSpawned &&
+        !finaleStarted &&
+        currentLevelDef.hasBoss &&
+        (currentLevelDef.finaleMiniBossType || currentLevelDef.miniBossPool?.length > 0) &&
+        (kills >= Math.floor(targetKills * 0.45) || (bossSpawnCountdown > 0 && bossSpawnCountdown <= (currentLevelDef.bossSpawnTimerSec || 45) * 0.55))
+      ) {
+        midMiniBossSpawned = true;
+        spawnMiniBossFromPool(false);
+      }
+
+      // Boss chapters (5,10,15,20,25): timed Boss Arrival countdown EVEN IF horde/mini-boss remain; Non-Boss chapters: trigger at targetKills!
+      if (!finaleStarted) {
+        if (currentLevelDef.hasBoss) {
+          bossSpawnCountdown = Math.max(0, bossSpawnCountdown - dt);
+          if (bossSpawnCountdown <= 0 || kills >= targetKills) {
+            timeLeft = 0;
+            startWaveFinale();
+          } else {
+            timeLeft = Math.ceil(bossSpawnCountdown);
+          }
+        } else if (kills >= targetKills) {
+          timeLeft = 0;
+          startWaveFinale();
+        } else {
+          timeLeft = Math.max(1, targetKills - kills);
+        }
+      }
+
+      // Minigore-2 Wave Pacing: Distinct rhythmic horde waves that accelerate with time pressure,
+      // plus instant wave reinforcement if player wipes the field (< 3 enemies left)!
+      spawnTimer -= dt;
+      if (!finaleStarted && enemies.length <= 2 && spawnTimer > 0.55) {
+        spawnTimer = 0.55;
+      }
+      if (spawnTimer <= 0) {
+        const timeRamp = clamp(elapsedRunTime / 60, 0, 1);
+        const baseWaveGap = finaleStarted ? 9.5 : 6.4 - timeRamp * 1.65;
+        spawnTimer = Math.max(4.2, baseWaveGap * clamp(currentLevelDef.spawnInterval || 1, 0.72, 1.12));
+        spawnWavePack();
+      }
     }
 
     // 50. Update Dying Skeleton Corpses (Rigged Death Collapse onto Cobblestones -> Pool Recycle!)
@@ -3642,17 +3980,19 @@ export function createCombatController({
       }
     }
 
-    // 5B. Bomber Barrel Hazards Update (Hurts player AND blasts nearby enemies for chain reactions!)
+    // 5B. Toxic Slime / Bomber Hazards Update (Hurts player AND blasts nearby enemies for chain reactions!)
     for (let i = bomberHazards.length - 1; i >= 0; i--) {
       const bh = bomberHazards[i];
+      if (!bh) continue;
       bh.timer -= dt;
       if (bh.timer <= 0) {
         bomberHazards.splice(i, 1);
 
+        const bhColor = bh.color || 0x22c55e;
         audio?.playExplosion?.();
         world?.addScreenShake?.(0.45, 0.24);
-        emitShockwave(bh.x, bh.z, bh.radius, 0xf97316, 0.38);
-        emitParticles(bh.x, 0.6, bh.z, 0xf97316, 24, 8.2, 0.20);
+        emitShockwave(bh.x, bh.z, bh.radius, bhColor, 0.38);
+        emitParticles(bh.x, 0.6, bh.z, bhColor, 24, 8.2, 0.20);
 
         const pDist = Math.hypot(player.x - bh.x, player.z - bh.z);
         if (pDist <= bh.radius + player.radius * 0.45) {
@@ -3674,7 +4014,9 @@ export function createCombatController({
       proj.vis.obj.position.set(proj.x, 0.72, proj.z);
 
       if (proj.kind === 'magic') {
-        proj.vis.obj.rotation.y += dt * 8;
+        if (proj.mageElement !== 'water') {
+          proj.vis.obj.rotation.y += dt * 8;
+        }
         proj.trailTick += dt;
         if (proj.trailTick >= 0.055) {
           proj.trailTick = 0;
@@ -3685,6 +4027,8 @@ export function createCombatController({
       let removeProj = false;
 
       if (Math.abs(proj.x) > ARENA_HALF_SIZE || Math.abs(proj.z) > ARENA_HALF_SIZE) {
+        removeProj = true;
+      } else if (!proj.isEnemy && !stats?.clampToArenaBounds && world?.isWorldPointVisible && !world.isWorldPointVisible(proj.x, proj.z, 0.72, 1.04)) {
         removeProj = true;
       } else if (Array.isArray(world?.obstacles)) {
         for (let o = 0; o < world.obstacles.length; o++) {
@@ -3718,22 +4062,28 @@ export function createCombatController({
             const pDirX = proj.vx / pSpd;
             const pDirZ = proj.vz / pSpd;
 
-            // Shotgun Distance Falloff: <= 5.5m deals 115% meatshot! > 5.5m tapers to 62% at max range!
+            // Shotgun Distance Falloff: <= 4.2m deals 100% (6 pellets = -10% vs Colt); tapers to 60% at max range!
             let falloffMult = 1.0;
             let knockMult = 1.0;
             if (proj.isShotgunPellet) {
-              if (proj.traveled <= 5.5) {
-                falloffMult = 1.15;
-                knockMult = 1.2;
+              if (proj.traveled <= 4.2) {
+                falloffMult = 1.0;
+                knockMult = 1.15;
               } else {
-                const t = clamp((proj.traveled - 5.5) / Math.max(0.5, proj.maxDist - 5.5), 0, 1);
-                falloffMult = 1.15 + (0.62 - 1.15) * t;
+                const t = clamp((proj.traveled - 4.2) / Math.max(0.5, proj.maxDist - 4.2), 0, 1);
+                falloffMult = 1.0 + (0.60 - 1.0) * t;
                 knockMult = 1.0 - 0.35 * t;
               }
             }
 
+            const decayArr = proj.pierceDecay;
+            const decayMult = Array.isArray(decayArr)
+              ? (decayArr[Math.min(proj.hitsLanded || 0, decayArr.length - 1)] ?? decayArr[decayArr.length - 1] ?? 1.0)
+              : 1.0;
+            proj.hitsLanded = (proj.hitsLanded || 0) + 1;
+
             const critMult = proj.isCrit ? stats?.critMult || 1.75 : 1.0;
-            const hitDamage = Math.max(1, Math.round(proj.damage * falloffMult * critMult));
+            const hitDamage = Math.max(1, Math.round(proj.damage * falloffMult * decayMult * critMult));
             const kx = pDirX * proj.knockback * knockMult;
             const kz = pDirZ * proj.knockback * knockMult;
 
@@ -3762,8 +4112,13 @@ export function createCombatController({
                 'air'
               );
             } else if (proj.kind === 'magic') {
-              // Crisp elemental burst particles ONLY — ZERO flat expanding ground circles!
-              emitParticles(proj.x, 0.78, proj.z, proj.color, 8, 4.6, 0.15);
+              if (proj.mageElement === 'water') {
+                // Crown splash of water droplets & foam matching 00:03 of Water_mage_shooting_projectile!
+                emitParticles(proj.x, 0.68, proj.z, 0x38bdf8, 13, 6.4, 0.16);
+                emitParticles(proj.x, 0.76, proj.z, 0xe0faff, 7, 4.9, 0.12);
+              } else {
+                emitParticles(proj.x, 0.78, proj.z, proj.color, 8, 4.6, 0.15);
+              }
             } else if (proj.splashRadius > 0) {
               const sRad = proj.splashRadius || 2.2;
               emitShockwave(proj.x, proj.z, sRad, proj.color, 0.28);
@@ -3784,7 +4139,7 @@ export function createCombatController({
           for (let pIdx = pickups.length - 1; pIdx >= 0; pIdx--) {
             const p = pickups[pIdx];
             if (!p || p.hp <= 0 || p.uid === proj.ignoreCrateUid) continue;
-            if (p.type !== 'relic_weapon_crate' && p.type !== 'supply_crate') continue;
+            if (p.type !== 'relic_weapon_crate' && p.type !== 'supply_crate' && p.type !== 'mimic_disguise') continue;
             const dSq = (p.x - proj.x) ** 2 + (p.z - proj.z) ** 2;
             if (dSq <= (p.radius + 0.3) ** 2) {
               hitCrate(p);
@@ -3834,6 +4189,13 @@ export function createCombatController({
       if (e.contactCooldown > 0) e.contactCooldown = Math.max(0, e.contactCooldown - dt);
       if (e.trampleCooldown > 0) e.trampleCooldown = Math.max(0, e.trampleCooldown - dt);
       if (e.stunTimer > 0) e.stunTimer = Math.max(0, e.stunTimer - dt);
+      if (e.disarmTimer > 0) {
+        e.disarmTimer = Math.max(0, e.disarmTimer - dt);
+        e.meleeCooldown = Math.max(e.meleeCooldown || 0, 0.15);
+        e.cloakAttackTimer = Math.max(e.cloakAttackTimer || 0, 0.15);
+        e.shootCooldown = Math.max(e.shootCooldown || 0, 0.15);
+        e.windupTimer = 0;
+      }
       if (e.frostTimer > 0) e.frostTimer = Math.max(0, e.frostTimer - dt);
       if (e.soakedTimer > 0) e.soakedTimer = Math.max(0, e.soakedTimer - dt);
       if (e.waterLiftTimer > 0) e.waterLiftTimer = Math.max(0, e.waterLiftTimer - dt);
@@ -3899,6 +4261,8 @@ export function createCombatController({
 
       const slowMult = e.frostTimer > 0 ? e.frostFactor || 0.75 : 1.0;
       const moveSpeed = e.speed * slowMult;
+      const prevEx = e.x;
+      const prevEz = e.z;
 
       if (e.isBoss && e.stunTimer <= 0) {
         updateBossAI(e, dt, elapsedTime);
@@ -3908,137 +4272,37 @@ export function createCombatController({
         const dist = Math.hypot(dx, dz) || 0.001;
         const angToPlayer = Math.atan2(dx, dz);
 
-        // --- ARCHETYPE 1: HOUND (Every 3.2s within 9m -> 0.45s 1.65x lunge burst!) ---
-        if (e.type === 'hound') {
-          if (e.lungeTimer > 0) {
-            e.lungeTimer -= dt;
-            e.facing = lerpAngle(e.facing, Math.atan2(e.lungeDirX, e.lungeDirZ), dt * 14);
-            e.x += e.lungeDirX * (moveSpeed * 1.65) * dt;
-            e.z += e.lungeDirZ * (moveSpeed * 1.65) * dt;
-          } else {
-            e.facing = lerpAngle(e.facing, angToPlayer, dt * 10);
-            e.x += (dx / dist) * moveSpeed * dt;
-            e.z += (dz / dist) * moveSpeed * dt;
-            e.specialCooldown -= dt;
-            if (e.specialCooldown <= 0 && dist <= 9.0 && dist >= 1.5) {
-              e.specialCooldown = 3.2;
-              e.lungeTimer = 0.45;
-              e.lungeDirX = dx / dist;
-              e.lungeDirZ = dz / dist;
-              triggerModelAttack(e.model);
-              emitParticles(e.x, 0.55, e.z, 0xef4444, 6, 4.2, 0.12);
-            }
-          }
-        }
-        // --- ARCHETYPE 2: ARCHER (Backline Sniper: holds ground, 0.85s glowing aim windup, 1 dodgeable bolt every ~4.8s) ---
-        else if (e.type === 'archer') {
-          if (e.windupTimer > 0) {
-            e.windupTimer -= dt;
-            e.facing = Math.atan2(e.aimDirX, e.aimDirZ);
-            if (Math.random() < 0.35) {
-              emitParticles(e.x + e.aimDirX * 0.5, 0.88, e.z + e.aimDirZ * 0.5, 0x22d3ee, 1, 1.8, 0.11);
-            }
-            if (e.windupTimer <= 0) {
-              e.shootCooldown = 4.55 + Math.random() * 0.75;
-              triggerModelAttack(e.model);
-              spawnProjectile({
-                x: e.x,
-                z: e.z,
-                vx: e.aimDirX * 10.4,
-                vz: e.aimDirZ * 10.4,
-                damage: e.damage,
-                maxDist: 19,
-                pierce: 1,
-                kind: 'enemy',
-                color: 0x22d3ee,
-                isEnemy: true
-              });
-            }
-          } else {
-            e.facing = lerpAngle(e.facing, angToPlayer, dt * 9);
-            if (dist > 10.4) {
-              e.x += (dx / dist) * moveSpeed * dt;
-              e.z += (dz / dist) * moveSpeed * dt;
-            }
-            e.shootCooldown -= dt;
-            if (e.shootCooldown <= 0 && dist <= 15.8) {
-              e.windupTimer = 0.85;
-              e.aimDirX = dx / dist;
-              e.aimDirZ = dz / dist;
-              emitParticles(e.x + e.aimDirX * 0.48, 0.90, e.z + e.aimDirZ * 0.48, 0x67e8f9, 8, 3.2, 0.14);
-            }
-          }
-        }
-        // --- ARCHETYPE 3: NECROMANCER (Keeps ~10.5m, raises 2 skeletons every 6.8s) ---
-        else if (e.type === 'necromancer') {
-          e.facing = lerpAngle(e.facing, angToPlayer, dt * 8);
-          if (dist > 11.2) {
-            e.x += (dx / dist) * moveSpeed * dt;
-            e.z += (dz / dist) * moveSpeed * dt;
-          }
-          e.specialCooldown -= dt;
-          if (e.specialCooldown <= 0 && dist <= 20.0) {
-            e.specialCooldown = 6.8;
-            triggerModelAttack(e.model);
-            audio?.playMagicCast?.('spark_staff');
-            emitParticles(e.x, 0.75, e.z, 0x10b981, 16, 4.8, 0.15);
-
-            for (let s = -1; s <= 1; s += 2) {
-              if (enemies.length >= MAX_ACTIVE_ENEMIES + 6) break;
-              const perpX = Math.cos(angToPlayer) * s * 1.5;
-              const perpZ = -Math.sin(angToPlayer) * s * 1.5;
-              const sx = clamp(e.x + perpX, -ARENA_ENTITY_LIMIT, ARENA_ENTITY_LIMIT);
-              const sz = clamp(e.z + perpZ, -ARENA_ENTITY_LIMIT, ARENA_ENTITY_LIMIT);
-              spawnEnemy('skeleton', sx, sz, null, { isSummoned: true, xp: 4, gold: 1 });
-              emitParticles(sx, 0.55, sz, 0x10b981, 7, 3.8, 0.13);
-            }
-          }
-        }
-        // --- ARCHETYPE 4: CULTIST (Backline Caster: 0.85s violet staff charge -> 1 heavy dodgeable shadow orb every ~4.8s, NO bullet-hell fan!) ---
-        else if (e.type === 'cultist') {
-          if (e.windupTimer > 0) {
-            e.windupTimer -= dt;
-            e.facing = Math.atan2(e.aimDirX, e.aimDirZ);
-            if (Math.random() < 0.4) {
-              emitParticles(e.x + e.aimDirX * 0.45, 0.95, e.z + e.aimDirZ * 0.45, 0xc084fc, 1, 2.0, 0.12);
-            }
-            if (e.windupTimer <= 0) {
-              e.shootCooldown = 4.65 + Math.random() * 0.75;
-              triggerModelAttack(e.model);
-              spawnProjectile({
-                x: e.x,
-                z: e.z,
-                vx: e.aimDirX * 10.6,
-                vz: e.aimDirZ * 10.6,
-                damage: e.damage,
-                maxDist: 19,
-                pierce: 1,
-                kind: 'enemy',
-                color: 0xa855f7,
-                isEnemy: true
-              });
+        // --- ARCHETYPE 0: HOPPING MONSTERS (`corrupted_treant`, `mimic_chest` — Coils on ground, then leaps in discrete forward arcs!) ---
+        if (e.type === 'corrupted_treant' || e.type === 'mimic_chest') {
+          const isMimic = e.type === 'mimic_chest';
+          if ((e.emergeTimer || 0) <= 0) {
+            e.hopCycle = ((e.hopCycle || 0) + dt * (isMimic ? 1.32 : 1.18) * slowMult) % 1.0;
+            // Grounded coil [0.00..0.17] & landing stomp [0.83..1.00]: ZERO floor crawling — only turns toward hero & spawns landing dust!
+            if (e.hopCycle >= 0.17 && e.hopCycle <= 0.83) {
+              const airT = (e.hopCycle - 0.17) / 0.66;
+              const hopBurst = 0.85 + 2.55 * Math.sin(airT * Math.PI);
+              e.facing = lerpAngle(e.facing, angToPlayer, dt * 6.5);
+              e.x += (dx / dist) * moveSpeed * hopBurst * dt;
+              e.z += (dz / dist) * moveSpeed * hopBurst * dt;
+              e._hopLandedDust = false;
+            } else {
+              e.facing = lerpAngle(e.facing, angToPlayer, dt * 12);
+              if (e.hopCycle >= 0.83 && !e._hopLandedDust) {
+                e._hopLandedDust = true;
+                world?.spawnShockwaveRing?.({ x: e.x, y: 0.03, z: e.z, radius: 0.88, color: isMimic ? 0xc084fc : 0xf97316, duration: 0.28 });
+                emitParticles(e.x, 0.10, e.z, isMimic ? 0xa855f7 : 0x78716c, 6, 3.2, 0.11);
+              }
             }
           } else {
             e.facing = lerpAngle(e.facing, angToPlayer, dt * 8);
-            if (dist > 10.6) {
-              e.x += (dx / dist) * moveSpeed * dt;
-              e.z += (dz / dist) * moveSpeed * dt;
-            }
-            e.shootCooldown -= dt;
-            if (e.shootCooldown <= 0 && dist <= 16.2) {
-              e.windupTimer = 0.85;
-              e.aimDirX = dx / dist;
-              e.aimDirZ = dz / dist;
-              emitParticles(e.x + e.aimDirX * 0.45, 0.95, e.z + e.aimDirZ * 0.45, 0xd8b4fe, 9, 3.2, 0.14);
-            }
           }
         }
-        // --- ARCHETYPE 5: BRUTE (Every 4.5s within 11m -> 0.60s red telegraph -> 0.65s bull-charge @ 13.5 spd!) ---
-        else if (e.type === 'brute') {
+        // --- ARCHETYPE 1: CHARGERS (`iron_knight`, `brute` — 0.60s telegraph -> 0.65s bull-charge @ 13.5 spd!) ---
+        else if (e.canCharge) {
           if (e.chargeState === 'telegraph') {
             e.chargeTimer -= dt;
             if (Math.random() < 0.45) {
-              emitParticles(e.x, 0.95, e.z, 0xef4444, 2, 3.2, 0.14);
+              emitParticles(e.x, 0.95, e.z, e.color || 0xef4444, 2, 3.2, 0.14);
             }
             if (e.chargeTimer <= 0) {
               e.chargeState = 'charging';
@@ -4052,7 +4316,7 @@ export function createCombatController({
             e.x += e.chargeDirX * (13.5 * slowMult) * dt;
             e.z += e.chargeDirZ * (13.5 * slowMult) * dt;
             if (Math.random() < 0.5) {
-              emitParticles(e.x, 0.25, e.z, 0xf97316, 1, 2.4, 0.13);
+              emitParticles(e.x, 0.25, e.z, e.color || 0xf97316, 1, 2.4, 0.13);
             }
             if (e.chargeTimer <= 0) {
               e.chargeState = 'walk';
@@ -4078,15 +4342,152 @@ export function createCombatController({
                 0.60,
                 0xef4444
               );
-              floatText('⚠️ ТАРАН!', e.x, e.z, '#f87171');
+              floatText(e.type === 'corrupted_treant' ? '🌿 КОРНЕВОЙ ТАРАН!' : '⚠️ ТАРАН!', e.x, e.z, '#f87171');
             }
           }
         }
-        // --- SKELETON, SHIELDBEARER, BOMBER (Relentless frontline advance) ---
+        // --- ARCHETYPE 2: SUMMONERS (`mummy`, `necromancer` — keeps ~10.8m, raises 2 ember_skeletons every 6.8s) ---
+        else if (e.summoner) {
+          const keepDist = e.keepDistance || 10.8;
+          e.facing = lerpAngle(e.facing, angToPlayer, dt * 8);
+          if (dist > keepDist) {
+            e.x += (dx / dist) * moveSpeed * dt;
+            e.z += (dz / dist) * moveSpeed * dt;
+          }
+          e.specialCooldown -= dt;
+          if (e.specialCooldown <= 0 && dist <= 20.0) {
+            e.specialCooldown = 6.8;
+            triggerModelAttack(e.model);
+            audio?.playMagicCast?.('spark_staff');
+            emitParticles(e.x, 0.75, e.z, e.color || 0x22d3ee, 16, 4.8, 0.15);
+
+            for (let s = -1; s <= 1; s += 2) {
+              if (enemies.length >= MAX_ACTIVE_ENEMIES + 6) break;
+              const perpX = Math.cos(angToPlayer) * s * 1.5;
+              const perpZ = -Math.sin(angToPlayer) * s * 1.5;
+              const sx = clamp(e.x + perpX, -ARENA_ENTITY_LIMIT, ARENA_ENTITY_LIMIT);
+              const sz = clamp(e.z + perpZ, -ARENA_ENTITY_LIMIT, ARENA_ENTITY_LIMIT);
+              spawnEnemy('ember_skeleton', sx, sz, null, { isSummoned: true, xp: 4, gold: 1 });
+              emitParticles(sx, 0.55, sz, 0xf97316, 7, 3.8, 0.13);
+            }
+          }
+        }
+        // --- ARCHETYPE 3B: VAMPIRE LORD (`vampire_lord` — stalks into melee for Cloak_Slash & pauses to summon Vampire Bats! ZERO ranged orbs!) ---
+        else if (e.canSummonBats || e.type === 'vampire_lord') {
+          e.cloakAttackTimer = Math.max(0, (e.cloakAttackTimer || 0) - dt);
+          e.facing = lerpAngle(e.facing, angToPlayer, dt * 9);
+          if ((e.castPauseTimer || 0) > 0) {
+            e.castPauseTimer = Math.max(0, e.castPauseTimer - dt);
+          } else if ((e.emergeTimer || 0) <= 0) {
+            e.batSummonCooldown = (e.batSummonCooldown ?? 2.4) - dt;
+            let aliveBats = 0;
+            for (let b = 0; b < enemies.length; b++) {
+              if (enemies[b]?.hp > 0 && enemies[b].type === 'vampire_bat') aliveBats += 1;
+            }
+            if (e.batSummonCooldown <= 0 && dist <= 16.5 && aliveBats < 5) {
+              e.batSummonCooldown = 6.2;
+              e.castPauseTimer = 0.72;
+              triggerModelAttack(e.model, 'Cast_Attack');
+              world?.spawnShockwaveRing?.({ x: e.x, y: 0.04, z: e.z, radius: 2.2, color: 0xe11d48, duration: 0.36 });
+              emitParticles(e.x, 1.05, e.z, 0xf43f5e, 14, 4.5, 0.14);
+              const batCount = aliveBats <= 3 ? 2 : 1;
+              for (let s = 0; s < batCount; s++) {
+                if (enemies.length >= MAX_ACTIVE_ENEMIES + 6) break;
+                const side = s === 0 ? -1 : 1;
+                const sx = clamp(e.x + Math.cos(angToPlayer) * side * 1.45, -ARENA_ENTITY_LIMIT, ARENA_ENTITY_LIMIT);
+                const sz = clamp(e.z - Math.sin(angToPlayer) * side * 1.45, -ARENA_ENTITY_LIMIT, ARENA_ENTITY_LIMIT);
+                spawnEnemy('vampire_bat', sx, sz, null, { isSummoned: true, noEmerge: true, xp: 4, gold: 2 });
+                emitParticles(sx, 0.75, sz, 0xe11d48, 8, 3.6, 0.13);
+              }
+            } else {
+              const stopDist = e.radius + player.radius + 0.85;
+              if (dist > stopDist) {
+                e.x += (dx / dist) * moveSpeed * dt;
+                e.z += (dz / dist) * moveSpeed * dt;
+              }
+              if (dist <= e.radius + player.radius + 1.45 && e.cloakAttackTimer <= 0) {
+                e.cloakAttackTimer = 1.15;
+                e.castPauseTimer = 0.36;
+                triggerModelAttack(e.model, 'Cloak_Slash');
+                audio?.playMeleeSwing?.(false);
+                emitSlashArc(e.x, e.z, angToPlayer, 2.45, Math.PI * 0.9, 0xe11d48);
+                emitParticles(e.x + (dx / dist) * 0.85, 0.9, e.z + (dz / dist) * 0.85, 0xf43f5e, 10, 4.2, 0.13);
+                applyDamageToPlayer(e.damage);
+              }
+            }
+          }
+        }
+        // --- ARCHETYPE 3: RANGED CASTERS (`dark_cultist`, `archer`, `cultist` — 0.85s windup -> 1 dodgeable bolt) ---
+        else if (e.ranged) {
+          const pColor = e.projColor || 0xa855f7;
+          const keepDist = e.keepDistance || 10.2;
+          if (e.windupTimer > 0) {
+            e.windupTimer -= dt;
+            e.facing = Math.atan2(e.aimDirX, e.aimDirZ);
+            if (Math.random() < 0.4) {
+              emitParticles(e.x + e.aimDirX * 0.48, 0.92, e.z + e.aimDirZ * 0.48, pColor, 1, 1.9, 0.12);
+            }
+            if (e.windupTimer <= 0) {
+              e.shootCooldown = 4.55 + Math.random() * 0.75;
+              triggerModelAttack(e.model);
+              spawnProjectile({
+                x: e.x,
+                z: e.z,
+                vx: e.aimDirX * 10.5,
+                vz: e.aimDirZ * 10.5,
+                damage: e.damage,
+                maxDist: 19,
+                pierce: 1,
+                kind: 'enemy',
+                color: pColor,
+                isEnemy: true
+              });
+            }
+          } else {
+            e.facing = lerpAngle(e.facing, angToPlayer, dt * 8.5);
+            if (dist > keepDist) {
+              e.x += (dx / dist) * moveSpeed * dt;
+              e.z += (dz / dist) * moveSpeed * dt;
+            }
+            e.shootCooldown -= dt;
+            if (e.shootCooldown <= 0 && dist <= 16.2) {
+              e.windupTimer = 0.85;
+              e.aimDirX = dx / dist;
+              e.aimDirZ = dz / dist;
+              emitParticles(e.x + e.aimDirX * 0.48, 0.92, e.z + e.aimDirZ * 0.48, pColor, 8, 3.2, 0.14);
+            }
+          }
+        }
+        // --- ARCHETYPE 4: DASHERS (`goblin`, `werewolf`, `dark_spider`, `gargoyle`, `hell_imp`, `mimic_chest`, `shadow_wisp`, `hound`) ---
+        else if (e.canDash) {
+          const dashMult = e.dashMult || 1.65;
+          if (e.lungeTimer > 0) {
+            e.lungeTimer -= dt;
+            e.facing = lerpAngle(e.facing, Math.atan2(e.lungeDirX, e.lungeDirZ), dt * 14);
+            e.x += e.lungeDirX * (moveSpeed * dashMult) * dt;
+            e.z += e.lungeDirZ * (moveSpeed * dashMult) * dt;
+          } else {
+            e.facing = lerpAngle(e.facing, angToPlayer, dt * 10);
+            e.x += (dx / dist) * moveSpeed * dt;
+            e.z += (dz / dist) * moveSpeed * dt;
+            e.specialCooldown -= dt;
+            if (e.specialCooldown <= 0 && dist <= 9.0 && dist >= 1.5) {
+              e.specialCooldown = 3.2;
+              e.lungeTimer = 0.45;
+              e.lungeDirX = dx / dist;
+              e.lungeDirZ = dz / dist;
+              triggerModelAttack(e.model);
+              emitParticles(e.x, 0.55, e.z, e.color || 0xef4444, 6, 4.2, 0.12);
+            }
+          }
+        }
+        // --- ARCHETYPE 5: FRONTLINE WALKERS (`plague_zombie`, `ember_skeleton`, `cursed_footman`, `toxic_slime`, `phantom_ghost`) ---
         else {
           e.facing = lerpAngle(e.facing, angToPlayer, dt * 9);
-          e.x += (dx / dist) * moveSpeed * dt;
-          e.z += (dz / dist) * moveSpeed * dt;
+          if ((e.emergeTimer || 0) <= 0) {
+            e.x += (dx / dist) * moveSpeed * dt;
+            e.z += (dz / dist) * moveSpeed * dt;
+          }
         }
       }
 
@@ -4135,13 +4536,13 @@ export function createCombatController({
             applyDamageToEnemy(e, trampleDmg, nx * 14.5, nz * 14.5, false);
           }
         } else if (e.explodesOnDeath && !e.bomberTriggered) {
-          // Bomber drops lit barrel right at player's feet and detonates in 0.80s!
+          // Toxic Slime / Bomber bursts acid hazard pool right at player's feet and detonates in 0.80s!
           e.bomberTriggered = true;
-          spawnBomberHazard(e.x, e.z);
-          floatText('💣 ФИТИЛЬ!', e.x, e.z, '#fb923c');
+          spawnBomberHazard(e.x, e.z, e.hazardColor || 0x22c55e);
+          floatText('🧪 КИСЛОТА!', e.x, e.z, '#4ade80');
           e.hp = 0;
           handleEnemyDeath(e);
-        } else if (e.contactCooldown <= 0) {
+        } else if (e.contactCooldown <= 0 && (e.disarmTimer || 0) <= 0) {
           e.contactCooldown = 0.65;
           applyDamageToPlayer(e.damage);
         }
@@ -4150,8 +4551,23 @@ export function createCombatController({
       if (e.hp > 0 && e.model?.obj) {
         e.model.obj.position.x = e.x;
         e.model.obj.position.z = e.z;
+        if ((e.emergeTimer || 0) > 0) {
+          e.emergeTimer = Math.max(0, e.emergeTimer - dt);
+          const prog = 1 - e.emergeTimer / Math.max(0.01, e.emergeDuration || 0.85);
+          const smooth = prog * prog * (3 - 2 * prog);
+          e.model.obj.position.y = -1.9 * (1 - smooth);
+        } else if ((e.waterLiftTimer || 0) <= 0) {
+          e.model.obj.position.y = 0;
+        }
         e.model.obj.rotation.y = e.facing;
-        animateEntityModel(e.model, dt, true, slowMult, false, false, elapsedTime);
+        const isMoving =
+          Math.hypot(e.x - prevEx, e.z - prevEz) > 0.0025 &&
+          (e.emergeTimer || 0) <= 0 &&
+          (e.castPauseTimer || 0) <= 0;
+        animateEntityModel(e.model, dt, isMoving, slowMult, false, false, elapsedTime);
+        if (e.type === 'corrupted_treant' || e.type === 'mimic_chest') {
+          e.model.handle?.syncCyclePhase?.((e.emergeTimer || 0) > 0 ? 0 : (e.hopCycle || 0));
+        }
       } else if (e.hp <= 0) {
         if (!e._corpseTransferred) removeSceneObject(e.model.obj, e.model.handle);
         enemies.splice(i, 1);
@@ -4193,9 +4609,15 @@ export function createCombatController({
             continue;
           }
         }
+      } else if (p.type === 'mimic_disguise') {
+        if (dist <= 2.75) {
+          awakenMimicDisguise(p, i);
+          continue;
+        }
       } else if (p.type === 'supply_crate' || p.type === 'companion_crate') {
         if (dist <= p.radius + player.radius + 0.28) {
           if (p.type === 'supply_crate') {
+            maybeDropSpearBlueprint(p.x, p.z);
             activateOverdrive(p.x, p.z);
           } else {
             activateCompanion(p.x, p.z);
@@ -4234,7 +4656,7 @@ export function createCombatController({
         p.model.obj.position.z = p.z;
         if (typeof p.model.handle?.update === 'function') {
           p.model.handle.update(dt, elapsedTime);
-        } else if (!p.type.includes('crate')) {
+        } else if (!p.type.includes('crate') && p.type !== 'mimic_disguise') {
           p.model.obj.position.y = 0.22 + Math.sin(elapsedTime * 4.2 + p.uid) * 0.09;
           p.model.obj.rotation.y += dt * 2.2;
         } else if (p.hitWobble > 0) {
@@ -4251,20 +4673,22 @@ export function createCombatController({
     const activeRelic = pickups.find((p) => p.type === 'relic_weapon_crate' && p.hp > 0);
 
     let activeBoss = bossEntity && bossEntity.hp > 0 ? bossEntity : null;
-    if (!activeBoss) {
-      for (let i = 0; i < enemies.length; i++) {
-        const e = enemies[i];
-        if (e && e.hp > 0 && (e.isBoss || e.isFinaleTarget)) {
+    let aliveFinaleCount = 0;
+    for (let i = 0; i < enemies.length; i++) {
+      const e = enemies[i];
+      if (e && e.hp > 0 && (e.isBoss || e.isFinaleTarget)) {
+        aliveFinaleCount += 1;
+        if (!activeBoss) {
           activeBoss = e;
           bossEntity = e;
-          break;
         }
       }
     }
 
     const wpnDef = WEAPONS[currentWeaponId] || WEAPONS.club;
     const maxHp = stats ? stats.maxHp : player.maxHp;
-    const goldTotal = progression.getState().gold;
+    const progState = progression.getState();
+    const goldTotal = progState.gold;
     const reloadProgress =
       player.isReloading && player.reloadDuration > 0
         ? +clamp(1 - player.reloadTimer / player.reloadDuration, 0, 1).toFixed(3)
@@ -4275,10 +4699,10 @@ export function createCombatController({
       maxHp,
       damageBlock: stats ? stats.damageBlock : 0,
       dodgeChance: stats ? stats.dodgeChance : 0,
-      xp,
-      xpNext,
-      xpToNext: xpNext,
-      runLevel,
+      xp: progState.heroXp ?? xp,
+      xpNext: progState.heroXpNext ?? xpNext,
+      xpToNext: progState.heroXpNext ?? xpNext,
+      runLevel: progState.heroLevel ?? runLevel,
       weaponRunLevel,
       weaponId: wpnDef.id,
       weapon: wpnDef,
@@ -4293,6 +4717,8 @@ export function createCombatController({
       mageElement: stats?.mageElement || null,
       isReloading: Boolean(player.isReloading),
       reloadProgress,
+      reloadPerShellTime: stats?.reloadPerShellTime || 0,
+      focusRatio: stats?.focusTime > 0 ? +clamp((player.standStillTimer || 0) / stats.focusTime, 0, 1).toFixed(2) : 1,
       activePerks: perks,
       overdriveAmmo: player.overdriveAmmo,
       overdriveMaxAmmo: player.overdriveMax,
@@ -4305,7 +4731,11 @@ export function createCombatController({
       finaleStarted,
       phaseText: finaleStarted
         ? '💀 УБЕЙ БОССА!'
-        : `☠️ Орда: ${Math.min(kills, targetKills)} / ${targetKills}`,
+        : currentLevelDef.hasBoss
+          ? bossSpawnCountdown <= 10.5
+            ? `⚠️ Босс через ${Math.max(1, Math.ceil(bossSpawnCountdown))} с!`
+            : `⏳ Босс: ${Math.max(1, Math.ceil(bossSpawnCountdown))} с • ☠️ ${kills}/${targetKills}`
+          : `☠️ Орда: ${Math.min(kills, targetKills)} / ${targetKills}`,
       seals: player.seals,
       beastTimeLeft: +Math.max(0, player.beastTimeLeft).toFixed(2),
       beastDuration: 10,
@@ -4315,7 +4745,7 @@ export function createCombatController({
       levelNameRu: currentLevelDef.nameRu,
       boss: activeBoss
         ? {
-            nameRu: activeBoss.nameRu,
+            nameRu: aliveFinaleCount > 1 ? `${activeBoss.nameRu} (+${aliveFinaleCount - 1})` : activeBoss.nameRu,
             hp: Math.max(0, Math.ceil(activeBoss.hp)),
             maxHp: activeBoss.maxHp,
             isMiniBoss: Boolean(activeBoss.isMiniBoss)
@@ -4323,7 +4753,8 @@ export function createCombatController({
         : null,
       relicCratePos: activeRelic ? { x: activeRelic.x, z: activeRelic.z } : null,
       playerPos: { x: player.x, z: player.z },
-      autoAim
+      autoAim,
+      attackEnabled
     };
   }
 
@@ -4336,6 +4767,15 @@ export function createCombatController({
     return autoAim;
   }
 
+  function setAttackEnabled(enabled) {
+    attackEnabled = Boolean(enabled);
+    return attackEnabled;
+  }
+
+  function getAttackEnabled() {
+    return attackEnabled;
+  }
+
   return {
     startRun,
     revivePlayer,
@@ -4343,6 +4783,8 @@ export function createCombatController({
     triggerReload,
     setAutoAim,
     getAutoAim,
+    setAttackEnabled,
+    getAttackEnabled,
     update,
     getHudSnapshot,
     disposeRun,

@@ -2,14 +2,14 @@
 // Arsenal Progression, Procedural Web Audio, Gothic UI, and Yandex Games SDK v2.
 
 import * as THREE from '../vendor/three.module.js';
-import { LEVELS, MAGE_ELEMENTS } from './config.js?v=20261116m';
-import { createArenaWorld } from './world.js?v=20261116m';
-import * as models from './models.js?v=20261116m';
-import { createProgressionStore } from './progression.js?v=20261116m';
-import { createCombatController } from './combat.js?v=20261116m';
-import { createAudioEngine } from './audio.js?v=20261116m';
-import { initYandexSdk } from './yandexSdk.js?v=20261116m';
-import { createUIManager } from './ui.js?v=20261116m';
+import { LEVELS, MAGE_ELEMENTS } from './config.js?v=20261117z16';
+import { createArenaWorld } from './world.js?v=20261117z16';
+import * as models from './models.js?v=20261117z16';
+import { createProgressionStore } from './progression.js?v=20261117z16';
+import { createCombatController } from './combat.js?v=20261117z16';
+import { createAudioEngine } from './audio.js?v=20261117z16';
+import { initYandexSdk } from './yandexSdk.js?v=20261117z16';
+import { createUIManager } from './ui.js?v=20261117z16';
 
 async function bootstrap() {
   const canvas = document.getElementById('game-canvas');
@@ -84,15 +84,64 @@ async function bootstrap() {
   window.addEventListener('touchstart', clearStaleExternalPause, { passive: true });
   window.addEventListener('focus', clearStaleExternalPause);
 
-  await Promise.all([
-    models.preloadModels((loaded, total) => {
-      window.__setSplashAssetProgress?.(loaded, total);
-    }),
-    world.ready
-  ]);
+  // Load tiny arena props & floor/sky textures FIRST (~1MB) before streaming large Tripo hero/monster GLBs
+  // so no courtyard prop ever times out or leaves an invisible obstacle collider!
+  await world.ready;
+  await models.preloadModels((loaded, total) => {
+    window.__setSplashAssetProgress?.(loaded, total);
+  });
 
-  // 3D Hero Preview in Hub Diorama
+  // 3D Hero & 3D Arsenal Weapon Preview in Hub Diorama + Interactive Right-Mouse-Button 360° Turntable
+  const hubBgPlateEl = document.getElementById('hub-bg-plate');
+  const hubBgVideoEl = document.getElementById('hub-bg-video');
+  if (hubBgVideoEl) {
+    hubBgVideoEl.muted = true;
+    hubBgVideoEl.play().catch(() => {});
+    document.addEventListener('pointerdown', () => {
+      if (gameMode === 'hub' && hubBgVideoEl.paused) {
+        hubBgVideoEl.play().catch(() => {});
+      }
+    }, { passive: true });
+  }
   let hubPreviewHero = null;
+  let hubArsenalWeapon = null;
+  let currentHubTab = 'home';
+  let previewedArsenalWeaponId = null;
+  let previewedArsenalLocked = false;
+  let hubHeroRotY = 0;
+  let hubHeroTargetRotY = 0;
+  let hubHeroRotVel = 0;
+  let rmbRotatingHero = false;
+  let lastRmbCoordX = 0;
+  let touchRotatingHero = false;
+  let activeHeroTouchId = null;
+  let lastHeroTouchX = 0;
+
+  function refreshArsenalWeaponDiorama(explicitWeaponId = null, isLocked = false) {
+    if (hubArsenalWeapon?.root && hubArsenalWeapon.root.parent) {
+      hubArsenalWeapon.root.parent.remove(hubArsenalWeapon.root);
+    }
+    hubArsenalWeapon = null;
+    const isShowcaseTab = currentHubTab === 'arsenal' || currentHubTab === 'store';
+    if (gameMode !== 'hub' || !isShowcaseTab) return;
+    if (explicitWeaponId === '__NONE__') {
+      previewedArsenalWeaponId = null;
+      return;
+    }
+
+    const st = progression.getState();
+    const classId = st.selectedClass || 'warrior';
+    const wId = explicitWeaponId || previewedArsenalWeaponId || progression.getEquippedWeaponId(classId);
+    previewedArsenalWeaponId = wId;
+    previewedArsenalLocked = Boolean(isLocked);
+    const mageElem = st.activeMageElement || 'water';
+    hubArsenalWeapon = models.createArsenalShowcaseWeapon(wId, mageElem, previewedArsenalLocked);
+    if (hubArsenalWeapon?.root) {
+      hubArsenalWeapon.root.rotation.y = hubHeroRotY;
+      world.scene.add(hubArsenalWeapon.root);
+    }
+  }
+
   function refreshHubDiorama() {
     if (hubPreviewHero?.root && hubPreviewHero.root.parent) {
       hubPreviewHero.root.parent.remove(hubPreviewHero.root);
@@ -103,12 +152,18 @@ async function bootstrap() {
     const st = progression.getState();
     const classId = st.selectedClass || 'warrior';
     const weaponId = progression.getEquippedWeaponId(classId);
-    const mageElem = st.activeMageElement || 'fire';
+    const mageElem = st.activeMageElement || 'water';
     hubPreviewHero = models.createHeroMesh(classId, weaponId, mageElem);
     if (hubPreviewHero?.root) {
-      hubPreviewHero.root.position.set(0, 0, 0);
-      hubPreviewHero.root.scale.setScalar(1.25);
+      hubPreviewHero.root.position.set(0, world.HUB_PEDESTAL_TOP_Y ?? 0, 0);
+      hubPreviewHero.root.scale.setScalar(1.10);
+      hubPreviewHero.root.rotation.y = hubHeroRotY;
+      const isShowcaseTab = currentHubTab === 'arsenal' || currentHubTab === 'store';
+      hubPreviewHero.root.visible = !isShowcaseTab;
       world.scene.add(hubPreviewHero.root);
+    }
+    if (currentHubTab === 'arsenal' || currentHubTab === 'store') {
+      refreshArsenalWeaponDiorama(previewedArsenalWeaponId, previewedArsenalLocked);
     }
   }
 
@@ -117,6 +172,10 @@ async function bootstrap() {
       hubPreviewHero.root.parent.remove(hubPreviewHero.root);
     }
     hubPreviewHero = null;
+    if (hubArsenalWeapon?.root && hubArsenalWeapon.root.parent) {
+      hubArsenalWeapon.root.parent.remove(hubArsenalWeapon.root);
+    }
+    hubArsenalWeapon = null;
   }
 
   // Helper: project 3D world position to 2D screen coordinates for floating damage/block numbers
@@ -156,24 +215,17 @@ async function bootstrap() {
           ui.showWeaponUnlockBanner(weaponDef);
         }
       },
-      onLevelUpReady: (choices) => {
-        if (gameMode !== 'playing') return;
-        gameMode = 'levelup';
-        sdk.GameplayAPI.stop();
-        audio.playLevelUp();
-        ui.showLevelUpModal(choices, (pickedChoice) => {
-          const choiceId = typeof pickedChoice === 'string' ? pickedChoice : pickedChoice?.id;
-          ui.hideLevelUpModal();
-          gameMode = 'playing';
-          sdk.GameplayAPI.start();
-          combat.applyLevelUpChoice(choiceId);
-        });
+      onHeroLevelUp: () => {
+        persistSave();
       },
-      onRunEnd: ({ victory, level, goldEarned, kills, unlockedWeapon }) => {
+      onRunEnd: ({ victory, level, goldEarned, kills, unlockedWeapon, hpRatio, elapsedSec, stars, starDetails, difficulty }) => {
         gameMode = 'result';
         sdk.GameplayAPI.stop();
         if (victory) {
           progression.unlockNextLevel(level);
+          if (typeof stars === 'number') {
+            progression.recordLevelStars?.(level, stars);
+          }
         }
         persistSave();
 
@@ -186,6 +238,11 @@ async function bootstrap() {
               goldEarned: currentGoldEarned,
               kills,
               unlockedWeapon,
+              hpRatio,
+              elapsedSec,
+              stars: victory ? (stars ?? 1) : 0,
+              starDetails,
+              difficulty,
               canRevive: !victory && !usedReviveThisRun,
               canDoubleGold: currentGoldEarned > 0 && !usedDoubleGoldThisRun
             },
@@ -216,9 +273,10 @@ async function bootstrap() {
               onNext: async () => {
                 ui.hideResultModal();
                 await sdk.showInterstitial();
-                const nextLvl = Math.min(LEVELS.length, (level || 1) + 1);
-                activeRunLevel = nextLvl;
-                enterHub();
+                if (victory) {
+                  activeRunLevel = Math.min(LEVELS.length, (level || 1) + 1);
+                }
+                enterHub('campaign_forest');
               },
               onArsenal: async () => {
                 ui.hideResultModal();
@@ -226,7 +284,7 @@ async function bootstrap() {
                 if (victory) {
                   activeRunLevel = Math.min(LEVELS.length, (level || 1) + 1);
                 }
-                enterHub();
+                enterHub('campaign_forest');
               },
               onRetry: async () => {
                 ui.hideResultModal();
@@ -244,16 +302,25 @@ async function bootstrap() {
 
   let reloadRequested = false;
 
-  function enterHub() {
+  function enterHub(targetTab = null) {
     reloadRequested = false;
     combat.disposeRun();
+    if (hubBgPlateEl) hubBgPlateEl.classList.remove('hidden');
+    if (hubBgVideoEl) {
+      hubBgVideoEl.muted = true;
+      hubBgVideoEl.play().catch(() => {});
+    }
     world.setBossAtmosphere(false);
     world.setCameraMode?.('hub');
+    audio.setMusicMode?.('hub');
     gameMode = 'hub';
     sdk.GameplayAPI.stop();
     ui.hideAllModals();
     ui.showHud(false);
     ui.setSelectedLevel?.(activeRunLevel);
+    if (targetTab) {
+      ui.setActiveTab?.(targetTab);
+    }
     ui.renderHub(progression);
     ui.showHub(true);
     refreshHubDiorama();
@@ -264,12 +331,14 @@ async function bootstrap() {
       gameMode = 'paused';
       keysDown.clear();
       pointerFiring = false;
+      audio.setMusicMode?.('hub');
       sdk.GameplayAPI.stop();
       const snap = combat.getHudSnapshot?.() || {};
       ui.showPauseModal?.(snap, {
         onResume: () => {
           if (gameMode === 'paused') {
             gameMode = 'playing';
+            audio.setMusicMode?.(combat.getHudSnapshot?.()?.finaleStarted ? 'boss' : 'combat');
             sdk.GameplayAPI.start();
           }
         },
@@ -285,6 +354,7 @@ async function bootstrap() {
     } else if (gameMode === 'paused') {
       ui.hidePauseModal?.();
       gameMode = 'playing';
+      audio.setMusicMode?.(combat.getHudSnapshot?.()?.finaleStarted ? 'boss' : 'combat');
       sdk.GameplayAPI.start();
     }
   }
@@ -299,13 +369,20 @@ async function bootstrap() {
     reloadRequested = false;
 
     clearHubDiorama();
+    if (hubBgPlateEl) hubBgPlateEl.classList.add('hidden');
+    if (hubBgVideoEl) hubBgVideoEl.pause();
     world.setCameraMode?.('combat');
     ui.hideAllModals();
     ui.showHub(false);
     ui.showHud(true);
+    combat.setAttackEnabled?.(true);
     ui.setAutoAimState(combat.getAutoAim());
+    ui.setAttackEnabledState?.(true);
 
-    combat.startRun({ classId: chosenClass, levelNumber: chosenLevel });
+    world.setArenaBiome?.('courtyard');
+    audio.setMusicMode?.('combat');
+    const difficultyMode = progression.getState().difficultyMode || 'normal';
+    combat.startRun({ classId: chosenClass, levelNumber: chosenLevel, difficultyMode });
     ui.updateHud(combat.getHudSnapshot());
     gameMode = 'playing';
     sdk.GameplayAPI.start();
@@ -387,8 +464,68 @@ async function bootstrap() {
         ui.showToast('Недостаточно золота для улучшения оружия');
       }
     },
+    onBuyWeapon: (weaponId) => {
+      audio.unlock();
+      const check = progression.canBuyWeaponInShop?.(weaponId);
+      if (check?.ok && progression.buyWeaponInShop?.(weaponId)) {
+        const wName = WEAPONS[weaponId]?.nameRu || weaponId;
+        audio.playWeaponUnlock();
+        persistSave();
+        ui.renderHub(progression);
+        refreshHubDiorama();
+        ui.showToast(`⚔️ Куплено: «${wName}» — теперь в Арсенале!`);
+      } else if (check?.reason === 'blueprint') {
+        ui.showToast('📜 Сначала найдите чертёж Копья в сундуках (этапы III+, шанс 20%)!');
+      } else if (check?.reason === 'boss') {
+        const req = WEAPONS[weaponId]?.unlockRequiresBossStage || 5;
+        ui.showToast(`🔒 Победите босса ${req}-го этапа, чтобы открыть в Магазине!`);
+      } else if (check?.reason === 'level') {
+        const req = WEAPONS[weaponId]?.unlockLevel || 3;
+        ui.showToast(`🔒 Откроется с ${req}-го этапа кампании!`);
+      } else if (check?.reason === 'gold') {
+        ui.showToast('Недостаточно золота для покупки!');
+      }
+    },
     onBuyHeroUpgrade: handleBuyHeroUpgrade,
     onUpgradeStat: handleBuyHeroUpgrade,
+    onUpgradeTalent: (classId, talentId) => {
+      audio.unlock();
+      if (progression.upgradeClassTalent?.(classId, talentId)) {
+        audio.playLevelUp();
+        persistSave();
+        ui.renderHub(progression);
+      } else {
+        ui.showToast('Нет доступных очков таланта или не открыт предыдущий узел');
+      }
+    },
+    onResetTalents: (classId) => {
+      audio.unlock();
+      if (progression.resetClassTalents?.(classId)) {
+        audio.playPickup('crate');
+        persistSave();
+        ui.renderHub(progression);
+        ui.showToast('Очки талантов сброшены!');
+      }
+    },
+    onUpgradeMageTalent: (talentId) => {
+      audio.unlock();
+      if (progression.upgradeMageTalent?.(talentId)) {
+        audio.playLevelUp();
+        persistSave();
+        ui.renderHub(progression);
+      } else {
+        ui.showToast('Нет доступных очков таланта или не открыт предыдущий узел');
+      }
+    },
+    onResetMageTalents: () => {
+      audio.unlock();
+      if (progression.resetMageTalents?.()) {
+        audio.playPickup('crate');
+        persistSave();
+        ui.renderHub(progression);
+        ui.showToast('Очки талантов Мага Воды сброшены!');
+      }
+    },
     onRewardGold: async () => {
       audio.unlock();
       const ok = await sdk.showRewarded('arsenal_gold_chest');
@@ -407,6 +544,12 @@ async function bootstrap() {
         activeRunLevel = levelNum;
       }
     },
+    onSetDifficulty: (mode) => {
+      audio.unlock();
+      progression.setDifficultyMode?.(mode);
+      persistSave();
+      ui.renderHub(progression);
+    },
     onStartRun: ({ classId, level } = {}) => {
       startBattle(classId, level || activeRunLevel);
     },
@@ -422,6 +565,11 @@ async function bootstrap() {
       combat.setAutoAim(next);
       ui.setAutoAimState(next);
     },
+    onToggleAttack: (nextBool) => {
+      const next = typeof nextBool === 'boolean' ? nextBool : !combat.getAttackEnabled?.();
+      combat.setAttackEnabled?.(next);
+      ui.setAttackEnabledState?.(next);
+    },
     onToggleMute: (nextBool) => {
       const muted = typeof nextBool === 'boolean' ? nextBool : !audio.isMuted();
       audio.setMuted(muted);
@@ -429,8 +577,14 @@ async function bootstrap() {
     },
     onVolumeChange: (vol) => {
       audio.unlock();
-      const v = audio.setVolume(vol);
+      const v = audio.setSfxVolume ? audio.setSfxVolume(vol) : audio.setVolume(vol);
       ui.setVolumeState?.(v);
+      ui.setMutedState?.(audio.isMuted());
+    },
+    onMusicVolumeChange: (vol) => {
+      audio.unlock();
+      const mv = audio.setMusicVolume ? audio.setMusicVolume(vol) : vol;
+      ui.setMusicVolumeState?.(mv);
       ui.setMutedState?.(audio.isMuted());
     },
     onTogglePause: () => {
@@ -438,7 +592,35 @@ async function bootstrap() {
     },
     onExitToHub: () => {
       persistSave();
-      enterHub();
+      enterHub('campaign_forest');
+    },
+    onHubTabChange: (tabId) => {
+      currentHubTab = tabId || 'home';
+      const isFullscreenCampaign =
+        currentHubTab === 'campaign' ||
+        currentHubTab === 'campaign_world' ||
+        currentHubTab === 'campaign_forest';
+      const isShowcaseTab = currentHubTab === 'arsenal' || currentHubTab === 'store';
+      world.setHubStageFocus?.(tabId === 'heroes' ? 'heroes' : isShowcaseTab ? 'arsenal' : 'center');
+      if (hubPreviewHero?.root) {
+        hubPreviewHero.root.visible = !isShowcaseTab && !isFullscreenCampaign;
+      }
+      if (isShowcaseTab) {
+        hubHeroRotY = 0;
+        hubHeroTargetRotY = 0;
+        hubHeroRotVel = 0;
+        refreshArsenalWeaponDiorama(previewedArsenalWeaponId, previewedArsenalLocked);
+      } else if (hubArsenalWeapon?.root && hubArsenalWeapon.root.parent) {
+        hubArsenalWeapon.root.parent.remove(hubArsenalWeapon.root);
+        hubArsenalWeapon = null;
+      }
+    },
+    onPreviewArsenalWeapon: (weaponId, isLocked) => {
+      previewedArsenalWeaponId = weaponId;
+      previewedArsenalLocked = Boolean(isLocked);
+      if (currentHubTab === 'arsenal' || currentHubTab === 'store') {
+        refreshArsenalWeaponDiorama(weaponId, isLocked);
+      }
     }
   });
 
@@ -462,6 +644,12 @@ async function bootstrap() {
       ui.setAutoAimState(next);
       ui.showToast(next ? '🎯 Автоприцел включён' : '🎯 Ручной прицел курсором');
     }
+    if (e.code === 'KeyE' && gameMode === 'playing' && !e.repeat) {
+      const next = !(combat.getAttackEnabled ? combat.getAttackEnabled() : true);
+      combat.setAttackEnabled?.(next);
+      ui.setAttackEnabledState?.(next);
+      ui.showToast(next ? '⚔️ Атака ВКЛ [E]' : '👁️ Атака ВЫКЛ [E] — режим наблюдения');
+    }
     if ((e.code === 'Escape' || e.code === 'KeyP') && (gameMode === 'playing' || gameMode === 'paused') && !e.repeat) {
       e.preventDefault();
       togglePauseGame();
@@ -476,10 +664,132 @@ async function bootstrap() {
     keysDown.clear();
     pointerFiring = false;
     reloadRequested = false;
+    rmbRotatingHero = false;
+    touchRotatingHero = false;
+    activeHeroTouchId = null;
+    document.body.classList.remove('is-rotating-hero');
   });
+
+  // Suppress browser context menu on Right-Click in Hub so Right-Mouse-Button rotates the 3D Hero cleanly!
+  window.addEventListener('contextmenu', (e) => {
+    if (gameMode !== 'hub') return;
+    if (e.target && typeof e.target.closest === 'function' && e.target.closest('.sound-trigger-btn')) {
+      return;
+    }
+    e.preventDefault();
+  });
+
+  window.addEventListener('pointerdown', (e) => {
+    if (gameMode !== 'hub' || (!hubPreviewHero?.root && !hubArsenalWeapon?.root)) return;
+    if (ui.isHeroStageVisible && !ui.isHeroStageVisible()) return;
+    const mapped = window.__toGameCoords ? window.__toGameCoords(e.clientX, e.clientY) : { x: e.clientX, y: e.clientY };
+
+    // Desktop Left OR Right Mouse Button drag on open 3D stage rotates Hero & Shop/Arsenal 3D weapons smoothly!
+    if (e.pointerType !== 'touch' && (e.button === 0 || e.button === 2)) {
+      if (
+        e.target &&
+        typeof e.target.closest === 'function' &&
+        e.target.closest(
+          e.button === 0
+            ? 'button, input, a, .hero-info-card, .hero-roster-rail, .arsenal-right-plaque, .arsenal-gothic-card, .hub-subpanel-card, .hub-bottom-dock, .hub-topleft-profile, .hub-topright-bar, .home-cta-stack, .modal-backdrop, .sound-popover'
+            : '.modal-backdrop:not(.hidden), .sound-popover:not(.hidden)'
+        )
+      ) {
+        return;
+      }
+      e.preventDefault();
+      audio.unlock();
+      rmbRotatingHero = true;
+      lastRmbCoordX = mapped.x;
+      hubHeroRotVel = 0;
+      document.body.classList.add('is-rotating-hero');
+      return;
+    }
+
+    // Touch fallback on open 3D stage area (for mobile/tablet where there is no RMB)
+    if (e.pointerType === 'touch' && !touchRotatingHero) {
+      if (
+        e.target &&
+        typeof e.target.closest === 'function' &&
+        e.target.closest(
+          'button, input, a, .hero-info-card, .hero-roster-rail, .hub-subpanel-card, .hub-bottom-dock, .hub-topleft-profile, .hub-topright-bar, .home-cta-stack, .modal-backdrop, .sound-popover'
+        )
+      ) {
+        return;
+      }
+      touchRotatingHero = true;
+      activeHeroTouchId = e.pointerId;
+      lastHeroTouchX = mapped.x;
+      hubHeroRotVel = 0;
+    }
+  });
+
+  window.addEventListener('pointermove', (e) => {
+    if (gameMode !== 'hub') return;
+    if (!rmbRotatingHero && !(touchRotatingHero && e.pointerId === activeHeroTouchId)) return;
+    const mapped = window.__toGameCoords ? window.__toGameCoords(e.clientX, e.clientY) : { x: e.clientX, y: e.clientY };
+
+    if (rmbRotatingHero && e.pointerType !== 'touch') {
+      // Safety check: if neither LMB nor RMB is pressed
+      if (typeof e.buttons === 'number' && (e.buttons & 3) === 0) {
+        rmbRotatingHero = false;
+        document.body.classList.remove('is-rotating-hero');
+        return;
+      }
+      const dx = mapped.x - lastRmbCoordX;
+      lastRmbCoordX = mapped.x;
+      const dAngle = dx * 0.0125;
+      hubHeroTargetRotY += dAngle;
+      hubHeroRotVel = Math.max(-10, Math.min(10, dAngle * 42));
+    } else if (touchRotatingHero && e.pointerId === activeHeroTouchId) {
+      const dx = mapped.x - lastHeroTouchX;
+      lastHeroTouchX = mapped.x;
+      const dAngle = dx * 0.0125;
+      hubHeroTargetRotY += dAngle;
+      hubHeroRotVel = Math.max(-10, Math.min(10, dAngle * 42));
+    }
+  });
+
+  const endHeroRotationDrag = (e) => {
+    if (e && e.pointerType !== 'touch' && (e.button === 0 || e.button === 2 || e.type === 'pointercancel')) {
+      rmbRotatingHero = false;
+      document.body.classList.remove('is-rotating-hero');
+    }
+    if (e && touchRotatingHero && e.pointerId === activeHeroTouchId) {
+      touchRotatingHero = false;
+      activeHeroTouchId = null;
+    }
+  };
+  window.addEventListener('pointerup', endHeroRotationDrag);
+  window.addEventListener('pointercancel', endHeroRotationDrag);
+
+  let rmbOrbitingCamera = false;
+  let lastCombatOrbitX = 0;
+  let lastCombatOrbitY = 0;
+
+  window.addEventListener('wheel', (e) => {
+    if (gameMode !== 'playing') return;
+    if (e.target && typeof e.target.closest === 'function' && e.target.closest('.modal-backdrop:not(.hidden), .sound-popover:not(.hidden)')) {
+      return;
+    }
+    e.preventDefault();
+    world.zoomCombatOrbit?.(e.deltaY);
+  }, { passive: false });
 
   canvas.addEventListener('pointermove', (e) => {
     if (e.pointerType === 'touch') return;
+    if (rmbOrbitingCamera && gameMode === 'playing') {
+      if (typeof e.buttons === 'number' && (e.buttons & 2) === 0) {
+        rmbOrbitingCamera = false;
+      } else {
+        const mapped = window.__toGameCoords ? window.__toGameCoords(e.clientX, e.clientY) : { x: e.clientX, y: e.clientY };
+        const dx = mapped.x - lastCombatOrbitX;
+        const dy = mapped.y - lastCombatOrbitY;
+        lastCombatOrbitX = mapped.x;
+        lastCombatOrbitY = mapped.y;
+        world.adjustCombatOrbit?.(-dx * 0.0068, dy * 0.0056);
+      }
+    }
     pointerClientX = e.clientX;
     pointerClientY = e.clientY;
     pointerMovedRecently = 2.5;
@@ -488,6 +798,14 @@ async function bootstrap() {
   canvas.addEventListener('pointerdown', (e) => {
     audio.unlock();
     if (e.pointerType === 'touch') return;
+    if (e.button === 2 && gameMode === 'playing') {
+      e.preventDefault();
+      const mapped = window.__toGameCoords ? window.__toGameCoords(e.clientX, e.clientY) : { x: e.clientX, y: e.clientY };
+      rmbOrbitingCamera = true;
+      lastCombatOrbitX = mapped.x;
+      lastCombatOrbitY = mapped.y;
+      return;
+    }
     if (e.button === 0) {
       pointerClientX = e.clientX;
       pointerClientY = e.clientY;
@@ -497,6 +815,9 @@ async function bootstrap() {
 
   window.addEventListener('pointerup', (e) => {
     if (e.pointerType === 'touch') return;
+    if (e.button === 2) {
+      rmbOrbitingCamera = false;
+    }
     if (e.button === 0) {
       pointerFiring = false;
     }
@@ -524,6 +845,15 @@ async function bootstrap() {
       if (len > 1) {
         moveX /= len;
         moveZ /= len;
+      }
+      const camYaw = world.getCombatOrbitYaw?.() || 0;
+      if (Math.abs(camYaw) > 0.0001 && (moveX !== 0 || moveZ !== 0)) {
+        const cosY = Math.cos(camYaw);
+        const sinY = Math.sin(camYaw);
+        const rx = moveX * cosY + moveZ * sinY;
+        const rz = -moveX * sinY + moveZ * cosY;
+        moveX = rx;
+        moveZ = rz;
       }
     }
 
@@ -561,7 +891,8 @@ async function bootstrap() {
   }
 
   // Sync initial volume/mute UI state & enter Hub behind splash screen
-  ui.setVolumeState?.(audio.getVolume());
+  ui.setVolumeState?.(audio.getSfxVolume ? audio.getSfxVolume() : audio.getVolume());
+  ui.setMusicVolumeState?.(audio.getMusicVolume ? audio.getMusicVolume() : 0.38);
   ui.setMutedState?.(audio.isMuted());
   enterHub();
   // Render initial 3D Courtyard + Hero Pedestal frame BEFORE dismissing splash so mobile never flashes black!
@@ -572,10 +903,26 @@ async function bootstrap() {
   sdk.markGameReady();
 
   // Expose debug helper on window for quick testing
-  window.__grimborne = { progression, combat, world, ui, enterHub, startBattle };
+  window.__grimborne = {
+    progression,
+    combat,
+    world,
+    ui,
+    enterHub,
+    startBattle,
+    getHeroRotationY: () => hubHeroRotY,
+    setHeroRotationY: (rad) => {
+      hubHeroRotY = Number(rad) || 0;
+      hubHeroTargetRotY = hubHeroRotY;
+      hubHeroRotVel = 0;
+      if (hubPreviewHero?.root) hubPreviewHero.root.rotation.y = hubHeroRotY;
+    }
+  };
 
   // === High-Refresh Render & Simulation Loop (Up to 120 FPS ProMotion / Desktop) ===
   const fpsBadgeEl = document.getElementById('fps-badge');
+  let hubParallaxX = 0;
+  let hubParallaxY = 0;
   let lastNow = performance.now();
   let elapsedTime = 0;
   let fpsAccumTime = 0;
@@ -621,7 +968,9 @@ async function bootstrap() {
       hudSyncAccum = (hudSyncAccum || 0) + dt;
       if (hudSyncAccum >= 0.036 || input.reload) {
         hudSyncAccum = 0;
-        ui.updateHud(combat.getHudSnapshot());
+        const snap = combat.getHudSnapshot();
+        ui.updateHud(snap);
+        audio.setMusicMode?.(snap?.finaleStarted ? 'boss' : 'combat');
       }
       autoSaveAccum += dt;
       if (autoSaveAccum >= 3.0) {
@@ -632,11 +981,38 @@ async function bootstrap() {
       }
       world.update(dt, elapsedTime);
     } else if (gameMode === 'hub') {
-      // Close-up Hero Showcase camera centered on (0, 0) pedestal
+      // Close-up Hero Showcase camera centered on (0, 0) stone pedestal + RMB 360° Hero Rotation
       world.followTarget(0, 0, dt);
-      if (hubPreviewHero?.root) {
-        hubPreviewHero.root.rotation.y = Math.sin(elapsedTime * 0.65) * 0.48;
+      if (!rmbRotatingHero && !touchRotatingHero && Math.abs(hubHeroRotVel) > 0.001) {
+        hubHeroTargetRotY += hubHeroRotVel * dt;
+        hubHeroRotVel *= Math.exp(-9.5 * dt);
+        if (Math.abs(hubHeroRotVel) < 0.005) hubHeroRotVel = 0;
+      }
+      const rotLerp = 1 - Math.exp(-22 * dt);
+      hubHeroRotY += (hubHeroTargetRotY - hubHeroRotY) * rotLerp;
+
+      if (hubPreviewHero?.root && hubPreviewHero.root.visible) {
+        hubPreviewHero.root.rotation.y = hubHeroRotY;
         hubPreviewHero.update?.(dt, false, 1, elapsedTime);
+      }
+      if (hubArsenalWeapon?.root) {
+        if (!rmbRotatingHero && !touchRotatingHero && (currentHubTab === 'arsenal' || currentHubTab === 'store')) {
+          hubHeroTargetRotY += dt * 0.36;
+        }
+        hubArsenalWeapon.root.rotation.y = hubHeroRotY;
+        hubArsenalWeapon.update?.(dt, elapsedTime);
+      }
+      if (hubBgPlateEl) {
+        const vw = Math.max(window.innerWidth, 1);
+        const vh = Math.max(window.innerHeight, 1);
+        const nx = Number.isFinite(pointerClientX) ? (pointerClientX / vw - 0.5) : 0;
+        const ny = Number.isFinite(pointerClientY) ? (pointerClientY / vh - 0.5) : 0;
+        const targetPx = -nx * 11.0 + Math.sin(elapsedTime * 0.45) * 2.2;
+        const targetPy = -ny * 6.5 + Math.cos(elapsedTime * 0.38) * 1.4;
+        const pLerp = 1 - Math.exp(-6.5 * dt);
+        hubParallaxX += (targetPx - hubParallaxX) * pLerp;
+        hubParallaxY += (targetPy - hubParallaxY) * pLerp;
+        hubBgPlateEl.style.transform = `translate3d(${hubParallaxX.toFixed(2)}px, ${hubParallaxY.toFixed(2)}px, 0) scale(1.035)`;
       }
       world.update(dt, elapsedTime);
     } else {

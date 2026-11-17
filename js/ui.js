@@ -15,8 +15,10 @@ import {
   WEAPONS,
   ENEMY_TYPES,
   LEVELS,
-  RUN_UPGRADES
-} from './config.js?v=20261116m';
+  RUN_UPGRADES,
+  MAGE_TALENT_TREE,
+  CLASS_TALENT_TREES
+} from './config.js?v=20261117z16';
 
 const CLASS_ORDER = ['warrior', 'gunslinger', 'mage'];
 
@@ -178,41 +180,121 @@ export function createWeaponSvg(weaponId, className = 'weapon-vector-svg') {
         <circle cx="22" cy="42" r="2.1" fill="#dc2626"/>`;
       break;
 
-    case 'cleaver': // Секач Инквизитора — Heavy Crimson Executioner Axe-Blade
+    case 'spear': // Боевое Копьё — Ornate Long Steel Spear
+    case 'cleaver':
       defs = `
         <linearGradient id="${u}_b" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="#fecaca"/>
-          <stop offset="38%" stop-color="#ef4444"/>
-          <stop offset="100%" stop-color="#450a0a"/>
-        </linearGradient>
-        <linearGradient id="${u}_s" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#e2e8f0"/>
+          <stop offset="0%" stop-color="#e0f2fe"/>
+          <stop offset="50%" stop-color="#38bdf8"/>
+          <stop offset="100%" stop-color="#334155"/>
+        </linearGradient>`;
+      body = `
+        <circle cx="32" cy="32" r="24" fill="rgba(56,189,248,0.14)"/>
+        <line x1="10" y1="54" x2="40" y2="24" stroke="#78350f" stroke-width="3.6" stroke-linecap="round"/>
+        <polygon points="56,8 47,26 39,25 38,17" fill="url(#${u}_b)" stroke="#bae6fd" stroke-width="1.1"/>
+        <path d="M35 20 L44 29" stroke="#f59e0b" stroke-width="2.4" stroke-linecap="round"/>`;
+      break;
+
+    case 'zweihander': // Цвайхандер — Two-Handed Greatsword
+      defs = `
+        <linearGradient id="${u}_b" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#f8fafc"/>
+          <stop offset="50%" stop-color="#cbd5e1"/>
           <stop offset="100%" stop-color="#475569"/>
         </linearGradient>`;
       body = `
-        <circle cx="33" cy="31" r="25" fill="rgba(239,68,68,0.16)"/>
-        <path d="M48 9 L56 19 C54 31 44 41 31 45 L22 36 L38 15 L43 16 Z" fill="url(#${u}_b)" stroke="#fca5a5" stroke-width="1.2"/>
-        <path d="M46 13 L52 20 C50 29 42 37 32 41" fill="none" stroke="#fef2f2" stroke-width="1.6" stroke-linecap="round"/>
-        <circle cx="41" cy="24" r="2.3" fill="#0f172a" stroke="#fca5a5" stroke-width="0.9"/>
-        <path d="M27 33 L11 49 L15 53 L31 37 Z" fill="url(#${u}_s)" stroke="#cbd5e1" stroke-width="0.9"/>
-        <path d="M19 35 L29 45" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"/>
-        <circle cx="11" cy="52" r="3" fill="#fbbf24"/>`;
+        <circle cx="32" cy="32" r="25" fill="rgba(203,213,225,0.14)"/>
+        <polygon points="56,8 51,21 25,47 17,47 17,39 43,13" fill="url(#${u}_b)" stroke="#f8fafc" stroke-width="1.1"/>
+        <path d="M11 32 L32 53" stroke="#eab308" stroke-width="3.2" stroke-linecap="round"/>
+        <line x1="20" y1="44" x2="9" y2="55" stroke="#78350f" stroke-width="3.4" stroke-linecap="round"/>`;
       break;
 
-    case 'flail': // Клинок Пепельной Бури — Legendary Flame-Serrated Greatsword
+    case 'axe': // Боевая Секира — Double-Bitted Iron War Axe
+    case 'flail':
       defs = `
         <linearGradient id="${u}_b" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="#fef9c3"/>
-          <stop offset="45%" stop-color="#f59e0b"/>
-          <stop offset="100%" stop-color="#991b1b"/>
+          <stop offset="0%" stop-color="#e2e8f0"/>
+          <stop offset="55%" stop-color="#94a3b8"/>
+          <stop offset="100%" stop-color="#475569"/>
         </linearGradient>`;
       body = `
-        <circle cx="32" cy="32" r="26" fill="rgba(245,158,11,0.18)"/>
-        <path d="M55 9 L51 22 L45 23 L43 29 L36 31 L27 44 L20 44 L20 37 L33 28 L35 21 L41 19 L42 13 Z" fill="url(#${u}_b)" stroke="#fef08a" stroke-width="1.2"/>
-        <line x1="50" y1="14" x2="24" y2="40" stroke="#fffbeb" stroke-width="1.7" stroke-linecap="round"/>
-        <path d="M12 31 L23 41 L33 52 L29 54 L20 44 L10 35 Z" fill="#f59e0b" stroke="#fef08a" stroke-width="1"/>
-        <path d="M19 45 L10 54" stroke="#78350f" stroke-width="4" stroke-linecap="round"/>
-        <circle cx="9.5" cy="54.5" r="3.2" fill="#fde047"/>`;
+        <circle cx="32" cy="32" r="25" fill="rgba(239,68,68,0.15)"/>
+        <line x1="11" y1="53" x2="45" y2="19" stroke="#5c2d16" stroke-width="4.2" stroke-linecap="round"/>
+        <path d="M35 12 C48 9 56 17 51 28 L39 24 Z" fill="url(#${u}_b)" stroke="#f8fafc" stroke-width="1.1"/>
+        <path d="M52 29 C55 42 47 50 36 45 L40 33 Z" fill="url(#${u}_b)" stroke="#f8fafc" stroke-width="1.1"/>
+        <rect x="37" y="21" width="8" height="8" rx="1.5" transform="rotate(-45 41 25)" fill="#b45309" stroke="#fbbf24" stroke-width="1"/>`;
+      break;
+
+    case 'boss_hammer': // Молот Костолома — Exclusive Boss Warhammer
+      defs = `
+        <linearGradient id="${u}_b" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#fef08a"/>
+          <stop offset="45%" stop-color="#d97706"/>
+          <stop offset="100%" stop-color="#78350f"/>
+        </linearGradient>`;
+      body = `
+        <circle cx="32" cy="32" r="25" fill="rgba(245,158,11,0.18)"/>
+        <line x1="11" y1="53" x2="43" y2="21" stroke="#451a03" stroke-width="4.6" stroke-linecap="round"/>
+        <rect x="29" y="10" width="22" height="14" rx="2.5" transform="rotate(45 40 17)" fill="url(#${u}_b)" stroke="#fef08a" stroke-width="1.2"/>`;
+      break;
+
+    case 'usp_pistol': // Тактический USP — Modern Tactical Handgun
+      defs = `
+        <linearGradient id="${u}_m" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#cbd5e1"/>
+          <stop offset="55%" stop-color="#64748b"/>
+          <stop offset="100%" stop-color="#0f172a"/>
+        </linearGradient>`;
+      body = `
+        <circle cx="32" cy="32" r="24" fill="rgba(148,163,184,0.14)"/>
+        <rect x="16" y="21" width="34" height="8" rx="1.5" fill="url(#${u}_m)" stroke="#e2e8f0" stroke-width="0.9"/>
+        <path d="M18 29 L28 29 L24 44 L15 44 Z" fill="#1e293b" stroke="#94a3b8" stroke-width="0.9"/>`;
+      break;
+
+    case 'colt': // Револьвер Кольт — Chrome Six-Shooter Magnum Revolver
+      defs = `
+        <linearGradient id="${u}_m" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#f8fafc"/>
+          <stop offset="55%" stop-color="#94a3b8"/>
+          <stop offset="100%" stop-color="#334155"/>
+        </linearGradient>`;
+      body = `
+        <circle cx="32" cy="32" r="25" fill="rgba(251,191,36,0.14)"/>
+        <g transform="rotate(-14 32 32)">
+          <rect x="25" y="19" width="29" height="6.2" rx="1.4" fill="url(#${u}_m)" stroke="#f8fafc" stroke-width="0.9"/>
+          <rect x="28" y="25.2" width="19" height="3.2" rx="1" fill="#64748b"/>
+          <rect x="19" y="21" width="11" height="10" rx="2" fill="#e2e8f0" stroke="#fbbf24" stroke-width="1"/>
+          <circle cx="24.5" cy="26" r="2.2" fill="#d97706"/>
+          <path d="M19 29 L12 44 L20 45 L24 31 Z" fill="#78350f" stroke="#d97706" stroke-width="0.9"/>
+        </g>`;
+      break;
+
+    case 'smg': // Пистолет-пулемёт — Submachine Gun
+      defs = `
+        <linearGradient id="${u}_m" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#e2e8f0"/>
+          <stop offset="55%" stop-color="#475569"/>
+          <stop offset="100%" stop-color="#1e293b"/>
+        </linearGradient>`;
+      body = `
+        <circle cx="32" cy="32" r="24" fill="rgba(245,158,11,0.14)"/>
+        <rect x="13" y="22" width="38" height="9" rx="2" fill="url(#${u}_m)" stroke="#cbd5e1" stroke-width="0.9"/>
+        <rect x="31" y="31" width="6" height="17" rx="1.5" transform="rotate(-10 34 39)" fill="#334155" stroke="#94a3b8" stroke-width="0.9"/>
+        <path d="M16 31 L23 31 L20 43 L14 43 Z" fill="#78350f" stroke="#d97706" stroke-width="0.8"/>`;
+      break;
+
+    case 'ak47': // АК-47 — Assault Rifle
+      defs = `
+        <linearGradient id="${u}_m" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#e2e8f0"/>
+          <stop offset="55%" stop-color="#475569"/>
+          <stop offset="100%" stop-color="#1e293b"/>
+        </linearGradient>`;
+      body = `
+        <circle cx="32" cy="32" r="25" fill="rgba(239,68,68,0.14)"/>
+        <path d="M8 28 L19 25 L19 33 L8 37 Z" fill="#78350f" stroke="#d97706" stroke-width="0.9"/>
+        <rect x="19" y="24" width="35" height="6.5" rx="1.5" fill="url(#${u}_m)" stroke="#cbd5e1" stroke-width="0.9"/>
+        <path d="M32 30.5 C32 39 36 45 41 47 L36 48 C30 45 27 38 27 30.5 Z" fill="#92400e" stroke="#f59e0b" stroke-width="0.9"/>`;
       break;
 
     case 'pistol': // Охотничье ружьё — Heavy Pump-Action Shotgun
@@ -379,6 +461,48 @@ function createStatRuneSvg(kind) {
   return makeSvgNode(
     `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${path}</svg>`,
     'stat-rune-svg'
+  );
+}
+
+function createTalentRuneSvg(kind) {
+  let inner = '';
+  if (kind === 'droplet') {
+    inner = `
+      <path d="M12 2.5 C12 2.5 18.5 10.2 18.5 14.5 C18.5 18.1 15.6 21 12 21 C8.4 21 5.5 18.1 5.5 14.5 C5.5 10.2 12 2.5 12 2.5 Z" fill="#0284c7" stroke="#7dd3fc" stroke-width="1.5"/>
+      <path d="M9.2 14.8 C9.2 16.5 10.5 17.8 12.1 18" stroke="#e0f2fe" stroke-width="1.5" stroke-linecap="round"/>`;
+  } else if (kind === 'chalice') {
+    inner = `
+      <path d="M6.5 4.5 H17.5 L15.5 11.2 C15 13 13.7 14 12 14 C10.3 14 9 13 8.5 11.2 Z" fill="#0369a1" stroke="#7dd3fc" stroke-width="1.4"/>
+      <path d="M12 14 V19 M8.5 19.5 H15.5" stroke="#fde047" stroke-width="1.8" stroke-linecap="round"/>
+      <circle cx="12" cy="8.5" r="1.6" fill="#e0f2fe"/>`;
+  } else if (kind === 'boots') {
+    inner = `
+      <path d="M4 13 H14.5 C16.8 13 18.5 11.4 18.5 9.4 C18.5 7.6 17 6.2 15.2 6.2 C13.8 6.2 12.6 7 12.2 8.2" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"/>
+      <path d="M3 17 H17.5 C19.5 17 20.8 18.2 20.8 19.6" stroke="#bae6fd" stroke-width="1.8" stroke-linecap="round"/>
+      <path d="M7 9.5 H10.5" stroke="#fde047" stroke-width="1.6" stroke-linecap="round"/>`;
+  } else if (kind === 'shield') {
+    inner = `
+      <path d="M12 3 L19 6.2 V12.2 C19 16.6 15.9 19.8 12 21.3 C8.1 19.8 5 16.6 5 12.2 V6.2 L12 3 Z" fill="#1e3a8a" stroke="#60a5fa" stroke-width="1.5"/>
+      <circle cx="12" cy="11.5" r="3.2" stroke="#bae6fd" stroke-width="1.4" fill="rgba(56,189,248,0.28)"/>`;
+  } else if (kind === 'twin') {
+    inner = `
+      <circle cx="8.2" cy="13.5" r="4.2" fill="#0284c7" stroke="#bae6fd" stroke-width="1.4"/>
+      <circle cx="15.8" cy="10.2" r="4.2" fill="#0ea5e9" stroke="#e0f2fe" stroke-width="1.4"/>
+      <path d="M11 6.5 L12.5 5 L14 6.5" stroke="#fde047" stroke-width="1.5" stroke-linecap="round"/>`;
+  } else if (kind === 'crit') {
+    inner = `
+      <polygon points="12,2.5 14.8,9 21.5,9.5 16.2,14 17.8,20.8 12,17.2 6.2,20.8 7.8,14 2.5,9.5 9.2,9" fill="#9f1239" stroke="#fda4af" stroke-width="1.4"/>
+      <circle cx="12" cy="12" r="2.2" fill="#fde047"/>`;
+  } else {
+    // crown / maelstrom_fury
+    inner = `
+      <path d="M4.5 17.5 L6.2 7.5 L10 11.8 L12 5.5 L14 11.8 L17.8 7.5 L19.5 17.5 Z" fill="#7c2d12" stroke="#fde047" stroke-width="1.5" stroke-linejoin="round"/>
+      <circle cx="12" cy="5" r="1.4" fill="#38bdf8"/>
+      <path d="M5.5 19.8 H18.5" stroke="#fbbf24" stroke-width="1.8" stroke-linecap="round"/>`;
+  }
+  return makeSvgNode(
+    `<svg viewBox="0 0 24 24" width="28" height="28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${inner}</svg>`,
+    'talent-rune-svg'
   );
 }
 
@@ -866,10 +990,12 @@ export function createUIManager(initialCallbacks = {}) {
   let callbacks = { ...initialCallbacks };
   let lang = 'ru';
   let muted = false;
-  let volume = 0.85;
-  let lastNonZeroVolume = 0.85;
+  let volume = 0.75;
+  let lastNonZeroVolume = 0.75;
+  let musicVolume = 0.38;
   let autoAim = true;
-  let activeHubTab = 'heroes'; // 'heroes' | 'campaign' | 'arsenal' | 'shop'
+  let attackEnabled = true;
+  let activeHubTab = 'home'; // 'home' | 'heroes' | 'campaign' | 'arsenal' | 'shop' | 'store'
   let renderSeq = 0;
 
   const root = document.getElementById('ui-root') || document.body;
@@ -1004,6 +1130,10 @@ export function createUIManager(initialCallbacks = {}) {
   autoAimBtn.type = 'button';
   autoAimBtn.textContent = 'Автоприцел: ВКЛ [Q]';
 
+  const attackToggleBtn = el('button', 'hud-btn autoaim-btn attack-toggle-btn is-on');
+  attackToggleBtn.type = 'button';
+  attackToggleBtn.textContent = 'Атака: ВКЛ [E]';
+
   const touchPreviewBtn = el('button', 'hud-btn icon-btn');
   touchPreviewBtn.type = 'button';
   touchPreviewBtn.title = 'Плавающий джойстик (Вкл/Выкл)';
@@ -1026,7 +1156,7 @@ export function createUIManager(initialCallbacks = {}) {
     )
   );
 
-  hudActionsRow.append(autoAimBtn, touchPreviewBtn, hudMuteBtn, hudHomeBtn);
+  hudActionsRow.append(autoAimBtn, attackToggleBtn, touchPreviewBtn, hudMuteBtn, hudHomeBtn);
   hudTopRight.append(hudStatsPills, hudActionsRow);
 
   hudTopRow.append(hudTopLeft, hudTopCenter, hudTopRight);
@@ -1148,7 +1278,7 @@ export function createUIManager(initialCallbacks = {}) {
   soulXpTrack.appendChild(soulXpFill);
   soulXpWrap.append(soulXpMeta, soulXpTrack);
 
-  hudBottomDock.append(hudPerksRow, hudWeaponRow, soulXpWrap);
+  hudBottomDock.append(hudPerksRow, hudWeaponRow);
   hudScreen.append(hudTopRow, touchLayer, hudBottomDock);
   root.appendChild(hudScreen);
 
@@ -1356,84 +1486,112 @@ export function createUIManager(initialCallbacks = {}) {
   });
 
   // =========================================================================
-  // 5. AAA DARK-FANTASY 4-TAB HUB (ГЕРОИ • ПОХОД • АРСЕНАЛ • МАСТЕРСКАЯ)
+  // 5. AAA DARK-FANTASY MAIN MENU & 5-DOCK HUB (МАГАЗИН • АРСЕНАЛ • ГЛАВНАЯ • ГЕРОИ • ТАЛАНТЫ)
   // =========================================================================
   const hubScreen = el('div', 'hub-screen');
   const hubShell = el('div', 'hub-shell');
 
-  // --- Top Navigation Header Bar (Matches 4-panel mobile/desktop dark-fantasy UI reference) ---
-  const hubHeader = el('header', 'hub-topbar');
-  const hubBrand = el('div', 'hub-brand');
-  const hubCrest = el('div', 'hub-crest');
-  hubCrest.appendChild(
+  // --- Top Flanking Plaques (Matches reference Main Menu: Left Avatar/Уровень + Right Золото/Settings Gear) ---
+  const hubHeader = el('header', 'hub-topbar hub-topbar-minimal');
+
+  // Top-Left: Hero Avatar Medallion + Level Circle + Beveled «Уровень ♦» Crimson Bar Plaque
+  const hubProfilePlaque = el('button', 'hub-topleft-profile');
+  hubProfilePlaque.type = 'button';
+  hubProfilePlaque.title = 'Выбор героя';
+
+  const hubAvatarMedallion = el('div', 'hub-avatar-medallion');
+  const hubAvatarImg = document.createElement('img');
+  hubAvatarImg.className = 'hub-avatar-img';
+  hubAvatarImg.src = CLASSES.warrior.portrait;
+  hubAvatarImg.alt = CLASSES.warrior.nameRu;
+  const hubAvatarLvlBadge = el('span', 'hub-avatar-lvl-badge', '1');
+  hubAvatarMedallion.append(hubAvatarImg, hubAvatarLvlBadge);
+
+  const hubLevelPlaque = el('div', 'hub-level-plaque');
+  const hubLevelTopRow = el('div', 'hub-level-top-row');
+  const hubTitle = el('span', 'hub-level-word', 'Уровень');
+  const hubRubyGem = makeSvgNode(
+    `<svg viewBox="0 0 18 22" width="14" height="17" fill="none" xmlns="http://www.w3.org/2000/svg" class="hub-ruby-gem">
+      <polygon points="9,1 16.5,11 9,21 1.5,11" fill="#fb7185" stroke="#ffe4e6" stroke-width="1"/>
+      <polygon points="9,3.2 13.8,11 9,18.8 4.2,11" fill="#e11d48"/>
+      <polygon points="9,3.2 11.8,10.2 9,11.5 6.2,10.2" fill="#fda4af" opacity="0.85"/>
+    </svg>`
+  );
+  hubLevelTopRow.append(hubTitle, hubRubyGem);
+
+  const hubLevelTrack = el('div', 'hub-level-track');
+  const hubLevelFill = el('div', 'hub-level-fill');
+  hubLevelTrack.appendChild(hubLevelFill);
+  hubLevelPlaque.append(hubLevelTopRow, hubLevelTrack);
+  hubProfilePlaque.append(hubAvatarMedallion, hubLevelPlaque);
+
+  // Top-Right: Beveled «Золото 1 000 🪙» Plaque + Circular Settings Gear Button
+  const hubTreasury = el('div', 'hub-topright-bar');
+  const treasuryGoldPill = el('div', 'treasury-gold-pill hub-gold-plaque');
+  const hubGoldLabel = el('span', 'hub-gold-word', 'Золото');
+  const hubGoldRight = el('div', 'hub-gold-val-wrap');
+  const hubGoldAmount = el('span', 'treasury-gold-val', '60');
+  const treasuryCoinSvg = makeSvgNode(
+    `<svg viewBox="0 0 24 24" width="21" height="21" fill="none" xmlns="http://www.w3.org/2000/svg" class="hub-gold-coin-svg">
+      <circle cx="12" cy="12" r="10" fill="#eab308" stroke="#fef08a" stroke-width="1.5"/>
+      <circle cx="12" cy="12" r="7" fill="#ca8a04" stroke="#fde047" stroke-width="1"/>
+      <path d="M10.5 8.5 H13.8 L11.5 15.5" stroke="#fef9c3" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`
+  );
+  hubGoldRight.append(hubGoldAmount, treasuryCoinSvg);
+  treasuryGoldPill.append(hubGoldLabel, hubGoldRight);
+
+  const hubResetBtn = el('button', 'sound-reset-progress-btn', '🔄 Сбросить весь прогресс');
+  hubResetBtn.type = 'button';
+  hubResetBtn.title = 'Сбросить весь прогресс до нуля';
+
+  const hubMuteBtn = el('button', 'hub-gear-btn sound-trigger-btn');
+  hubMuteBtn.type = 'button';
+  hubMuteBtn.title = 'Настройки звука и игры';
+  hubMuteBtn.setAttribute('aria-label', 'Настройки');
+  hubMuteBtn.appendChild(
     makeSvgNode(
-      `<svg viewBox="0 0 36 36" width="24" height="24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M8 15 C3 11 3 5 7 3 C6 8 8 11 12 13 Z" fill="#fde093" stroke="#92400e" stroke-width="0.9"/>
-        <path d="M28 15 C33 11 33 5 29 3 C30 8 28 11 24 13 Z" fill="#fde093" stroke="#92400e" stroke-width="0.9"/>
-        <path d="M18 8 C12.2 8 9 12.2 9 17.5 C9 21.2 10.8 23.6 13 25 V30 H23 V25 C25.2 23.6 27 21.2 27 17.5 C27 12.2 23.8 8 18 8 Z" fill="#f5efe2" stroke="#d97706" stroke-width="1.2"/>
-        <circle cx="14.5" cy="18.2" r="2.3" fill="#ef4444"/>
-        <circle cx="21.5" cy="18.2" r="2.3" fill="#ef4444"/>
-        <polygon points="18,21 16.5,24 19.5,24" fill="#291d18"/>
+      `<svg viewBox="0 0 24 24" width="19" height="19" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 8.6 A3.4 3.4 0 1 0 12 15.4 A3.4 3.4 0 1 0 12 8.6 Z" stroke="#e2d9eb" stroke-width="1.8"/>
+        <path d="M19.4 13.2 L21 12 L19.4 10.8 L19.6 8.8 L17.8 8 L17 6.2 L15 6.4 L13.8 4.8 L12 5.4 L10.2 4.8 L9 6.4 L7 6.2 L6.2 8 L4.4 8.8 L4.6 10.8 L3 12 L4.6 13.2 L4.4 15.2 L6.2 16 L7 17.8 L9 17.6 L10.2 19.2 L12 18.6 L13.8 19.2 L15 17.6 L17 17.8 L17.8 16 L19.6 15.2 Z" stroke="#cbbce0" stroke-width="1.5" stroke-linejoin="round"/>
       </svg>`
     )
   );
-  const hubTitle = el('h1', 'hub-title', 'ОХОТНИКИ МРАКА');
-  hubBrand.append(hubCrest, hubTitle);
-
-  const hubNavTabs = el('nav', 'hub-nav-tabs');
-  hubNavTabs.setAttribute('aria-label', 'Навигация лагеря');
-
-  const tabHeroesBtn = el('button', 'hub-tab-btn is-active');
-  tabHeroesBtn.type = 'button';
-  const tabHeroesLabel = el('span', 'hub-tab-label', '⚔️ Герои');
-  tabHeroesBtn.appendChild(tabHeroesLabel);
-
-  const tabCampaignBtn = el('button', 'hub-tab-btn');
-  tabCampaignBtn.type = 'button';
-  const tabCampaignLabel = el('span', 'hub-tab-label', '📖 Поход');
-  tabCampaignBtn.appendChild(tabCampaignLabel);
-
-  const tabArsenalBtn = el('button', 'hub-tab-btn');
-  tabArsenalBtn.type = 'button';
-  const tabArsenalLabel = el('span', 'hub-tab-label', '🗡️ Арсенал');
-  const tabArsenalDot = el('span', 'hub-tab-dot hidden');
-  tabArsenalBtn.append(tabArsenalLabel, tabArsenalDot);
-
-  const tabShopBtn = el('button', 'hub-tab-btn');
-  tabShopBtn.type = 'button';
-  const tabShopLabel = el('span', 'hub-tab-label', '🧪 Мастерская');
-  const tabShopDot = el('span', 'hub-tab-dot hidden');
-  tabShopBtn.append(tabShopLabel, tabShopDot);
-
-  hubNavTabs.append(tabHeroesBtn, tabCampaignBtn, tabArsenalBtn, tabShopBtn);
-
-  const hubTreasury = el('div', 'hub-treasury');
-  const treasuryGoldPill = el('div', 'treasury-gold-pill');
-  const treasuryCoinSvg = makeSvgNode(
-    `<svg viewBox="0 0 18 18" width="16" height="16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="9" cy="9" r="7.2" fill="#facc15" stroke="#fef08a" stroke-width="1.3"/><circle cx="9" cy="9" r="4.4" stroke="#92400e" stroke-width="1"/></svg>`
-  );
-  const hubGoldAmount = el('span', 'treasury-gold-val', '60');
-  treasuryGoldPill.append(treasuryCoinSvg, hubGoldAmount);
-
-  const hubResetBtn = el('button', 'hud-btn icon-btn reset-progress-btn', '🔄');
-  hubResetBtn.type = 'button';
-  hubResetBtn.title = 'Сбросить весь прогресс до нуля';
-  hubResetBtn.setAttribute('aria-label', 'Сбросить весь прогресс');
-
-  const hubMuteBtn = el('button', 'hud-btn icon-btn sound-trigger-btn', '🔊');
-  hubMuteBtn.type = 'button';
-  hubMuteBtn.title = 'Настройки звука';
-  hubTreasury.append(treasuryGoldPill, hubResetBtn, hubMuteBtn);
-
-  hubHeader.append(hubBrand, hubNavTabs, hubTreasury);
+  const hubHeaderFiligree = el('div', 'hub-header-filigree');
+  const hubFiligreeImg = document.createElement('img');
+  hubFiligreeImg.src = './assets/ui/hub_top_filigree.png?v=20261117z16';
+  hubFiligreeImg.className = 'hub-filigree-img';
+  hubFiligreeImg.alt = '';
+  hubFiligreeImg.draggable = false;
+  hubHeaderFiligree.appendChild(hubFiligreeImg);
+  hubTreasury.append(treasuryGoldPill, hubMuteBtn);
+  hubHeader.append(hubProfilePlaque, hubHeaderFiligree, hubTreasury);
 
   // --- Hub Body Container ---
   const hubBody = el('div', 'hub-body');
 
   // =========================================================================
-  // TAB 1: ⚔️ ГЕРОИ (3-Column Native Widescreen Layout: Left Portrait Rail + 3D Stage + Right Hero Card & Giant В БОЙ!)
+  // TAB 0 (DEFAULT): 🏰 ГЛАВНАЯ (Centered Live 3D Hero on Cracked Pedestal + «Кампания» / «В ПУТЬ!»)
   // =========================================================================
-  const heroesPanel = el('section', 'hub-panel hub-panel-heroes');
+  const homePanel = el('section', 'hub-panel hub-panel-home');
+  const homeRotateHint = el('div', 'hub-rotate-hint', 'ПКМ — повернуть героя');
+
+  const homeCtaStack = el('div', 'home-cta-stack');
+  const homeWeaponWarn = el('button', 'launch-weapon-warn home-weapon-warn hidden');
+  homeWeaponWarn.type = 'button';
+
+  const homeJourneyBtn = el('button', 'home-journey-btn');
+  homeJourneyBtn.type = 'button';
+  const homeJourneyLabel = el('span', 'home-journey-label', 'В ПУТЬ!');
+  homeJourneyBtn.appendChild(homeJourneyLabel);
+
+  homeCtaStack.append(homeWeaponWarn, homeJourneyBtn);
+  homePanel.append(homeCtaStack);
+
+  // =========================================================================
+  // TAB 1: ⚔️ ГЕРОИ (Live 3D Hero on Pedestal + Left Portrait Rail + Right Stats Card)
+  // =========================================================================
+  const heroesPanel = el('section', 'hub-panel hub-panel-heroes hidden');
 
   // Column 1: Left Vertical 4-Slot Portrait Rail
   const heroRosterRail = el('aside', 'hero-roster-rail');
@@ -1470,15 +1628,27 @@ export function createUIManager(initialCallbacks = {}) {
   const heroStageArea = el('div', 'hero-stage-area');
   const heroStageControls = el('div', 'hero-stage-controls');
 
-  const stagePrevBtn = el('button', 'stage-carousel-btn prev', '‹');
+  const stagePrevBtn = el('button', 'stage-carousel-btn prev');
   stagePrevBtn.type = 'button';
   stagePrevBtn.setAttribute('aria-label', 'Предыдущий класс');
+  const stagePrevImg = document.createElement('img');
+  stagePrevImg.className = 'switch-arrow-icon is-prev';
+  stagePrevImg.src = './assets/ui/btn_arrow_switch.png?v=20261117z16';
+  stagePrevImg.alt = '';
+  stagePrevImg.draggable = false;
+  stagePrevBtn.appendChild(stagePrevImg);
 
   const stageCenterSpacer = el('div', 'stage-center-window');
 
-  const stageNextBtn = el('button', 'stage-carousel-btn next', '›');
+  const stageNextBtn = el('button', 'stage-carousel-btn next');
   stageNextBtn.type = 'button';
   stageNextBtn.setAttribute('aria-label', 'Следующий класс');
+  const stageNextImg = document.createElement('img');
+  stageNextImg.className = 'switch-arrow-icon is-next';
+  stageNextImg.src = './assets/ui/btn_arrow_switch.png?v=20261117z16';
+  stageNextImg.alt = '';
+  stageNextImg.draggable = false;
+  stageNextBtn.appendChild(stageNextImg);
 
   heroStageControls.append(stagePrevBtn, stageCenterSpacer, stageNextBtn);
   heroStageArea.append(heroStageControls);
@@ -1589,132 +1759,241 @@ export function createUIManager(initialCallbacks = {}) {
   launchBattleBtn.append(launchMainText, launchSubText);
 
   heroShowcaseDocks.append(heroInfoCard, launchWeaponWarn, launchBattleBtn);
-  heroesPanel.append(heroRosterRail, heroStageArea, heroShowcaseDocks);
+  heroesPanel.append(heroStageArea, heroShowcaseDocks);
 
   // =========================================================================
-  // TAB 2: 📖 ПОХОД — SINGLE-SCREEN PANORAMIC 25-CHAPTER CAMPAIGN MAP
+  // TAB 2: 📖 КАМПАНИЯ — СЦЕНА 1: КАРТА МИРА (4 РЕГИОНА) -> ФИОЛЕТОВЫЙ ТУМАН -> СЦЕНА 2: ТУМАННЫЙ ЛЕС (1..25)
   // =========================================================================
-  const campaignPanel = el('section', 'hub-panel hub-panel-sub hub-panel-campaign hidden');
+  const WORLD_REGION_DEFS = [
+    {
+      id: 'forest',
+      titleRu: 'Туманный лес',
+      subRu: '25 этапов • Открыто',
+      x: 29,
+      y: 27,
+      unlocked: true
+    },
+    {
+      id: 'crypt',
+      titleRu: 'Сумрачный погост',
+      subRu: 'Заблокировано',
+      x: 35,
+      y: 74,
+      unlocked: false
+    },
+    {
+      id: 'peaks',
+      titleRu: 'Ледяные пики',
+      subRu: 'Заблокировано',
+      x: 70,
+      y: 27,
+      unlocked: false
+    },
+    {
+      id: 'lava',
+      titleRu: 'Огненный разлом',
+      subRu: 'Заблокировано',
+      x: 76,
+      y: 66,
+      unlocked: false
+    }
+  ];
+
+  const FOREST_PATH_COORDS = [
+    [11, 63], [16, 73], [24, 75], [32, 68], [26, 53],
+    [17, 41], [24, 29], [34, 26], [43, 23], [52, 24],
+    [60, 28], [63, 39], [58, 52], [50, 62], [41, 68],
+    [58, 72], [68, 70], [76, 62], [82, 53], [74, 44],
+    [69, 33], [77, 25], [86, 28], [90, 41], [88, 57]
+  ];
+
+  let campaignSubView = 'world'; // 'world' | 'forest'
+  let mistAnimActive = false;
+
+  const campaignPanel = el('section', 'hub-panel hub-panel-campaign hidden');
   campaignPanel.id = 'campaignPanel';
-  const campaignBox = el('div', 'hub-subpanel-card campaign-subpanel');
+  const campaignBox = el('div', 'campaign-fullscreen-shell');
 
-  const campaignTopBar = el('div', 'campaign-header-row');
-  const campaignTitleWrap = el('div', 'subpanel-title-group');
-  const campaignHeading = el('h2', 'subpanel-title', '📖 Карта Похода — 25 Глав');
-  const campaignProgressHint = el('p', 'subpanel-hint', 'Открыто глав: 1 из 25');
-  campaignTitleWrap.append(campaignHeading, campaignProgressHint);
+  // --- SCENE 2: WORLD REGIONS MAP ---
+  const campaignWorldView = el('div', 'campaign-world-view');
+  const worldStageFrame = el('div', 'campaign-map-stage-frame');
+  const campaignWorldBg = document.createElement('img');
+  campaignWorldBg.className = 'campaign-map-bg-img';
+  campaignWorldBg.src = './assets/ui/world_map_clean_hq.jpg?v=20261117z16';
+  campaignWorldBg.alt = 'Карта Мира';
+  campaignWorldBg.draggable = false;
+  const campaignWorldVignette = el('div', 'campaign-map-vignette');
 
-  const campaignBackHeroBtn = el('button', 'subpanel-back-btn', '← К герою');
+  const worldTopBar = el('div', 'campaign-map-topbar');
+  const worldLeftSpacer = el('div', 'map-topbar-left');
+  const worldHeaderTitle = el('h2', 'campaign-map-heading', 'Карта Мира — Выбор региона');
+  const worldRightControls = el('div', 'map-topbar-right');
+  const worldProgressPill = el('span', 'campaign-map-progress-pill', 'Открыт: Туманный лес');
+  const campaignBackHeroBtn = el('button', 'map-close-x-btn', '✕');
   campaignBackHeroBtn.type = 'button';
-  campaignTopBar.append(campaignTitleWrap, campaignBackHeroBtn);
+  campaignBackHeroBtn.title = 'Вернуться в меню';
+  campaignBackHeroBtn.setAttribute('aria-label', 'Закрыть карту');
+  worldLeftSpacer.appendChild(worldProgressPill);
+  worldRightControls.appendChild(campaignBackHeroBtn);
+  worldTopBar.append(worldLeftSpacer, worldHeaderTitle, worldRightControls);
 
-  // 5 Act Selector Tabs
-  const campaignActsBar = el('div', 'campaign-acts-bar');
-  const campaignActBtns = {};
-  for (const aDef of ACT_DEFS) {
-    const aBtn = el('button', 'campaign-act-tab');
-    aBtn.type = 'button';
-    aBtn.dataset.act = String(aDef.act);
-    aBtn.textContent = aDef.titleRu;
-    campaignActsBar.appendChild(aBtn);
-    campaignActBtns[aDef.act] = aBtn;
+  const worldPinsLayer = el('div', 'world-pins-layer');
+  let worldForestStarsLabel = null;
+  for (const reg of WORLD_REGION_DEFS) {
+    const pin = el('button', `world-region-pin${reg.unlocked ? ' is-open' : ' is-locked'}`);
+    pin.type = 'button';
+    pin.style.left = `${reg.x}%`;
+    pin.style.top = `${reg.y}%`;
+
+    const badge = el('div', 'world-pin-crest', reg.unlocked ? '🌲' : '🔒');
+    const title = el('div', 'world-pin-title', reg.titleRu);
+    const sub = el('div', 'world-pin-sub', reg.subRu);
+    pin.append(badge, title, sub);
+    if (reg.unlocked) {
+      worldForestStarsLabel = sub;
+      const enterHint = el('div', 'world-pin-enter-hint', 'Нажмите для входа ›');
+      pin.appendChild(enterHint);
+    }
+
+    pin.addEventListener('click', () => {
+      if (reg.unlocked) {
+        triggerVioletMistTransition(() => {
+          setActiveTab('campaign_forest');
+        });
+      } else {
+        showToast(`🔒 Регион «${reg.titleRu}» откроется после прохождения Туманного леса!`, 2400);
+      }
+    });
+    worldPinsLayer.appendChild(pin);
   }
+  worldStageFrame.append(campaignWorldBg, campaignWorldVignette, worldPinsLayer);
+  campaignWorldView.append(worldTopBar, worldStageFrame);
 
-  // Center Featured Chapter Showcase Stage (‹ Panoramic Banner with Integrated Bottom Overlay ›)
-  const campaignShowcaseStage = el('div', 'campaign-showcase-stage');
-  const campaignPrevBtn = el('button', 'campaign-nav-arrow prev', '‹');
-  campaignPrevBtn.type = 'button';
-  campaignPrevBtn.setAttribute('aria-label', 'Предыдущая глава');
+  // --- SCENE 3: MISTY FOREST 25-STAGE WINDING PATH MAP ---
+  const campaignForestView = el('div', 'campaign-forest-view hidden');
+  const forestStageFrame = el('div', 'campaign-map-stage-frame is-forest-frame');
+  const forestBgImg = document.createElement('img');
+  forestBgImg.className = 'campaign-map-bg-img';
+  forestBgImg.src = './assets/ui/forest_stages_clean_hq.jpg?v=20261117z16';
+  forestBgImg.alt = 'Туманный лес';
+  forestBgImg.draggable = false;
+  const forestVignette = el('div', 'campaign-map-vignette is-forest');
 
-  const campaignCard = el('div', 'campaign-showcase-card');
+  const forestTopBar = el('div', 'campaign-map-topbar');
+  const forestLeftControls = el('div', 'map-topbar-left');
+  const forestBackWorldBtn = el('button', 'map-gothic-back-btn', '← Карта мира');
+  forestBackWorldBtn.type = 'button';
+  forestLeftControls.appendChild(forestBackWorldBtn);
 
-  const campaignBannerWrap = el('div', 'campaign-banner-wrap');
-  const campaignBannerImg = document.createElement('img');
-  campaignBannerImg.className = 'campaign-banner-img';
-  campaignBannerImg.src = LEVELS[0].bannerImg;
-  campaignBannerImg.alt = LEVELS[0].nameRu;
-  const campaignBannerVignette = el('div', 'campaign-banner-vignette');
+  const campaignHeading = el('h2', 'campaign-map-heading', 'Туманный лес — 25 Глав');
+  const campaignProgressHint = el('span', 'campaign-map-progress-pill', '★ 0 / 75 • Глав: 1/25');
 
-  const campaignBannerTopLeft = el('div', 'campaign-banner-badges-left');
-  const campaignActPill = el('span', 'campaign-meta-pill', 'Акт I • Глава I');
-  const campaignDurationPill = el('span', 'campaign-meta-pill', '⏱️ 01:04');
-  campaignBannerTopLeft.append(campaignActPill, campaignDurationPill);
+  const forestRightControls = el('div', 'map-topbar-right');
+  const diffSwitchWrap = el('div', 'forest-diff-switch');
+  const diffNormalBtn = el('button', 'forest-diff-btn is-active', 'Обычный');
+  diffNormalBtn.type = 'button';
+  const diffHardBtn = el('button', 'forest-diff-btn', 'Сложный');
+  diffHardBtn.type = 'button';
+  diffSwitchWrap.append(diffNormalBtn, diffHardBtn);
 
-  const campaignSpecialBadge = el('div', 'campaign-special-badge hidden');
+  const forestCloseMapBtn = el('button', 'map-close-x-btn', '✕');
+  forestCloseMapBtn.type = 'button';
+  forestCloseMapBtn.title = 'Вернуться в меню';
+  forestCloseMapBtn.setAttribute('aria-label', 'Закрыть карту');
 
-  const campaignLockOverlay = el('div', 'campaign-lock-overlay hidden');
-  const campaignLockSvg = makeSvgNode(
-    `<svg viewBox="0 0 48 48" width="36" height="36" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="10" y="21" width="28" height="21" rx="4" fill="#1e1b2e" stroke="#e5b85c" stroke-width="2.2"/>
-      <path d="M16 21 V15 C16 10.5 19.6 7 24 7 C28.4 7 32 10.5 32 15 V21" stroke="#fde093" stroke-width="2.4" stroke-linecap="round"/>
-      <circle cx="24" cy="30" r="3" fill="#fde093"/>
-      <line x1="24" y1="32" x2="24" y2="37" stroke="#fde093" stroke-width="2.2" stroke-linecap="round"/>
+  forestRightControls.append(campaignProgressHint, diffSwitchWrap, forestCloseMapBtn);
+  forestTopBar.append(forestLeftControls, campaignHeading, forestRightControls);
+
+  const forestBoard = el('div', 'forest-map-board');
+  const forestPathSvg = makeSvgNode(
+    `<svg viewBox="0 0 100 100" preserveAspectRatio="none" class="forest-path-svg" aria-hidden="true">
+      <polyline class="forest-path-shadow" fill="none" points="${FOREST_PATH_COORDS.map(([x, y]) => `${x},${y}`).join(' ')}" />
+      <polyline class="forest-path-line" fill="none" points="${FOREST_PATH_COORDS.map(([x, y]) => `${x},${y}`).join(' ')}" />
     </svg>`
   );
-  const campaignLockTitle = el('div', 'campaign-lock-title', 'ГЛАВА ЗАКРЫТА');
-  const campaignLockSub = el('div', 'campaign-lock-sub', 'Пройдите предыдущую главу похода');
-  campaignLockOverlay.append(campaignLockSvg, campaignLockTitle, campaignLockSub);
+  const forestNodesLayer = el('div', 'forest-nodes-layer');
+  const forestNodeButtons = [];
+  for (let idx = 0; idx < LEVELS.length; idx++) {
+    const lvlNum = idx + 1;
+    const [px, py] = FOREST_PATH_COORDS[idx] || [50, 50];
+    const btn = el('button', 'forest-stage-node');
+    btn.type = 'button';
+    btn.style.left = `${px}%`;
+    btn.style.top = `${py}%`;
 
-  // Integrated Bottom Overlay inside Panoramic Banner (matches reference top-right panel!)
-  const campaignCardBody = el('div', 'campaign-card-body');
-  const campaignBodyLeft = el('div', 'campaign-body-left');
-  const campaignChapterTitle = el('h3', 'campaign-chapter-title', LEVELS[0].nameRu);
-  const campaignChapterLore = el('p', 'campaign-chapter-lore', LEVELS[0].subtitleRu);
+    const levBadge = el('span', 'forest-node-lev-tag hidden', `Гл. ${lvlNum}`);
+    const coin = el('span', 'forest-node-coin', String(lvlNum));
+    const starsRow = el('span', 'forest-node-stars');
+    btn.append(levBadge, coin, starsRow);
+    btn.addEventListener('click', () => navigateCampaignChapter(lvlNum));
+    forestNodesLayer.appendChild(btn);
+    forestNodeButtons.push({ btn, levBadge, coin, starsRow, lvlNum });
+  }
+  forestBoard.append(forestPathSvg, forestNodesLayer);
+  forestStageFrame.append(forestBgImg, forestVignette, forestBoard);
 
-  const campaignThreatsWrap = el('div', 'campaign-threats-wrap');
-  const campaignThreatsLabel = el('span', 'campaign-threats-label', 'Бестиарий главы:');
-  const campaignThreatsList = el('div', 'campaign-threats-list');
-  campaignThreatsWrap.append(campaignThreatsLabel, campaignThreatsList);
-  campaignBodyLeft.append(campaignChapterTitle, campaignChapterLore, campaignThreatsWrap);
+  const forestBottomStrip = el('div', 'forest-bottom-strip');
+  const forestInfoCol = el('div', 'forest-stage-info-col');
+  const campaignActPill = el('span', 'campaign-meta-pill', 'Акт I • Глава I');
+  const campaignChapterTitle = el('h3', 'forest-stage-title', LEVELS[0].nameRu);
+  const campaignChapterLore = el('p', 'forest-stage-lore', LEVELS[0].subtitleRu);
+  const forestGoalsRow = el('div', 'forest-goals-row');
+  const forestGoal1 = el('span', 'forest-goal-chip', '★ Победа');
+  const forestGoal2 = el('span', 'forest-goal-chip', '★★ ≥ 55% HP');
+  const forestGoal3 = el('span', 'forest-goal-chip', '★★★ ≤ 95с');
+  forestGoalsRow.append(campaignActPill, forestGoal1, forestGoal2, forestGoal3);
+  forestInfoCol.append(campaignChapterTitle, campaignChapterLore, forestGoalsRow);
 
-  const campaignActionRow = el('div', 'campaign-action-row');
+  const forestActionsCol = el('div', 'forest-stage-actions-col');
   const campaignWpnCheckBtn = el('button', 'campaign-wpn-check is-ready');
   campaignWpnCheckBtn.type = 'button';
   const campaignWpnCheckIcon = el('span', 'campaign-wpn-check-icon');
-  const campaignWpnCheckText = el('span', 'campaign-wpn-check-text', 'Оружие готово (Ур. 1)');
+  const campaignWpnCheckText = el('span', 'campaign-wpn-check-text', 'Оружие готово');
   campaignWpnCheckBtn.append(campaignWpnCheckIcon, campaignWpnCheckText);
 
-  const campaignStartBtn = el('button', 'campaign-start-btn', '⚔️ Начать главу');
+  const campaignStartBtn = el('button', 'forest-fight-gothic-btn', 'В БОЙ!');
   campaignStartBtn.type = 'button';
-  campaignActionRow.append(campaignWpnCheckBtn, campaignStartBtn);
+  forestActionsCol.append(campaignWpnCheckBtn, campaignStartBtn);
+  forestBottomStrip.append(forestInfoCol, forestActionsCol);
 
-  campaignCardBody.append(campaignBodyLeft, campaignActionRow);
+  campaignForestView.append(forestTopBar, forestStageFrame, forestBottomStrip);
 
-  campaignBannerWrap.append(
-    campaignBannerImg,
-    campaignBannerVignette,
-    campaignBannerTopLeft,
-    campaignSpecialBadge,
-    campaignLockOverlay,
-    campaignCardBody
-  );
-  campaignCard.append(campaignBannerWrap);
-
-  const campaignNextBtn = el('button', 'campaign-nav-arrow next', '›');
-  campaignNextBtn.type = 'button';
-  campaignNextBtn.setAttribute('aria-label', 'Следующая глава');
-
-  campaignShowcaseStage.append(campaignPrevBtn, campaignCard, campaignNextBtn);
-
-  // Bottom 5 Chapter Nodes along the Act
-  const campaignNodesStrip = el('div', 'campaign-nodes-strip');
-
-  campaignBox.append(campaignTopBar, campaignActsBar, campaignShowcaseStage, campaignNodesStrip);
+  campaignBox.append(campaignWorldView, campaignForestView);
   campaignPanel.appendChild(campaignBox);
 
   // =========================================================================
-  // TAB 3: 🗡️ АРСЕНАЛ (3-Card Centered Weapon Showcase + Bottom Action Bar)
+  // TAB 3: 🗡️ АРСЕНАЛ (3D Pedestal Floating Weapon Stage + Ruby Arrows + Right Stats Plaque matching media_1794851281081_25811ecd.jpg!)
   // =========================================================================
-  const arsenalPanel = el('section', 'hub-panel hub-panel-sub hidden');
-  const arsenalBox = el('div', 'hub-subpanel-card arsenal-subpanel');
+  const arsenalPanel = el('section', 'hub-panel hub-panel-arsenal-3d hidden');
 
-  const arsenalHeaderRow = el('div', 'subpanel-header-row');
-  const arsenalTitleGroup = el('div', 'subpanel-title-group');
-  const arsenalHeading = el('h2', 'subpanel-title', '🗡️ Арсенал Охотника');
-  const arsenalSubhint = el('p', 'subpanel-hint', 'Рунные сундуки в главах III и VII открывают новое оружие класса навсегда.');
-  arsenalTitleGroup.append(arsenalHeading, arsenalSubhint);
+  // Center-Left Stage with Flanking Ruby-Iron Star Arrows (◀ [3D Floating Weapon] ▶)
+  const arsenalStageArea = el('div', 'arsenal-stage-area');
+  const arsenalPrevBtn = el('button', 'arsenal-ruby-arrow prev');
+  arsenalPrevBtn.type = 'button';
+  arsenalPrevBtn.setAttribute('aria-label', 'Предыдущее оружие');
+  const arsenalPrevImg = document.createElement('img');
+  arsenalPrevImg.className = 'switch-arrow-icon is-prev';
+  arsenalPrevImg.src = './assets/ui/btn_arrow_switch.png?v=20261117z16';
+  arsenalPrevImg.alt = '';
+  arsenalPrevImg.draggable = false;
+  arsenalPrevBtn.appendChild(arsenalPrevImg);
 
-  const arsenalClassSwitch = el('div', 'arsenal-class-switch');
+  const arsenalStageSpacer = el('div', 'arsenal-stage-spacer');
+
+  const arsenalNextBtn = el('button', 'arsenal-ruby-arrow next');
+  arsenalNextBtn.type = 'button';
+  arsenalNextBtn.setAttribute('aria-label', 'Следующее оружие');
+  const arsenalNextImg = document.createElement('img');
+  arsenalNextImg.className = 'switch-arrow-icon is-next';
+  arsenalNextImg.src = './assets/ui/btn_arrow_switch.png?v=20261117z16';
+  arsenalNextImg.alt = '';
+  arsenalNextImg.draggable = false;
+  arsenalNextBtn.appendChild(arsenalNextImg);
+  arsenalStageArea.append(arsenalPrevBtn, arsenalStageSpacer, arsenalNextBtn);
+
+  // Right Gothic Weapon Plaque (Matches media_1794851281081_25811ecd.jpg!)
+  const arsenalRightPlaque = el('div', 'arsenal-right-plaque');
+  const arsenalClassSwitch = el('div', 'arsenal-class-switch arsenal-mini-class-row');
   const arsenalClassBtns = {};
   for (const cid of CLASS_ORDER) {
     const cDef = CLASSES[cid];
@@ -1730,20 +2009,78 @@ export function createUIManager(initialCallbacks = {}) {
     arsenalClassSwitch.appendChild(b);
     arsenalClassBtns[cid] = b;
   }
-  arsenalHeaderRow.append(arsenalTitleGroup, arsenalClassSwitch);
 
-  const arsenalMageElementsBox = el('div', 'arsenal-mage-elements hidden');
-  const arsenalCardsGrid = el('div', 'arsenal-cards-grid');
+  const arsenalPlaqueCard = el('div', 'arsenal-gothic-card');
+  const arsenalCrestDiamond = el('div', 'arsenal-crest-diamond');
+  arsenalCrestDiamond.appendChild(
+    makeSvgNode(
+      `<svg viewBox="0 0 36 28" width="32" height="24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <polygon points="18,2 32,14 18,26 4,14" fill="#2a1d2c" stroke="#c89e5a" stroke-width="1.6"/>
+        <polygon points="18,6 26,14 18,22 10,14" fill="#1b3b5a" stroke="#7dd3fc" stroke-width="1"/>
+      </svg>`
+    )
+  );
+  const arsenalRibbonHeader = el('div', 'arsenal-ribbon-header');
+  const arsenalHeading = el('h2', 'arsenal-ribbon-title', WEAPONS.club.nameRu);
+  arsenalRibbonHeader.appendChild(arsenalHeading);
 
-  const arsenalFooterRow = el('div', 'subpanel-footer-row');
-  const arsenalBackBtn = el('button', 'subpanel-back-btn', '← К герою');
-  arsenalBackBtn.type = 'button';
-  const arsenalQuickPlayBtn = el('button', 'subpanel-battle-btn gothic-plaque-battle-btn', '⚔️ В БОЙ!');
-  arsenalQuickPlayBtn.type = 'button';
-  arsenalFooterRow.append(arsenalBackBtn, arsenalQuickPlayBtn);
+  const arsenalSubhint = el('div', 'arsenal-tier-sub', 'Ранг I • Ур. 1/12');
 
-  arsenalBox.append(arsenalHeaderRow, arsenalMageElementsBox, arsenalCardsGrid, arsenalFooterRow);
-  arsenalPanel.appendChild(arsenalBox);
+  // Stat Row 1: ⚔️ Урон
+  const arsenalDmgRow = el('div', 'arsenal-stat-block');
+  const arsenalDmgTop = el('div', 'arsenal-stat-top');
+  const arsenalDmgLbl = el('span', 'arsenal-stat-lbl', '⚔ Урон');
+  const arsenalDmgVal = el('span', 'arsenal-stat-num', '50');
+  arsenalDmgTop.append(arsenalDmgLbl, arsenalDmgVal);
+  const arsenalDmgTrack = el('div', 'hub-level-track arsenal-crimson-track');
+  const arsenalDmgFill = el('div', 'hub-level-fill');
+  arsenalDmgTrack.appendChild(arsenalDmgFill);
+  arsenalDmgRow.append(arsenalDmgTop, arsenalDmgTrack);
+
+  // Stat Row 2: 🛡️ Прочность / Закалка
+  const arsenalPwrRow = el('div', 'arsenal-stat-block');
+  const arsenalPwrTop = el('div', 'arsenal-stat-top');
+  const arsenalPwrLbl = el('span', 'arsenal-stat-lbl', '🛡 Закалка');
+  const arsenalPwrVal = el('span', 'arsenal-stat-num', '100');
+  arsenalPwrTop.append(arsenalPwrLbl, arsenalPwrVal);
+  const arsenalPwrTrack = el('div', 'hub-level-track arsenal-crimson-track');
+  const arsenalPwrFill = el('div', 'hub-level-fill');
+  arsenalPwrTrack.appendChild(arsenalPwrFill);
+  arsenalPwrRow.append(arsenalPwrTop, arsenalPwrTrack);
+
+  const arsenalWeaponMeta = el('div', 'arsenal-weapon-meta');
+  const arsenalWeaponDesc = el('p', 'arsenal-weapon-desc');
+  const arsenalMageElementsBox = el('div', 'arsenal-mage-elements arsenal-inline-elems hidden');
+  const arsenalLockBanner = el('div', 'locked-hint-badge hidden');
+
+  const arsenalActionsStack = el('div', 'arsenal-actions-stack');
+  const arsenalEquipStageBtn = el('button', 'btn-equip arsenal-equip-stage-btn', '✓ В руках');
+  arsenalEquipStageBtn.type = 'button';
+
+  const arsenalUpgradeStageBtn = el('button', 'arsenal-gothic-upgrade-btn', 'Улучшить');
+  arsenalUpgradeStageBtn.type = 'button';
+
+  arsenalActionsStack.append(arsenalUpgradeStageBtn, arsenalEquipStageBtn);
+  arsenalPlaqueCard.append(
+    arsenalCrestDiamond,
+    arsenalRibbonHeader,
+    arsenalSubhint,
+    arsenalDmgRow,
+    arsenalPwrRow,
+    arsenalWeaponMeta,
+    arsenalWeaponDesc,
+    arsenalMageElementsBox,
+    arsenalLockBanner,
+    arsenalActionsStack
+  );
+
+  // Keep lightweight hidden refs for backward compatibility
+  const arsenalCardsGrid = el('div', 'hidden');
+  const arsenalBackBtn = el('button', 'hidden');
+  const arsenalQuickPlayBtn = el('button', 'hidden');
+
+  arsenalRightPlaque.append(arsenalClassSwitch, arsenalPlaqueCard);
+  arsenalPanel.append(arsenalStageArea, arsenalRightPlaque);
 
   // =========================================================================
   // TAB 4: 🧪 МАСТЕРСКАЯ (2-Column Beveled Talent Cards + Bottom Action Bar)
@@ -1783,10 +2120,19 @@ export function createUIManager(initialCallbacks = {}) {
 
   const rewardGoldBtn = el('button', 'gothic-btn btn-reward-gold', '🎁 +80 золота (Видео)');
   rewardGoldBtn.type = 'button';
-  shopHeaderControls.append(shopClassSwitch, rewardGoldBtn);
+  const talentPointsPill = el('div', 'talent-points-pill', '✨ Очки таланта: 1');
+  const talentResetBtn = el('button', 'gothic-btn talent-reset-btn', '↺ Сброс');
+  talentResetBtn.type = 'button';
+  shopHeaderControls.append(talentPointsPill, talentResetBtn, shopClassSwitch, rewardGoldBtn);
   shopHeaderRow.append(shopTitleGroup, shopHeaderControls);
 
   const masteryGrid = el('div', 'mastery-grid');
+  const selectedTalentByClass = {
+    mage: CLASS_TALENT_TREES.mage?.[0]?.id || 'water_pressure',
+    warrior: CLASS_TALENT_TREES.warrior?.[0]?.id || 'war_steel_grip',
+    gunslinger: CLASS_TALENT_TREES.gunslinger?.[0]?.id || 'gun_heavy_slug'
+  };
+  let selectedMageTalentId = selectedTalentByClass.mage;
 
   const shopFooterRow = el('div', 'subpanel-footer-row');
   const shopBackBtn = el('button', 'subpanel-back-btn', '← К герою');
@@ -1798,18 +2144,190 @@ export function createUIManager(initialCallbacks = {}) {
   shopBox.append(shopHeaderRow, masteryGrid, shopFooterRow);
   shopPanel.appendChild(shopBox);
 
-  hubBody.append(heroesPanel, campaignPanel, arsenalPanel, shopPanel);
-  hubShell.append(hubHeader, hubBody);
-  hubScreen.appendChild(hubShell);
+  // =========================================================================
+  // TAB 5: 🛒 МАГАЗИН (Gothic Treasury Supplies, Quick Weapon Forge & Elemental Tomes)
+  // =========================================================================
+  const storePanel = el('section', 'hub-panel hub-panel-sub hidden');
+  const storeBox = el('div', 'hub-subpanel-card store-subpanel');
+
+  const storeHeaderRow = el('div', 'subpanel-header-row');
+  const storeTitleGroup = el('div', 'subpanel-title-group');
+  const storeHeading = el('h2', 'subpanel-title', '🛒 Магазин Лагеря');
+  const storeSubhint = el('p', 'subpanel-hint', 'Припасы похода, ковка экипированного оружия и фолианты стихий.');
+  storeTitleGroup.append(storeHeading, storeSubhint);
+  storeHeaderRow.appendChild(storeTitleGroup);
+
+  const storeCardsGrid = el('div', 'store-cards-grid');
+
+  const storeFooterRow = el('div', 'subpanel-footer-row');
+  const storeBackBtn = el('button', 'subpanel-back-btn', '← На главную');
+  storeBackBtn.type = 'button';
+  const storeQuickPlayBtn = el('button', 'subpanel-battle-btn gothic-plaque-battle-btn', '⚔️ В ПУТЬ!');
+  storeQuickPlayBtn.type = 'button';
+  storeFooterRow.append(storeBackBtn, storeQuickPlayBtn);
+
+  storeBox.append(storeHeaderRow, storeCardsGrid, storeFooterRow);
+  storePanel.appendChild(storeBox);
+
+  // =========================================================================
+  // BOTTOM 5-BUTTON GOTHIC NAVIGATION DOCK (Магазин • Арсенал • Главная • Герои • Таланты)
+  // =========================================================================
+  const hubNavTabs = el('nav', 'hub-bottom-dock');
+  hubNavTabs.setAttribute('aria-label', 'Нижняя панель меню');
+
+  function createBottomDockTab(labelText, svgMarkup, withDot = false) {
+    const btn = el('button', 'dock-tab-btn');
+    btn.type = 'button';
+    const crest = el('span', 'dock-crest-circle');
+    const socketImg = document.createElement('img');
+    socketImg.src = './assets/ui/dock_crest_socket.png?v=20261117z16';
+    socketImg.className = 'dock-socket-ring';
+    socketImg.alt = '';
+    socketImg.draggable = false;
+    crest.append(socketImg, makeSvgNode(svgMarkup));
+    let dot = null;
+    if (withDot) {
+      dot = el('span', 'hub-tab-dot dock-notif-dot hidden');
+      crest.appendChild(dot);
+    }
+    const plaque = el('span', 'dock-plaque-body');
+    const runeL = el('span', 'dock-rune', 'ᚱ');
+    const lbl = el('span', 'hub-tab-label dock-tab-label', labelText);
+    const runeR = el('span', 'dock-rune', 'ᛟ');
+    plaque.append(runeL, lbl, runeR);
+    btn.append(crest, plaque);
+    return { btn, lbl, dot };
+  }
+
+  const storeDock = createBottomDockTab(
+    'Магазин',
+    `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M4 6 H6.5 L8.8 14.5 H17.5 L19.6 8.5 H7.4" stroke="#f5d0dc" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="9.6" cy="18" r="1.6" fill="#fda4af"/>
+      <circle cx="16.6" cy="18" r="1.6" fill="#fda4af"/>
+    </svg>`,
+    false
+  );
+  const tabStoreBtn = storeDock.btn;
+  const tabStoreLabel = storeDock.lbl;
+
+  const arsenalDock = createBottomDockTab(
+    'Арсенал',
+    `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M5 19 L18.5 5.5 M15 5 H19 V9" stroke="#f5d0dc" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M19 19 L5.5 5.5 M9 5 H5 V9" stroke="#fda4af" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`,
+    true
+  );
+  const tabArsenalBtn = arsenalDock.btn;
+  const tabArsenalLabel = arsenalDock.lbl;
+  const tabArsenalDot = arsenalDock.dot;
+
+  const homeDock = createBottomDockTab(
+    'Главная',
+    `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M6 20 V9 L9 9 V6 H11.5 V9 H12.5 V6 H15 V9 H18 V20 Z" fill="rgba(244,63,94,0.28)" stroke="#ffe4e6" stroke-width="1.6" stroke-linejoin="round"/>
+      <path d="M10.2 20 V15.2 C10.2 14.2 11 13.5 12 13.5 C13 13.5 13.8 14.2 13.8 15.2 V20" stroke="#fda4af" stroke-width="1.5"/>
+    </svg>`,
+    false
+  );
+  const tabHomeBtn = homeDock.btn;
+  const tabHomeLabel = homeDock.lbl;
+  tabHomeBtn.classList.add('is-center-home', 'is-active');
+
+  const heroesDock = createBottomDockTab(
+    'Герои',
+    `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M6.5 11 C6.5 7.2 8.9 5 12 5 C15.1 5 17.5 7.2 17.5 11 V18.5 L14.5 17 V13 H9.5 V17 L6.5 18.5 Z" fill="rgba(244,63,94,0.24)" stroke="#f5d0dc" stroke-width="1.6" stroke-linejoin="round"/>
+      <line x1="12" y1="5" x2="12" y2="13" stroke="#ffe4e6" stroke-width="1.5"/>
+    </svg>`,
+    false
+  );
+  const tabHeroesBtn = heroesDock.btn;
+  const tabHeroesLabel = heroesDock.lbl;
+
+  const talentsDock = createBottomDockTab(
+    'Таланты',
+    `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <line x1="12" y1="19" x2="12" y2="9" stroke="#f5d0dc" stroke-width="1.8" stroke-linecap="round"/>
+      <line x1="12" y1="13" x2="7.5" y2="9.5" stroke="#fda4af" stroke-width="1.6" stroke-linecap="round"/>
+      <line x1="12" y1="13" x2="16.5" y2="9.5" stroke="#fda4af" stroke-width="1.6" stroke-linecap="round"/>
+      <circle cx="12" cy="6.5" r="2.1" fill="#fb7185"/>
+      <circle cx="6.8" cy="8.5" r="1.8" fill="#fda4af"/>
+      <circle cx="17.2" cy="8.5" r="1.8" fill="#fda4af"/>
+    </svg>`,
+    true
+  );
+  const tabShopBtn = talentsDock.btn;
+  const tabShopLabel = talentsDock.lbl;
+  const tabShopDot = talentsDock.dot;
+
+  // Keep lightweight hidden campaign tab ref for backward compatibility
+  const tabCampaignBtn = el('button', 'hidden');
+  const tabCampaignLabel = el('span', '', 'Кампания');
+  tabCampaignBtn.appendChild(tabCampaignLabel);
+
+  hubNavTabs.append(tabStoreBtn, tabArsenalBtn, tabHomeBtn, tabHeroesBtn, tabShopBtn);
+
+  // Violet Mist Cloud Transition Overlay (Scene Switch Curtain matching Clash of Clans Cloud Swipe)
+  const mistTransitionOverlay = el('div', 'mist-transition-overlay hidden');
+  mistTransitionOverlay.id = 'mist-transition-overlay';
+  for (let m = 1; m <= 6; m++) {
+    mistTransitionOverlay.appendChild(el('div', `mist-cloud-puff puff-${m}`));
+  }
+
+  function triggerVioletMistTransition(onMidpoint) {
+    if (mistAnimActive) {
+      onMidpoint?.();
+      return;
+    }
+    mistAnimActive = true;
+    mistTransitionOverlay.classList.remove('hidden', 'is-parting');
+    void mistTransitionOverlay.offsetWidth;
+    mistTransitionOverlay.classList.add('is-closing');
+    setTimeout(() => {
+      try {
+        onMidpoint?.();
+      } finally {
+        mistTransitionOverlay.classList.remove('is-closing');
+        mistTransitionOverlay.classList.add('is-parting');
+        setTimeout(() => {
+          mistTransitionOverlay.classList.add('hidden');
+          mistTransitionOverlay.classList.remove('is-parting');
+          mistAnimActive = false;
+        }, 440);
+      }
+    }, 340);
+  }
+
+  hubBody.append(homePanel, heroesPanel, campaignPanel, arsenalPanel, shopPanel, storePanel);
+  hubShell.append(hubHeader, hubBody, hubNavTabs);
+  hubScreen.append(hubShell, mistTransitionOverlay);
   root.appendChild(hubScreen);
 
   // =========================================================================
-  // SOUND SETTINGS POPOVER
+  // SOUND & GAME SETTINGS POPOVER (Anchored to Top-Right Gear / Combat Sound)
   // =========================================================================
   const soundPopover = el('div', 'sound-popover hidden');
+  const musicPopHead = el('div', 'sound-pop-head');
+  const musicPopTitle = el('span', 'sound-pop-title', '🎵 Музыка');
+  const musicPopVal = el('span', 'sound-pop-val', '38%');
+  musicPopHead.append(musicPopTitle, musicPopVal);
+
+  const musicSliderWrap = el('div', 'sound-slider-wrap');
+  const musicSlider = document.createElement('input');
+  musicSlider.type = 'range';
+  musicSlider.className = 'sound-volume-slider';
+  musicSlider.min = '0';
+  musicSlider.max = '100';
+  musicSlider.step = '1';
+  musicSlider.value = '38';
+  musicSlider.setAttribute('aria-label', 'Громкость музыки');
+  musicSliderWrap.appendChild(musicSlider);
+
   const soundPopHead = el('div', 'sound-pop-head');
-  const soundPopTitle = el('span', 'sound-pop-title', 'Громкость');
-  const soundPopVal = el('span', 'sound-pop-val', '85%');
+  const soundPopTitle = el('span', 'sound-pop-title', '🔫 Выстрелы и эффекты');
+  const soundPopVal = el('span', 'sound-pop-val', '75%');
   soundPopHead.append(soundPopTitle, soundPopVal);
 
   const soundSliderWrap = el('div', 'sound-slider-wrap');
@@ -1819,14 +2337,21 @@ export function createUIManager(initialCallbacks = {}) {
   soundSlider.min = '0';
   soundSlider.max = '100';
   soundSlider.step = '1';
-  soundSlider.value = '85';
-  soundSlider.setAttribute('aria-label', 'Громкость');
+  soundSlider.value = '75';
+  soundSlider.setAttribute('aria-label', 'Громкость выстрелов и эффектов');
   soundSliderWrap.appendChild(soundSlider);
 
   const soundMuteToggleBtn = el('button', 'sound-mute-toggle-btn', 'Выключить звук');
   soundMuteToggleBtn.type = 'button';
 
-  soundPopover.append(soundPopHead, soundSliderWrap, soundMuteToggleBtn);
+  soundPopover.append(
+    musicPopHead,
+    musicSliderWrap,
+    soundPopHead,
+    soundSliderWrap,
+    soundMuteToggleBtn,
+    hubResetBtn
+  );
   root.appendChild(soundPopover);
 
   let soundAnchorBtn = null;
@@ -1834,9 +2359,9 @@ export function createUIManager(initialCallbacks = {}) {
   function positionSoundPopover(anchor) {
     if (!anchor) return;
     const rect = anchor.getBoundingClientRect();
-    const popWidth = 232;
+    const popWidth = 248;
     const left = Math.max(10, Math.min(window.innerWidth - popWidth - 10, rect.right - popWidth));
-    const top = Math.max(10, Math.min(window.innerHeight - 135, rect.bottom + 8));
+    const top = Math.max(10, Math.min(window.innerHeight - 250, rect.bottom + 8));
     soundPopover.style.left = `${Math.round(left)}px`;
     soundPopover.style.top = `${Math.round(top)}px`;
   }
@@ -1855,6 +2380,7 @@ export function createUIManager(initialCallbacks = {}) {
       return;
     }
     soundAnchorBtn = anchorBtn;
+    hubResetBtn.classList.toggle('hidden', anchorBtn !== hubMuteBtn);
     hubMuteBtn.classList.toggle('is-open', anchorBtn === hubMuteBtn);
     hudMuteBtn.classList.toggle('is-open', anchorBtn === hudMuteBtn);
     soundPopover.classList.remove('hidden');
@@ -2139,7 +2665,7 @@ export function createUIManager(initialCallbacks = {}) {
   pauseExitBtn.addEventListener('click', () => {
     const fn = activePauseHandlers.onExit;
     hidePauseModal();
-    setActiveTab('heroes');
+    setActiveTab('home');
     fn?.();
   });
 
@@ -2148,18 +2674,26 @@ export function createUIManager(initialCallbacks = {}) {
   // =========================================================================
   function syncMuteButtons() {
     const effectiveVol = muted ? 0 : volume;
-    const icon = effectiveVol <= 0.001 ? '🔇' : effectiveVol < 0.5 ? '🔉' : '🔊';
+    const effectiveMusic = muted ? 0 : musicVolume;
+    const anyAudio = effectiveVol > 0.001 || effectiveMusic > 0.001;
+    const icon = !anyAudio ? '🔇' : effectiveVol < 0.45 ? '🔉' : '🔊';
     hudMuteBtn.textContent = icon;
-    hubMuteBtn.textContent = icon;
+    hubMuteBtn.classList.toggle('is-muted-gear', !anyAudio);
+
+    const mPct = Math.round(effectiveMusic * 100);
+    musicPopTitle.textContent = lang === 'en' ? '🎵 Music' : '🎵 Музыка';
+    musicPopVal.textContent = muted ? (lang === 'en' ? 'Muted' : 'Выкл') : `${mPct}%`;
+    musicSlider.value = String(mPct);
+    musicSlider.style.setProperty('--vol-pct', `${mPct}%`);
 
     const pct = Math.round(effectiveVol * 100);
-    soundPopTitle.textContent = lang === 'en' ? 'Volume' : 'Громкость';
+    soundPopTitle.textContent = lang === 'en' ? '🔫 Shots & SFX' : '🔫 Выстрелы и эффекты';
     soundPopVal.textContent = muted ? (lang === 'en' ? 'Muted' : 'Выкл') : `${pct}%`;
     soundSlider.value = String(pct);
     soundSlider.style.setProperty('--vol-pct', `${pct}%`);
 
-    soundMuteToggleBtn.classList.toggle('is-muted', muted || volume <= 0.001);
-    if (muted || volume <= 0.001) {
+    soundMuteToggleBtn.classList.toggle('is-muted', muted || !anyAudio);
+    if (muted || !anyAudio) {
       soundMuteToggleBtn.textContent = lang === 'en' ? '🔊 Unmute Audio' : '🔊 Включить звук';
     } else {
       soundMuteToggleBtn.textContent = lang === 'en' ? '🔇 Mute Audio' : '🔇 Выключить звук';
@@ -2175,29 +2709,50 @@ export function createUIManager(initialCallbacks = {}) {
     }
   }
 
+  function syncAttackToggleButton() {
+    attackToggleBtn.classList.toggle('is-on', attackEnabled);
+    attackToggleBtn.classList.toggle('is-off', !attackEnabled);
+    if (lang === 'en') {
+      attackToggleBtn.textContent = `Attack: ${attackEnabled ? 'ON' : 'OFF'} [E]`;
+    } else {
+      attackToggleBtn.textContent = `Атака: ${attackEnabled ? 'ВКЛ' : 'ВЫКЛ'} [E]`;
+    }
+  }
+
   function syncStaticLabels() {
     const isEn = lang === 'en';
-    hubTitle.textContent = isEn ? 'GRIMBORNE HUNTERS' : 'ОХОТНИКИ МРАКА';
-    tabHeroesLabel.textContent = isEn ? '⚔️ Heroes' : '⚔️ Герои';
-    tabCampaignLabel.textContent = isEn ? '📖 Campaign' : '📖 Поход';
-    tabArsenalLabel.textContent = isEn ? '🗡️ Arsenal' : '🗡️ Арсенал';
-    tabShopLabel.textContent = isEn ? '🧪 Workshop' : '🧪 Мастерская';
+    hubTitle.textContent = isEn ? 'Level' : 'Уровень';
+    hubGoldLabel.textContent = isEn ? 'Gold' : 'Золото';
+    homeJourneyLabel.textContent = isEn ? 'EMBARK!' : 'В ПУТЬ!';
+    homeRotateHint.textContent = isEn ? 'RMB — rotate hero' : 'ПКМ — повернуть героя';
+
+    tabStoreLabel.textContent = isEn ? 'Shop' : 'Магазин';
+    tabArsenalLabel.textContent = isEn ? 'Arsenal' : 'Арсенал';
+    tabHomeLabel.textContent = isEn ? 'Home' : 'Главная';
+    tabHeroesLabel.textContent = isEn ? 'Heroes' : 'Герои';
+    tabShopLabel.textContent = isEn ? 'Talents' : 'Таланты';
+    tabCampaignLabel.textContent = isEn ? 'Campaign' : 'Кампания';
+
     heroWeaponChipArrow.textContent = isEn ? 'Arsenal ›' : 'Арсенал ›';
-    launchMainText.textContent = isEn ? '⚔️ BATTLE!' : '⚔️ В БОЙ!';
-    arsenalQuickPlayBtn.textContent = isEn ? '⚔️ BATTLE!' : '⚔️ В БОЙ!';
-    shopQuickPlayBtn.textContent = isEn ? '⚔️ BATTLE!' : '⚔️ В БОЙ!';
-    campaignBackHeroBtn.textContent = isEn ? '← Hero Stage' : '← К герою';
-    arsenalBackBtn.textContent = isEn ? '← Hero Stage' : '← К герою';
-    shopBackBtn.textContent = isEn ? '← Hero Stage' : '← К герою';
-    campaignHeading.textContent = isEn ? '📖 Dark Campaign — 25 Chapters' : '📖 Карта Похода — 25 Глав';
-    arsenalSubhint.textContent = isEn
-      ? 'Relic Chests in Chapters III & VII permanently unlock new class weapons'
-      : 'Рунные Сундуки в Главах III и VII открывают новое оружие класса навсегда';
-    masteryHeading.textContent = isEn ? '🧪 Class Workshop' : '🧪 Мастерская Класса';
+    launchMainText.textContent = isEn ? '⚔️ EMBARK!' : '⚔️ В ПУТЬ!';
+    arsenalQuickPlayBtn.textContent = isEn ? '⚔️ EMBARK!' : '⚔️ В ПУТЬ!';
+    shopQuickPlayBtn.textContent = isEn ? '⚔️ EMBARK!' : '⚔️ В ПУТЬ!';
+    storeQuickPlayBtn.textContent = isEn ? '⚔️ EMBARK!' : '⚔️ В ПУТЬ!';
+
+    campaignBackHeroBtn.textContent = '✕';
+    arsenalBackBtn.textContent = isEn ? '← Home' : '← На главную';
+    shopBackBtn.textContent = isEn ? '← Home' : '← На главную';
+    storeBackBtn.textContent = isEn ? '← Home' : '← На главную';
+
+    campaignHeading.textContent = isEn ? 'Misty Forest — 25 Stages' : 'Туманный лес — 25 Глав';
+    masteryHeading.textContent = isEn ? '🌿 Class Talents' : '🌿 Древо Талантов';
+    storeHeading.textContent = isEn ? '🛒 Camp Shop' : '🛒 Магазин Лагеря';
     rewardGoldBtn.textContent = isEn ? '🎁 +80 Gold (Video)' : '🎁 +80 золота (Видео)';
+    hubResetBtn.textContent = isEn ? '🔄 Reset All Progress' : '🔄 Сбросить весь прогресс';
     leftCap.textContent = isEn ? 'MOVE' : 'ДВИЖЕНИЕ';
     syncMuteButtons();
     syncAutoAimButton();
+    syncAttackToggleButton();
   }
 
   const handleToggleMute = () => {
@@ -2232,6 +2787,18 @@ export function createUIManager(initialCallbacks = {}) {
 
   soundMuteToggleBtn.addEventListener('click', handleToggleMute);
 
+  musicSlider.addEventListener('input', () => {
+    const pct = Math.max(0, Math.min(100, Number(musicSlider.value) || 0));
+    musicVolume = pct / 100;
+    if (musicVolume > 0.01 && muted) {
+      muted = false;
+      const mRes = callbacks.onToggleMute?.(false);
+      if (typeof mRes === 'boolean') muted = mRes;
+    }
+    callbacks.onMusicVolumeChange?.(musicVolume);
+    syncMuteButtons();
+  });
+
   soundSlider.addEventListener('input', () => {
     const pct = Math.max(0, Math.min(100, Number(soundSlider.value) || 0));
     volume = pct / 100;
@@ -2261,39 +2828,90 @@ export function createUIManager(initialCallbacks = {}) {
   });
 
   function normalizeTabId(tabId) {
-    if (tabId === 'campaign' || tabId === 'map' || tabId === 'chapters') return 'campaign';
+    if (tabId === 'home' || tabId === 'main') return 'home';
+    if (tabId === 'heroes') return 'heroes';
+    if (tabId === 'campaign_forest' || tabId === 'forest') return 'campaign_forest';
+    if (tabId === 'campaign_world' || tabId === 'campaign' || tabId === 'map' || tabId === 'chapters') return 'campaign_world';
     if (tabId === 'arsenal') return 'arsenal';
-    if (tabId === 'shop' || tabId === 'workshop') return 'shop';
-    return 'heroes';
+    if (tabId === 'store' || tabId === 'market') return 'store';
+    if (tabId === 'shop' || tabId === 'workshop' || tabId === 'talents') return 'shop';
+    return 'home';
   }
 
   function setActiveTab(tabId) {
-    const valid = normalizeTabId(tabId);
+    closeSoundPopover();
+    const norm = normalizeTabId(tabId);
+    const isCampaign = norm === 'campaign_world' || norm === 'campaign_forest';
+    if (norm === 'campaign_forest') {
+      campaignSubView = 'forest';
+    } else if (norm === 'campaign_world') {
+      campaignSubView = 'world';
+    }
+    const valid = isCampaign ? 'campaign' : norm;
     activeHubTab = valid;
 
-    tabHeroesBtn.classList.toggle('is-active', valid === 'heroes');
-    tabCampaignBtn.classList.toggle('is-active', valid === 'campaign');
+    tabStoreBtn.classList.toggle('is-active', valid === 'store');
     tabArsenalBtn.classList.toggle('is-active', valid === 'arsenal');
+    tabHomeBtn.classList.toggle('is-active', valid === 'home' || valid === 'campaign');
+    tabHeroesBtn.classList.toggle('is-active', valid === 'heroes');
     tabShopBtn.classList.toggle('is-active', valid === 'shop');
 
+    homePanel.classList.toggle('hidden', valid !== 'home');
     heroesPanel.classList.toggle('hidden', valid !== 'heroes');
     campaignPanel.classList.toggle('hidden', valid !== 'campaign');
-    arsenalPanel.classList.toggle('hidden', valid !== 'arsenal');
+    arsenalPanel.classList.toggle('hidden', valid !== 'arsenal' && valid !== 'store');
     shopPanel.classList.toggle('hidden', valid !== 'shop');
+    storePanel.classList.add('hidden');
 
-    hubScreen.classList.toggle('is-subtab', valid !== 'heroes');
+    const is3DStageTab = valid === 'home' || valid === 'heroes' || valid === 'arsenal' || valid === 'store';
+    hubScreen.classList.toggle('is-subtab', !is3DStageTab && valid !== 'campaign');
+    hubScreen.classList.toggle('is-campaign-map', valid === 'campaign');
     hubScreen.scrollTop = 0;
 
+    if (valid === 'campaign') {
+      campaignWorldView.classList.toggle('hidden', campaignSubView !== 'world');
+      campaignForestView.classList.toggle('hidden', campaignSubView !== 'forest');
+    }
+
+    if (valid === 'arsenal' && lastHubState) {
+      viewedArsenalWeaponIdx = -1;
+      renderHub(lastHubState);
+    } else if (valid === 'store' && lastHubState) {
+      viewedShopWeaponIdx = 0;
+      renderHub(lastHubState);
+    }
+
+    callbacks.onHubTabChange?.(isCampaign ? (campaignSubView === 'forest' ? 'campaign_forest' : 'campaign_world') : valid);
+
     if (valid === 'campaign' && lastHubState) {
-      viewedCampaignLevel = localSelectedLevel;
+      if (!viewedCampaignLevel || viewedCampaignLevel > cachedMaxUnlockedLevel) {
+        viewedCampaignLevel = localSelectedLevel;
+      }
       renderHub(lastHubState);
     }
   }
 
-  tabHeroesBtn.addEventListener('click', () => setActiveTab('heroes'));
-  tabCampaignBtn.addEventListener('click', () => setActiveTab('campaign'));
+  tabStoreBtn.addEventListener('click', () => setActiveTab('store'));
   tabArsenalBtn.addEventListener('click', () => setActiveTab('arsenal'));
+  tabHomeBtn.addEventListener('click', () => setActiveTab('home'));
+  tabHeroesBtn.addEventListener('click', () => setActiveTab('heroes'));
   tabShopBtn.addEventListener('click', () => setActiveTab('shop'));
+  tabCampaignBtn.addEventListener('click', () => setActiveTab('campaign_world'));
+
+  hubProfilePlaque.addEventListener('click', () => {
+    if (activeHubTab === 'heroes') {
+      cycleHeroClass(1);
+    } else {
+      setActiveTab('heroes');
+    }
+  });
+
+  homeWeaponWarn.addEventListener('click', () => setActiveTab('arsenal'));
+  forestBackWorldBtn.addEventListener('click', () => {
+    triggerVioletMistTransition(() => setActiveTab('campaign_world'));
+  });
+  diffNormalBtn.addEventListener('click', () => callbacks.onSetDifficulty?.('normal'));
+  diffHardBtn.addEventListener('click', () => callbacks.onSetDifficulty?.('hard'));
 
   heroWeaponChip.addEventListener('click', () => setActiveTab('arsenal'));
   launchWeaponWarn.addEventListener('click', () => setActiveTab('arsenal'));
@@ -2303,9 +2921,11 @@ export function createUIManager(initialCallbacks = {}) {
   });
   chapterMiniCard.addEventListener('click', () => setActiveTab('campaign'));
 
-  campaignBackHeroBtn.addEventListener('click', () => setActiveTab('heroes'));
-  arsenalBackBtn.addEventListener('click', () => setActiveTab('heroes'));
-  shopBackBtn.addEventListener('click', () => setActiveTab('heroes'));
+  campaignBackHeroBtn.addEventListener('click', () => setActiveTab('home'));
+  forestCloseMapBtn.addEventListener('click', () => setActiveTab('home'));
+  arsenalBackBtn.addEventListener('click', () => setActiveTab('home'));
+  shopBackBtn.addEventListener('click', () => setActiveTab('home'));
+  storeBackBtn.addEventListener('click', () => setActiveTab('home'));
 
   autoAimBtn.addEventListener('click', () => {
     const next = !autoAim;
@@ -2314,12 +2934,19 @@ export function createUIManager(initialCallbacks = {}) {
     syncAutoAimButton();
   });
 
+  attackToggleBtn.addEventListener('click', () => {
+    const next = !attackEnabled;
+    const res = callbacks.onToggleAttack?.(next);
+    attackEnabled = typeof res === 'boolean' ? res : next;
+    syncAttackToggleButton();
+  });
+
   hudHomeBtn.addEventListener('click', () => {
     closeSoundPopover();
     if (callbacks.onTogglePause) {
       callbacks.onTogglePause();
     } else {
-      setActiveTab('heroes');
+      setActiveTab('home');
       (callbacks.onExitToHub || callbacks.onReturnToHub || callbacks.onQuitRun)?.();
     }
   });
@@ -2339,14 +2966,57 @@ export function createUIManager(initialCallbacks = {}) {
   let lastSeenMaxUnlockedLevel = null;
   let userPickedLevel = false;
   let currentEquippedWeaponId = 'club';
+  let viewedArsenalWeaponIdx = -1;
+  let viewedShopWeaponIdx = 0;
+
+  function getOwnedClassWeapons(classId) {
+    const cDef = CLASSES[classId] || CLASSES.warrior;
+    const allList = cDef.weapons || ['club'];
+    if (!lastHubState) return allList;
+    const s = typeof lastHubState?.getState === 'function' ? lastHubState.getState() : lastHubState;
+    const owned = allList.filter((wId) => WEAPONS[wId] && resolveWeaponUnlocked(s, lastHubState, WEAPONS[wId]));
+    return owned.length > 0 ? owned : [cDef.starterWeapon || allList[0]];
+  }
+
+  function getUnownedShopWeapons(classId) {
+    const cDef = CLASSES[classId] || CLASSES.warrior;
+    const allList = cDef.weapons || ['club'];
+    if (!lastHubState) return [];
+    const s = typeof lastHubState?.getState === 'function' ? lastHubState.getState() : lastHubState;
+    return allList.filter((wId) => {
+      const wDef = WEAPONS[wId];
+      return wDef && !wDef.bossExclusive && !resolveWeaponUnlocked(s, lastHubState, wDef);
+    });
+  }
+
+  function cycleArsenalWeapon(step) {
+    const isShopMode = activeHubTab === 'store';
+    const list = isShopMode
+      ? getUnownedShopWeapons(localSelectedClass)
+      : getOwnedClassWeapons(localSelectedClass);
+    if (list.length <= 1) return;
+    if (isShopMode) {
+      const curIdx = Math.max(0, Math.min(list.length - 1, viewedShopWeaponIdx));
+      const nextIdx = Math.max(0, Math.min(list.length - 1, curIdx + step));
+      if (nextIdx === curIdx) return;
+      viewedShopWeaponIdx = nextIdx;
+    } else {
+      const curIdx =
+        viewedArsenalWeaponIdx >= 0 && viewedArsenalWeaponIdx < list.length
+          ? viewedArsenalWeaponIdx
+          : Math.max(0, list.indexOf(currentEquippedWeaponId));
+      const nextIdx = Math.max(0, Math.min(list.length - 1, curIdx + step));
+      if (nextIdx === curIdx) return;
+      viewedArsenalWeaponIdx = nextIdx;
+    }
+    if (lastHubState) renderHub(lastHubState);
+  }
+
+  arsenalPrevBtn.addEventListener('click', () => cycleArsenalWeapon(-1));
+  arsenalNextBtn.addEventListener('click', () => cycleArsenalWeapon(1));
 
   function isMageStarterChosen() {
-    if (!lastHubState) return false;
-    if (typeof lastHubState?.getMageElementState === 'function') {
-      return Boolean(lastHubState.getMageElementState().starterChosen);
-    }
-    const st = typeof lastHubState?.getState === 'function' ? lastHubState.getState() : lastHubState;
-    return Boolean(st?.mageStarterChosen);
+    return true;
   }
 
   function resetLocalSelection() {
@@ -2357,7 +3027,9 @@ export function createUIManager(initialCallbacks = {}) {
     lastSeenMaxUnlockedLevel = null;
     userPickedLevel = false;
     currentEquippedWeaponId = 'club';
-    setActiveTab('heroes');
+    viewedArsenalWeaponIdx = -1;
+    viewedShopWeaponIdx = 0;
+    setActiveTab('home');
   }
 
   resetConfirmYesBtn.addEventListener('click', () => {
@@ -2369,6 +3041,8 @@ export function createUIManager(initialCallbacks = {}) {
   function selectHeroClass(nextClassId) {
     if (!CLASSES[nextClassId] || nextClassId === localSelectedClass) return;
     localSelectedClass = nextClassId;
+    viewedArsenalWeaponIdx = -1;
+    viewedShopWeaponIdx = 0;
 
     heroInfoCard.classList.remove('hero-switch-pulse');
     void heroInfoCard.offsetWidth;
@@ -2407,23 +3081,6 @@ export function createUIManager(initialCallbacks = {}) {
   stagePrevBtn.addEventListener('click', () => cycleHeroClass(-1));
   stageNextBtn.addEventListener('click', () => cycleHeroClass(1));
 
-  campaignPrevBtn.addEventListener('click', () => navigateCampaignChapter(viewedCampaignLevel - 1));
-  campaignNextBtn.addEventListener('click', () => navigateCampaignChapter(viewedCampaignLevel + 1));
-
-  for (const aDef of ACT_DEFS) {
-    campaignActBtns[aDef.act].addEventListener('click', () => {
-      const actStart = (aDef.act - 1) * 5 + 1;
-      const actEnd = aDef.act * 5;
-      if (localSelectedLevel >= actStart && localSelectedLevel <= actEnd) {
-        navigateCampaignChapter(localSelectedLevel);
-      } else if (cachedMaxUnlockedLevel >= actStart) {
-        navigateCampaignChapter(Math.min(actEnd, cachedMaxUnlockedLevel));
-      } else {
-        navigateCampaignChapter(actStart);
-      }
-    });
-  }
-
   for (const cid of CLASS_ORDER) {
     emblemDotButtons[cid].addEventListener('click', () => selectHeroClass(cid));
     arsenalClassBtns[cid].addEventListener('click', () => selectHeroClass(cid));
@@ -2444,9 +3101,11 @@ export function createUIManager(initialCallbacks = {}) {
     });
   }
 
+  homeJourneyBtn.addEventListener('click', () => setActiveTab('campaign_world'));
   launchBattleBtn.addEventListener('click', () => triggerStartRun(localSelectedLevel));
   arsenalQuickPlayBtn.addEventListener('click', () => triggerStartRun(localSelectedLevel));
   shopQuickPlayBtn.addEventListener('click', () => triggerStartRun(localSelectedLevel));
+  storeQuickPlayBtn.addEventListener('click', () => triggerStartRun(localSelectedLevel));
 
   campaignStartBtn.addEventListener('click', () => {
     if (viewedCampaignLevel > cachedMaxUnlockedLevel) return;
@@ -2504,13 +3163,16 @@ export function createUIManager(initialCallbacks = {}) {
       levelUpModal.classList.contains('hidden') &&
       resultModal.classList.contains('hidden')
     ) {
-      if (activeHubTab === 'heroes') {
+      if (activeHubTab === 'home' || activeHubTab === 'heroes') {
         if (e.code === 'ArrowLeft') {
           e.preventDefault();
           cycleHeroClass(-1);
         } else if (e.code === 'ArrowRight') {
           e.preventDefault();
           cycleHeroClass(1);
+        } else if (e.code === 'Escape' && activeHubTab === 'heroes') {
+          e.preventDefault();
+          setActiveTab('home');
         }
       } else if (activeHubTab === 'campaign') {
         if (e.code === 'ArrowLeft') {
@@ -2521,11 +3183,11 @@ export function createUIManager(initialCallbacks = {}) {
           navigateCampaignChapter(viewedCampaignLevel + 1);
         } else if (e.code === 'Escape') {
           e.preventDefault();
-          setActiveTab('heroes');
+          setActiveTab('home');
         }
       } else if (e.code === 'Escape') {
         e.preventDefault();
-        setActiveTab('heroes');
+        setActiveTab('home');
       }
     }
   });
@@ -2550,7 +3212,7 @@ export function createUIManager(initialCallbacks = {}) {
     const isEn = lang === 'en';
     const maxWpnLvl = resolveMaxWeaponShopLevel(storeRef);
     const gold = Math.floor(Number(state.gold ?? state.coins ?? 0));
-    hubGoldAmount.textContent = String(gold);
+    hubGoldAmount.textContent = String(gold).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 
     const selectedClassId =
       state.selectedClass ||
@@ -2571,6 +3233,16 @@ export function createUIManager(initialCallbacks = {}) {
       )
     );
     cachedMaxUnlockedLevel = maxUnlockedLevel;
+
+    const heroLvl = Math.max(1, Number(state.heroLevel || 1));
+    const heroXp = Math.max(0, Number(state.heroXp || 0));
+    const heroXpNext = Math.max(1, Number(state.heroXpNext || 95));
+
+    hubAvatarImg.src = activeClass.portrait;
+    hubAvatarImg.alt = isEn ? activeClass.nameEn : activeClass.nameRu;
+    hubAvatarLvlBadge.textContent = String(heroLvl);
+    const lvlFillPct = Math.max(8, Math.min(100, Math.round((heroXp / heroXpNext) * 100)));
+    hubLevelFill.style.width = `${lvlFillPct}%`;
 
     const explicitLevelLock =
       state.maxUnlockedLevel !== undefined ||
@@ -2669,80 +3341,20 @@ export function createUIManager(initialCallbacks = {}) {
     statBlkBar.val.textContent = `${Math.round(dispBlk * 100)}%`;
 
     const eqWpnDef = WEAPONS[equippedWeaponId] || WEAPONS[activeClass.starterWeapon];
-    const eqShopLvl = resolveWeaponShopLevel(state, storeRef, eqWpnDef.id, maxWpnLvl);
-    const eqUpgCost = resolveWeaponUpgradeCost(state, storeRef, callbacks, eqWpnDef, eqShopLvl, maxWpnLvl);
-    const eqCanUpgrade = eqShopLvl < maxWpnLvl && typeof eqUpgCost === 'number' && gold >= eqUpgCost;
+    const eqMaxLvl = eqWpnDef?.maxLevel || maxWpnLvl;
+    const eqShopLvl = resolveWeaponShopLevel(state, storeRef, eqWpnDef.id, eqMaxLvl);
+    const eqUpgCost = resolveWeaponUpgradeCost(state, storeRef, callbacks, eqWpnDef, eqShopLvl, eqMaxLvl);
+    const eqCanUpgrade = eqShopLvl < eqMaxLvl && typeof eqUpgCost === 'number' && gold >= eqUpgCost;
 
-    // --- 2b. Mage 4-Element Selector inside Hero Card ---
-    const mageElemState =
-      typeof storeRef?.getMageElementState === 'function'
-        ? storeRef.getMageElementState()
-        : {
-            starterChosen: Boolean(state.mageStarterChosen),
-            activeElement: state.activeMageElement || 'fire',
-            unlockedElements: { ...(state.unlockedMageElements || {}) },
-            nextUnlockCost:
-              !state.mageStarterChosen
-                ? 0
-                : MAGE_ELEMENT_UNLOCK_COSTS[
-                    MAGE_ELEMENT_ORDER.filter((k) => state.unlockedMageElements?.[k]).length
-                  ] ?? null
-          };
-
-    const isMageActive = localSelectedClass === 'mage';
-    mageElementsBox.classList.toggle('hidden', !isMageActive);
-    if (isMageActive) {
-      const curElemId = MAGE_ELEMENTS[mageElemState.activeElement] ? mageElemState.activeElement : 'fire';
-      const curElemDef = MAGE_ELEMENTS[curElemId];
-      mageElemTitle.textContent = '✦ Стихия посоха:';
-      if (!mageElemState.starterChosen) {
-        mageElemStatus.textContent = '1-я бесплатно!';
-      } else {
-        mageElemStatus.textContent = `${curElemDef.icon} ${curElemDef.nameRu}`;
-      }
-
-      mageElemRow.innerHTML = '';
-      for (const elKey of MAGE_ELEMENT_ORDER) {
-        const eDef = MAGE_ELEMENTS[elKey];
-        if (!eDef) continue;
-        const unlocked = Boolean(mageElemState.unlockedElements?.[elKey]);
-        const isCurrent = mageElemState.starterChosen && curElemId === elKey && unlocked;
-        const costVal = unlocked ? null : mageElemState.nextUnlockCost;
-        const canAffordUnlock = !unlocked && typeof costVal === 'number' && gold >= costVal;
-
-        const pillBtn = el(
-          'button',
-          `mage-elem-pill elem-theme-${elKey}${isCurrent ? ' is-active' : ''}${unlocked ? ' is-unlocked' : ' is-locked'}${canAffordUnlock ? ' is-affordable' : ''}`
-        );
-        pillBtn.type = 'button';
-        pillBtn.style.setProperty('--elem-color', hexNumToCss(eDef.color, '#c084fc'));
-
-        const topTxt = el('span', 'mage-elem-pill-name', `${eDef.icon} ${eDef.shortRu}`);
-        let subLabel = '';
-        if (isCurrent) subLabel = '✓ Выбрана';
-        else if (unlocked) subLabel = 'Взять';
-        else if (costVal === 0) subLabel = 'Бесплатно';
-        else subLabel = `🔒 ${costVal}`;
-        const subTxt = el('span', 'mage-elem-pill-sub', subLabel);
-
-        pillBtn.append(topTxt, subTxt);
-        pillBtn.addEventListener('click', () => {
-          callbacks.onSelectMageElement?.(elKey);
-        });
-        mageElemRow.appendChild(pillBtn);
-      }
-
-      mageElemDesc.textContent = mageElemState.starterChosen
-        ? curElemDef.descRu
-        : 'Нажмите на любую стихию выше, чтобы выбрать первую школу магии бесплатно!';
-    }
+    // Pure Water Mage: hide legacy 4-element selector completely!
+    mageElementsBox.classList.add('hidden');
 
     heroWeaponChipIcon.innerHTML = '';
     heroWeaponChipIcon.appendChild(createWeaponSvg(eqWpnDef.id));
     heroWeaponChipName.textContent = isEn ? eqWpnDef.nameEn : eqWpnDef.nameRu;
     heroWeaponChipLvl.textContent = isEn
-      ? `Lv. ${eqShopLvl}/${maxWpnLvl}`
-      : `Ур. ${eqShopLvl}/${maxWpnLvl}`;
+      ? `Lv. ${eqShopLvl}/${eqMaxLvl}`
+      : `Ур. ${eqShopLvl}/${eqMaxLvl}`;
     heroWeaponChipDot.classList.toggle('hidden', !eqCanUpgrade);
 
     // --- 3. Update Launch Dock (Selected Chapter Mini-Banner + Weapon Warning + Battle CTA) ---
@@ -2768,10 +3380,13 @@ export function createUIManager(initialCallbacks = {}) {
 
     const isUnderleveledForSelected = eqShopLvl < (selLevelDef.recWeaponLevel || 1);
     launchWeaponWarn.classList.toggle('hidden', !isUnderleveledForSelected);
+    homeWeaponWarn.classList.toggle('hidden', !isUnderleveledForSelected);
     if (isUnderleveledForSelected) {
-      launchWeaponWarn.textContent = isEn
+      const warnMsg = isEn
         ? `⚠️ Weapon Lv. ${eqShopLvl} / rec. ${selLevelDef.recWeaponLevel}`
         : `⚠️ Оружие Ур. ${eqShopLvl} / рек. ${selLevelDef.recWeaponLevel}`;
+      launchWeaponWarn.textContent = warnMsg;
+      homeWeaponWarn.textContent = warnMsg;
     }
 
     changeChapterBtn.textContent = isEn
@@ -2782,7 +3397,27 @@ export function createUIManager(initialCallbacks = {}) {
       ? `Ch. ${selLevelDef.roman}: ${selLevelDef.shortTitleRu}`
       : `Глава ${selLevelDef.roman}: ${selLevelDef.shortTitleRu}`;
 
-    // --- 4. Render Dedicated 25-Chapter Campaign Screen (🗺️ Поход) ---
+    // --- 4. Render 2-Scene World Map -> Misty Forest 25-Stage Path & 3-Star Goals ---
+    const levelStarsMap = state.levelStars || {};
+    const diffMode = state.difficultyMode === 'hard' ? 'hard' : 'normal';
+    let earnedStarsTotal = 0;
+    for (let l = 1; l <= LEVELS.length; l++) {
+      earnedStarsTotal += Math.max(0, Math.min(3, Number(levelStarsMap[l] ?? levelStarsMap[String(l)] ?? 0)));
+    }
+    const maxStarsTotal = LEVELS.length * 3;
+
+    campaignWorldView.classList.toggle('hidden', campaignSubView !== 'world');
+    campaignForestView.classList.toggle('hidden', campaignSubView !== 'forest');
+
+    if (worldForestStarsLabel) {
+      worldForestStarsLabel.textContent = isEn
+        ? `25 Stages • ★ ${earnedStarsTotal}/${maxStarsTotal}`
+        : `25 этапов • ★ ${earnedStarsTotal}/${maxStarsTotal}`;
+    }
+
+    diffNormalBtn.classList.toggle('is-active', diffMode === 'normal');
+    diffHardBtn.classList.toggle('is-active', diffMode === 'hard');
+
     const viewDef = LEVELS[viewedCampaignLevel - 1] || selLevelDef;
     const viewAct = viewDef.act || Math.ceil(viewDef.level / 5);
     const isViewLocked = explicitLevelLock && (
@@ -2792,387 +3427,440 @@ export function createUIManager(initialCallbacks = {}) {
     );
 
     campaignProgressHint.textContent = isEn
-      ? `Unlocked Chapters: ${maxUnlockedLevel} / ${LEVELS.length} • Active Hero: ${activeClass.nameEn}`
-      : `Открыто глав: ${maxUnlockedLevel} из ${LEVELS.length} • Охотник: ${activeClass.nameRu}`;
-
-    for (const aDef of ACT_DEFS) {
-      const btn = campaignActBtns[aDef.act];
-      if (!btn) continue;
-      const actFirstLvl = (aDef.act - 1) * 5 + 1;
-      const actLocked = explicitLevelLock && actFirstLvl > maxUnlockedLevel;
-      btn.classList.toggle('is-active', aDef.act === viewAct);
-      btn.classList.toggle('is-locked', actLocked);
-      const baseTitle = isEn ? aDef.titleEn : aDef.titleRu;
-      btn.textContent = actLocked ? `🔒 ${baseTitle}` : baseTitle;
-    }
-
-    campaignPrevBtn.disabled = viewDef.level <= 1;
-    campaignNextBtn.disabled = viewDef.level >= LEVELS.length;
-
-    campaignBannerImg.src = viewDef.bannerImg;
-    campaignBannerImg.alt = viewDef.nameRu;
-    campaignCard.classList.toggle('is-boss-chapter', Boolean(viewDef.hasBoss));
-    campaignCard.classList.toggle('is-locked-chapter', isViewLocked);
+      ? `★ ${earnedStarsTotal}/${maxStarsTotal} • Chapters: ${maxUnlockedLevel}/${LEVELS.length}`
+      : `★ ${earnedStarsTotal}/${maxStarsTotal} • Глав: ${maxUnlockedLevel}/${LEVELS.length}`;
 
     campaignActPill.textContent = isEn
-      ? `ACT ${ACT_DEFS[viewAct - 1]?.roman || viewAct} • CHAPTER ${viewDef.roman}`
+      ? `ACT ${ACT_DEFS[viewAct - 1]?.roman || viewAct} • CH. ${viewDef.roman}`
       : `АКТ ${ACT_DEFS[viewAct - 1]?.roman || viewAct} • ГЛАВА ${viewDef.roman}`;
-    campaignDurationPill.textContent = `⏱️ ${formatTimeMMSS(viewDef.durationSec)}`;
 
-    if (viewDef.hasBoss) {
-      const bossName = ENEMY_TYPES[viewDef.bossId]?.nameRu || 'Босс Акта';
-      campaignSpecialBadge.textContent = isEn ? '💀 ACT BOSS' : `💀 БОСС АКТА • ${bossName.toUpperCase()}`;
-      campaignSpecialBadge.className = 'campaign-special-badge is-boss';
-    } else if (viewDef.unlockWeaponTier) {
-      const rStr = TIER_ROMAN[viewDef.unlockWeaponTier] || viewDef.unlockWeaponTier;
-      campaignSpecialBadge.textContent = isEn
-        ? `🗡️ NEW WEAPON (TIER ${rStr})`
-        : `🗡️ НОВОЕ ОРУЖИЕ (${rStr} РАНГ)`;
-      campaignSpecialBadge.className = 'campaign-special-badge is-weapon';
-    } else {
-      campaignSpecialBadge.className = 'campaign-special-badge hidden';
-    }
-
-    campaignLockOverlay.classList.toggle('hidden', !isViewLocked);
-    if (isViewLocked) {
-      const prevRoman = LEVELS[Math.max(0, viewDef.level - 2)]?.roman || String(viewDef.level - 1);
-      campaignLockTitle.textContent = isEn ? 'CHAPTER SEALED' : 'ГЛАВА ЗАПЕЧАТАНА';
-      campaignLockSub.textContent = isEn
-        ? `Clear Chapter ${prevRoman} to unlock this battleground`
-        : `Одержите победу в Главе ${prevRoman}, чтобы открыть путь`;
-    }
-
-    campaignChapterTitle.textContent = isEn ? `${viewDef.nameEn}: ${viewDef.shortTitleRu}` : viewDef.nameRu;
+    campaignChapterTitle.textContent = isEn
+      ? `${viewDef.level}. ${viewDef.nameEn}`
+      : `${viewDef.level}. ${viewDef.nameRu}`;
     campaignChapterLore.textContent = viewDef.subtitleRu;
 
-    // Enemy Threat Roster Pills (Boss + Pool)
-    campaignThreatsLabel.textContent = isEn ? 'ENEMY THREATS:' : 'БЕСТИАРИЙ ГЛАВЫ:';
-    campaignThreatsList.innerHTML = '';
+    const viewStarsEarned = Math.max(0, Math.min(3, Number(levelStarsMap[viewDef.level] ?? levelStarsMap[String(viewDef.level)] ?? 0)));
+    forestGoal1.classList.toggle('is-done', viewStarsEarned >= 1);
+    forestGoal2.classList.toggle('is-done', viewStarsEarned >= 2);
+    forestGoal3.classList.toggle('is-done', viewStarsEarned >= 3);
 
-    if (viewDef.hasBoss && viewDef.bossId && ENEMY_TYPES[viewDef.bossId]) {
-      const bDef = ENEMY_TYPES[viewDef.bossId];
-      const bossPill = el('div', 'threat-pill is-boss-threat');
-      const dot = el('span', 'threat-dot');
-      dot.style.background = '#ef4444';
-      const nameSpan = el('strong', 'threat-name', `💀 ${bDef.nameRu}`);
-      const roleSpan = el('span', 'threat-role', bDef.roleHintRu);
-      bossPill.append(dot, nameSpan, roleSpan);
-      campaignThreatsList.appendChild(bossPill);
-    }
-
-    for (const enemyId of viewDef.enemyPool || []) {
-      const eDef = ENEMY_TYPES[enemyId];
-      if (!eDef) continue;
-      const pill = el('div', 'threat-pill');
-      const dot = el('span', 'threat-dot');
-      dot.style.background = hexNumToCss(eDef.color, '#94a3b8');
-      const nameSpan = el('strong', 'threat-name', eDef.nameRu);
-      const roleSpan = el('span', 'threat-role', eDef.roleHintRu);
-      pill.append(dot, nameSpan, roleSpan);
-      campaignThreatsList.appendChild(pill);
-    }
-
-    // Recommended Weapon Rank vs Current Class Weapon Rank Pill
     const recLvl = viewDef.recWeaponLevel || 1;
     const wpnReady = eqShopLvl >= recLvl;
     campaignWpnCheckBtn.classList.toggle('is-ready', wpnReady);
     campaignWpnCheckBtn.classList.toggle('is-warn', !wpnReady);
     campaignWpnCheckIcon.innerHTML = '';
     campaignWpnCheckIcon.appendChild(createWeaponSvg(eqWpnDef.id, 'mini-check-wpn-svg'));
-
-    if (wpnReady) {
-      campaignWpnCheckText.textContent = isEn
-        ? `✓ Weapon Ready (Lv. ${eqShopLvl} / rec. ${recLvl})`
-        : `✓ Оружие готово (Ур. ${eqShopLvl} / рек. ${recLvl})`;
-    } else {
-      campaignWpnCheckText.textContent = isEn
-        ? `⚠️ Upgrade Recommended (Lv. ${eqShopLvl} / rec. ${recLvl})`
-        : `⚠️ Требуется прокачка оружия (Ур. ${eqShopLvl} / рек. ${recLvl})`;
-    }
+    campaignWpnCheckText.textContent = wpnReady
+      ? (isEn ? `✓ Weapon Lv.${eqShopLvl}` : `✓ Оружие Ур.${eqShopLvl}`)
+      : (isEn ? `⚠️ Rec. Lv.${recLvl}` : `⚠️ Рек. Ур.${recLvl}`);
 
     campaignStartBtn.disabled = isViewLocked;
-    if (isViewLocked) {
-      campaignStartBtn.textContent = isEn ? '🔒 LOCKED' : '🔒 ГЛАВА ЗАКРЫТА';
-    } else {
-      campaignStartBtn.textContent = isEn ? '⚔️ START CHAPTER' : '⚔️ НАЧАТЬ ГЛАВУ';
-    }
+    campaignStartBtn.textContent = isViewLocked
+      ? (isEn ? '🔒 LOCKED' : '🔒 ЗАКРЫТО')
+      : (isEn ? 'FIGHT!' : 'В БОЙ!');
 
-    // 5 Chapter Nodes along the bottom of the Active Act
-    campaignNodesStrip.innerHTML = '';
-    const actStartLvl = (viewAct - 1) * 5 + 1;
-    for (let l = actStartLvl; l < actStartLvl + 5 && l <= LEVELS.length; l++) {
+    for (const nodeObj of forestNodeButtons) {
+      const l = nodeObj.lvlNum;
       const cDef = LEVELS[l - 1];
+      const nodeStars = Math.max(0, Math.min(3, Number(levelStarsMap[l] ?? levelStarsMap[String(l)] ?? 0)));
       const nodeLocked = explicitLevelLock && l > maxUnlockedLevel;
-      const nodeCleared = l < maxUnlockedLevel;
-      const nodeActive = l === viewDef.level;
+      const nodeCleared = l < maxUnlockedLevel || nodeStars > 0;
+      const nodeCurrent = l === viewDef.level;
 
-      const nodeBtn = el(
-        'button',
-        `campaign-node-btn${nodeActive ? ' is-active' : ''}${nodeCleared ? ' is-cleared' : ''}${nodeLocked ? ' is-locked' : ''}${cDef.hasBoss ? ' is-boss-node' : ''}`
-      );
-      nodeBtn.type = 'button';
+      nodeObj.btn.classList.toggle('is-active', nodeCurrent);
+      nodeObj.btn.classList.toggle('is-cleared', nodeCleared && !nodeLocked);
+      nodeObj.btn.classList.toggle('is-locked', nodeLocked);
+      nodeObj.btn.classList.toggle('is-boss', Boolean(cDef?.hasBoss));
+      nodeObj.btn.disabled = nodeLocked;
 
-      const medallion = el('span', 'campaign-node-medallion');
-      if (nodeLocked) {
-        medallion.textContent = `🔒 ${cDef.roman}`;
-      } else if (cDef.hasBoss) {
-        medallion.textContent = `💀 ${cDef.roman}`;
-      } else if (cDef.unlockWeaponTier) {
-        medallion.textContent = `🗡️ ${cDef.roman}`;
-      } else if (nodeCleared) {
-        medallion.textContent = `✓ ${cDef.roman}`;
-      } else {
-        medallion.textContent = cDef.roman;
-      }
+      nodeObj.levBadge.classList.toggle('hidden', !nodeCurrent);
+      nodeObj.levBadge.textContent = isEn ? `St. ${l}` : `Гл. ${l}`;
+      nodeObj.coin.textContent = cDef?.hasBoss ? `💀` : String(l);
 
-      const shortName = el('span', 'campaign-node-title', cDef.shortTitleRu);
-      nodeBtn.append(medallion, shortName);
-      nodeBtn.addEventListener('click', () => navigateCampaignChapter(l));
-      campaignNodesStrip.appendChild(nodeBtn);
-    }
-
-    // --- 5. Render 🗡️ Арсенал Cards (3 Per-Class Weapons, Shop Levels 1..12 + Mage Elements) ---
-    arsenalHeading.textContent = isEn
-      ? `🗡️ Arsenal — ${activeClass.nameEn}`
-      : `🗡️ Арсенал — ${activeClass.nameRu}`;
-    arsenalCardsGrid.innerHTML = '';
-
-    arsenalMageElementsBox.classList.toggle('hidden', localSelectedClass !== 'mage');
-    arsenalMageElementsBox.innerHTML = '';
-    let anyElemUnlockAffordable = false;
-    if (localSelectedClass === 'mage') {
-      const aHead = el('div', 'arsenal-elem-header');
-      aHead.append(
-        el('span', 'arsenal-elem-title', '✦ Школы Стихий Посоха (переключаются свободно после открытия)'),
-        el(
-          'span',
-          'arsenal-elem-hint',
-          !mageElemState.starterChosen
-            ? 'Первая стихия — БЕСПЛАТНО!'
-            : mageElemState.nextUnlockCost !== null
-              ? `Следующая стихия: ${mageElemState.nextUnlockCost} золота`
-              : 'Все 4 стихии открыты!'
-        )
-      );
-      const aGrid = el('div', 'arsenal-elem-grid');
-      for (const elKey of MAGE_ELEMENT_ORDER) {
-        const eDef = MAGE_ELEMENTS[elKey];
-        if (!eDef) continue;
-        const unlocked = Boolean(mageElemState.unlockedElements?.[elKey]);
-        const isCurrent = mageElemState.starterChosen && mageElemState.activeElement === elKey && unlocked;
-        const costVal = unlocked ? null : mageElemState.nextUnlockCost;
-        if (!unlocked && typeof costVal === 'number' && gold >= costVal) {
-          anyElemUnlockAffordable = true;
+      nodeObj.starsRow.innerHTML = '';
+      if (!nodeLocked && (nodeCleared || nodeCurrent)) {
+        for (let s = 1; s <= 3; s++) {
+          nodeObj.starsRow.appendChild(el('span', `node-star${s <= nodeStars ? ' is-lit' : ''}`, '★'));
         }
-        const eCard = el(
-          'button',
-          `arsenal-elem-card elem-theme-${elKey}${isCurrent ? ' is-active' : ''}${unlocked ? ' is-unlocked' : ' is-locked'}`
-        );
-        eCard.type = 'button';
-        eCard.style.setProperty('--elem-color', hexNumToCss(eDef.color, '#c084fc'));
-        const topRow = el('div', 'arsenal-elem-card-top');
-        topRow.append(
-          el('strong', 'arsenal-elem-name', `${eDef.icon} ${eDef.nameRu}`),
-          el(
-            'span',
-            'arsenal-elem-tag',
-            isCurrent
-              ? '✓ Активна'
-              : unlocked
-                ? 'Выбрать'
-                : costVal === 0
-                  ? 'Бесплатно'
-                  : `🔒 ${costVal} зол.`
-          )
-        );
-        const dP = el('p', 'arsenal-elem-desc', eDef.descRu);
-        eCard.append(topRow, dP);
-        eCard.addEventListener('click', () => {
-          callbacks.onSelectMageElement?.(elKey);
-        });
-        aGrid.appendChild(eCard);
       }
-      arsenalMageElementsBox.append(aHead, aGrid);
     }
 
-    let anyWeaponUpgradeAffordable = anyElemUnlockAffordable;
+    // --- 5. Render 🗡️ Арсенал & 🛒 Магазин (Unified Floating 3D Weapon Showcase + Gothic Stats Plaque!) ---
+    arsenalMageElementsBox.classList.add('hidden');
+    arsenalMageElementsBox.innerHTML = '';
+    let anyWeaponUpgradeAffordable = false;
+    const allClassWeapons = activeClass.weapons || [activeClass.starterWeapon];
+    const ownedClassWeapons = allClassWeapons.filter((wId) => WEAPONS[wId] && resolveWeaponUnlocked(state, storeRef, WEAPONS[wId]));
+    const arsenalList = ownedClassWeapons.length > 0 ? ownedClassWeapons : [activeClass.starterWeapon];
+    const unownedShopWeapons = allClassWeapons.filter((wId) => {
+      const wDef = WEAPONS[wId];
+      return wDef && !wDef.bossExclusive && !resolveWeaponUnlocked(state, storeRef, wDef);
+    });
 
-    for (const wId of activeClass.weapons) {
+    for (const wId of arsenalList) {
       const wDef = WEAPONS[wId];
       if (!wDef) continue;
-
-      const unlocked = resolveWeaponUnlocked(state, storeRef, wDef);
-      const isEquipped = unlocked && wId === equippedWeaponId;
-      const tierLabel = isEn
-        ? `Tier ${TIER_ROMAN[wDef.tier] || wDef.tier}`
-        : `Ранг ${TIER_ROMAN[wDef.tier] || wDef.tier}`;
-
-      if (!unlocked) {
-        const lockedCard = el('div', 'weapon-card is-locked');
-        const head = el('div', 'weapon-card-head');
-        head.append(
-          el('span', 'weapon-tier-badge', tierLabel),
-          el('span', 'weapon-shop-lvl', isEn ? '🔒 Sealed' : '🔒 Тайна')
-        );
-
-        const silWrap = el('div', 'locked-silhouette-wrap');
-        const silIcon = el('div', 'locked-silhouette-icon');
-        silIcon.appendChild(createWeaponSvg(wId, 'locked-weapon-svg'));
-        const mysName = el('h4', 'locked-mystery-name', isEn ? wDef.nameEn : wDef.nameRu);
-        const unlockRoman = LEVELS[Math.max(0, (wDef.unlockLevel || 3) - 1)]?.roman || wDef.unlockLevel;
-        const lockText = isEn
-          ? `🔒 Relic Chest • Chapter ${unlockRoman}`
-          : `🔒 Рунный Сундук • Глава ${unlockRoman}`;
-        const hintBadge = el('div', 'locked-hint-badge', lockText);
-
-        silWrap.append(silIcon, mysName);
-        lockedCard.append(head, silWrap, hintBadge);
-        arsenalCardsGrid.appendChild(lockedCard);
-        continue;
-      }
-
-      const shopLevel = resolveWeaponShopLevel(state, storeRef, wId, maxWpnLvl);
-      const upgradeCost = resolveWeaponUpgradeCost(state, storeRef, callbacks, wDef, shopLevel, maxWpnLvl);
-      const isMaxed = shopLevel >= maxWpnLvl || upgradeCost === null;
-      if (!isMaxed && typeof upgradeCost === 'number' && gold >= upgradeCost) {
+      const wMax = wDef.maxLevel || maxWpnLvl;
+      const sLvl = resolveWeaponShopLevel(state, storeRef, wId, wMax);
+      const uCost = resolveWeaponUpgradeCost(state, storeRef, callbacks, wDef, sLvl, wMax);
+      if (sLvl < wMax && typeof uCost === 'number' && gold >= uCost) {
         anyWeaponUpgradeAffordable = true;
       }
+    }
 
-      const wCard = el('div', `weapon-card${isEquipped ? ' is-equipped' : ''}`);
-      const head = el('div', 'weapon-card-head');
-      head.append(
-        el('span', 'weapon-tier-badge', tierLabel),
-        el(
-          'span',
-          'weapon-shop-lvl',
-          isEn ? `Lv. ${shopLevel}/${maxWpnLvl}` : `Ур. ${shopLevel}/${maxWpnLvl}`
-        )
-      );
+    const isShopShowcase = activeHubTab === 'store';
+    const activeShowcaseList = isShopShowcase ? unownedShopWeapons : arsenalList;
+    arsenalPrevBtn.classList.toggle('hidden', activeShowcaseList.length <= 1);
+    arsenalNextBtn.classList.toggle('hidden', activeShowcaseList.length <= 1);
 
-      const showcaseWrap = el('div', 'weapon-showcase-art');
-      const iconBox = el('div', 'weapon-icon-box');
-      iconBox.appendChild(createWeaponSvg(wId));
-      const wName = el('h4', 'weapon-name', isEn ? wDef.nameEn : wDef.nameRu);
-      showcaseWrap.append(iconBox, wName);
-
-      const pipsRow = el('div', 'weapon-pips');
-      pipsRow.style.setProperty('--wpn-max-pips', String(maxWpnLvl));
-      for (let p = 1; p <= maxWpnLvl; p++) {
-        pipsRow.appendChild(el('span', `weapon-pip${p <= shopLevel ? ' filled' : ''}`));
+    let activeShowcaseIdx = 0;
+    if (isShopShowcase) {
+      if (viewedShopWeaponIdx < 0 || viewedShopWeaponIdx >= activeShowcaseList.length) {
+        viewedShopWeaponIdx = 0;
       }
+      activeShowcaseIdx = viewedShopWeaponIdx;
+    } else {
+      if (viewedArsenalWeaponIdx < 0 || viewedArsenalWeaponIdx >= arsenalList.length) {
+        viewedArsenalWeaponIdx = Math.max(0, arsenalList.indexOf(equippedWeaponId));
+      }
+      activeShowcaseIdx = viewedArsenalWeaponIdx;
+    }
 
-      const wDesc = el('p', 'weapon-desc', wDef.descRu);
-      const scaledDmg = Math.round(wDef.baseDamage * (1 + (shopLevel - 1) * 0.24));
-      const rateStr = (1 / wDef.cooldown).toFixed(1);
-      const magInfo = wDef.magSize
-        ? isEn
-          ? ` • Mag: ${wDef.magSize}`
-          : ` • Обойма: ${wDef.magSize}`
-        : wDef.manaCost
-          ? isEn
-            ? ` • Mana: ${wDef.manaCost}`
-            : ` • Мана: ${wDef.manaCost}`
-          : '';
-      const metrics = el(
-        'div',
-        'weapon-metrics',
-        isEn
-          ? `⚔️ Dmg: ${scaledDmg}${wDef.pellets > 1 ? ` ×${wDef.pellets}` : ''} • ${rateStr}/s${magInfo}`
-          : `⚔️ Урон: ${scaledDmg}${wDef.pellets > 1 ? ` ×${wDef.pellets}` : ''} • ${rateStr}/с${magInfo}`
+    const atStart = activeShowcaseIdx <= 0;
+    const atEnd = activeShowcaseIdx >= Math.max(0, activeShowcaseList.length - 1);
+    arsenalPrevBtn.disabled = atStart;
+    arsenalNextBtn.disabled = atEnd;
+    arsenalPrevBtn.classList.toggle('is-disabled', atStart);
+    arsenalNextBtn.classList.toggle('is-disabled', atEnd);
+
+    const formatWeaponTag = (wDef) => {
+      if (!wDef) return '';
+      if (wDef.id === 'spear') return ' • 2 в линию (100%/50%)';
+      if (wDef.id === 'zweihander') return ' • 2 цели спереди • Обезоруживание 20% (2 с)';
+      if (wDef.id === 'axe') return ' • До 3 целей спереди (100%)';
+      if (wDef.id === 'boss_hammer') return ' • 3 спереди + 1 за спиной • Стан 25%';
+      if (wDef.id === 'usp_pistol') return ` • ${wDef.magSize} патр. (${wDef.reloadTime} с) • Без пробития`;
+      if (wDef.id === 'colt') return ` • ${wDef.magSize} патр. (${wDef.reloadTime} с) • 3 цели (100/50/25%)`;
+      if (wDef.id === 'smg') return ` • ${wDef.magSize} патр. (${wDef.reloadTime} с) • Разброс 10–40%`;
+      if (wDef.id === 'pistol') return ` • ${wDef.magSize} патр. (0.5 с/патр.) • Разброс 10–80%`;
+      if (wDef.id === 'ak47') return ` • ${wDef.magSize} патр. (${wDef.reloadTime} с) • 2 цели • Вся карта`;
+      if ((wDef.splashRadius || 0) > 0) return ' • Сплэш';
+      return wDef.type === 'melee' ? ' • В 1 цель' : ' • Точечный';
+    };
+
+    const setButtonLabel = (btn, labelText) => {
+      btn.innerHTML = '';
+      btn.append(
+        el('span', 'upgrade-btn-rune', 'ᛟ ᚦ ᚱ'),
+        el('span', 'upgrade-btn-main', labelText),
+        el('span', 'upgrade-btn-rune', 'ᚱ ᚦ ᛟ')
       );
+    };
 
-      const actionsRow = el('div', 'weapon-actions');
-      const equipBtn = el(
-        'button',
-        `btn-equip${isEquipped ? ' in-hands' : ''}`,
-        isEquipped ? (isEn ? '✓ Equipped' : '✓ В руках') : isEn ? 'Equip' : 'Взять'
-      );
-      equipBtn.type = 'button';
-      equipBtn.disabled = isEquipped;
-      equipBtn.addEventListener('click', () => {
-        (callbacks.onEquipWeapon || callbacks.onSelectWeapon)?.(wId, localSelectedClass);
-      });
+    if (isShopShowcase && activeShowcaseList.length === 0) {
+      callbacks.onPreviewArsenalWeapon?.('__NONE__', false);
+      arsenalCrestDiamond.innerHTML = '';
+      arsenalCrestDiamond.appendChild(createWeaponSvg(equippedWeaponId));
+      arsenalHeading.textContent = isEn ? 'All Weapons Owned' : 'Всё оружие куплено';
+      arsenalSubhint.textContent = isEn ? activeClass.nameEn : `${activeClass.nameRu} • Магазин`;
+      arsenalDmgRow.classList.add('hidden');
+      arsenalPwrRow.classList.add('hidden');
+      arsenalWeaponMeta.classList.add('hidden');
+      arsenalWeaponDesc.textContent = isEn
+        ? 'All purchasable weapons for this class are already in your Arsenal.'
+        : 'Всё доступное для покупки оружие этого класса уже куплено и находится в Арсенале.';
+      arsenalWeaponDesc.classList.remove('hidden');
+      arsenalLockBanner.classList.add('hidden');
+      arsenalEquipStageBtn.classList.add('hidden');
+      arsenalUpgradeStageBtn.classList.remove('hidden');
+      arsenalUpgradeStageBtn.disabled = false;
+      setButtonLabel(arsenalUpgradeStageBtn, isEn ? 'Open Arsenal ›' : 'ПЕРЕЙТИ В АРСЕНАЛ ›');
+      arsenalUpgradeStageBtn.onclick = () => setActiveTab('arsenal');
+    } else {
+      const inspectedWpnId = activeShowcaseList[activeShowcaseIdx] || equippedWeaponId;
+      const inspectedDef = WEAPONS[inspectedWpnId] || eqWpnDef;
+      const inspectedMaxLvl = inspectedDef.maxLevel || maxWpnLvl;
+      const inspectedUnlocked = resolveWeaponUnlocked(state, storeRef, inspectedDef);
+      const inspectedEquipped = inspectedUnlocked && inspectedDef.id === equippedWeaponId;
+      const inspectedLvl = isShopShowcase ? 1 : resolveWeaponShopLevel(state, storeRef, inspectedDef.id, inspectedMaxLvl);
+      const inspectedCost = resolveWeaponUpgradeCost(state, storeRef, callbacks, inspectedDef, inspectedLvl, inspectedMaxLvl);
+      const inspectedMaxed = inspectedLvl >= inspectedMaxLvl || inspectedCost === null;
 
-      const upgBtn = el(
-        'button',
-        'btn-upgrade-wpn',
-        isMaxed
+      callbacks.onPreviewArsenalWeapon?.(inspectedDef.id, false);
+      arsenalCrestDiamond.innerHTML = '';
+      arsenalCrestDiamond.appendChild(createWeaponSvg(inspectedDef.id));
+
+      arsenalHeading.textContent = isEn ? inspectedDef.nameEn : inspectedDef.nameRu;
+      const tierStr = TIER_ROMAN[inspectedDef.tier] || inspectedDef.tier;
+      const splashTag = formatWeaponTag(inspectedDef);
+      const shopCost = inspectedDef.shopCost || 200;
+
+      arsenalSubhint.textContent = isShopShowcase
+        ? `Магазин • Ранг ${tierStr}${splashTag}`
+        : activeShowcaseList.length <= 1
+          ? `Уровень ${inspectedLvl} / ${inspectedMaxLvl}${splashTag}`
+          : `Ранг ${tierStr} • Уровень ${inspectedLvl} / ${inspectedMaxLvl}${splashTag}`;
+
+      const scaledDmg = Math.round(inspectedDef.baseDamage * (1 + (inspectedLvl - 1) * 0.24));
+      const totalBurstDmg = scaledDmg * (inspectedDef.pellets > 1 ? inspectedDef.pellets : 1);
+      arsenalDmgRow.classList.remove('hidden');
+      arsenalPwrRow.classList.remove('hidden');
+      arsenalDmgLbl.textContent = isEn ? '⚔ Damage' : '⚔ Урон';
+      arsenalDmgVal.textContent = inspectedDef.pellets > 1 ? `${scaledDmg}×${inspectedDef.pellets}` : String(scaledDmg);
+      arsenalDmgFill.style.width = `${Math.max(12, Math.min(100, Math.round((totalBurstDmg / 60) * 100)))}%`;
+
+      const piercePct = Math.round((inspectedDef.armorPierce || 0) * 100);
+      arsenalPwrLbl.textContent = isEn ? '🛡 Armor Pierce' : '🛡 Пробитие брони';
+      arsenalPwrVal.textContent = `${piercePct}%`;
+      arsenalPwrFill.style.width = `${Math.max(10, Math.min(100, piercePct))}%`;
+
+      const effMove = +(activeClass.moveSpeed * (inspectedDef.moveSpeedMult ?? 1.0)).toFixed(2);
+      arsenalWeaponMeta.textContent = isShopShowcase
+        ? `⏱ ${inspectedDef.cooldown} с • 📏 ${inspectedDef.range} м • 💨 ${effMove} м/с • 💰 ${shopCost} 🪙`
+        : `⏱ ${inspectedDef.cooldown} с • 📏 ${inspectedDef.range} м • 💨 ${effMove} м/с`;
+      arsenalWeaponMeta.classList.remove('hidden');
+      arsenalWeaponDesc.textContent = inspectedDef.descRu || '';
+      arsenalWeaponDesc.classList.toggle('hidden', !inspectedDef.descRu);
+
+      if (isShopShowcase) {
+        const bpFound = Boolean(state.unlockedBlueprints?.[inspectedDef.id]);
+        const bossClearOk = !inspectedDef.unlockRequiresBossStage || maxUnlockedLevel > inspectedDef.unlockRequiresBossStage;
+        const lvlOk = !inspectedDef.unlockLevel || maxUnlockedLevel >= inspectedDef.unlockLevel;
+        const needsBlueprint = Boolean(inspectedDef.blueprintChestChance && !bpFound);
+
+        let lockReason = '';
+        let canBuyNow = true;
+        if (needsBlueprint) {
+          lockReason = `📜 Чертёж из сундуков с ${inspectedDef.unlockLevel || 3}-го этапа (20%) • Цена: ${shopCost} 🪙`;
+          canBuyNow = false;
+        } else if (!bossClearOk) {
+          lockReason = `🔒 Откроется после босса ${inspectedDef.unlockRequiresBossStage}-го этапа • Цена: ${shopCost} 🪙`;
+          canBuyNow = false;
+        } else if (!lvlOk) {
+          lockReason =
+            inspectedDef.unlockLevel === 8
+              ? `🔒 Откроется после 7-го этапа • Цена: ${shopCost} 🪙`
+              : inspectedDef.unlockLevel === 11
+                ? `🔒 Откроется после 10-го этапа • Цена: ${shopCost} 🪙`
+                : `🔒 Доступно с ${inspectedDef.unlockLevel}-го этапа • Цена: ${shopCost} 🪙`;
+          canBuyNow = false;
+        } else if (gold < shopCost) {
+          canBuyNow = false;
+        }
+
+        arsenalLockBanner.classList.toggle('hidden', !lockReason);
+        if (lockReason) arsenalLockBanner.textContent = lockReason;
+
+        arsenalEquipStageBtn.classList.add('hidden');
+        arsenalUpgradeStageBtn.classList.remove('hidden');
+        arsenalUpgradeStageBtn.disabled = !canBuyNow;
+        setButtonLabel(
+          arsenalUpgradeStageBtn,
+          lockReason
+            ? `🔒 НЕДОСТУПНО • ${shopCost} 🪙`
+            : gold < shopCost
+              ? `МАЛО ЗОЛОТА • ${shopCost} 🪙`
+              : `🛒 КУПИТЬ • ${shopCost} 🪙`
+        );
+        arsenalUpgradeStageBtn.onclick = () => {
+          callbacks.onBuyWeapon?.(inspectedDef.id);
+        };
+      } else {
+        arsenalLockBanner.classList.add('hidden');
+        arsenalEquipStageBtn.classList.toggle('hidden', !inspectedUnlocked || arsenalList.length <= 1);
+        arsenalEquipStageBtn.classList.toggle('in-hands', inspectedEquipped);
+        arsenalEquipStageBtn.disabled = inspectedEquipped;
+        arsenalEquipStageBtn.textContent = inspectedEquipped
           ? isEn
-            ? `✨ Max ${maxWpnLvl}/${maxWpnLvl}`
-            : `✨ Макс. ${maxWpnLvl}/${maxWpnLvl}`
+            ? '✓ Equipped'
+            : '✓ В руках'
           : isEn
-            ? `Upgrade • ${upgradeCost}g`
-            : `Улучшить • ${upgradeCost} зол.`
-      );
-      upgBtn.type = 'button';
-      upgBtn.disabled = isMaxed || (typeof upgradeCost === 'number' && gold < upgradeCost);
-      upgBtn.addEventListener('click', () => {
-        callbacks.onUpgradeWeapon?.(wId);
-      });
+            ? 'Equip Weapon'
+            : 'Взять в руки';
+        arsenalEquipStageBtn.onclick = () => {
+          if (inspectedUnlocked && !inspectedEquipped) {
+            (callbacks.onEquipWeapon || callbacks.onSelectWeapon)?.(inspectedDef.id, localSelectedClass);
+          }
+        };
 
-      actionsRow.append(equipBtn, upgBtn);
-      wCard.append(head, showcaseWrap, pipsRow, wDesc, metrics, actionsRow);
-      arsenalCardsGrid.appendChild(wCard);
+        arsenalUpgradeStageBtn.classList.toggle('hidden', !inspectedUnlocked);
+        arsenalUpgradeStageBtn.disabled =
+          !inspectedUnlocked || inspectedMaxed || (typeof inspectedCost === 'number' && gold < inspectedCost);
+        setButtonLabel(
+          arsenalUpgradeStageBtn,
+          inspectedMaxed
+            ? `МАКС. ${inspectedMaxLvl}/${inspectedMaxLvl}`
+            : inspectedCost
+              ? `УЛУЧШИТЬ • ${inspectedCost}`
+              : 'УЛУЧШИТЬ'
+        );
+        arsenalUpgradeStageBtn.onclick = () => {
+          if (inspectedUnlocked && !inspectedMaxed) {
+            callbacks.onUpgradeWeapon?.(inspectedDef.id);
+          }
+        };
+      }
     }
 
     tabArsenalDot.classList.toggle('hidden', !anyWeaponUpgradeAffordable);
 
-    // --- 6. Render 🧪 Мастерская (Per-Class Talents + Class Badge) ---
+    // --- 6. Render 🌿 Древо Талантов (Menu-Only Per-Class Talent Tree for Воин, Стрелок, Маг!) ---
+    const heroLvlNum = Math.max(1, Number(state.heroLevel || 1));
+    const classTree = CLASS_TALENT_TREES[localSelectedClass] || MAGE_TALENT_TREE;
+    const clsRanks =
+      state.classTalents?.[localSelectedClass] ||
+      (localSelectedClass === 'mage' ? state.mageTalents || {} : {});
+    const getRank = (id) =>
+      typeof storeRef?.getClassTalentRank === 'function'
+        ? storeRef.getClassTalentRank(localSelectedClass, id)
+        : Math.max(0, Number(clsRanks[id] || 0));
+    const ptsSpent = classTree.reduce((acc, n) => acc + getRank(n.id), 0);
+    const ptsAvail = Math.max(0, heroLvlNum - ptsSpent);
+
     masteryClassBadgeImg.src = activeClass.portrait;
     masteryClassBadgeImg.alt = activeClass.nameRu;
     masteryClassBadgeText.textContent = isEn
-      ? `Class Talents: ${activeClass.nameEn}`
-      : `Таланты класса: ${activeClass.nameRu}`;
+      ? `${activeClass.nameEn} • Talent Tree (Menu Only)`
+      : `${activeClass.nameRu} • Древо талантов (только в меню)`;
 
-    const masteryItems = resolveMasteryList(state, storeRef, callbacks, localSelectedClass, lang);
+    rewardGoldBtn.classList.add('hidden');
+    talentPointsPill.textContent = isEn
+      ? `✨ Skill Points: ${ptsAvail} (Lv. ${heroLvlNum})`
+      : `✨ Очки таланта: ${ptsAvail} (Ур. ${heroLvlNum})`;
+    talentResetBtn.classList.toggle('hidden', ptsSpent <= 0);
+    talentResetBtn.onclick = () => {
+      if (callbacks.onResetTalents) {
+        callbacks.onResetTalents(localSelectedClass);
+      } else {
+        callbacks.onResetMageTalents?.();
+      }
+    };
+
     masteryGrid.innerHTML = '';
-    let anyMasteryAffordable = false;
+    masteryGrid.className = 'mastery-grid talent-tree-shell';
 
-    for (const m of masteryItems) {
-      const isMax = m.level >= m.maxLevel || m.cost === null;
-      if (!isMax && typeof m.cost === 'number' && gold >= m.cost) {
-        anyMasteryAffordable = true;
+    {
+      const curSelectedId = selectedTalentByClass[localSelectedClass] || classTree[0]?.id;
+      const treeBoard = el('div', 'talent-tree-board');
+      const colPct = { 1: 20, 2: 50, 3: 80 };
+      const rowPct = { 1: 12, 2: 37, 3: 63, 4: 88 };
+      let linesSvg = '';
+      for (const b of classTree) {
+        for (const r of b.requires || []) {
+          const a = classTree.find((n) => n.id === r.id);
+          if (!a) continue;
+          const bRank = getRank(b.id);
+          const reqMet = (b.requires || []).every((req) => getRank(req.id) >= (req.rank || 1));
+          const clsEdge = bRank > 0 ? 'is-active' : reqMet ? 'is-ready' : 'is-locked';
+          linesSvg += `<line x1="${colPct[a.col]}%" y1="${rowPct[a.row]}%" x2="${colPct[b.col]}%" y2="${rowPct[b.row]}%" class="talent-edge ${clsEdge}" />`;
+        }
       }
-
-      const btn = el('button', 'mastery-btn');
-      btn.type = 'button';
-      btn.disabled = isMax || (typeof m.cost === 'number' && gold < m.cost);
-
-      const top = el('div', 'mastery-top');
-      const nameWrap = el('div', 'mastery-name-wrap');
-      const iconBadge = el('span', 'mastery-icon-badge');
-      iconBadge.appendChild(createStatRuneSvg(m.runeType));
-      nameWrap.append(iconBadge, el('span', 'mastery-name', m.name));
-      top.append(
-        nameWrap,
-        el('span', 'mastery-lvl', isEn ? `Lv. ${m.level}/${m.maxLevel}` : `Ур. ${m.level}/${m.maxLevel}`)
+      const svgCanvas = makeSvgNode(
+        `<svg viewBox="0 0 100 100" preserveAspectRatio="none" class="talent-edges-svg" xmlns="http://www.w3.org/2000/svg">${linesSvg}</svg>`
       );
+      treeBoard.appendChild(svgCanvas);
 
-      const pips = el('div', 'mastery-pips');
-      for (let p = 1; p <= m.maxLevel; p++) {
-        pips.appendChild(el('span', `mastery-pip${p <= m.level ? ' filled' : ''}`));
-      }
+      for (const node of classTree) {
+        const rank = getRank(node.id);
+        const reqMet = (node.requires || []).every((r) => getRank(r.id) >= (r.rank || 1));
+        const isMaxed = rank >= node.maxRank;
+        const canBuy = ptsAvail >= 1 && reqMet && !isMaxed;
 
-      const bottomRow = el('div', 'mastery-bottom-row');
-      const bonus = el('span', 'mastery-bonus', m.bonus);
-      const costEl = el(
-        'span',
-        'mastery-cost',
-        isMax ? (isEn ? 'MAX' : 'МАКС.') : `${m.cost} зол.`
-      );
-      bottomRow.append(bonus, costEl);
-
-      btn.append(top, pips, bottomRow);
-      btn.addEventListener('click', () => {
-        (callbacks.onBuyHeroUpgrade || callbacks.onUpgradeStat || callbacks.onBuyStatUpgrade)?.(
-          m.key,
-          localSelectedClass
+        const nodeBtn = el(
+          'button',
+          `talent-node-btn${curSelectedId === node.id ? ' is-selected' : ''}${
+            rank > 0 ? ' is-learned' : ''
+          }${canBuy ? ' is-upgradeable' : ''}${!reqMet ? ' is-locked' : ''}`
         );
+        nodeBtn.type = 'button';
+        nodeBtn.style.gridColumn = String(node.col);
+        nodeBtn.style.gridRow = String(node.row);
+        nodeBtn.title = `${node.nameRu} (${rank}/${node.maxRank})`;
+
+        const iconWrap = el('div', 'talent-node-icon');
+        iconWrap.appendChild(createTalentRuneSvg(node.iconKind));
+        const rankBadge = el('span', 'talent-node-rank', `${rank}/${node.maxRank}`);
+        const nameLbl = el('span', 'talent-node-name', node.nameRu);
+        nodeBtn.append(iconWrap, rankBadge, nameLbl);
+
+        nodeBtn.addEventListener('click', () => {
+          if (curSelectedId === node.id && canBuy) {
+            if (callbacks.onUpgradeTalent) {
+              callbacks.onUpgradeTalent(localSelectedClass, node.id);
+            } else {
+              callbacks.onUpgradeMageTalent?.(node.id);
+            }
+          } else {
+            selectedTalentByClass[localSelectedClass] = node.id;
+            if (localSelectedClass === 'mage') selectedMageTalentId = node.id;
+            renderHub(lastHubState || storeRef);
+          }
+        });
+        treeBoard.appendChild(nodeBtn);
+      }
+
+      const selNode = classTree.find((n) => n.id === curSelectedId) || classTree[0];
+      const selRank = getRank(selNode.id);
+      const selReqMet = (selNode.requires || []).every((r) => getRank(r.id) >= (r.rank || 1));
+      const selMaxed = selRank >= selNode.maxRank;
+      const selCanBuy = ptsAvail >= 1 && selReqMet && !selMaxed;
+
+      const inspector = el('div', 'talent-inspector-card');
+      const inspTop = el('div', 'talent-insp-top');
+      const inspIconBox = el('div', 'talent-insp-icon');
+      inspIconBox.appendChild(createTalentRuneSvg(selNode.iconKind));
+      const inspHeadText = el('div', 'talent-insp-headtext');
+      inspHeadText.append(
+        el('span', 'talent-insp-tier', `Уровень древа ${selNode.tier} • Ранг ${selRank}/${selNode.maxRank}`),
+        el('h3', 'talent-insp-title', selNode.nameRu)
+      );
+      inspTop.append(inspIconBox, inspHeadText);
+
+      const inspStatPill = el('div', 'talent-insp-stat', selNode.statBadgeRu);
+      const inspDesc = el('p', 'talent-insp-desc', selNode.descRu);
+
+      let reqText = 'Готов к изучению (только в меню лагеря).';
+      if (!selReqMet) {
+        const missing = (selNode.requires || [])
+          .filter((r) => getRank(r.id) < (r.rank || 1))
+          .map((r) => {
+            const pNode = classTree.find((x) => x.id === r.id);
+            return `«${pNode?.nameRu || r.id}» ур. ${r.rank || 1}`;
+          })
+          .join(', ');
+        reqText = `Требуется: ${missing}`;
+      } else if (selMaxed) {
+        reqText = '✓ Навык полностью изучен!';
+      } else if (ptsAvail <= 0) {
+        reqText = 'Повышайте уровень героя в бою, чтобы получить +1 очко таланта.';
+      }
+      const inspReq = el('div', `talent-insp-req${!selReqMet ? ' is-blocked' : ''}`, reqText);
+
+      const learnBtn = el(
+        'button',
+        'arsenal-gothic-upgrade-btn talent-learn-btn',
+        selMaxed ? '✓ МАКСИМУМ' : selCanBuy ? 'ИЗУЧИТЬ • 1 ОЧКО' : !selReqMet ? '🔒 ЗАБЛОКИРОВАНО' : 'НЕТ ОЧКОВ'
+      );
+      learnBtn.type = 'button';
+      learnBtn.disabled = !selCanBuy;
+      learnBtn.addEventListener('click', () => {
+        if (selCanBuy) {
+          if (callbacks.onUpgradeTalent) {
+            callbacks.onUpgradeTalent(localSelectedClass, selNode.id);
+          } else {
+            callbacks.onUpgradeMageTalent?.(selNode.id);
+          }
+        }
       });
-      masteryGrid.appendChild(btn);
+
+      inspector.append(inspTop, inspStatPill, inspDesc, inspReq, learnBtn);
+      masteryGrid.append(treeBoard, inspector);
     }
 
-    tabShopDot.classList.toggle('hidden', !anyMasteryAffordable);
+    tabShopDot.classList.toggle('hidden', ptsAvail <= 0);
+
+    // --- 7. Clear Legacy Store Grid (Магазин now uses Unified 3D Floating Weapon Showcase above — zero Supply Chest or Hunter Upgrades!) ---
+    storeCardsGrid.innerHTML = '';
   }
 
   // =========================================================================
@@ -3465,10 +4153,11 @@ export function createUIManager(initialCallbacks = {}) {
       hudReloadBtn.classList.toggle('is-low', !isReloading && ammo <= Math.max(1, Math.floor(maxAmmo * 0.25)));
     }
 
-    if (isReloading !== hudCache.isReloading || maxAmmo !== hudCache.maxAmmo) {
+    const showAmmoDuringPartial = isReloading && Number(snapshot.reloadPerShellTime || 0) > 0;
+    if (isReloading !== hudCache.isReloading || maxAmmo !== hudCache.maxAmmo || showAmmoDuringPartial) {
       hudCache.isReloading = isReloading;
       reloadBarWrap.classList.toggle('hidden', !isReloading);
-      weaponAmmoRow.classList.toggle('hidden', !hasMagazine || isReloading);
+      weaponAmmoRow.classList.toggle('hidden', !hasMagazine || (isReloading && !showAmmoDuringPartial));
     }
 
     if (isReloading) {
@@ -3489,7 +4178,8 @@ export function createUIManager(initialCallbacks = {}) {
         hudCache.reloadQuant = rQuant;
         reloadBarFill.style.transform = `scaleX(${rProg.toFixed(3)})`;
       }
-    } else if (hasMagazine) {
+    }
+    if (hasMagazine && (!isReloading || showAmmoDuringPartial)) {
       if (ammo !== hudCache.ammo || maxAmmo !== hudCache.maxAmmo || ammoKind !== hudCache.ammoStyle) {
         hudCache.ammo = ammo;
         hudCache.maxAmmo = maxAmmo;
@@ -3510,7 +4200,7 @@ export function createUIManager(initialCallbacks = {}) {
 
     // Overdrive Crate Ammo Bar
     const overAmmo = Number(snapshot.overdriveAmmo ?? snapshot.specialAmmo ?? snapshot.crateAmmo ?? 0);
-    const overMax = Number(snapshot.overdriveMaxAmmo ?? snapshot.specialMaxAmmo ?? snapshot.crateMaxAmmo ?? 35);
+    const overMax = Number(snapshot.overdriveMaxAmmo ?? snapshot.specialMaxAmmo ?? snapshot.crateMaxAmmo ?? 5);
     const overActive = Boolean(
       snapshot.overdriveActive || overAmmo > 0 || (typeof snapshot.overdriveRatio === 'number' && snapshot.overdriveRatio > 0)
     );
@@ -3596,7 +4286,12 @@ export function createUIManager(initialCallbacks = {}) {
     activeLevelUpHandler = null;
   }
 
-  function showLevelUpModal(choices = [], onSelect) {
+  function showLevelUpModal(_choices = [], _onSelect) {
+    // "Благословение душ" combat modal permanently removed per user design.
+    hideLevelUpModal();
+  }
+
+  function _unusedLegacyShowLevelUpModal(choices = [], onSelect) {
     closeSoundPopover();
     const list = (Array.isArray(choices) && choices.length > 0 ? choices : RUN_UPGRADES.slice(0, 3)).slice(0, 3);
     blessingCardsGrid.innerHTML = '';
@@ -3733,7 +4428,7 @@ export function createUIManager(initialCallbacks = {}) {
   }
 
   function showResultModal(
-    { victory = false, level = 1, goldEarned = 0, kills = 0, unlockedWeapon = null, canRevive = false } = {},
+    { victory = false, level = 1, goldEarned = 0, kills = 0, unlockedWeapon = null, canRevive = false, stars = 0, elapsedSec = 0 } = {},
     actions = {}
   ) {
     closeSoundPopover();
@@ -3783,8 +4478,10 @@ export function createUIManager(initialCallbacks = {}) {
       );
     }
 
-    resultTitle.textContent = victory ? 'Победа! Глава очищена!' : 'Охотник пал в бою';
-    resultLevelName.textContent = lvlDef ? lvlDef.nameRu : `Глава ${level}`;
+    const earnedStarsCount = victory ? Math.max(1, Math.min(3, Number(stars) || 1)) : 0;
+    const starDisplay = victory ? ` • ${'★'.repeat(earnedStarsCount)}${'☆'.repeat(3 - earnedStarsCount)}` : '';
+    resultTitle.textContent = victory ? `Победа! Глава очищена!${starDisplay}` : 'Охотник пал в бою';
+    resultLevelName.textContent = (lvlDef ? lvlDef.nameRu : `Глава ${level}`) + (elapsedSec > 0 ? ` • ${elapsedSec}с` : '');
 
     let displayedGold = Math.max(0, Math.floor(Number(goldEarned) || 0));
     resGoldVal.textContent = `+${displayedGold}`;
@@ -3856,11 +4553,11 @@ export function createUIManager(initialCallbacks = {}) {
         resultActionsCol.appendChild(doubleBtn);
       }
 
-      const nextArsenalBtn = el('button', 'result-btn btn-arsenal-primary', '⚔️ В Лагерь • Следующая глава');
+      const nextArsenalBtn = el('button', 'result-btn btn-arsenal-primary', '🗺️ На карту похода • Далее');
       nextArsenalBtn.type = 'button';
       nextArsenalBtn.addEventListener('click', () => {
         hideResultModal();
-        setActiveTab('heroes');
+        setActiveTab('campaign_forest');
         (
           actions.onNext ||
           actions.onNextLevel ||
@@ -3937,11 +4634,20 @@ export function createUIManager(initialCallbacks = {}) {
 
   // Initialize labels & default tab
   syncStaticLabels();
-  setActiveTab('heroes');
+  setActiveTab('home');
 
   return {
     setCallbacks(nextCallbacks = {}) {
       callbacks = { ...callbacks, ...nextCallbacks };
+    },
+
+    isHeroStageVisible() {
+      return (
+        !hubScreen.classList.contains('hidden') &&
+        (activeHubTab === 'home' || activeHubTab === 'heroes' || activeHubTab === 'arsenal') &&
+        mageStarterModal.classList.contains('hidden') &&
+        resetConfirmModal.classList.contains('hidden')
+      );
     },
 
     setLang(nextLang) {
@@ -3957,6 +4663,8 @@ export function createUIManager(initialCallbacks = {}) {
       localSelectedLevel = n;
       viewedCampaignLevel = n;
     },
+
+    setActiveTab,
 
     renderHub,
 
@@ -3995,9 +4703,22 @@ export function createUIManager(initialCallbacks = {}) {
       }
     },
 
+    setMusicVolumeState(vol0to1) {
+      const v = Number(vol0to1);
+      if (Number.isFinite(v)) {
+        musicVolume = Math.max(0, Math.min(1, v));
+        syncMuteButtons();
+      }
+    },
+
     setAutoAimState(isEnabled) {
       autoAim = Boolean(isEnabled);
       syncAutoAimButton();
+    },
+
+    setAttackEnabledState(isEnabled) {
+      attackEnabled = Boolean(isEnabled);
+      syncAttackToggleButton();
     },
 
     spawnFloatingText,

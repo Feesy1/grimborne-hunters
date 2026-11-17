@@ -5,6 +5,7 @@ GrimborneHunters_YandexGames.zip
 server.ps1
 Запустить_игру.cmd
 assets/arena_map.jpg
+assets/models/*.blend
+assets/models/*.blend1
 strelok_3d.html
 assets/strelok_preview/
-
