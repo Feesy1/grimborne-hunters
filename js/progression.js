@@ -10,7 +10,7 @@ import {
   MAGE_ELEMENT_UNLOCK_COSTS,
   MAGE_TALENT_TREE,
   CLASS_TALENT_TREES
-} from './config.js?v=20261117z23';
+} from './config.js?v=20261117z24';
 
 export const WEAPON_MAX_SHOP_LEVEL = WEAPON_MAX_LEVEL || 12;
 
@@ -743,6 +743,18 @@ export function createProgressionStore(initialSave = null) {
     const gExp = isGun ? getClassTalentRank('gunslinger', 'gun_explosive_powder') : 0;
     const gDead = isGun ? getClassTalentRank('gunslinger', 'gun_deadeye') : 0;
     const gMine = isGun ? getClassTalentRank('gunslinger', 'gun_shrapnel_trap') : 0;
+    const gLightArms = isGun ? getClassTalentRank('gunslinger', 'gun_light_arms') : 0;
+    const gPistolMast = isGun ? getClassTalentRank('gunslinger', 'gun_pistol_mastery') : 0;
+    const gSmgFury = isGun ? getClassTalentRank('gunslinger', 'gun_smg_fury') : 0;
+    const gRifleCore = isGun ? getClassTalentRank('gunslinger', 'gun_rifle_core') : 0;
+    const gRifleStab = isGun ? getClassTalentRank('gunslinger', 'gun_rifle_stabilizer') : 0;
+    const gShotBlitz = isGun ? getClassTalentRank('gunslinger', 'gun_shotgun_blitz') : 0;
+
+    const isPistolWpn = wpn.id === 'usp_pistol' || wpn.id === 'colt';
+    const isSmgWpn = wpn.id === 'smg';
+    const isLightWpn = isPistolWpn || isSmgWpn;
+    const isRifleWpn = wpn.id === 'ak47';
+    const isShotgunWpn = Boolean(wpn.isShotgun);
 
     // Class-specific & dark relic in-run blessing stacks
     const mageArcaneStacks = getPerkStacks(perks, 'mage_arcane_surge');
@@ -791,19 +803,38 @@ export function createProgressionStore(initialSave = null) {
       wBanner * 0.14 +
       wWhirl * 0.14 +
       wOrbit * 0.24 +
-      gunHeavyStacks * 0.14 +
+      (isShotgunWpn ? gunHeavyStacks * 0.14 : getPerkStacks(perks, 'gun_heavy_buckshot') * 0.14) +
+      (isLightWpn ? gLightArms * 0.12 : 0) +
+      (isPistolWpn ? gPistolMast * 0.18 : 0) +
+      (isRifleWpn ? gRifleCore * 0.16 : 0) +
       gExp * 0.16 +
-      gMine * 0.22;
-    const perkHasteMult = 1 + tVel * 0.07 + wStride * 0.08 + gQuick * 0.07;
-    const perkReloadMult = 1 + gunReloadStacks * 0.28;
-    const perkMoveMult = 1 + greedStacks * 0.07 + tVel * 0.06 + wStride * 0.06 + gQuick * 0.07;
+      gMine * 0.18;
+    const perkHasteMult =
+      1 +
+      tVel * 0.07 +
+      wStride * 0.08 +
+      gQuick * 0.07 +
+      (isSmgWpn ? gSmgFury * 0.12 : 0) +
+      (isShotgunWpn ? gShotBlitz * 0.12 : 0);
+    const perkReloadMult =
+      1 +
+      gunReloadStacks * 0.28 +
+      (isLightWpn ? gLightArms * 0.18 : 0) +
+      (isShotgunWpn ? gShotBlitz * 0.20 : 0);
+    const perkMoveMult =
+      1 +
+      greedStacks * 0.07 +
+      tVel * 0.06 +
+      wStride * 0.06 +
+      gQuick * 0.07 +
+      (isRifleWpn ? gRifleStab * 0.11 : 0);
 
-    const weaponMoveMult = wpn.moveSpeedMult ?? 1.0;
+    const weaponMoveMult = Math.min(1.12, (wpn.moveSpeedMult ?? 1.0) + (isRifleWpn ? gRifleStab * 0.11 : 0));
     const maxHp = Math.round(cls.maxHp + vitalityLvl * 15 + warBannerStacks * 24 + tFlow * 12 + wGrip * 18);
     const moveSpeed = +(cls.moveSpeed * weaponMoveMult * heroAgilityMult * perkMoveMult).toFixed(3);
     const damageBlock = Math.min(
       0.78,
-      +(cls.damageBlock + wardLvl * 0.03 + wShield * 0.07 + gRico * 0.05 + tWard * 0.04).toFixed(4)
+      +(cls.damageBlock + wardLvl * 0.03 + wShield * 0.07 + gRico * 0.06 + tWard * 0.04).toFixed(4)
     );
     const blockChance = Math.min(0.65, (cls.blockChance || 0) + wShield * 0.08);
     const dodgeChance = 0;
@@ -836,7 +867,16 @@ export function createProgressionStore(initialSave = null) {
       baseSplash > 0
         ? +(baseSplash * runWeaponAreaMult * (1 + mageArcaneStacks * 0.15)).toFixed(3)
         : 0;
-    const armorPierce = Math.min(1, +((wpn.armorPierce || 0) + (cls.id === 'warrior' ? wBlood * 0.05 : 0)).toFixed(3));
+    const armorPierce = Math.min(
+      1,
+      +(
+        (wpn.armorPierce || 0) +
+        (cls.id === 'warrior' ? wBlood * 0.05 : 0) +
+        (isPistolWpn ? gPistolMast * 0.08 : 0) +
+        (isRifleWpn ? gRifleCore * 0.07 : 0) +
+        gExp * 0.10
+      ).toFixed(3)
+    );
 
     const knockback = +(
       (wpn.knockback || 0) *
@@ -844,8 +884,15 @@ export function createProgressionStore(initialSave = null) {
     ).toFixed(3);
 
     const pellets = (wpn.pellets || 1) + (wpn.isShotgun ? gunHeavyStacks * 2 : 0);
-    const spread = (wpn.spread ?? 0) * (wpn.isShotgun && gunHeavyStacks > 0 ? 1.08 : 1.0);
-    const pierce = wpn.pierce || 1;
+    const spreadReduce = Math.max(
+      0.32,
+      1 - (isSmgWpn ? gSmgFury * 0.20 : 0) - (isRifleWpn ? gRifleStab * 0.22 : 0)
+    );
+    const spread = +((wpn.spread ?? 0) * (wpn.isShotgun && gunHeavyStacks > 0 ? 1.08 : 1.0) * spreadReduce).toFixed(4);
+    const pierce =
+      (wpn.pierce || 1) +
+      (isPistolWpn && gDead > 0 ? 1 : 0) +
+      (isRifleWpn && gRifleStab >= 2 ? 1 : 0);
     const projectileSpeed = wpn.projectileSpeed ? +wpn.projectileSpeed.toFixed(2) : 0;
     const pickupRadius = +(3.8 * perkMoveMult).toFixed(3);
 
@@ -854,7 +901,7 @@ export function createProgressionStore(initialSave = null) {
     const mageElement = usesMana ? 'water' : null;
     const elemDef = mageElement ? MAGE_ELEMENTS[mageElement] : null;
     const baseMag = usesMana ? 0 : (wpn.magSize || 0);
-    const magSize = baseMag > 0 ? baseMag + ammoPouchStacks * 2 : 0;
+    const magSize = baseMag > 0 ? baseMag + ammoPouchStacks * 3 - getPerkStacks(perks, 'ammo_pouch') : 0;
     const reloadSpeedMult = +(shopReloadMult * heroAgilityMult * perkReloadMult).toFixed(4);
     const reloadTime =
       baseMag > 0 && wpn.reloadTime
@@ -864,8 +911,8 @@ export function createProgressionStore(initialSave = null) {
       baseMag > 0 && wpn.reloadPerShellTime
         ? Math.max(0.12, +(wpn.reloadPerShellTime / reloadSpeedMult).toFixed(3))
         : 0;
-    const moveSpread = wpn.moveSpread ?? wpn.spread ?? 0;
-    const focusSpread = wpn.focusSpread ?? wpn.spread ?? 0;
+    const moveSpread = +((wpn.moveSpread ?? wpn.spread ?? 0) * spreadReduce).toFixed(4);
+    const focusSpread = +((wpn.focusSpread ?? wpn.spread ?? 0) * spreadReduce).toFixed(4);
     const focusTime = wpn.focusTime ?? 0;
     const pierceDecay = Array.isArray(wpn.pierceDecay) ? wpn.pierceDecay : null;
 

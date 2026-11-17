@@ -18,7 +18,7 @@ import {
   RUN_UPGRADES,
   MAGE_TALENT_TREE,
   CLASS_TALENT_TREES
-} from './config.js?v=20261117z23';
+} from './config.js?v=20261117z24';
 
 const CLASS_ORDER = ['warrior', 'gunslinger', 'mage'];
 
@@ -493,6 +493,26 @@ function createTalentRuneSvg(kind) {
     inner = `
       <polygon points="12,2.5 14.8,9 21.5,9.5 16.2,14 17.8,20.8 12,17.2 6.2,20.8 7.8,14 2.5,9.5 9.2,9" fill="#9f1239" stroke="#fda4af" stroke-width="1.4"/>
       <circle cx="12" cy="12" r="2.2" fill="#fde047"/>`;
+  } else if (kind === 'pistol') {
+    inner = `
+      <path d="M4.5 9.5 H17.5 V12.5 H11.5 L10 18.5 H6.8 L8.1 12.5 H4.5 Z" fill="#334155" stroke="#fde047" stroke-width="1.45" stroke-linejoin="round"/>
+      <path d="M17.5 10.3 H20 V11.7 H17.5" stroke="#fbbf24" stroke-width="1.4" stroke-linecap="round"/>
+      <circle cx="11.2" cy="13.8" r="1.1" fill="#fde047"/>`;
+  } else if (kind === 'smg') {
+    inner = `
+      <path d="M3 10.5 H17.5 V13 H14.5 V18 H12 V13 H9.5 L8.3 17.5 H5.8 L6.8 13 H3 Z" fill="#1e293b" stroke="#38bdf8" stroke-width="1.45" stroke-linejoin="round"/>
+      <path d="M17.5 11.2 H21.2" stroke="#bae6fd" stroke-width="1.8" stroke-linecap="round"/>
+      <path d="M7.5 8.2 H13.5" stroke="#fde047" stroke-width="1.3" stroke-linecap="round"/>`;
+  } else if (kind === 'rifle') {
+    inner = `
+      <path d="M2.2 12.2 L6 12.2 L8 10.4 H16.5 L17.5 11.5 H21.8" stroke="#f97316" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M8.4 12.2 H13.8 L15.2 17.2 L12.5 17.5 L11.4 13.4 H8.6 L6.2 16.5 H3.6 Z" fill="#7c2d12" stroke="#fdba74" stroke-width="1.3" stroke-linejoin="round"/>`;
+  } else if (kind === 'shotgun') {
+    inner = `
+      <path d="M2.5 13.2 H15.5 L17 11.2 H21.5" stroke="#fb7185" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M2.5 15.6 L6.8 15.6 L9 13.6 H16.5" stroke="#fda4af" stroke-width="1.6" stroke-linecap="round"/>
+      <circle cx="20.5" cy="9.2" r="1.2" fill="#fde047"/>
+      <circle cx="21.5" cy="13.8" r="1.1" fill="#f97316"/>`;
   } else {
     // crown / maelstrom_fury
     inner = `
@@ -1559,7 +1579,7 @@ export function createUIManager(initialCallbacks = {}) {
   );
   const hubHeaderFiligree = el('div', 'hub-header-filigree');
   const hubFiligreeImg = document.createElement('img');
-  hubFiligreeImg.src = './assets/ui/hub_top_filigree.png?v=20261117z23';
+  hubFiligreeImg.src = './assets/ui/hub_top_filigree.png?v=20261117z24';
   hubFiligreeImg.className = 'hub-filigree-img';
   hubFiligreeImg.alt = '';
   hubFiligreeImg.draggable = false;
@@ -1633,7 +1653,7 @@ export function createUIManager(initialCallbacks = {}) {
   stagePrevBtn.setAttribute('aria-label', 'Предыдущий класс');
   const stagePrevImg = document.createElement('img');
   stagePrevImg.className = 'switch-arrow-icon is-prev';
-  stagePrevImg.src = './assets/ui/btn_arrow_switch.png?v=20261117z23';
+  stagePrevImg.src = './assets/ui/btn_arrow_switch.png?v=20261117z24';
   stagePrevImg.alt = '';
   stagePrevImg.draggable = false;
   stagePrevBtn.appendChild(stagePrevImg);
@@ -1645,7 +1665,7 @@ export function createUIManager(initialCallbacks = {}) {
   stageNextBtn.setAttribute('aria-label', 'Следующий класс');
   const stageNextImg = document.createElement('img');
   stageNextImg.className = 'switch-arrow-icon is-next';
-  stageNextImg.src = './assets/ui/btn_arrow_switch.png?v=20261117z23';
+  stageNextImg.src = './assets/ui/btn_arrow_switch.png?v=20261117z24';
   stageNextImg.alt = '';
   stageNextImg.draggable = false;
   stageNextBtn.appendChild(stageNextImg);
@@ -1796,8 +1816,8 @@ export function createUIManager(initialCallbacks = {}) {
   const worldStageFrame = el('div', 'campaign-map-stage-frame is-world-fullscreen');
   const campaignWorldBg = document.createElement('video');
   campaignWorldBg.className = 'campaign-map-bg-img campaign-map-video';
-  campaignWorldBg.src = './assets/ui/world_map_loop.mp4?v=20261117z23';
-  campaignWorldBg.poster = './assets/ui/world_map_clean_hq.jpg?v=20261117z23';
+  campaignWorldBg.src = './assets/ui/world_map_loop.mp4?v=20261117z24';
+  campaignWorldBg.poster = './assets/ui/world_map_clean_hq.jpg?v=20261117z24';
   campaignWorldBg.autoplay = true;
   campaignWorldBg.loop = true;
   campaignWorldBg.muted = true;
@@ -1856,8 +1876,8 @@ export function createUIManager(initialCallbacks = {}) {
   const forestStageFrame = el('div', 'campaign-map-stage-frame is-forest-frame');
   const forestBgImg = document.createElement('video');
   forestBgImg.className = 'campaign-map-bg-img campaign-map-video';
-  forestBgImg.src = './assets/ui/forest_stages_loop.mp4?v=20261117z23';
-  forestBgImg.poster = './assets/ui/forest_stages_clean_hq.jpg?v=20261117z23';
+  forestBgImg.src = './assets/ui/forest_stages_loop.mp4?v=20261117z24';
+  forestBgImg.poster = './assets/ui/forest_stages_clean_hq.jpg?v=20261117z24';
   forestBgImg.autoplay = true;
   forestBgImg.loop = true;
   forestBgImg.muted = true;
@@ -1960,7 +1980,7 @@ export function createUIManager(initialCallbacks = {}) {
   arsenalPrevBtn.setAttribute('aria-label', 'Предыдущее оружие');
   const arsenalPrevImg = document.createElement('img');
   arsenalPrevImg.className = 'switch-arrow-icon is-prev';
-  arsenalPrevImg.src = './assets/ui/btn_arrow_switch.png?v=20261117z23';
+  arsenalPrevImg.src = './assets/ui/btn_arrow_switch.png?v=20261117z24';
   arsenalPrevImg.alt = '';
   arsenalPrevImg.draggable = false;
   arsenalPrevBtn.appendChild(arsenalPrevImg);
@@ -1972,7 +1992,7 @@ export function createUIManager(initialCallbacks = {}) {
   arsenalNextBtn.setAttribute('aria-label', 'Следующее оружие');
   const arsenalNextImg = document.createElement('img');
   arsenalNextImg.className = 'switch-arrow-icon is-next';
-  arsenalNextImg.src = './assets/ui/btn_arrow_switch.png?v=20261117z23';
+  arsenalNextImg.src = './assets/ui/btn_arrow_switch.png?v=20261117z24';
   arsenalNextImg.alt = '';
   arsenalNextImg.draggable = false;
   arsenalNextBtn.appendChild(arsenalNextImg);
@@ -2070,22 +2090,25 @@ export function createUIManager(initialCallbacks = {}) {
   arsenalPanel.append(arsenalStageArea, arsenalRightPlaque);
 
   // =========================================================================
-  // TAB 4: 🧪 МАСТЕРСКАЯ (2-Column Beveled Talent Cards + Bottom Action Bar)
+  // TAB 4: 🌿 ДРЕВО ТАЛАНТОВ (Fullscreen Dark-Fantasy Interactive Pan/Hold Canvas)
   // =========================================================================
-  const shopPanel = el('section', 'hub-panel hub-panel-sub hidden');
-  const shopBox = el('div', 'hub-subpanel-card shop-subpanel');
+  const shopPanel = el('section', 'hub-panel hub-panel-sub talent-fullscreen-panel hidden');
+  const shopBox = el('div', 'hub-subpanel-card shop-subpanel talent-fs-shell');
 
-  const shopHeaderRow = el('div', 'subpanel-header-row');
-  const shopTitleGroup = el('div', 'subpanel-title-group');
-  const masteryHeading = el('h2', 'subpanel-title', '🧪 Мастерская Класса');
+  const shopHeaderRow = el('div', 'subpanel-header-row talent-fs-topbar');
+  const shopTitleGroup = el('div', 'subpanel-title-group talent-fs-title-group');
+  const talentFsCloseBtn = el('button', 'map-close-x-btn talent-fs-close-btn', '✕');
+  talentFsCloseBtn.type = 'button';
+  talentFsCloseBtn.setAttribute('aria-label', 'Закрыть древо талантов');
+  const masteryHeading = el('h2', 'subpanel-title', '🌿 Древо Талантов');
   const masteryClassBadge = el('div', 'workshop-class-badge');
   const masteryClassBadgeImg = document.createElement('img');
   masteryClassBadgeImg.className = 'workshop-badge-portrait';
   masteryClassBadgeImg.src = CLASSES.warrior.portrait;
   masteryClassBadgeImg.alt = '';
-  const masteryClassBadgeText = el('span', '', '⚔️ Таланты класса: Воин Клятвы');
+  const masteryClassBadgeText = el('span', '', '⚔️ Древо талантов');
   masteryClassBadge.append(masteryClassBadgeImg, masteryClassBadgeText);
-  shopTitleGroup.append(masteryHeading, masteryClassBadge);
+  shopTitleGroup.append(talentFsCloseBtn, masteryHeading, masteryClassBadge);
 
   const shopHeaderControls = el('div', 'workshop-header-controls');
   const shopClassSwitch = el('div', 'arsenal-class-switch');
@@ -2110,25 +2133,45 @@ export function createUIManager(initialCallbacks = {}) {
   const talentPointsPill = el('div', 'talent-points-pill', '✨ Очки таланта: 1');
   const talentResetBtn = el('button', 'gothic-btn talent-reset-btn', '↺ Сброс');
   talentResetBtn.type = 'button';
-  shopHeaderControls.append(talentPointsPill, talentResetBtn, shopClassSwitch, rewardGoldBtn);
+
+  const talentCamControls = el('div', 'talent-cam-controls');
+  const talentZoomOutBtn = el('button', 'gothic-btn talent-cam-btn', '−');
+  talentZoomOutBtn.type = 'button';
+  const talentZoomLabel = el('span', 'talent-zoom-val', '100%');
+  const talentZoomInBtn = el('button', 'gothic-btn talent-cam-btn', '+');
+  talentZoomInBtn.type = 'button';
+  const talentCenterBtn = el('button', 'gothic-btn talent-cam-btn talent-center-btn', '⌖ Центр');
+  talentCenterBtn.type = 'button';
+  talentCamControls.append(talentZoomOutBtn, talentZoomLabel, talentZoomInBtn, talentCenterBtn);
+
+  shopHeaderControls.append(talentPointsPill, talentResetBtn, shopClassSwitch, talentCamControls, rewardGoldBtn);
   shopHeaderRow.append(shopTitleGroup, shopHeaderControls);
 
-  const masteryGrid = el('div', 'mastery-grid');
+  const talentControlsHint = el(
+    'div',
+    'talent-controls-hint',
+    '🖱️ ПКМ или фон — двигать карту • Колёсико — масштаб • Удерживайте ЛКМ на иконке (0.5 с) — изучить'
+  );
+
+  const masteryGrid = el('div', 'mastery-grid talent-fs-body');
   const selectedTalentByClass = {
     mage: CLASS_TALENT_TREES.mage?.[0]?.id || 'water_pressure',
     warrior: CLASS_TALENT_TREES.warrior?.[0]?.id || 'war_steel_grip',
-    gunslinger: CLASS_TALENT_TREES.gunslinger?.[0]?.id || 'gun_heavy_slug'
+    gunslinger: CLASS_TALENT_TREES.gunslinger?.[0]?.id || 'gun_quicksilver'
   };
   let selectedMageTalentId = selectedTalentByClass.mage;
 
-  const shopFooterRow = el('div', 'subpanel-footer-row');
+  const talentCamState = { x: 0, y: 0, zoom: 1, key: '' };
+
+  const shopFooterRow = el('div', 'subpanel-footer-row hidden');
   const shopBackBtn = el('button', 'subpanel-back-btn', '← К герою');
   shopBackBtn.type = 'button';
   const shopQuickPlayBtn = el('button', 'subpanel-battle-btn gothic-plaque-battle-btn', '⚔️ В БОЙ!');
   shopQuickPlayBtn.type = 'button';
   shopFooterRow.append(shopBackBtn, shopQuickPlayBtn);
 
-  shopBox.append(shopHeaderRow, masteryGrid, shopFooterRow);
+  talentFsCloseBtn.addEventListener('click', () => setActiveTab('home'));
+  shopBox.append(shopHeaderRow, talentControlsHint, masteryGrid, shopFooterRow);
   shopPanel.appendChild(shopBox);
 
   // =========================================================================
@@ -2167,7 +2210,7 @@ export function createUIManager(initialCallbacks = {}) {
     btn.type = 'button';
     const crest = el('span', 'dock-crest-circle');
     const socketImg = document.createElement('img');
-    socketImg.src = './assets/ui/dock_crest_socket.png?v=20261117z23';
+    socketImg.src = './assets/ui/dock_crest_socket.png?v=20261117z24';
     socketImg.className = 'dock-socket-ring';
     socketImg.alt = '';
     socketImg.draggable = false;
@@ -2851,8 +2894,9 @@ export function createUIManager(initialCallbacks = {}) {
     storePanel.classList.add('hidden');
 
     const is3DStageTab = valid === 'home' || valid === 'heroes' || valid === 'arsenal' || valid === 'store';
-    hubScreen.classList.toggle('is-subtab', !is3DStageTab && valid !== 'campaign');
+    hubScreen.classList.toggle('is-subtab', !is3DStageTab && valid !== 'campaign' && valid !== 'shop');
     hubScreen.classList.toggle('is-campaign-map', valid === 'campaign');
+    hubScreen.classList.toggle('is-talent-fullscreen', valid === 'shop');
     hubScreen.scrollTop = 0;
 
     if (valid === 'campaign') {
@@ -3696,7 +3740,7 @@ export function createUIManager(initialCallbacks = {}) {
 
     tabArsenalDot.classList.toggle('hidden', !anyWeaponUpgradeAffordable);
 
-    // --- 6. Render 🌿 Древо Талантов (Menu-Only Per-Class Talent Tree for Воин, Стрелок, Маг!) ---
+    // --- 6. Render 🌿 Древо Талантов (Fullscreen Ornate Constellation Canvas • RMB Pan • Hold LMB to Upgrade!) ---
     const heroLvlNum = Math.max(1, Number(state.heroLevel || 1));
     const classTree = CLASS_TALENT_TREES[localSelectedClass] || MAGE_TALENT_TREE;
     const clsRanks =
@@ -3712,13 +3756,13 @@ export function createUIManager(initialCallbacks = {}) {
     masteryClassBadgeImg.src = activeClass.portrait;
     masteryClassBadgeImg.alt = activeClass.nameRu;
     masteryClassBadgeText.textContent = isEn
-      ? `${activeClass.nameEn} • Talent Tree (Menu Only)`
-      : `${activeClass.nameRu} • Древо талантов (только в меню)`;
+      ? `${activeClass.nameEn} • Constellation`
+      : `${activeClass.nameRu} • Ветки специализаций`;
 
     rewardGoldBtn.classList.add('hidden');
     talentPointsPill.textContent = isEn
-      ? `✨ Skill Points: ${ptsAvail} (Lv. ${heroLvlNum})`
-      : `✨ Очки таланта: ${ptsAvail} (Ур. ${heroLvlNum})`;
+      ? `✨ Points: ${ptsAvail} (Lv. ${heroLvlNum})`
+      : `✨ Очки: ${ptsAvail} (Ур. ${heroLvlNum})`;
     talentResetBtn.classList.toggle('hidden', ptsSpent <= 0);
     talentResetBtn.onclick = () => {
       if (callbacks.onResetTalents) {
@@ -3728,31 +3772,225 @@ export function createUIManager(initialCallbacks = {}) {
       }
     };
 
+    const needsInitialFit = talentCamState.key !== localSelectedClass;
+    if (needsInitialFit) {
+      talentCamState.key = localSelectedClass;
+      talentCamState.x = 0;
+      talentCamState.y = 0;
+      talentCamState.zoom = 0.72;
+    }
+
     masteryGrid.innerHTML = '';
-    masteryGrid.className = 'mastery-grid talent-tree-shell';
+    masteryGrid.className = 'mastery-grid talent-fs-body talent-tree-shell';
 
     {
-      const curSelectedId = selectedTalentByClass[localSelectedClass] || classTree[0]?.id;
-      const treeBoard = el('div', 'talent-tree-board');
-      const colPct = { 1: 20, 2: 50, 3: 80 };
-      const rowPct = { 1: 12, 2: 37, 3: 63, 4: 88 };
-      let linesSvg = '';
+      if (!classTree.some((n) => n.id === selectedTalentByClass[localSelectedClass])) {
+        selectedTalentByClass[localSelectedClass] = classTree[0]?.id;
+      }
+      let curSelectedId = selectedTalentByClass[localSelectedClass] || classTree[0]?.id;
+
+      const viewport = el('div', 'talent-canvas-viewport');
+      viewport.addEventListener('contextmenu', (e) => e.preventDefault());
+
+      const world = el('div', 'talent-canvas-world');
+      const WORLD_W = 1280;
+      const WORLD_H = 740;
+      const colPctFallback = { 1: 22, 2: 50, 3: 78 };
+      const rowPctFallback = { 1: 14, 2: 38, 3: 62, 4: 84 };
+      const getPos = (n) => ({
+        xPct: n.xPct ?? colPctFallback[n.col] ?? 50,
+        yPct: n.yPct ?? rowPctFallback[n.row] ?? 50
+      });
+
+      const computeFitZoom = () => {
+        const vw = viewport.clientWidth || 840;
+        const vh = viewport.clientHeight || 520;
+        const fit = Math.min((vw - 24) / WORLD_W, (vh - 18) / WORLD_H);
+        return Math.max(0.5, Math.min(1.05, +fit.toFixed(3)));
+      };
+
+      const applyCamTransform = (fitFirst = false) => {
+        const vw = Math.max(viewport.clientWidth || 840, 320);
+        const vh = Math.max(viewport.clientHeight || 520, 240);
+        if (fitFirst) {
+          talentCamState.x = 0;
+          talentCamState.y = 0;
+          talentCamState.zoom = computeFitZoom();
+        }
+        talentCamState.zoom = Math.max(0.48, Math.min(1.5, talentCamState.zoom));
+        const maxPanX = Math.max(240, (WORLD_W * talentCamState.zoom - vw) * 0.55 + 160);
+        const maxPanY = Math.max(180, (WORLD_H * talentCamState.zoom - vh) * 0.55 + 140);
+        talentCamState.x = Math.max(-maxPanX, Math.min(maxPanX, talentCamState.x));
+        talentCamState.y = Math.max(-maxPanY, Math.min(maxPanY, talentCamState.y));
+        world.style.transform = `translate(-50%, -50%) translate3d(${talentCamState.x.toFixed(1)}px, ${talentCamState.y.toFixed(1)}px, 0) scale(${talentCamState.zoom.toFixed(3)})`;
+        talentZoomLabel.textContent = `${Math.round(talentCamState.zoom * 100)}%`;
+      };
+
+      // Atmospheric Branch Header Banners directly on the Talent Map
+      const branchBanners =
+        localSelectedClass === 'gunslinger'
+          ? [
+              { x: 22, y: 23, title: 'ЛЁГКОЕ ОРУЖИЕ', sub: 'Пистолеты (USP / Кольт) и ПП' },
+              { x: 11, y: 47, title: 'ПИСТОЛЕТЫ', sub: 'Точечный калибр', mini: true },
+              { x: 32, y: 47, title: 'ПИСТОЛЕТЫ-ПУЛЕМЁТЫ', sub: 'Шквал и кучность', mini: true },
+              { x: 50, y: 27, title: 'АВТОМАТЫ', sub: 'Штурмовой калибр АК-47' },
+              { x: 78, y: 23, title: 'ДРОБОВИКИ', sub: 'Картечь, мины и рикошет' }
+            ]
+          : localSelectedClass === 'warrior'
+            ? [
+                { x: 23, y: 27, title: 'БАСТИОН И ЩИТ', sub: 'Броня и стойкость' },
+                { x: 50, y: 45, title: 'ДУЭЛЬНЫЙ МЕЧ', sub: 'Точечные выпады' },
+                { x: 77, y: 27, title: 'НАТИСК И ЖАТВА', sub: 'Темп, крит и вампиризм' }
+              ]
+            : [
+                { x: 23, y: 27, title: 'РЕЗЕРВ И ЩИТ', sub: 'Мана и водная пелена' },
+                { x: 50, y: 45, title: 'ВОДОВОРОТ', sub: 'Двойные сферы и вихри' },
+                { x: 77, y: 27, title: 'ШТОРМ ПРИЛИВА', sub: 'Скорость и криты' }
+              ];
+      for (const bb of branchBanners) {
+        const bEl = el('div', `talent-branch-banner${bb.mini ? ' is-mini' : ''}`);
+        bEl.style.left = `${bb.x}%`;
+        bEl.style.top = `${bb.y}%`;
+        bEl.append(
+          el('span', 'talent-branch-title', bb.title),
+          el('span', 'talent-branch-sub', bb.sub)
+        );
+        world.appendChild(bEl);
+      }
+
+      // Glowing Curved SVG Bezier Paths
+      let pathsSvg = '';
       for (const b of classTree) {
+        const pB = getPos(b);
+        const bx = (pB.xPct / 100) * WORLD_W;
+        const by = (pB.yPct / 100) * WORLD_H;
         for (const r of b.requires || []) {
           const a = classTree.find((n) => n.id === r.id);
           if (!a) continue;
+          const pA = getPos(a);
+          const ax = (pA.xPct / 100) * WORLD_W;
+          const ay = (pA.yPct / 100) * WORLD_H;
+          const midY = (ay + by) * 0.5;
           const bRank = getRank(b.id);
           const reqMet = (b.requires || []).every((req) => getRank(req.id) >= (req.rank || 1));
           const clsEdge = bRank > 0 ? 'is-active' : reqMet ? 'is-ready' : 'is-locked';
-          linesSvg += `<line x1="${colPct[a.col]}%" y1="${rowPct[a.row]}%" x2="${colPct[b.col]}%" y2="${rowPct[b.row]}%" class="talent-edge ${clsEdge}" />`;
+          const d = `M ${ax.toFixed(1)} ${ay.toFixed(1)} C ${ax.toFixed(1)} ${midY.toFixed(1)}, ${bx.toFixed(1)} ${midY.toFixed(1)}, ${bx.toFixed(1)} ${by.toFixed(1)}`;
+          pathsSvg += `<path d="${d}" class="talent-edge-glow ${clsEdge}" /><path d="${d}" class="talent-edge ${clsEdge}" />`;
         }
       }
       const svgCanvas = makeSvgNode(
-        `<svg viewBox="0 0 100 100" preserveAspectRatio="none" class="talent-edges-svg" xmlns="http://www.w3.org/2000/svg">${linesSvg}</svg>`
+        `<svg viewBox="0 0 ${WORLD_W} ${WORLD_H}" class="talent-edges-svg" xmlns="http://www.w3.org/2000/svg">${pathsSvg}</svg>`
       );
-      treeBoard.appendChild(svgCanvas);
+      world.appendChild(svgCanvas);
+
+      // Gothic Inspector Card (Right Side Floating/Docked Plaque)
+      const inspector = el('div', 'talent-inspector-card');
+      const RING_CIRC = 213.63; // 2 * PI * 34
+      const nodeButtonMap = new Map();
+
+      const updateInspector = (nodeId) => {
+        curSelectedId = nodeId;
+        selectedTalentByClass[localSelectedClass] = nodeId;
+        if (localSelectedClass === 'mage') selectedMageTalentId = nodeId;
+        for (const [id, btn] of nodeButtonMap.entries()) {
+          btn.classList.toggle('is-selected', id === nodeId);
+        }
+
+        const selNode = classTree.find((n) => n.id === nodeId) || classTree[0];
+        const selRank = getRank(selNode.id);
+        const selReqMet = (selNode.requires || []).every((r) => getRank(r.id) >= (r.rank || 1));
+        const selMaxed = selRank >= selNode.maxRank;
+        const selCanBuy = ptsAvail >= 1 && selReqMet && !selMaxed;
+
+        inspector.innerHTML = '';
+
+        const inspBranch = el('div', 'talent-insp-branch-pill', selNode.branchLabelRu || activeClass.nameRu);
+        const inspTop = el('div', 'talent-insp-top');
+        const inspIconBox = el('div', 'talent-insp-icon');
+        inspIconBox.appendChild(createTalentRuneSvg(selNode.iconKind));
+        const inspHeadText = el('div', 'talent-insp-headtext');
+        inspHeadText.append(
+          el('span', 'talent-insp-tier', `Ступень ${selNode.tier} • Ранг ${selRank} / ${selNode.maxRank}`),
+          el('h3', 'talent-insp-title', selNode.nameRu)
+        );
+        inspTop.append(inspIconBox, inspHeadText);
+
+        const rankPipsRow = el('div', 'talent-insp-pips');
+        for (let p = 1; p <= selNode.maxRank; p++) {
+          rankPipsRow.appendChild(el('span', `talent-insp-pip${p <= selRank ? ' is-lit' : ''}`));
+        }
+
+        const inspStatPill = el('div', 'talent-insp-stat', selNode.statBadgeRu);
+        const inspDesc = el('p', 'talent-insp-desc', selNode.descRu);
+
+        const statsSummary = el(
+          'div',
+          'talent-insp-summary',
+          `Вложено очков: ${ptsSpent} • Свободно: ${ptsAvail} • Ур. героя: ${heroLvlNum}`
+        );
+
+        let reqText = 'Готов к изучению: зажмите ЛКМ на иконке (0.5 с) или нажмите кнопку ниже.';
+        if (!selReqMet) {
+          const missing = (selNode.requires || [])
+            .filter((r) => getRank(r.id) < (r.rank || 1))
+            .map((r) => {
+              const pNode = classTree.find((x) => x.id === r.id);
+              return `«${pNode?.nameRu || r.id}» ур. ${r.rank || 1}`;
+            })
+            .join(', ');
+          reqText = `Требуется: ${missing}`;
+        } else if (selMaxed) {
+          reqText = '✓ Навык полностью изучен!';
+        } else if (ptsAvail <= 0) {
+          reqText = 'Получите новый уровень героя в бою для +1 очка таланта.';
+        }
+        const inspReq = el('div', `talent-insp-req${!selReqMet ? ' is-blocked' : ''}`, reqText);
+
+        const learnBtn = el(
+          'button',
+          'arsenal-gothic-upgrade-btn talent-learn-btn',
+          selMaxed ? '✓ МАКСИМУМ' : selCanBuy ? 'ИЗУЧИТЬ • 1 ОЧКО' : !selReqMet ? '🔒 ЗАБЛОКИРОВАНО' : 'НЕТ ОЧКОВ'
+        );
+        learnBtn.type = 'button';
+        learnBtn.disabled = !selCanBuy;
+        learnBtn.addEventListener('click', () => {
+          if (selCanBuy) {
+            if (callbacks.onUpgradeTalent) callbacks.onUpgradeTalent(localSelectedClass, selNode.id);
+            else callbacks.onUpgradeMageTalent?.(selNode.id);
+          }
+        });
+
+        const inspFooter = el('div', 'talent-insp-footer');
+        const backCampBtn = el('button', 'subpanel-back-btn', '← В лагерь');
+        backCampBtn.type = 'button';
+        backCampBtn.addEventListener('click', () => setActiveTab('home'));
+        const toBattleBtn = el('button', 'subpanel-battle-btn gothic-plaque-battle-btn', '⚔️ В БОЙ!');
+        toBattleBtn.type = 'button';
+        toBattleBtn.addEventListener('click', () => {
+          setActiveTab('campaign_world');
+          renderHub(lastHubState || storeRef);
+        });
+        inspFooter.append(backCampBtn, toBattleBtn);
+
+        inspector.append(
+          inspBranch,
+          inspTop,
+          rankPipsRow,
+          inspStatPill,
+          inspDesc,
+          statsSummary,
+          inspReq,
+          learnBtn,
+          inspFooter
+        );
+      };
+
+      // Build Beveled Gothic Medallion Nodes + LMB Hold Progress Rings
+      const HOLD_DURATION_MS = 500;
+      let activeHoldCancel = null;
 
       for (const node of classTree) {
+        const pos = getPos(node);
         const rank = getRank(node.id);
         const reqMet = (node.requires || []).every((r) => getRank(r.id) >= (r.rank || 1));
         const isMaxed = rank >= node.maxRank;
@@ -3762,91 +4000,144 @@ export function createUIManager(initialCallbacks = {}) {
           'button',
           `talent-node-btn${curSelectedId === node.id ? ' is-selected' : ''}${
             rank > 0 ? ' is-learned' : ''
-          }${canBuy ? ' is-upgradeable' : ''}${!reqMet ? ' is-locked' : ''}`
+          }${isMaxed ? ' is-maxed' : ''}${canBuy ? ' is-upgradeable' : ''}${!reqMet ? ' is-locked' : ''}`
         );
         nodeBtn.type = 'button';
-        nodeBtn.style.gridColumn = String(node.col);
-        nodeBtn.style.gridRow = String(node.row);
-        nodeBtn.title = `${node.nameRu} (${rank}/${node.maxRank})`;
+        nodeBtn.dataset.talentId = node.id;
+        nodeBtn.style.left = `${pos.xPct}%`;
+        nodeBtn.style.top = `${pos.yPct}%`;
+        nodeBtn.title = `${node.nameRu} (${rank}/${node.maxRank}) — удерживайте ЛКМ 0.5 с для изучения`;
 
+        const medallion = el('div', 'talent-node-medallion');
+        const holdSvg = makeSvgNode(
+          `<svg class="talent-hold-ring-svg" viewBox="0 0 80 80" aria-hidden="true">
+            <circle class="talent-hold-ring-track" cx="40" cy="40" r="34" />
+            <circle class="talent-hold-ring-fill" cx="40" cy="40" r="34" stroke-dasharray="${RING_CIRC}" stroke-dashoffset="${RING_CIRC}" />
+          </svg>`
+        );
+        const ringFill = holdSvg.querySelector('.talent-hold-ring-fill');
         const iconWrap = el('div', 'talent-node-icon');
         iconWrap.appendChild(createTalentRuneSvg(node.iconKind));
+        medallion.append(holdSvg, iconWrap);
+
         const rankBadge = el('span', 'talent-node-rank', `${rank}/${node.maxRank}`);
         const nameLbl = el('span', 'talent-node-name', node.nameRu);
-        nodeBtn.append(iconWrap, rankBadge, nameLbl);
+        nodeBtn.append(medallion, rankBadge, nameLbl);
 
-        nodeBtn.addEventListener('click', () => {
-          if (curSelectedId === node.id && canBuy) {
-            if (callbacks.onUpgradeTalent) {
-              callbacks.onUpgradeTalent(localSelectedClass, node.id);
-            } else {
-              callbacks.onUpgradeMageTalent?.(node.id);
+        nodeBtn.addEventListener('pointerdown', (e) => {
+          // Right mouse button passes cleanly to viewport pan handler
+          if (e.button === 2 || e.button === 1) return;
+          e.stopPropagation();
+          updateInspector(node.id);
+          if (!canBuy) return;
+
+          if (activeHoldCancel) activeHoldCancel();
+          const startX = e.clientX;
+          const startY = e.clientY;
+          const startTime = performance.now();
+          let rafId = 0;
+          let finished = false;
+          nodeBtn.classList.add('is-charging');
+
+          const cleanupHold = () => {
+            if (rafId) cancelAnimationFrame(rafId);
+            nodeBtn.classList.remove('is-charging');
+            if (ringFill) ringFill.setAttribute('stroke-dashoffset', String(RING_CIRC));
+            window.removeEventListener('pointerup', onAbort);
+            window.removeEventListener('pointercancel', onAbort);
+            window.removeEventListener('pointermove', onMove);
+            if (activeHoldCancel === cleanupHold) activeHoldCancel = null;
+          };
+          const onMove = (ev) => {
+            if (Math.hypot(ev.clientX - startX, ev.clientY - startY) > 12) cleanupHold();
+          };
+          const onAbort = () => {
+            if (!finished) cleanupHold();
+          };
+          activeHoldCancel = cleanupHold;
+          window.addEventListener('pointerup', onAbort);
+          window.addEventListener('pointercancel', onAbort);
+          window.addEventListener('pointermove', onMove);
+
+          const tick = (now) => {
+            const p = Math.min(1, (now - startTime) / HOLD_DURATION_MS);
+            if (ringFill) ringFill.setAttribute('stroke-dashoffset', String((RING_CIRC * (1 - p)).toFixed(2)));
+            if (p >= 1) {
+              finished = true;
+              cleanupHold();
+              if (callbacks.onUpgradeTalent) callbacks.onUpgradeTalent(localSelectedClass, node.id);
+              else callbacks.onUpgradeMageTalent?.(node.id);
+              return;
             }
-          } else {
-            selectedTalentByClass[localSelectedClass] = node.id;
-            if (localSelectedClass === 'mage') selectedMageTalentId = node.id;
-            renderHub(lastHubState || storeRef);
-          }
+            rafId = requestAnimationFrame(tick);
+          };
+          rafId = requestAnimationFrame(tick);
         });
-        treeBoard.appendChild(nodeBtn);
+
+        nodeButtonMap.set(node.id, nodeBtn);
+        world.appendChild(nodeBtn);
       }
 
-      const selNode = classTree.find((n) => n.id === curSelectedId) || classTree[0];
-      const selRank = getRank(selNode.id);
-      const selReqMet = (selNode.requires || []).every((r) => getRank(r.id) >= (r.rank || 1));
-      const selMaxed = selRank >= selNode.maxRank;
-      const selCanBuy = ptsAvail >= 1 && selReqMet && !selMaxed;
+      // Right-Mouse-Button Drag (and background drag) + Mouse Wheel Zoom
+      let isPanning = false;
+      let panStartX = 0;
+      let panStartY = 0;
+      let origCamX = 0;
+      let origCamY = 0;
 
-      const inspector = el('div', 'talent-inspector-card');
-      const inspTop = el('div', 'talent-insp-top');
-      const inspIconBox = el('div', 'talent-insp-icon');
-      inspIconBox.appendChild(createTalentRuneSvg(selNode.iconKind));
-      const inspHeadText = el('div', 'talent-insp-headtext');
-      inspHeadText.append(
-        el('span', 'talent-insp-tier', `Уровень древа ${selNode.tier} • Ранг ${selRank}/${selNode.maxRank}`),
-        el('h3', 'talent-insp-title', selNode.nameRu)
-      );
-      inspTop.append(inspIconBox, inspHeadText);
-
-      const inspStatPill = el('div', 'talent-insp-stat', selNode.statBadgeRu);
-      const inspDesc = el('p', 'talent-insp-desc', selNode.descRu);
-
-      let reqText = 'Готов к изучению (только в меню лагеря).';
-      if (!selReqMet) {
-        const missing = (selNode.requires || [])
-          .filter((r) => getRank(r.id) < (r.rank || 1))
-          .map((r) => {
-            const pNode = classTree.find((x) => x.id === r.id);
-            return `«${pNode?.nameRu || r.id}» ур. ${r.rank || 1}`;
-          })
-          .join(', ');
-        reqText = `Требуется: ${missing}`;
-      } else if (selMaxed) {
-        reqText = '✓ Навык полностью изучен!';
-      } else if (ptsAvail <= 0) {
-        reqText = 'Повышайте уровень героя в бою, чтобы получить +1 очко таланта.';
-      }
-      const inspReq = el('div', `talent-insp-req${!selReqMet ? ' is-blocked' : ''}`, reqText);
-
-      const learnBtn = el(
-        'button',
-        'arsenal-gothic-upgrade-btn talent-learn-btn',
-        selMaxed ? '✓ МАКСИМУМ' : selCanBuy ? 'ИЗУЧИТЬ • 1 ОЧКО' : !selReqMet ? '🔒 ЗАБЛОКИРОВАНО' : 'НЕТ ОЧКОВ'
-      );
-      learnBtn.type = 'button';
-      learnBtn.disabled = !selCanBuy;
-      learnBtn.addEventListener('click', () => {
-        if (selCanBuy) {
-          if (callbacks.onUpgradeTalent) {
-            callbacks.onUpgradeTalent(localSelectedClass, selNode.id);
-          } else {
-            callbacks.onUpgradeMageTalent?.(selNode.id);
-          }
-        }
+      viewport.addEventListener('pointerdown', (e) => {
+        const isRmbOrMmb = e.button === 2 || e.button === 1;
+        const onBackground = !e.target.closest('.talent-node-btn');
+        if (!isRmbOrMmb && !onBackground) return;
+        e.preventDefault();
+        if (activeHoldCancel) activeHoldCancel();
+        isPanning = true;
+        panStartX = e.clientX;
+        panStartY = e.clientY;
+        origCamX = talentCamState.x;
+        origCamY = talentCamState.y;
+        viewport.classList.add('is-panning');
+        try { viewport.setPointerCapture(e.pointerId); } catch {}
       });
+      viewport.addEventListener('pointermove', (e) => {
+        if (!isPanning) return;
+        const pStart = window.__toGameCoords ? window.__toGameCoords(panStartX, panStartY) : { x: panStartX, y: panStartY };
+        const pNow = window.__toGameCoords ? window.__toGameCoords(e.clientX, e.clientY) : { x: e.clientX, y: e.clientY };
+        talentCamState.x = origCamX + (pNow.x - pStart.x);
+        talentCamState.y = origCamY + (pNow.y - pStart.y);
+        applyCamTransform();
+      });
+      const stopPan = () => {
+        if (!isPanning) return;
+        isPanning = false;
+        viewport.classList.remove('is-panning');
+      };
+      viewport.addEventListener('pointerup', stopPan);
+      viewport.addEventListener('pointercancel', stopPan);
+      viewport.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? -0.1 : 0.1;
+        talentCamState.zoom += delta;
+        applyCamTransform();
+      }, { passive: false });
 
-      inspector.append(inspTop, inspStatPill, inspDesc, inspReq, learnBtn);
-      masteryGrid.append(treeBoard, inspector);
+      talentZoomInBtn.onclick = () => {
+        talentCamState.zoom += 0.14;
+        applyCamTransform();
+      };
+      talentZoomOutBtn.onclick = () => {
+        talentCamState.zoom -= 0.14;
+        applyCamTransform();
+      };
+      talentCenterBtn.onclick = () => {
+        applyCamTransform(true);
+      };
+
+      viewport.appendChild(world);
+      masteryGrid.append(viewport, inspector);
+      updateInspector(curSelectedId);
+      applyCamTransform(needsInitialFit);
+      requestAnimationFrame(() => applyCamTransform(needsInitialFit));
     }
 
     tabShopDot.classList.toggle('hidden', ptsAvail <= 0);
