@@ -384,7 +384,10 @@ export async function initYandexSdk({ onPauseAudio, onResumeAudio } = {}) {
       return finalData;
     },
 
-    async saveData(obj) {
+    // `immediate = true` skips the 250 ms debounce. Used on pagehide /
+    // beforeunload / visibilitychange(hidden), where a pending timer would be
+    // killed together with the page and the cloud save would be lost.
+    async saveData(obj, immediate = false) {
       if (!obj || typeof obj !== 'object') return false;
       const payload = {
         ...obj,
@@ -395,14 +398,26 @@ export async function initYandexSdk({ onPauseAudio, onResumeAudio } = {}) {
 
       if (player && typeof player.setData === 'function') {
         if (pendingCloudSaveTimer) clearTimeout(pendingCloudSaveTimer);
-        pendingCloudSaveTimer = setTimeout(async () => {
-          pendingCloudSaveTimer = null;
+        pendingCloudSaveTimer = null;
+
+        if (immediate) {
+          // The call itself starts synchronously here, before this async
+          // function yields, so closing the tab right after is safe.
           try {
-            await player.setData(latestSavePayload, true);
+            await player.setData(payload, true);
           } catch {
             // Silent fallback: localStorage already has latest data
           }
-        }, 250);
+        } else {
+          pendingCloudSaveTimer = setTimeout(async () => {
+            pendingCloudSaveTimer = null;
+            try {
+              await player.setData(latestSavePayload, true);
+            } catch {
+              // Silent fallback: localStorage already has latest data
+            }
+          }, 250);
+        }
       }
 
       return true;

@@ -10,6 +10,13 @@ import { createCombatController } from './combat.js?v=20261117z25';
 import { createAudioEngine } from './audio.js?v=20261117z25';
 import { initYandexSdk } from './yandexSdk.js?v=20261117z25';
 import { createUIManager } from './ui.js?v=20261117z25';
+import { attachSeamlessLoop } from './ambientVideo.js?v=20261117z25';
+
+// Per-biome fixed viewpoints. Expand this map when new locations are added:
+// { yaw: radians around Y, pitch: radians above horizon, dist: camera distance }
+const LEVEL_CAMERA_PRESETS = {
+  misty_forest: { yaw: 0, pitch: 0.95, dist: 11 }
+};
 
 async function bootstrap() {
   const canvas = document.getElementById('game-canvas');
@@ -44,18 +51,19 @@ async function bootstrap() {
   activeRunLevel = Math.min(LEVELS.length, Math.max(1, progression.getState().maxUnlockedLevel || 1));
 
   let lastSavedGold = progression.getState().gold;
-  const persistSave = () => {
+  const persistSave = (immediate = false) => {
     const st = progression.getState();
     lastSavedGold = st.gold;
-    sdk.saveData(st);
+    sdk.saveData(st, immediate);
   };
 
-  // Guaranteed mobile persistence on iPhone Safari / Android tab switch or close
-  window.addEventListener('pagehide', persistSave);
-  window.addEventListener('beforeunload', persistSave);
+  // Guaranteed mobile persistence on iPhone Safari / Android tab switch or close.
+  // These events can kill the page before a 250 ms debounce fires, so flush at once.
+  window.addEventListener('pagehide', () => persistSave(true));
+  window.addEventListener('beforeunload', () => persistSave(true));
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
-      persistSave();
+      persistSave(true);
     }
   });
 
@@ -102,12 +110,13 @@ async function bootstrap() {
   // 3D Hero & 3D Arsenal Weapon Preview in Hub Diorama + Interactive Right-Mouse-Button 360° Turntable
   const hubBgPlateEl = document.getElementById('hub-bg-plate');
   const hubBgVideoEl = document.getElementById('hub-bg-video');
+  const hubBgVideoLoop = attachSeamlessLoop(hubBgVideoEl, { fadeSec: 1.2 });
   if (hubBgVideoEl) {
     hubBgVideoEl.muted = true;
-    hubBgVideoEl.play().catch(() => {});
+    hubBgVideoLoop?.play();
     document.addEventListener('pointerdown', () => {
       if (gameMode === 'hub' && hubBgVideoEl.paused) {
-        hubBgVideoEl.play().catch(() => {});
+        hubBgVideoLoop?.play();
       }
     }, { passive: true });
   }
@@ -125,11 +134,16 @@ async function bootstrap() {
   let activeHeroTouchId = null;
   let lastHeroTouchX = 0;
 
-  let hubDioramaGen = 0;
+  // Separate generation counters: hero and weapon loads must not invalidate
+  // each other (they used to share one counter, so the hero silently stayed
+  // a placeholder whenever the Arsenal showcase was opened at the same time).
+  let hubHeroGen = 0;
+  let hubWeaponGen = 0;
   function refreshArsenalWeaponDiorama(explicitWeaponId = null, isLocked = false) {
     if (hubArsenalWeapon?.root && hubArsenalWeapon.root.parent) {
       hubArsenalWeapon.root.parent.remove(hubArsenalWeapon.root);
     }
+    hubArsenalWeapon?.dispose?.();
     hubArsenalWeapon = null;
     const isShowcaseTab = currentHubTab === 'arsenal' || currentHubTab === 'store';
     if (gameMode !== 'hub' || !isShowcaseTab) return;
@@ -147,9 +161,9 @@ async function bootstrap() {
 
     const missing = models.getMissingHeroOrWeaponKeys(null, wId);
     if (missing.length > 0) {
-      const gen = ++hubDioramaGen;
+      const gen = ++hubWeaponGen;
       models.ensureModelKeysLoaded(missing).then(() => {
-        if (gen === hubDioramaGen && gameMode === 'hub' && (currentHubTab === 'arsenal' || currentHubTab === 'store')) {
+        if (gen === hubWeaponGen && gameMode === 'hub' && (currentHubTab === 'arsenal' || currentHubTab === 'store')) {
           refreshArsenalWeaponDiorama(wId, previewedArsenalLocked);
         }
       });
@@ -166,6 +180,7 @@ async function bootstrap() {
     if (hubPreviewHero?.root && hubPreviewHero.root.parent) {
       hubPreviewHero.root.parent.remove(hubPreviewHero.root);
     }
+    hubPreviewHero?.dispose?.();
     hubPreviewHero = null;
     if (gameMode !== 'hub') return;
 
@@ -176,9 +191,9 @@ async function bootstrap() {
 
     const missing = models.getMissingHeroOrWeaponKeys(classId, weaponId);
     if (missing.length > 0) {
-      const gen = ++hubDioramaGen;
+      const gen = ++hubHeroGen;
       models.ensureModelKeysLoaded(missing).then(() => {
-        if (gen === hubDioramaGen && gameMode === 'hub') {
+        if (gen === hubHeroGen && gameMode === 'hub') {
           refreshHubDiorama();
         }
       });
@@ -202,10 +217,12 @@ async function bootstrap() {
     if (hubPreviewHero?.root && hubPreviewHero.root.parent) {
       hubPreviewHero.root.parent.remove(hubPreviewHero.root);
     }
+    hubPreviewHero?.dispose?.();
     hubPreviewHero = null;
     if (hubArsenalWeapon?.root && hubArsenalWeapon.root.parent) {
       hubArsenalWeapon.root.parent.remove(hubArsenalWeapon.root);
     }
+    hubArsenalWeapon?.dispose?.();
     hubArsenalWeapon = null;
   }
 
@@ -346,7 +363,7 @@ async function bootstrap() {
     if (hubBgPlateEl) hubBgPlateEl.classList.remove('hidden');
     if (hubBgVideoEl) {
       hubBgVideoEl.muted = true;
-      hubBgVideoEl.play().catch(() => {});
+      hubBgVideoLoop?.play();
     }
     world.setBossAtmosphere(false);
     world.setCameraMode?.('hub');
@@ -422,7 +439,7 @@ async function bootstrap() {
 
     clearHubDiorama();
     if (hubBgPlateEl) hubBgPlateEl.classList.add('hidden');
-    if (hubBgVideoEl) hubBgVideoEl.pause();
+    hubBgVideoLoop?.pause();
     world.setCameraMode?.('combat');
     ui.hideAllModals();
     ui.showHub(false);
@@ -431,7 +448,16 @@ async function bootstrap() {
     ui.setAutoAimState(combat.getAutoAim());
     ui.setAttackEnabledState?.(true);
 
-    world.setArenaBiome?.('courtyard');
+    world.setArenaBiome?.(chosenLevel >= 6 ? 'misty_forest' : 'courtyard');
+    // Each chapter can define its own fixed camera angle. The Misty Forest
+    // uses the reference-art viewpoint and locks orbit/zoom so the ground
+    // image never distorts during normal play.
+    if (chosenLevel >= 6) {
+      world.setCameraPreset?.(LEVEL_CAMERA_PRESETS.misty_forest);
+      world.setCameraLock?.(true);
+    } else {
+      world.setCameraLock?.(false);
+    }
     syncMusicMode('combat');
     const difficultyMode = progression.getState().difficultyMode || 'normal';
     combat.startRun({ classId: chosenClass, levelNumber: chosenLevel, difficultyMode });
@@ -669,6 +695,7 @@ async function bootstrap() {
         refreshArsenalWeaponDiorama(previewedArsenalWeaponId, previewedArsenalLocked);
       } else if (hubArsenalWeapon?.root && hubArsenalWeapon.root.parent) {
         hubArsenalWeapon.root.parent.remove(hubArsenalWeapon.root);
+        hubArsenalWeapon?.dispose?.();
         hubArsenalWeapon = null;
       }
     },
@@ -689,6 +716,16 @@ async function bootstrap() {
   let pointerMovedRecently = 0;
 
   window.addEventListener('keydown', (e) => {
+    if (e.code === 'KeyK' && !e.repeat) {
+      world.setWeaponEditMode?.(!world.isWeaponEditMode?.());
+      return;
+    }
+    if (world.isWeaponEditMode?.()) return;
+    if (world.isArenaEditMode?.()) {
+      if (!world.isArenaEditorHeroMovement?.()) return;
+      const moveKeys = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
+      if (!moveKeys.includes(e.code)) return;
+    }
     keysDown.add(e.code);
     if (e.code === 'KeyR' && gameMode === 'playing' && !e.repeat) {
       audio.unlock();
@@ -863,7 +900,7 @@ async function bootstrap() {
       lastCombatOrbitY = mapped.y;
       return;
     }
-    if (e.button === 0) {
+    if (e.button === 0 && !world.isArenaEditMode?.()) {
       pointerClientX = e.clientX;
       pointerClientY = e.clientY;
       pointerFiring = true;
@@ -881,6 +918,14 @@ async function bootstrap() {
   });
 
   function gatherInput(dt) {
+    if (world.isWeaponEditMode?.()) {
+      return { moveX: 0, moveZ: 0, aimWorldX: 0, aimWorldZ: 0, hasManualAim: false, firing: false, reload: false };
+    }
+    // While the arena editor is open, firing stays off. Hero movement (WASD)
+    // can be enabled from the editor panel so you can reposition while building.
+    if (world.isArenaEditMode?.() && !world.isArenaEditorHeroMovement?.()) {
+      return { moveX: 0, moveZ: 0, aimWorldX: 0, aimWorldZ: 0, hasManualAim: false, firing: false, reload: false };
+    }
     let moveX = 0;
     let moveZ = 0;
 
@@ -967,6 +1012,13 @@ async function bootstrap() {
     ui,
     enterHub,
     startBattle,
+    // Walk the new arena with no enemies and no damage (layout testing).
+    startFreeRoam: async (level = 6, classId = null) => {
+      combat.setFreeRoam(true);
+      await startBattle(classId || progression.getState().selectedClass || 'warrior', level);
+      world.setCameraLock?.(false);
+    },
+    stopFreeRoam: () => combat.setFreeRoam(false),
     getHeroRotationY: () => hubHeroRotY,
     setHeroRotationY: (rad) => {
       hubHeroRotY = Number(rad) || 0;

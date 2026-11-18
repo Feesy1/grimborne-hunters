@@ -5704,6 +5704,19 @@ html.is-mobile-landscape .hub-rotate-hint {
   pointer-events: none;
 }
 
+/* Two stacked copies of the same ambient clip cross-fade forever:
+   no `loop`, no visible restart, exact original content and speed. */
+.seamless-video-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+  will-change: opacity;
+}
+
 /* Warm Golden-Amber Active Bottom Dock Glow (matching media_1794851281081_25811ecd.jpg!) */
 .dock-tab-btn.is-active .dock-crest-circle {
   background: transparent;

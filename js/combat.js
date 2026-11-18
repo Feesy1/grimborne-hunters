@@ -11,8 +11,9 @@ import {
 } from './config.js?v=20261117z25';
 
 const TWO_PI = Math.PI * 2;
-const ARENA_PLAYER_LIMIT = ARENA_HALF_SIZE - 1.4;
-const ARENA_ENTITY_LIMIT = ARENA_HALF_SIZE - 1.6;
+// Keep the player just inside the decorative fence ring (HALF_SIZE - 1.6).
+const ARENA_PLAYER_LIMIT = ARENA_HALF_SIZE - 2.6;
+const ARENA_ENTITY_LIMIT = ARENA_HALF_SIZE - 2.8;
 const MAX_ACTIVE_ENEMIES = 52;
 const COS_75_DEG = Math.cos((75 * Math.PI) / 180); // ~0.2588 for ±75° Shieldbearer front arc
 
@@ -327,6 +328,8 @@ export function createCombatController({
     if (world?.scene && !obj.parent) {
       world.scene.add(obj);
     }
+    // Restore weapon positions placed with the in-game K editor.
+    try { world?.loadWeaponLayout?.(); } catch {}
     return { handle, obj, sigUpdate: inspectSignature(handle?.update) };
   }
 
@@ -563,6 +566,16 @@ export function createCombatController({
 
     nx = clamp(nx, -arenaLimit, arenaLimit);
     nz = clamp(nz, -arenaLimit, arenaLimit);
+
+    // The graveyard arena is round; a square clamp lets the player slip
+    // through the circular fence at the diagonals. Clamp to a disc instead.
+    if (world?.isArenaCircular?.()) {
+      const dist = Math.hypot(nx, nz);
+      if (dist > arenaLimit) {
+        nx = (nx / dist) * arenaLimit;
+        nz = (nz / dist) * arenaLimit;
+      }
+    }
     return { x: nx, z: nz };
   }
 
@@ -590,6 +603,9 @@ export function createCombatController({
   let weaponRunLevel = 1;
   let perks = Object.create(null);
   let stats = null;
+
+  // Debug/free-roam inspection: no enemies, no player damage.
+  let freeRoamMode = false;
 
   let timeLeft = 65;
   let elapsedRunTime = 0;
@@ -812,7 +828,7 @@ export function createCombatController({
     const lvlIdx = clamp((Number(levelNumber) || 1) - 1, 0, LEVELS.length - 1);
     currentLevelDef = LEVELS[lvlIdx];
     currentLevelNumber = currentLevelDef.level;
-    world?.setArenaBiome?.(currentLevelNumber >= 11 ? 'misty_forest' : 'courtyard');
+    world?.setArenaBiome?.(currentLevelNumber >= 6 ? 'misty_forest' : 'courtyard');
 
     currentWeaponId = progression.getEquippedWeaponId(currentClassId);
     const progInit = progression.getState();
@@ -2189,6 +2205,7 @@ export function createCombatController({
   }
 
   function applyDamageToPlayer(rawDamage) {
+    if (freeRoamMode) return;
     if (runEnded || pendingVictoryPayload) return;
     if (player.invulnTimer > 0 || player.beastTimeLeft > 0) return;
 
@@ -3689,9 +3706,18 @@ export function createCombatController({
     const sprintMult = player.sprintTimer > 0 ? 1.35 : 1.0;
     const effectiveMoveSpeed = stats.moveSpeed * (beastActive ? 1.45 : 1.0) * sprintMult;
 
+    // Ease the velocity in/out so pressing a direction no longer snaps the
+    // hero to full speed instantly (which looked like a sudden lunge).
+    const accel = 1 - Math.exp(-dt * 9);
+    const targetVX = moveMag > 0.01 ? mx * effectiveMoveSpeed : 0;
+    const targetVZ = moveMag > 0.01 ? mz * effectiveMoveSpeed : 0;
+    player.moveVelX = (player.moveVelX || 0) + (targetVX - (player.moveVelX || 0)) * accel;
+    player.moveVelZ = (player.moveVelZ || 0) + (targetVZ - (player.moveVelZ || 0)) * accel;
+    if (Math.abs(player.moveVelX) < 0.02) player.moveVelX = 0;
+    if (Math.abs(player.moveVelZ) < 0.02) player.moveVelZ = 0;
+    player.x += player.moveVelX * dt;
+    player.z += player.moveVelZ * dt;
     if (moveMag > 0.01) {
-      player.x += mx * effectiveMoveSpeed * dt;
-      player.z += mz * effectiveMoveSpeed * dt;
       player.standStillTimer = Math.max(0, (player.standStillTimer || 0) - dt * 4.5);
     } else {
       const maxFocusTime = Math.max(0.05, stats?.focusTime || 1.0);
@@ -3865,8 +3891,8 @@ export function createCombatController({
     }
 
     // 4. Kill-Quota Wave Spawner, Relic Crate, Mid-Quota Mini-Boss & Mandatory Boss Finale!
-    // Temporary peaceful map-inspection mode turned OFF so monsters & new Tripo Zombie spawn normally!
-    const TEMP_PEACEFUL_MAP_INSPECT = false;
+    // Peaceful map-inspection mode — enabled from the debug API (`startFreeRoam`).
+    const TEMP_PEACEFUL_MAP_INSPECT = freeRoamMode;
     if (!TEMP_PEACEFUL_MAP_INSPECT) {
       if (!relicCrateSpawned && currentLevelDef.unlockWeaponTier && (kills >= Math.max(8, Math.floor(targetKills * 0.28)) || elapsedRunTime >= 18.0)) {
         relicCrateSpawned = true;
@@ -4817,6 +4843,31 @@ export function createCombatController({
     return attackEnabled;
   }
 
+  // Debug helper for layout testing: place the hero at an exact coordinate and
+  // report where the collision resolver actually put him.
+  function debugTeleport(x, z) {
+    if (!freeRoamMode) return null;
+    const resolved = resolveObstaclesAndBounds(x, z, player.radius, ARENA_PLAYER_LIMIT);
+    player.x = resolved.x;
+    player.z = resolved.z;
+    return { x: resolved.x, z: resolved.z };
+  }
+
+  // Debug helper: walk the arena without waves or damage (for layout testing).
+  function setFreeRoam(enabled) {
+    freeRoamMode = Boolean(enabled);
+    if (freeRoamMode) {
+      for (let i = 0; i < enemies.length; i++) {
+        removeSceneObject(enemies[i].model.obj, enemies[i].model.handle);
+      }
+      enemies.length = 0;
+      kills = 0;
+      regularMobsSpawned = 0;
+      timeLeft = 999;
+    }
+    return freeRoamMode;
+  }
+
   return {
     startRun,
     revivePlayer,
@@ -4826,6 +4877,8 @@ export function createCombatController({
     getAutoAim,
     setAttackEnabled,
     getAttackEnabled,
+    setFreeRoam,
+    debugTeleport,
     update,
     getHudSnapshot,
     disposeRun,

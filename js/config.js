@@ -1,7 +1,7 @@
 // Shared configuration, class definitions, weapon progression, 9-archetype enemy roster, and 25-level campaign
 // All modules import from './config.js' and adhere strictly to these IDs and data shapes.
 
-export const ARENA_HALF_SIZE = 27; // Spacious 3D gothic courtyard arena [-27, +27]
+export const ARENA_HALF_SIZE = 23; // 3D arena [-23, +23] — 30% smaller than the previous 66 m layout
 export const WEAPON_MAX_LEVEL = 12;
 
 export const CLASSES = {
@@ -15,7 +15,7 @@ export const CLASSES = {
     descEn: 'Armored skeleton bruiser with high health, shield block, and sweeping blade strikes.',
     portrait: './assets/ui/portrait_warrior.png',
     maxHp: 145,
-    moveSpeed: 5.5,
+    moveSpeed: 3.3,
     damageBlock: 0.26,
     blockChance: 0.22,
     colorPrimary: 0x8b2635,

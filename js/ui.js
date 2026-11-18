@@ -19,6 +19,7 @@ import {
   MAGE_TALENT_TREE,
   CLASS_TALENT_TREES
 } from './config.js?v=20261117z25';
+import { attachSeamlessLoop } from './ambientVideo.js?v=20261117z25';
 
 const CLASS_ORDER = ['warrior', 'gunslinger', 'mage'];
 
@@ -1819,7 +1820,6 @@ export function createUIManager(initialCallbacks = {}) {
   campaignWorldBg.src = './assets/ui/world_map_loop.mp4?v=20261117z25';
   campaignWorldBg.poster = './assets/ui/world_map_clean_hq.jpg?v=20261117z25';
   campaignWorldBg.autoplay = true;
-  campaignWorldBg.loop = true;
   campaignWorldBg.muted = true;
   campaignWorldBg.playsInline = true;
   campaignWorldBg.setAttribute('playsinline', '');
@@ -1869,6 +1869,7 @@ export function createUIManager(initialCallbacks = {}) {
     worldPinsLayer.appendChild(pin);
   }
   worldStageFrame.append(campaignWorldBg, campaignWorldVignette, worldPinsLayer);
+  const worldMapVideoLoop = attachSeamlessLoop(campaignWorldBg, { fadeSec: 1.1 });
   campaignWorldView.append(worldTopBar, worldStageFrame);
 
   // --- SCENE 3: MISTY FOREST 25-STAGE WINDING PATH MAP (Animated Video Scene + 25 Stone Tile Nodes!) ---
@@ -1879,7 +1880,6 @@ export function createUIManager(initialCallbacks = {}) {
   forestBgImg.src = './assets/ui/forest_stages_loop.mp4?v=20261117z25';
   forestBgImg.poster = './assets/ui/forest_stages_clean_hq.jpg?v=20261117z25';
   forestBgImg.autoplay = true;
-  forestBgImg.loop = true;
   forestBgImg.muted = true;
   forestBgImg.playsInline = true;
   forestBgImg.setAttribute('playsinline', '');
@@ -1938,6 +1938,7 @@ export function createUIManager(initialCallbacks = {}) {
   }
   forestBoard.append(forestPathSvg, forestNodesLayer);
   forestStageFrame.append(forestBgImg, forestVignette, forestBoard);
+  const forestMapVideoLoop = attachSeamlessLoop(forestBgImg, { fadeSec: 1.1 });
 
   const forestBottomStrip = el('div', 'forest-bottom-strip');
   const forestInfoCol = el('div', 'forest-stage-info-col');
@@ -2903,10 +2904,16 @@ export function createUIManager(initialCallbacks = {}) {
       campaignWorldView.classList.toggle('hidden', campaignSubView !== 'world');
       campaignForestView.classList.toggle('hidden', campaignSubView !== 'forest');
       if (campaignSubView === 'world') {
-        try { campaignWorldBg.play?.().catch(() => {}); } catch {}
+        forestMapVideoLoop?.pause();
+        worldMapVideoLoop?.play();
       } else {
-        try { forestBgImg.play?.().catch(() => {}); } catch {}
+        worldMapVideoLoop?.pause();
+        forestMapVideoLoop?.play();
       }
+    } else {
+      // Leaving the campaign screen freezes the clips without rewinding them.
+      worldMapVideoLoop?.pause();
+      forestMapVideoLoop?.pause();
     }
 
     if (valid === 'arsenal' && lastHubState) {

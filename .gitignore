@@ -9,3 +9,11 @@ assets/models/*.blend
 assets/models/*.blend1
 strelok_3d.html
 assets/strelok_preview/
+# temporary debug/build artifacts
+debug_*.mp4
+*.bak_rootmotion
+model_preview*.html
+model_new_preview.html
+assets/models/9864cc7e-23c8-4f19-b851-b58f2539c26d.glb
+assets/env/misty_graveyard/dl_preview/
+assets/env/misty_graveyard/uploaded/

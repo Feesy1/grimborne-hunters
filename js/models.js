@@ -11,8 +11,11 @@ import { WEAPONS } from './config.js?v=20261117z25';
 
 const MODEL_PATHS = {
   gunslinger_tripo: './assets/models/Gunslinger_Tripo.glb?v=20261117z25',
-  warrior_tripo: './assets/models/Warrior_Tripo.glb?v=20261117z25',
+  // New clean warrior with Mixamo "Sword And Shield Run" baked in as Running_A.
+  warrior_run: './assets/models/Warrior_Run.glb?v=20261117z26',
+
   sword_tripo: './assets/models/Sword_Tripo.glb?v=20261117z25',
+  shield_custom: './assets/models/Shield_Custom.glb?v=20261117final',
   spear_tripo: './assets/models/Spear_Tripo.glb?v=20261117z25',
   zweihander_tripo: './assets/models/Zweihander_Tripo.glb?v=20261117z25',
   axe_tripo: './assets/models/Axe_Tripo.glb?v=20261117z25',
@@ -47,6 +50,9 @@ const MODEL_PATHS = {
 
 const gltfCache = new Map();
 const inFlightModelLoads = new Map();
+// Keys that failed to download (timeout / network error). They must not be
+// re-queued forever: every battle would otherwise wait another 60 seconds.
+const failedModelKeys = new Set();
 let preloadPromise = null;
 let sharedModelLoader = null;
 const cachedEyeEmissiveTextures = new Map();
@@ -493,11 +499,11 @@ function getWeaponAssetKey(weaponId = 'club') {
 function getHeroAssetKey(classId = 'warrior') {
   if (classId === 'gunslinger') return MODEL_PATHS.gunslinger_tripo ? 'gunslinger_tripo' : 'rogue';
   if (classId === 'mage') return 'mage_tripo';
-  return 'warrior_tripo';
+  return MODEL_PATHS.warrior_run ? 'warrior_run' : 'skel_warrior';
 }
 
 function loadSingleModelKey(key) {
-  if (!key || !MODEL_PATHS[key] || gltfCache.has(key)) return Promise.resolve();
+  if (!key || !MODEL_PATHS[key] || gltfCache.has(key) || failedModelKeys.has(key)) return Promise.resolve();
   if (inFlightModelLoads.has(key)) return inFlightModelLoads.get(key);
   if (!sharedModelLoader) sharedModelLoader = new GLTFLoader();
   const url = MODEL_PATHS[key];
@@ -513,7 +519,8 @@ function loadSingleModelKey(key) {
       resolve();
     };
     const timer = setTimeout(() => {
-      console.warn(`[models] Timeout loading ${url}, continuing with fallback`);
+      failedModelKeys.add(key);
+      console.warn(`[models] Timeout loading ${url}, continuing with fallback (marked failed, will not retry this session)`);
       finish();
     }, 60000);
 
@@ -538,7 +545,7 @@ function loadSingleModelKey(key) {
               clipMap.set(cleanClipName, clip);
             }
           }
-          const isTripoHero = key === 'gunslinger_tripo' || key === 'mage_tripo' || key === 'warrior_tripo';
+          const isTripoHero = key === 'gunslinger_tripo' || key === 'mage_tripo' || key === 'warrior_run' || key === 'warrior_tripo';
           const isTripoWeapon =
             key === 'shotgun_tripo' ||
             key === 'pistol_tripo' ||
@@ -613,6 +620,7 @@ function loadSingleModelKey(key) {
               }
             }
           });
+          failedModelKeys.delete(key);
           gltfCache.set(key, { scene: gltf.scene, clips: clipMap });
           finish();
         },
@@ -623,7 +631,8 @@ function loadSingleModelKey(key) {
             return;
           }
           clearTimeout(timer);
-          console.warn(`[models] Failed to load ${url}:`, err);
+          failedModelKeys.add(key);
+          console.warn(`[models] Failed to load ${url}:`, err, '(marked failed, will not retry this session)');
           finish();
         }
       );
@@ -636,7 +645,7 @@ function loadSingleModelKey(key) {
 }
 
 export async function ensureModelKeysLoaded(keys = []) {
-  const valid = [...new Set(keys.filter((k) => k && MODEL_PATHS[k] && !gltfCache.has(k)))];
+  const valid = [...new Set(keys.filter((k) => k && MODEL_PATHS[k] && !gltfCache.has(k) && !failedModelKeys.has(k)))];
   if (valid.length === 0) return;
   const conc = isMobileRuntimeDevice() ? 2 : 4;
   let cursor = 0;
@@ -649,9 +658,19 @@ export async function ensureModelKeysLoaded(keys = []) {
   await Promise.all(workers);
 }
 
+// Diagnostics: which assets failed to download this session (and were excluded from retries).
+export function getFailedModelKeys() {
+  return [...failedModelKeys];
+}
+
+export function resetFailedModelKeys() {
+  failedModelKeys.clear();
+}
+
 export function getBootModelKeys(classId = 'warrior', weaponId = null, levelDef = null) {
   const set = new Set([
     getHeroAssetKey(classId),
+    ...(classId === 'warrior' ? ['shield_custom'] : []),
     getWeaponAssetKey(weaponId || (classId === 'gunslinger' ? 'usp_pistol' : classId === 'mage' ? 'spark_staff' : 'club')),
     'zombie_tripo',
     'chest',
@@ -681,14 +700,14 @@ export function getBootModelKeys(classId = 'warrior', weaponId = null, levelDef 
 export function getMissingHeroOrWeaponKeys(classId = 'warrior', weaponId = null) {
   const out = [];
   const hk = getHeroAssetKey(classId);
-  if (hk && MODEL_PATHS[hk] && !gltfCache.has(hk)) out.push(hk);
+  if (hk && MODEL_PATHS[hk] && !gltfCache.has(hk) && !failedModelKeys.has(hk)) out.push(hk);
   const wk = getWeaponAssetKey(weaponId);
-  if (wk && MODEL_PATHS[wk] && !gltfCache.has(wk)) out.push(wk);
+  if (wk && MODEL_PATHS[wk] && !gltfCache.has(wk) && !failedModelKeys.has(wk)) out.push(wk);
   return out;
 }
 
 export function getMissingStageModelKeys(classId = 'warrior', weaponId = null, levelDef = null) {
-  return getBootModelKeys(classId, weaponId, levelDef).filter((k) => !gltfCache.has(k));
+  return getBootModelKeys(classId, weaponId, levelDef).filter((k) => !gltfCache.has(k) && !failedModelKeys.has(k));
 }
 
 export function preloadModels(onProgressOrOpts, maybeOpts = null) {
@@ -696,16 +715,16 @@ export function preloadModels(onProgressOrOpts, maybeOpts = null) {
 
   const opts = typeof onProgressOrOpts === 'object' && onProgressOrOpts !== null ? onProgressOrOpts : maybeOpts || {};
   const onProgress = typeof onProgressOrOpts === 'function' ? onProgressOrOpts : opts.onProgress;
-  const allKeys = Object.keys(MODEL_PATHS);
+  const allKeys = Object.keys(MODEL_PATHS).filter((k) => !failedModelKeys.has(k));
   const priorityList = Array.isArray(opts.priorityKeys) && opts.priorityKeys.length > 0
-    ? [...new Set(opts.priorityKeys.filter((k) => MODEL_PATHS[k]))]
+    ? [...new Set(opts.priorityKeys.filter((k) => MODEL_PATHS[k] && !failedModelKeys.has(k)))]
     : null;
 
   // Fast Progressive Boot (iPhone / MacBook / Web): await ONLY Tier-1 essential keys before opening the Hub,
   // then stream all remaining heroes, weapons & late bosses smoothly in the background!
   const isMobile = isMobileRuntimeDevice();
-  const tier1Keys = priorityList || [
-    'warrior_tripo',
+  const tier1Keys = (priorityList || [
+    'warrior_run',
     'sword_tripo',
     'zombie_tripo',
     'chest',
@@ -713,7 +732,7 @@ export function preloadModels(onProgressOrOpts, maybeOpts = null) {
     'skel_minion',
     'skel_warrior',
     ...(isMobile ? [] : ['gunslinger_tripo', 'pistol_tripo', 'mage_tripo', 'staff_tripo'])
-  ];
+  ]).filter((k) => !failedModelKeys.has(k));
   const tier1Set = new Set(tier1Keys);
   const tier2Keys = allKeys.filter((k) => !tier1Set.has(k));
 
@@ -1643,6 +1662,9 @@ function createHeroWeaponMesh(weaponId, mageElement = null) {
 // ============================================================================
 export function createArsenalShowcaseWeapon(weaponId = 'club', mageElement = 'water', isLocked = false) {
   const root = new THREE.Group();
+  // Materials are cloned per instance below — remember them so the showcase
+  // can actually free its VRAM when a different weapon is previewed.
+  const showcaseMats = [];
   const floatPivot = new THREE.Group();
   const tiltPivot = new THREE.Group();
   root.add(floatPivot);
@@ -1712,6 +1734,7 @@ export function createArsenalShowcaseWeapon(weaponId = 'club', mageElement = 'wa
       n.castShadow = true;
       n.receiveShadow = false;
       const list = Array.isArray(n.material) ? n.material.map((m) => m.clone()) : [n.material.clone()];
+      showcaseMats.push(...list);
       for (const m of list) {
         if (isLocked) {
           if (m.color) m.color.setHex(0x524c66);
@@ -1792,7 +1815,17 @@ export function createArsenalShowcaseWeapon(weaponId = 'club', mageElement = 'wa
     showcaseStaffVfx?.updateVfx(elapsedTime, 0);
   }
 
-  return { root, update };
+  function dispose() {
+    for (const mat of showcaseMats) {
+      if (mat?.dispose) mat.dispose();
+    }
+    showcaseMats.length = 0;
+    rawModel?.traverse?.((n) => {
+      if (n.isSkinnedMesh && n.skeleton) n.skeleton.dispose();
+    });
+  }
+
+  return { root, update, dispose };
 }
 
 function createMagePotionFlask() {
@@ -1838,10 +1871,19 @@ function createAnimController(modelRoot, clipMap, idleClipName = 'Idle', moveCli
   function setBaseState(clipName, timeScale = 1.0) {
     const next = getAction(clipName) || getAction('Idle');
     if (!next) return;
+    // Always update the playback rate (even for the already-active clip) so
+    // the gait frequency tracks travel speed; otherwise steps stay at frame 0
+    // rate and the feet slide across the ground.
     next.timeScale = timeScale;
+    // Clear any paused state left over from the earlier syncPhase experiment
+    // (a paused clip freezes mid-pose and looks like a teleport).
+    if (next.paused) { next.paused = false; }
     if (currentBase === next) return;
-    next.reset().fadeIn(0.16).play();
-    if (currentBase) currentBase.fadeOut(0.16);
+    // Reset only when the clip is not already running (otherwise a reset at
+    // every Idle<->Run switch makes the pose jump like a teleport).
+    if (!next.isRunning()) next.reset();
+    next.fadeIn(0.22).play();
+    if (currentBase) currentBase.fadeOut(0.22);
     currentBase = next;
   }
 
@@ -2059,13 +2101,13 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
   }
   const safeClass = CLASS_SKELETON_ASSET[classId] ? classId : 'warrior';
   const isTripoGunslinger = safeClass === 'gunslinger' && gltfCache.has('gunslinger_tripo');
-  const isTripoWarrior = safeClass === 'warrior' && gltfCache.has('warrior_tripo');
+  const isTripoWarrior = safeClass === 'warrior' && (gltfCache.has('warrior_run') || gltfCache.has('warrior_tripo'));
   const isTripoMage = safeClass === 'mage' && gltfCache.has('mage_tripo');
   const isAnyTripoHero = isTripoGunslinger || isTripoWarrior || isTripoMage;
   const assetKey = isTripoGunslinger
     ? 'gunslinger_tripo'
     : isTripoWarrior
-      ? 'warrior_tripo'
+      ? (gltfCache.has('warrior_run') ? 'warrior_run' : 'warrior_tripo')
       : isTripoMage
         ? 'mage_tripo'
         : CLASS_SKELETON_ASSET[safeClass];
@@ -2097,6 +2139,7 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
   let reloadBlend = 0;
   let walkPhase = 0;
   let moveBlend = 0;
+  let gaitDistance = 0;   // travelled distance used to phase-lock Mixamo clips
 
   let modelInstance = null;
   let animCtrl = null;
@@ -2109,6 +2152,7 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
   let upperArmL = null;
   let lowerArmL = null;
   let mountedWeaponObj = null;
+  let mountedShieldObj = null;
   let embeddedWarriorSwordNode = null;
   let embeddedPistolNode = null;
   let embeddedShotgunNode = null;
@@ -2257,8 +2301,11 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
       }
     });
 
-    if (isTripoWarrior || isTripoMage || (hasBakedGunslingerClips && embeddedShotgunNode && !embeddedPistolNode)) {
-      // Legacy Mixamo NLA exports face +X in glTF Y-up; rotate -90 deg around Y to face +Z! (New HeroWeapon_Pistol rig already faces +Z.)
+    // The new warrior_run model already faces +Z (verified in Idle), so it
+    // must NOT get the legacy -90deg rotation — that made it run sideways.
+    const legacyFaceFix = isTripoMage || (hasBakedGunslingerClips && embeddedShotgunNode && !embeddedPistolNode) ||
+      (isTripoWarrior && assetKey !== 'warrior_run');
+    if (legacyFaceFix) {
       modelInstance.rotation.y = -Math.PI * 0.5;
     }
 
@@ -2282,6 +2329,8 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
       }
     }
 
+    // Tripo warrior now has baked Mixamo clips (Idle, Running_A, Attack, ...):
+    // Enable baked animation playback (Idle / Run / attack) for the new warrior.
     if (!isTripoGunslinger || hasBakedGunslingerClips) {
       animCtrl = createAnimController(modelInstance, asset.clips, 'Idle', 'Running_A');
     }
@@ -2590,12 +2639,50 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
       mountedWeaponObj.parent.remove(mountedWeaponObj);
     }
     mountedWeaponObj = null;
+    if (mountedShieldObj && mountedShieldObj.parent) {
+      mountedShieldObj.parent.remove(mountedShieldObj);
+    }
+    mountedShieldObj = null;
 
     if (isTripoMage) {
       return;
     }
 
     if (isTripoWarrior) {
+      // warrior_run ships a clean body; its sword and shield are mounted here
+      // as children of the hand bones so they follow every animation exactly.
+      if (assetKey === 'warrior_run') {
+        // Sword in the right hand.
+        if (handR) {
+          // Load the raw sword GLB and mount it directly — no procedural
+          // helper offsets, so the grip sits exactly at the hand bone origin.
+          const swordAsset = gltfCache.get('sword_tripo') || gltfCache.get(assetKey);
+          if (swordAsset?.scene) {
+            mountedWeaponObj = swordAsset.scene.clone(true);
+            mountedWeaponObj.name = 'HeroWeapon_Sword_Mount';
+            mountedWeaponObj.scale.setScalar(0.006);
+            mountedWeaponObj.position.set(-0.4787, 0.1255, 0.0683);
+            mountedWeaponObj.rotation.set(-1.04, 0.24, -1.52);
+            mountedWeaponObj.traverse((n) => { if (n.isMesh) { n.castShadow = true; n.frustumCulled = false; } });
+            handR.add(mountedWeaponObj);
+          } else {
+            mountedWeaponObj = createHeroWeaponMesh(currentWeaponId, null);
+            mountedWeaponObj.name = 'HeroWeapon_Sword_Mount';
+            handR.add(mountedWeaponObj);
+          }
+        }
+        // Shield in the left hand (user's 3D model), bone-local placement.
+        if (handL && gltfCache.has('shield_custom')) {
+          const sh = gltfCache.get('shield_custom').scene.clone(true);
+          sh.name = 'HeroWeapon_Shield_Mount';
+          sh.scale.setScalar(0.42);
+          sh.position.set(0, -0.06, 0);
+          sh.rotation.set(Math.PI / 2, 0, 0);
+          handL.add(sh);
+          mountedShieldObj = sh;
+        }
+        return;
+      }
       const useEmbeddedSword = currentWeaponId === 'club' || !WEAPONS[currentWeaponId];
       if (embeddedWarriorSwordNode) {
         embeddedWarriorSwordNode.visible = useEmbeddedSword;
@@ -3018,8 +3105,14 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
           } else if (moveLocalZ < -0.35 && asset?.clips?.has('Running_Back')) {
             runClip = 'Running_Back';
           }
+        } else if (isTripoWarrior && moveLocalZ < -0.35 && asset?.clips?.has('Running_Back')) {
+          // New forward run (Running_A) vs old clip kept for walking BACKWARD.
+          runClip = 'Running_Back';
         }
-        animCtrl.setBaseState(runClip, Math.max(0.95, Math.min(2.15, speedRatio * 1.32)));
+        const runScale = assetKey === 'warrior_run'
+          ? Math.max(0.95, Math.min(1.6, speedRatio * 1.15))
+          : Math.max(0.95, Math.min(2.15, speedRatio * 1.32));
+        animCtrl.setBaseState(runClip, runScale);
       } else {
         animCtrl.setBaseState('Idle', 1.0);
       }
@@ -3129,8 +3222,29 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
   root.userData.flashHit = flashHit;
   root.userData.update = update;
 
+  // Free the GPU memory owned by this particular copy of the hero.
+  // Shared geometry/textures from gltfCache are intentionally NOT disposed —
+  // other instances still use them. Only cloned materials, skeletons and
+  // mixer bindings belong to this instance.
+  function dispose() {
+    if (animCtrl?.mixer && modelInstance) {
+      animCtrl.mixer.stopAllAction();
+      animCtrl.mixer.uncacheRoot(modelInstance);
+    }
+    if (modelInstance) {
+      modelInstance.traverse((n) => {
+        if (n.isSkinnedMesh && n.skeleton) n.skeleton.dispose();
+      });
+    }
+    for (const item of instanceMats) {
+      if (item.mat?.dispose) item.mat.dispose();
+    }
+    instanceMats.length = 0;
+  }
+
   return {
     root,
+    dispose,
     setWeapon,
     setElement,
     setBeastMode,
@@ -3148,25 +3262,47 @@ export function createCompanionMesh() {
   const root = new THREE.Group();
   const asset = gltfCache.get('skel_minion');
   let animCtrl = null;
+  let companionInst = null;
+  const companionMats = [];
 
   if (asset) {
     const inst = cloneSkinned(asset.scene);
+    companionInst = inst;
     inst.scale.setScalar(0.62);
     inst.traverse((n) => {
       if (n.isMesh && /Eyes/i.test(n.name)) {
-        n.material = new THREE.MeshStandardMaterial({
+        const eyeMat = new THREE.MeshStandardMaterial({
           color: 0x67e8f9,
           emissive: 0x06b6d4,
           emissiveIntensity: 2.2
         });
+        n.material = eyeMat;
+        companionMats.push(eyeMat);
       }
     });
     root.add(inst);
     animCtrl = createAnimController(inst, asset.clips, 'Idle', 'Running_A');
   }
 
+  function dispose() {
+    if (animCtrl?.mixer && companionInst) {
+      animCtrl.mixer.stopAllAction();
+      animCtrl.mixer.uncacheRoot(companionInst);
+    }
+    if (companionInst) {
+      companionInst.traverse((n) => {
+        if (n.isSkinnedMesh && n.skeleton) n.skeleton.dispose();
+      });
+    }
+    for (const mat of companionMats) {
+      if (mat?.dispose) mat.dispose();
+    }
+    companionMats.length = 0;
+  }
+
   return {
     root,
+    dispose,
     playAttackAnim() {
       animCtrl?.triggerOneShot('1H_Melee_Attack_Chop', 1.9);
     },

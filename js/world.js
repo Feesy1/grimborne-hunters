@@ -4,6 +4,7 @@
 import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { ARENA_HALF_SIZE } from './config.js?v=20261117z25';
+import { createMistyArena } from './mistyArena.js?v=20261117z25';
 
 // ============================================================================
 // Procedural Textures: Gothic Slate Cobblestone Floor & Soft Radial Glow Sprite
@@ -77,6 +78,152 @@ function createCourtyardStoneTexture() {
   tex.repeat.set(11, 11);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 8;
+  return tex;
+}
+
+// Grass-overgrown purple-grey graveyard cobblestone for the Misty Forest arena.
+// Colours come from the technical reference (#493F55 / #65566E stone, #626C4B moss).
+function createGraveyardStoneTexture() {
+  const size = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#2b2338';
+  ctx.fillRect(0, 0, size, size);
+
+  let seed = 9137;
+  const rand = () => {
+    seed = (seed * 16807) % 2147483647;
+    return (seed - 1) / 2147483646;
+  };
+
+  const rows = 6;
+  const rowH = size / rows;
+  for (let r = 0; r < rows; r++) {
+    const cols = r % 2 === 0 ? 5 : 6;
+    const colW = size / cols;
+    const offset = (r % 2) * (colW * 0.45);
+    for (let c = -1; c <= cols; c++) {
+      const x = c * colW + offset + 2;
+      const y = r * rowH + 2;
+      const w = colW - 5;
+      const h = rowH - 5;
+      const lum = 58 + Math.floor(rand() * 30);
+      ctx.fillStyle = `rgb(${lum + 10}, ${lum + 5}, ${lum + 22})`;
+      const j = () => (rand() - 0.5) * 7;
+      ctx.beginPath();
+      ctx.moveTo(x + 4 + j(), y + 3 + j());
+      ctx.lineTo(x + w - 2 + j(), y + 2 + j());
+      ctx.lineTo(x + w - 1 + j(), y + h - 3 + j());
+      ctx.lineTo(x + 3 + j(), y + h - 2 + j());
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(16, 12, 24, 0.72)';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+      // cracks
+      if (rand() < 0.5) {
+        ctx.strokeStyle = 'rgba(20, 14, 30, 0.6)';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        let cx = x + w * (0.2 + rand() * 0.5);
+        let cy = y + 2;
+        ctx.moveTo(cx, cy);
+        for (let s = 0; s < 3; s++) {
+          cx += (rand() - 0.5) * 18;
+          cy += h * 0.3;
+          ctx.lineTo(cx, cy);
+        }
+        ctx.stroke();
+      }
+      // moss growing in the joints and over the stone
+      if (rand() < 0.55) {
+        for (let k = 0; k < 3; k++) {
+          ctx.fillStyle = `rgba(94, 108, 66, ${(0.12 + rand() * 0.2).toFixed(2)})`;
+          ctx.beginPath();
+          ctx.ellipse(x + w * rand(), y + h * rand(), 5 + rand() * 12, 3 + rand() * 7, rand() * 3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(5, 5);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  return tex;
+}
+
+function createGroundDecalTexture(inner, outer) {
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const g = ctx.createRadialGradient(size / 2, size / 2, 2, size / 2, size / 2, size / 2);
+  g.addColorStop(0, inner);
+  g.addColorStop(0.55, outer);
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function createGrassPatchTexture() {
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  let seed = 5527;
+  const rand = () => {
+    seed = (seed * 16807) % 2147483647;
+    return (seed - 1) / 2147483646;
+  };
+  for (let i = 0; i < 280; i++) {
+    const x = rand() * size;
+    const y = rand() * size;
+    const len = 10 + rand() * 26;
+    const alpha = 0.18 + rand() * 0.28;
+    ctx.strokeStyle = `rgba(${88 + Math.floor(rand() * 32)}, ${116 + Math.floor(rand() * 34)}, ${58 + Math.floor(rand() * 24)}, ${alpha.toFixed(2)})`;
+    ctx.lineWidth = 1.4 + rand() * 2.0;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + (rand() - 0.5) * 10, y - len);
+    ctx.stroke();
+  }
+  const mask = ctx.createRadialGradient(size / 2, size / 2, 10, size / 2, size / 2, size / 2);
+  mask.addColorStop(0, 'rgba(0,0,0,1)');
+  mask.addColorStop(0.55, 'rgba(0,0,0,0.65)');
+  mask.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.globalCompositeOperation = 'destination-in';
+  ctx.fillStyle = mask;
+  ctx.fillRect(0, 0, size, size);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function createSlimeTexture() {
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const g = ctx.createRadialGradient(size / 2, size / 2, 3, size / 2, size / 2, size / 2);
+  g.addColorStop(0.0, 'rgba(179, 243, 75, 0.65)');
+  g.addColorStop(0.45, 'rgba(131, 197, 47, 0.42)');
+  g.addColorStop(0.8, 'rgba(90, 150, 40, 0.18)');
+  g.addColorStop(1.0, 'rgba(90, 150, 40, 0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }
 
@@ -312,7 +459,14 @@ export function createArenaWorld(canvas) {
     dir: new THREE.Color(0xe2ebff),
     plazaRune: new THREE.Color(0xa855f7)
   };
-  const PALETTE_FOREST = PALETTE_NORMAL;
+  const PALETTE_FOREST = {
+    bg: new THREE.Color(0x3d466f),
+    fog: new THREE.Color(0x4a3c72),
+    hemiSky: new THREE.Color(0xbcaee6),
+    hemiGround: new THREE.Color(0x6a4a3a),
+    dir: new THREE.Color(0xd6d8ff),
+    plazaRune: new THREE.Color(0x8150b4)
+  };
   const PALETTE_BOSS = {
     bg: new THREE.Color(0x281320),
     fog: new THREE.Color(0x2c1625),
@@ -330,7 +484,7 @@ export function createArenaWorld(canvas) {
     plazaRune: new THREE.Color(0xf97316)
   };
   let currentBiome = 'courtyard';
-  const getCombatBasePalette = () => PALETTE_NORMAL;
+  const getCombatBasePalette = () => (currentBiome === 'misty_forest' ? PALETTE_FOREST : PALETTE_NORMAL);
 
   scene.background = PALETTE_NORMAL.bg.clone();
   scene.fog = new THREE.Fog(PALETTE_NORMAL.fog.clone(), 48, 112);
@@ -400,12 +554,24 @@ export function createArenaWorld(canvas) {
   const arenaGroup = new THREE.Group();
   scene.add(arenaGroup);
 
+  // Clean standalone arena scene for chapters 6+ (painted plate + 3D props).
+  const mistyArena = createMistyArena();
+  arenaGroup.add(mistyArena.group);
+
   const courtyardPropsGroup = new THREE.Group();
   courtyardPropsGroup.visible = true;
+  // Original courtyard props were authored for a 54 m arena — scale the whole
+  // group so the old map keeps its exact proportional layout after enlargement.
+  courtyardPropsGroup.scale.setScalar(ARENA_HALF_SIZE / 27);
   arenaGroup.add(courtyardPropsGroup);
 
   const forestPropsGroup = new THREE.Group();
   forestPropsGroup.visible = false;
+  // The reference art is seen from a ~45° azimuth. Rotating the whole graveyard
+  // group by -45° lets us keep the simple percentage-based layout while the
+  // combat camera (+45°) shows it exactly like the reference image.
+  const FOREST_GROUP_YAW = Math.PI / 4;
+  forestPropsGroup.rotation.y = FOREST_GROUP_YAW;
   arenaGroup.add(forestPropsGroup);
 
   const forestMistPatches = [];
@@ -413,10 +579,47 @@ export function createArenaWorld(canvas) {
   const B = ARENA_HALF_SIZE; // 27
   const arenaSpan = B * 2;
   const cobbleTex = createCourtyardStoneTexture();
+  const graveyardCobbleTex = createGraveyardStoneTexture();
+  const grassPatchTex = createGrassPatchTexture();
+  const slimeTex = createSlimeTexture();
+  const mossDecalTex = createGroundDecalTexture('rgba(98,108,75,0.62)', 'rgba(79,92,58,0.28)');
+  const redLeafTex = createGroundDecalTexture('rgba(139,45,66,0.6)', 'rgba(110,32,52,0.22)');
   const forestMistTex = createForestMistTexture();
   const softGlowTex = createSoftGlowTexture();
   const terrainMicroDetailTex = createTerrainMicroDetailTexture();
   const arcaneCircleTex = createArcaneCircleTexture();
+
+  // Low-lying violet mist drifting around the Misty Forest arena perimeter.
+  const forestMistGeo = new THREE.PlaneGeometry(1, 1);
+  for (let i = 0; i < 22; i++) {
+    const a = (i / 22) * Math.PI * 2;
+    const dist = B - 1.0 + (i % 3) * 1.7;
+    const x = Math.cos(a) * dist;
+    const z = Math.sin(a) * dist;
+    const mat = new THREE.MeshBasicMaterial({
+      map: forestMistTex,
+      color: 0xa66acf,
+      transparent: true,
+      opacity: 0.1,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide
+    });
+    const mesh = new THREE.Mesh(forestMistGeo, mat);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.scale.setScalar(9 + (i % 4) * 2.5);
+    mesh.position.set(x, 0.14 + (i % 2) * 0.05, z);
+    forestPropsGroup.add(mesh);
+    forestMistPatches.push({
+      mesh,
+      mat,
+      baseX: x,
+      baseZ: z,
+      speed: 0.10 + (i % 5) * 0.025,
+      phase: i * 0.73,
+      baseOpacity: 0.07 + (i % 4) * 0.018
+    });
+  }
 
   // Fast 129x129 terrain height grid sampled from Necropolis_Terrain so characters stay 100% planted on uneven 3D ground!
   const TERRAIN_GRID_RES = 129;
@@ -880,6 +1083,48 @@ export function createArenaWorld(canvas) {
     { x:  23.6, z:  5.6,  radius: 1.85 }
   ];
 
+  // Colliders matched to the graveyard props actually placed on this arena.
+  // (The old FOREST_OBSTACLES belonged to the previous 54 m layout and had
+  // invisible blockers near lanterns/fences — do not use them here.)
+  const GRAVEYARD_OBSTACLES = (() => {
+    const mg = (p) => ((p - 50) / 50) * (B - 4);
+    // Radii are deliberately tight so the current built-in fallback props do
+    // not create invisible walls around themselves. They can be enlarged once
+    // the final generated models with known bounds are installed.
+    // Only large structural props get colliders. Small decorations (campfire,
+    // skull posts, graves, barrels, chest, rubble) are walk-through on purpose:
+    // their fallback models are tiny and invisible walls around them feel wrong.
+    const list = [
+      // Arches intentionally have NO collider: the player may walk under them.
+      // Leaving the arena is already prevented by the radial boundary.
+      { x: mg(28), z: mg(43), radius: 0.7 },
+      { x: mg(64), z: mg(44), radius: 0.7 },
+      { x: mg(62), z: mg(28), radius: 0.7 },
+      { x: mg(42), z: mg(76), radius: 0.7 },
+      { x: mg(12), z: mg(34), radius: 1.4 },
+      { x: mg(10), z: mg(49), radius: 0.8 },
+      { x: mg(62), z: mg(55), radius: 1.1 },
+      // Arch pillars only (the passage between them stays open).
+      { x: mg(50) - 1.4, z: mg(12), radius: 0.6 },
+      { x: mg(50) + 1.4, z: mg(12), radius: 0.6 },
+      { x: mg(23) - 1.25, z: mg(20) + 0.33, radius: 0.6 },
+      { x: mg(23) + 1.25, z: mg(20) - 0.33, radius: 0.6 },
+      { x: mg(85) - 1.4, z: mg(20), radius: 0.6 },
+      { x: mg(85) + 1.4, z: mg(20), radius: 0.6 },
+      { x: mg(24) - 1.25, z: mg(72) - 0.33, radius: 0.6 },
+      { x: mg(24) + 1.25, z: mg(72) + 0.33, radius: 0.6 },
+      { x: mg(91) - 1.25, z: mg(49) + 0.33, radius: 0.6 },
+      { x: mg(91) + 1.25, z: mg(49) - 0.33, radius: 0.6 },
+      { x: mg(86), z: mg(17), radius: 1.3 },
+      { x: mg(55), z: mg(20), radius: 1.0 },
+      { x: mg(20), z: mg(25), radius: 1.0 },
+      { x: mg(76), z: mg(60), radius: 1.0 }
+    ];
+    // Trees also have no collider for now: their fallback silhouettes are thin
+    // and a circular blocker around them reads as an invisible wall.
+    return list;
+  })();
+
   const obstacles = COURTYARD_OBSTACLES.map((o) => ({ ...o }));
 
   addFlickerLight(-14.5, 2.4, 5.5, 0xff8c24, 3.2, 18, 0.5, true, courtyardPropsGroup);    // Campfire with real 3D logs & flames!
@@ -928,16 +1173,74 @@ export function createArenaWorld(canvas) {
     coffin: './assets/env/coffin_decorated.gltf',
     banner_red: './assets/env/banner_patternA_red.gltf.glb',
     barrels: './assets/env/barrel_small_stack.gltf.glb',
-    crates: './assets/env/crates_stacked.gltf.glb'
+    crates: './assets/env/crates_stacked.gltf.glb',
+
+    // Generated high-detail props (drop the .glb files into this folder later).
+    // Missing files are detected with a HEAD request and silently skipped, so
+    // the arena works with the built-in fallback props until they arrive.
+    gen_arch: './assets/env/misty_graveyard/gen_arch.glb',
+    gen_arch_broken: './assets/env/misty_graveyard/gen_arch_broken.glb',
+    gen_column: './assets/env/misty_graveyard/gen_column.glb',
+    gen_tree_large: './assets/env/misty_graveyard/tree_dead_large.glb',
+    gen_tree_small: './assets/env/misty_graveyard/tree_dead_small.glb',
+    gen_roots: './assets/env/misty_graveyard/roots_large.glb',
+    gen_gravestone: './assets/env/misty_graveyard/gravestone_set.glb',
+    gen_cross: './assets/env/misty_graveyard/cross_stone.glb',
+    gen_fence: './assets/env/misty_graveyard/gen_fence.glb',
+    gen_coffin: './assets/env/misty_graveyard/gen_coffin.glb',
+    gen_barrel: './assets/env/misty_graveyard/gen_barrel.glb',
+    gen_crate: './assets/env/misty_graveyard/gen_crate.glb',
+    gen_chest: './assets/env/misty_graveyard/chest_treasure.glb',
+    gen_tent: './assets/env/misty_graveyard/gen_tent.glb',
+    gen_campfire: './assets/env/misty_graveyard/gen_campfire.glb',
+    gen_torch: './assets/env/misty_graveyard/torch_wall.glb',
+    gen_lantern: './assets/env/misty_graveyard/gen_lantern.glb',
+    gen_banner: './assets/env/misty_graveyard/banner_skull.glb',
+    gen_rubble: './assets/env/misty_graveyard/gen_rubble.glb',
+    gen_bones: './assets/env/misty_graveyard/bone_skull_set.glb',
+    gen_bush: './assets/env/misty_graveyard/red_bush_set.glb',
+    gen_moss: './assets/env/misty_graveyard/moss_patch_set.glb',
+    gen_slime: './assets/env/misty_graveyard/slime_pool.glb',
+    gen_path: './assets/env/misty_graveyard/stone_path.glb',
+    gen_portal: './assets/env/misty_graveyard/gen_portal.glb',
+    gen_ruin: './assets/env/misty_graveyard/gen_ruin.glb',
+    gen_wall: './assets/env/misty_graveyard/gen_wall.glb'
+  };
+  const OPTIONAL_GEN_KEYS = new Set(Object.keys(envPaths).filter((k) => k.startsWith('gen_')));
+  // Each generated model is normalized to this height at load time, so the
+  // placement code can keep the same scale numbers it used for the fallbacks.
+  const GEN_TARGET_HEIGHTS = {
+    gen_tent: 2.6, gen_fence: 1.8, gen_portal: 5.0, gen_arch: 3.0,
+    gen_arch_broken: 2.4, gen_campfire: 0.7, gen_coffin: 1.2, gen_wall: 3.0,
+    gen_column: 4.5, gen_ruin: 3.0, gen_crate: 1.2, gen_barrel: 1.1, gen_lantern: 3.6,
+    gen_rubble: 1.2, gen_lantern: 1.5, gen_torch: 1.2, gen_banner: 2.5,
+    gen_tree_large: 9.0, gen_tree_small: 5.0, gen_gravestone: 1.4,
+    gen_cross: 1.8, gen_bones: 0.3, gen_bush: 0.7, gen_moss: 0.15,
+    gen_slime: 0.1, gen_path: 0.2, gen_roots: 1.5
   };
 
   const ready = (async () => {
     const loader = new GLTFLoader();
     const templates = new Map();
 
+    // Generated props are opt-in through a small manifest file, so missing
+    // .glb files never produce 404 noise in the console.
+    let availableGeneratedFiles = new Set();
+    try {
+      const manifestRes = await fetch('./assets/env/misty_graveyard/manifest.json');
+      if (manifestRes.ok) {
+        const manifest = await manifestRes.json();
+        availableGeneratedFiles = new Set(Array.isArray(manifest.models) ? manifest.models : []);
+      }
+    } catch {}
+
     const envEntries = Object.entries(envPaths);
     const loadEnvProp = ([key, url]) =>
       new Promise((resolve) => {
+        if (OPTIONAL_GEN_KEYS.has(key) && !availableGeneratedFiles.has(url.split('/').pop())) {
+          resolve();
+          return;
+        }
         let settled = false;
         let attempt = 0;
         const finish = () => {
@@ -992,7 +1295,7 @@ export function createArenaWorld(canvas) {
                       roughness: 0.85,
                       metalness: 0.05
                     });
-                  } else if (n.material && key !== 'banner_red') {
+                  } else if (n.material && key !== 'banner_red' && !key.startsWith('gen_')) {
                     // Moody twilight slate stone tint so KayKit props match the dark courtyard
                     const cloned = Array.isArray(n.material)
                       ? n.material.map((m) => m.clone())
@@ -1005,6 +1308,25 @@ export function createArenaWorld(canvas) {
                   }
                 }
               });
+              if (key.startsWith('gen_')) {
+                const target = GEN_TARGET_HEIGHTS[key] || 2;
+                const box = new THREE.Box3().setFromObject(gltf.scene);
+                const h = box.getSize(new THREE.Vector3()).y || 1;
+                gltf.scene.scale.setScalar(target / h);
+                const box2 = new THREE.Box3().setFromObject(gltf.scene);
+                gltf.scene.position.y -= box2.min.y;
+                // Bring the bright Tripo textures closer to the cool palette
+                // of the arena instead of leaving them looking pasted on.
+                const coolTint = new THREE.Color(0x9a90ad);
+                gltf.scene.traverse((n) => {
+                  if (!n.isMesh || !n.material) return;
+                  const list = Array.isArray(n.material) ? n.material : [n.material];
+                  for (const m of list) {
+                    if (m.color) m.color.multiply(coolTint);
+                    if (m.emissiveIntensity) m.emissiveIntensity *= 0.7;
+                  }
+                });
+              }
               templates.set(key, gltf.scene);
               finish();
             },
@@ -1052,12 +1374,21 @@ export function createArenaWorld(canvas) {
         return null;
       }
       const inst = tpl.clone(true);
-      inst.position.set(x, y, z);
+      const baseScale = tpl.scale.x || 1;
+      const baseY = tpl.position.y || 0;
+      inst.position.set(x, y + baseY * scale, z);
       inst.rotation.y = rotY;
-      inst.scale.setScalar(scale);
+      inst.scale.setScalar(baseScale * scale);
       parent.add(inst);
       inst.updateMatrixWorld(true);
       return inst;
+    }
+
+    // Use the generated GLB when it has been dropped into misty_graveyard/,
+    // otherwise fall back to the built-in KayKit prop with the same footprint.
+    function placeGO(genKey, fallbackKey, x, y, z, rotY = 0, scale = 1.0, parent = forestPropsGroup) {
+      return placeProp(genKey, x, y, z, rotY, scale, parent)
+        || (fallbackKey ? placeProp(fallbackKey, x, y, z, rotY, scale, parent) : null);
     }
 
     // 1. Perimeter 3D Iron Fences, Stone Fence Pillars, Gothic Gates & Crimson Banners
@@ -1206,6 +1537,202 @@ export function createArenaWorld(canvas) {
       sp.scale.set(0.65, 0.75, 1);
       courtyardPropsGroup.add(sp);
     }
+
+    // =========================================================================
+    // MISTY GRAVEYARD ARENA (chapters 6+) — layout from the technical reference.
+    // Every prop first tries the generated GLB from misty_graveyard/ and falls
+    // back to a built-in KayKit prop (or simple procedural geometry).
+    // =========================================================================
+    const mx = (percent) => ((percent - 50) / 50) * (B - 4);
+    const mz = (percent) => ((percent - 50) / 50) * (B - 4);
+
+    function makeTentFallback(x, z, rot) {
+      const grp = new THREE.Group();
+      const cloth = new THREE.MeshStandardMaterial({ color: 0x6d2f38, roughness: 0.95, side: THREE.DoubleSide });
+      const wood = new THREE.MeshStandardMaterial({ color: 0x4a3528, roughness: 0.85 });
+      const roof = new THREE.Mesh(new THREE.ConeGeometry(2.1, 2.4, 4), cloth);
+      roof.rotation.y = Math.PI / 4;
+      roof.position.y = 1.35;
+      roof.castShadow = true;
+      grp.add(roof);
+      for (const sx of [-1, 1]) {
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, 2.6, 6), wood);
+        pole.position.set(sx * 1.35, 1.3, 0);
+        grp.add(pole);
+      }
+      grp.position.set(x, 0, z);
+      grp.rotation.y = rot;
+      forestPropsGroup.add(grp);
+      return grp;
+    }
+
+    function makeRedBush(x, z, scale) {
+      const grp = new THREE.Group();
+      const mat = new THREE.MeshStandardMaterial({ color: 0x6d2440, roughness: 0.9 });
+      for (let i = 0; i < 4; i++) {
+        const s = new THREE.Mesh(new THREE.IcosahedronGeometry(0.32 + (i % 2) * 0.12, 0), mat);
+        s.position.set((i - 1.5) * 0.22, 0.24 + (i % 2) * 0.12, i % 2 ? 0.15 : -0.1);
+        grp.add(s);
+      }
+      grp.position.set(x, 0, z);
+      grp.scale.setScalar(scale);
+      forestPropsGroup.add(grp);
+    }
+
+
+    // Circular iron-fence perimeter with four visual-only exit arches.
+    const perimeterSegments = 72;
+    const ringRadius = B - 1.6;
+    for (let i = 0; i < perimeterSegments; i++) {
+      const a = (i / perimeterSegments) * Math.PI * 2;
+      const x = Math.cos(a) * ringRadius;
+      const z = Math.sin(a) * ringRadius;
+      const rot = -a + Math.PI / 2;
+      // New stone-based iron fence forms the main railing; occasional stone
+      // wall sections and small gates break it up, like the reference.
+      if (i % 12 === 0) {
+        placeProp('arch_gate', x, 0, z, rot, 1.0);
+      } else if (i % 9 === 0) {
+        placeGO('gen_wall', null, x, 0, z, rot, 1.0);
+      } else {
+        placeGO('gen_fence', 'fence', x, 0, z, rot, 1.0);
+      }
+    }
+
+    // Visual-only exits (no passage, no collider change — colliders come from FOREST_OBSTACLES).
+    placeGO('gen_arch', 'arch_gate', mx(50), 0, mz(12), 0, 2.0);
+    placeGO('gen_arch_broken', 'arch', mx(23), 0, mz(20), -0.26, 1.7);
+    placeGO('gen_arch_broken', 'arch', mx(85), 0, mz(20), 0, 1.85);
+    placeGO('gen_arch_broken', 'arch', mx(24), 0, mz(72), 0.26, 1.75);
+    placeGO('gen_arch_broken', 'arch', mx(91), 0, mz(49), -0.26, 1.7);
+    placeGO('gen_banner', 'banner_red', mx(41), 0, mz(7), 0, 1.2);
+    placeGO('gen_banner', 'banner_red', mx(59), 0, mz(7), 0, 1.2);
+    // Purple rune portal from the uploaded set — static reference, no interaction.
+    placeGO('gen_portal', null, mx(86), 0, mz(17), -0.35, 1.0);
+    placeGO('gen_ruin', null, mx(55), 0, mz(20), 0.4, 1.0);
+    placeGO('gen_wall', null, mx(20), 0, mz(25), 0.2, 1.0);
+    placeGO('gen_wall', null, mx(76), 0, mz(60), -0.5, 1.0);
+
+    // Ruined columns and central landmarks.
+    for (const [px, pz, s] of [[28, 43, 1.05], [64, 44, 1.0], [62, 28, 0.95], [42, 76, 1.1]]) {
+      placeGO('gen_column', 'pillar', mx(px), 0, mz(pz), 0, s);
+    }
+    placeGO('gen_rubble', 'shrine', mx(40), 0, mz(33), 0.3, 1.2);
+    placeGO('gen_gravestone', 'gravestone', mx(85), 0, mz(70), 0.2, 1.0);
+    placeGO('gen_gravestone', 'gravestone', mx(92), 0, mz(76), -0.3, 0.9);
+    placeGO('gen_cross', 'gravestone', mx(37), 0, mz(47), 0.4, 1.0);
+    placeGO('gen_cross', 'gravestone', mx(33), 0, mz(51), -0.2, 0.85);
+    // Scattered graves around the open central fighting space.
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2 + 0.3;
+      const d = 9 + (i % 4) * 2.6;
+      const gx = Math.cos(a) * d;
+      const gz = Math.sin(a) * d;
+      if (i % 2) placeGO('gen_gravestone', 'gravestone', gx, 0, gz, a, 0.8 + (i % 3) * 0.15);
+    }
+    placeGO('gen_coffin', 'coffin', mx(62), 0, mz(55), 0.3, 1.1);
+
+    // Dense moss, grass and red flowers around the interior landmarks,
+    // especially the coffin and columns — like the reference image.
+    const overgrownSpots = [
+      [62, 55], [28, 43], [64, 44], [62, 28], [42, 76],
+      [50, 12], [23, 20], [85, 20], [24, 72], [91, 49],
+      [12, 34], [34, 53], [10, 49], [86, 17], [55, 20],
+      [20, 25], [76, 60]
+    ];
+    const grassDecalMat = new THREE.MeshBasicMaterial({
+      map: grassPatchTex, transparent: true, opacity: 0.78, depthWrite: false, side: THREE.DoubleSide
+    });
+    const grassDecalGeo = new THREE.PlaneGeometry(1, 1);
+    function addGrassPatch(x, z, scale) {
+      const patch = new THREE.Mesh(grassDecalGeo, grassDecalMat);
+      patch.rotation.x = -Math.PI / 2;
+      patch.rotation.z = Math.random() * Math.PI;
+      patch.scale.set(scale, scale * (0.7 + Math.random() * 0.5), 1);
+      patch.position.set(x, 0.018, z);
+      forestPropsGroup.add(patch);
+    }
+    for (const [u, v] of overgrownSpots) {
+      const bx = mx(u);
+      const bz = mz(v);
+      const count = (u === 62 && v === 55) ? 8 : 4;
+      for (let i = 0; i < count; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const d = 0.9 + Math.random() * 2.4;
+        addGrassPatch(bx + Math.cos(a) * d, bz + Math.sin(a) * d, 2.8 + Math.random() * 1.8);
+      }
+    }
+    for (let i = 0; i < 110; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const d = 7 + Math.random() * (B - 11);
+      addGrassPatch(Math.cos(a) * d, Math.sin(a) * d, 2.2 + Math.random() * 2.0);
+    }
+
+    // Camp, cover and treasure.
+    const tentX = mx(12), tentZ = mz(34);
+    if (!placeGO('gen_tent', null, tentX, 0, tentZ, 0.15, 1)) makeTentFallback(tentX, tentZ, 0.15);
+    addFlickerLight(mx(17), 1.0, mz(39), 0xff762b, 3.2, 17, 0.7, true, forestPropsGroup);
+    placeGO('gen_barrel', 'barrels', mx(34), 0, mz(53), 0.4, 1.0);
+    placeGO('gen_barrel', 'barrels', mx(31), 0, mz(56), -0.3, 0.85);
+    for (const [u, v] of [[70, 45], [35, 75], [78, 62]]) {
+      placeGO('gen_campfire', null, mx(u), 0, mz(v), 0, 1.0);
+    }
+    placeGO('gen_crate', 'crates', mx(10), 0, mz(49), 0.2, 1.0);
+    placeGO('gen_chest', 'crates', mx(69), 0, mz(30), -0.4, 1.0);
+
+    for (const [px, pz] of [[12, 54], [45, 15], [55, 15]]) {
+      placeGO('gen_lantern', 'post_lantern', mx(px), 0, mz(pz), 0, 1.0);
+      addFlickerLight(mx(px), 1.8, mz(pz), 0xffa64d, 2.1, 11, px * 0.1, false, forestPropsGroup);
+    }
+    for (const [px, pz] of [[28, 34], [87, 27]]) {
+      placeGO('gen_lantern', null, mx(px), 0, mz(pz), 0, 1.0);
+    }
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2 + 0.4;
+      const d = 18 + (i % 2) * 3.5;
+      const lx = Math.cos(a) * d;
+      const lz = Math.sin(a) * d;
+      placeGO('gen_lantern', null, lx, 0, lz, a, 1.0);
+    }
+
+    // Gnarled dead trees framing the arena (visual only).
+    for (const [px, pz, r] of [[9, 13, 0.35], [89, 10, -0.26], [5, 77, 0.44], [88, 75, -0.35]]) {
+      placeGO('gen_tree_large', 'tree_dead_large', mx(px), 0, mz(pz), r, 2.4);
+    }
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      const d = B + 5 + (i % 3) * 2;
+      placeGO('gen_tree_small', 'tree_dead_med', Math.cos(a) * d, 0, Math.sin(a) * d, a, 1.0);
+    }
+
+    // Moss and fallen red leaves/vegetation printed onto the cobblestones,
+    // matching the green and crimson patches visible in the reference.
+    const decalMatMoss = new THREE.MeshBasicMaterial({
+      map: mossDecalTex, transparent: true, opacity: 0.32, depthWrite: false, side: THREE.DoubleSide
+    });
+    const decalMatRed = new THREE.MeshBasicMaterial({
+      map: redLeafTex, transparent: true, opacity: 0.28, depthWrite: false, side: THREE.DoubleSide
+    });
+    const decalGeo = new THREE.PlaneGeometry(1, 1);
+    let dSeed = 7391;
+    const dRand = () => {
+      dSeed = (dSeed * 16807) % 2147483647;
+      return (dSeed - 1) / 2147483646;
+    };
+    for (const [mat, count] of [[decalMatMoss, 20], [decalMatRed, 14]]) {
+      for (let i = 0; i < count; i++) {
+        const a = dRand() * Math.PI * 2;
+        const d = 8 + dRand() * (B - 13);
+        const decal = new THREE.Mesh(decalGeo, mat);
+        decal.rotation.x = -Math.PI / 2;
+        decal.rotation.z = dRand() * Math.PI;
+        const s = 1.2 + dRand() * 2.4;
+        decal.scale.set(s, s * (0.6 + dRand() * 0.7), 1);
+        decal.position.set(Math.cos(a) * d, 0.025, Math.sin(a) * d);
+        forestPropsGroup.add(decal);
+      }
+    }
+
   })();
 
   // Ambient floating spirit motes
@@ -3060,33 +3587,88 @@ export function createArenaWorld(canvas) {
     }
   }
 
-  function setArenaBiome(_biome = 'courtyard') {
-    currentBiome = 'courtyard';
-    courtyardPropsGroup.visible = true;
-    forestPropsGroup.visible = false;
-    obstacles.length = 0;
-    for (let i = 0; i < COURTYARD_OBSTACLES.length; i++) {
-      obstacles.push({ ...COURTYARD_OBSTACLES[i] });
+  // Debug: draw every invisible collider and the movement boundary on the floor.
+  const debugColliderGroup = new THREE.Group();
+  debugColliderGroup.visible = false;
+  arenaGroup.add(debugColliderGroup);
+
+  function setDebugColliders(enabled = true) {
+    debugColliderGroup.visible = Boolean(enabled);
+    if (!enabled) return;
+    while (debugColliderGroup.children.length) {
+      const ch = debugColliderGroup.children.pop();
+      if (ch.geometry) ch.geometry.dispose();
+      if (ch.material) ch.material.dispose();
     }
-    groundMesh.visible = true;
-    groundMesh.material.map = cobbleTex;
-    groundMesh.material.color.setHex(0xd8dff2);
-    groundMesh.material.roughness = 0.80;
-    groundMesh.material.metalness = 0.08;
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0xff3355, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide
+    });
+    const boundaryMat = new THREE.MeshBasicMaterial({
+      color: 0x33ddff, transparent: true, opacity: 0.7, depthWrite: false, side: THREE.DoubleSide
+    });
+    for (const o of obstacles) {
+      const r = o.radius ?? o.r ?? 0.95;
+      const ring = new THREE.Mesh(new THREE.RingGeometry(r - 0.04, r + 0.04, 32), mat);
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.set(o.x ?? 0, 0.09, o.z ?? 0);
+      debugColliderGroup.add(ring);
+    }
+    for (const [radius, color] of [[B - 2.6, boundaryMat], [B - 1.6, boundaryMat]]) {
+      const ring = new THREE.Mesh(new THREE.RingGeometry(radius - 0.05, radius + 0.05, 96), color);
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.y = 0.08;
+      debugColliderGroup.add(ring);
+    }
+  }
+
+  const isArenaCircular = () => false;
+
+  function setArenaBiome(biome = 'courtyard') {
+    const isForest = biome === 'misty_forest';
+    currentBiome = isForest ? 'misty_forest' : 'courtyard';
+    courtyardPropsGroup.visible = !isForest;
+    forestPropsGroup.visible = false;
+    mistyArena.group.visible = isForest;
+
+    obstacles.length = 0;
+    if (isForest) {
+      // Empty arena: no prop colliders until models are placed in the editor.
+    } else {
+      // The original courtyard was authored for a 54 m arena; keep its layout
+      // proportionally identical after the arena was enlarged.
+      const scale = ARENA_HALF_SIZE / 27;
+      for (let i = 0; i < COURTYARD_OBSTACLES.length; i++) {
+        const o = COURTYARD_OBSTACLES[i];
+        obstacles.push({ ...o, x: o.x * scale, z: o.z * scale });
+      }
+    }
+
+    groundMesh.visible = !isForest;
+    groundMesh.material.map = isForest ? graveyardCobbleTex : cobbleTex;
+    groundMesh.material.color.setHex(isForest ? 0xd8cfe0 : 0xd8dff2);
+    if (isForest) {
+      groundMesh.material.emissive.setHex(0x160d22);
+      groundMesh.material.emissiveIntensity = 0.15;
+    } else {
+      groundMesh.material.emissive.setHex(0x000000);
+      groundMesh.material.emissiveIntensity = 1;
+    }
+    groundMesh.material.roughness = isForest ? 0.90 : 0.80;
+    groundMesh.material.metalness = isForest ? 0.02 : 0.08;
     groundMesh.material.needsUpdate = true;
     outerGround.position.y = -0.06;
-    outerGround.material.color.setHex(0x161728);
+    outerGround.material.color.setHex(isForest ? 0x252b54 : 0x161728);
     outerGround.material.roughness = 0.95;
     outerGround.material.needsUpdate = true;
 
     if (cameraMode !== 'hub') {
-      const pal = bossModeActive ? PALETTE_BOSS : PALETTE_NORMAL;
+      const pal = bossModeActive ? PALETTE_BOSS : (isForest ? PALETTE_FOREST : PALETTE_NORMAL);
       if (!scene.background) scene.background = pal.bg.clone();
       else scene.background.copy(pal.bg);
       renderer.setClearColor(pal.bg.getHex(), 1);
       scene.fog.color.copy(pal.fog);
-      scene.fog.near = 48;
-      scene.fog.far = 112;
+      scene.fog.near = isForest ? 58 : 48;
+      scene.fog.far = isForest ? 132 : 112;
       hemiLight.color.copy(pal.hemiSky);
       hemiLight.groundColor.copy(pal.hemiGround);
       dirLight.color.copy(pal.dir);
@@ -3098,21 +3680,575 @@ export function createArenaWorld(canvas) {
   // Free 3D Orbital Combat Camera State (RMB drag: yaw left/right & pitch up/down; Mouse wheel: zoom in/out)
   const DEFAULT_ORBIT_PITCH = Math.atan2(COMBAT_CAM_OFFSET.y - 0.5, COMBAT_CAM_OFFSET.z);
   const DEFAULT_ORBIT_DIST = Math.hypot(COMBAT_CAM_OFFSET.y - 0.5, COMBAT_CAM_OFFSET.z);
-  let orbitYaw = 0;
+  let orbitYaw = Math.PI / 4;
   let orbitPitch = DEFAULT_ORBIT_PITCH;
   let orbitDist = DEFAULT_ORBIT_DIST;
-  let orbitTargetYaw = 0;
+  let orbitTargetYaw = Math.PI / 4;
   let orbitTargetPitch = DEFAULT_ORBIT_PITCH;
   let orbitTargetDist = DEFAULT_ORBIT_DIST;
 
+  let cameraLocked = false;
+  let activeCameraPreset = null;
+  let arenaEditorSavedOrbit = null;
+
   function adjustCombatOrbit(dYaw = 0, dPitch = 0) {
+    if (cameraLocked) return;
     orbitTargetYaw += dYaw;
     orbitTargetPitch = Math.max(0.10, Math.min(1.48, orbitTargetPitch + dPitch));
   }
 
   function zoomCombatOrbit(wheelDelta = 0) {
+    if (cameraLocked) return;
     const step = Math.sign(wheelDelta) * Math.min(Math.abs(wheelDelta), 160) * 0.018;
     orbitTargetDist = Math.max(3.0, Math.min(68.0, orbitTargetDist * Math.exp(step * 0.12)));
+  }
+
+  function setCameraLock(locked = true) {
+    cameraLocked = Boolean(locked);
+  }
+
+  // --- Debug: drag placed arena props directly with the mouse --------------
+  const arenaRaycaster = new THREE.Raycaster();
+  // --- Weapon placement editor (K) ----------------------------------------
+  const WEAPON_LAYOUT_KEY = 'grimborne_weapon_layout_v1';
+  let weaponEditMode = false;
+  let weaponSelected = null;        // the THREE.Object3D mount group
+  let weaponDragging = false;
+  let weaponCameraOrbiting = false;
+  let weaponLastX = 0;
+  let weaponLastY = 0;
+  const weaponPointer = new THREE.Vector2();
+  const weaponRaycaster = new THREE.Raycaster();
+  const weaponDragPlane = new THREE.Plane();
+  const weaponHit = new THREE.Vector3();
+  const weaponDragOffset = new THREE.Vector3();
+  let weaponHint = null;
+
+  const arenaPointer = new THREE.Vector2();
+  const arenaGroundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  const arenaHitPoint = new THREE.Vector3();
+  let arenaEditMode = false;
+  let arenaEditorHeroMovement = true;
+  let arenaSelected = null;
+  let arenaDragging = false;
+  const arenaDragOffset = new THREE.Vector3();
+  let arenaCameraOrbiting = false;
+  let arenaLastOrbitX = 0;
+  let arenaLastOrbitY = 0;
+
+  const arenaSelectionRing = new THREE.Mesh(
+    new THREE.RingGeometry(0.85, 1.0, 40),
+    new THREE.MeshBasicMaterial({ color: 0xffd24a, transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide })
+  );
+  arenaSelectionRing.rotation.x = -Math.PI / 2;
+  arenaSelectionRing.position.y = 0.06;
+  arenaSelectionRing.visible = false;
+  scene.add(arenaSelectionRing);
+
+  // ---- weapon editor helpers ---------------------------------------------
+  function findWeaponMounts() {
+    const found = [];
+    scene.traverse((o) => {
+      if (o.name === 'HeroWeapon_Sword_Mount' || o.name === 'HeroWeapon_Shield_Mount') found.push(o);
+    });
+    return found;
+  }
+
+  function setWeaponPointer(e) {
+    const rect = renderer.domElement.getBoundingClientRect();
+    weaponPointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    weaponPointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    weaponRaycaster.setFromCamera(weaponPointer, camera);
+  }
+
+  function saveWeaponLayout() {
+    try {
+      const data = findWeaponMounts().map((o) => ({
+        name: o.name,
+        p: [o.position.x, o.position.y, o.position.z].map((v) => +v.toFixed(4)),
+        r: [o.rotation.x, o.rotation.y, o.rotation.z].map((v) => +v.toFixed(4)),
+        s: +o.scale.x.toFixed(4)
+      }));
+      localStorage.setItem(WEAPON_LAYOUT_KEY, JSON.stringify(data));
+      console.log('[weapon] layout saved:', data);
+    } catch (e) { console.warn('[weapon] save failed', e); }
+  }
+
+  function loadWeaponLayout() {
+    try {
+      const raw = localStorage.getItem(WEAPON_LAYOUT_KEY);
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      const mounts = findWeaponMounts();
+      for (const it of data) {
+        const obj = mounts.find((m) => m.name === it.name);
+        if (!obj) continue;
+        obj.position.fromArray(it.p);
+        obj.rotation.set(it.r[0], it.r[1], it.r[2]);
+        obj.scale.setScalar(it.s);
+      }
+      console.log('[weapon] layout loaded');
+    } catch (e) { console.warn('[weapon] load failed', e); }
+  }
+
+  function onWeaponPointerDown(e) {
+    if (!weaponEditMode || e.button !== 0) return;
+    setWeaponPointer(e);
+    const mounts = findWeaponMounts();
+    const hits = weaponRaycaster.intersectObjects(mounts, true);
+    for (const hit of hits) {
+      let obj = hit.object;
+      while (obj && !mounts.includes(obj)) obj = obj.parent;
+      if (!obj) continue;
+      weaponSelected = obj;
+      weaponDragging = true;
+      // Drag on a plane facing the camera, passing through the object.
+      const n = new THREE.Vector3();
+      camera.getWorldDirection(n);
+      weaponDragPlane.setFromNormalAndCoplanarPoint(n, obj.getWorldPosition(new THREE.Vector3()));
+      if (weaponRaycaster.ray.intersectPlane(weaponDragPlane, weaponHit)) {
+        const local = obj.parent.worldToLocal(weaponHit.clone());
+        weaponDragOffset.set(obj.position.x - local.x, obj.position.y - local.y, obj.position.z - local.z);
+      } else weaponDragOffset.set(0, 0, 0);
+      try { renderer.domElement.setPointerCapture(e.pointerId); } catch {}
+      if (weaponHint) weaponHint.textContent = 'ОРУЖИЕ • ' + (obj.name.includes('Sword') ? 'МЕЧ' : 'ЩИТ') + ' • тащи мышью • Z/X/Q/E/C/V — поворот • K — выход';
+      e.preventDefault();
+      return;
+    }
+    weaponSelected = null;
+    weaponCameraOrbiting = true;
+    weaponLastX = e.clientX; weaponLastY = e.clientY;
+    e.preventDefault();
+  }
+
+  function onWeaponPointerMove(e) {
+    if (!weaponEditMode) return;
+    if (weaponCameraOrbiting) {
+      orbitCamera(-(e.clientX - weaponLastX) * 0.005, -(e.clientY - weaponLastY) * 0.005);
+      weaponLastX = e.clientX; weaponLastY = e.clientY;
+      return;
+    }
+    if (!weaponDragging || !weaponSelected) return;
+    setWeaponPointer(e);
+    if (weaponRaycaster.ray.intersectPlane(weaponDragPlane, weaponHit)) {
+      const local = weaponSelected.parent.worldToLocal(weaponHit.clone());
+      weaponSelected.position.set(local.x + weaponDragOffset.x, local.y + weaponDragOffset.y, local.z + weaponDragOffset.z);
+    }
+  }
+
+  function onWeaponWheel(e) {
+    if (!weaponEditMode) return;
+    e.preventDefault();
+    zoomCamera(Math.sign(e.deltaY) * 1.6);
+  }
+
+  function onWeaponPointerUp(e) {
+    try { if (e?.pointerId !== undefined) renderer.domElement.releasePointerCapture(e.pointerId); } catch {}
+    if (weaponDragging && weaponSelected) saveWeaponLayout();
+    weaponDragging = false;
+    weaponCameraOrbiting = false;
+  }
+
+  function onWeaponKeyDown(e) {
+    if (!weaponEditMode) return;
+    if (e.code === 'KeyK') { setWeaponEditMode(false); return; }
+    if (!weaponSelected) return;
+    const step = 0.08;
+    if (e.code === 'KeyZ') weaponSelected.rotation.y -= step;
+    else if (e.code === 'KeyX') weaponSelected.rotation.y += step;
+    else if (e.code === 'KeyQ') weaponSelected.rotation.x -= step;
+    else if (e.code === 'KeyE') weaponSelected.rotation.x += step;
+    else if (e.code === 'KeyC') weaponSelected.rotation.z -= step;
+    else if (e.code === 'KeyV') weaponSelected.rotation.z += step;
+    else return;
+    e.preventDefault();
+    saveWeaponLayout();
+  }
+
+  function setWeaponEditMode(enabled = true) {
+    weaponEditMode = Boolean(enabled);
+    const dom = renderer.domElement;
+    if (weaponEditMode) {
+      dom.addEventListener('pointerdown', onWeaponPointerDown);
+      window.addEventListener('pointermove', onWeaponPointerMove);
+      window.addEventListener('pointerup', onWeaponPointerUp);
+      window.addEventListener('keydown', onWeaponKeyDown);
+      dom.addEventListener('wheel', onWeaponWheel, { passive: false });
+      setCameraLock(true);
+      if (!weaponHint) {
+        weaponHint = document.createElement('div');
+        weaponHint.style.cssText = 'position:fixed;bottom:8px;left:50%;transform:translateX(-50%);z-index:99999;background:rgba(20,12,30,.94);color:#7dd3fc;padding:8px 16px;border:1px solid #38bdf8;border-radius:6px;font:13px sans-serif;pointer-events:none';
+        document.body.appendChild(weaponHint);
+      }
+      weaponHint.textContent = 'ОРУЖИЕ • ЛКМ по мечу/щиту — перетащить • ЛКМ по пустому — поворот камеры • КОЛЕСО — приблизить • Q/E/Z/X/C/V — поворот • K — выход';
+      loadWeaponLayout();
+      console.log('[weapon] editor ON');
+    } else {
+      dom.removeEventListener('pointerdown', onWeaponPointerDown);
+      window.removeEventListener('pointermove', onWeaponPointerMove);
+      window.removeEventListener('pointerup', onWeaponPointerUp);
+      window.removeEventListener('keydown', onWeaponKeyDown);
+      dom.removeEventListener('wheel', onWeaponWheel);
+      setCameraLock(false);
+      weaponSelected = null;
+      weaponDragging = false;
+      if (weaponHint) { weaponHint.remove(); weaponHint = null; }
+      console.log('[weapon] editor OFF');
+    }
+  }
+
+  function setArenaPointer(e) {
+    const rect = renderer.domElement.getBoundingClientRect();
+    arenaPointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    arenaPointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    arenaRaycaster.setFromCamera(arenaPointer, camera);
+  }
+
+  function onArenaPointerDown(e) {
+    if (!arenaEditMode || e.button !== 0) return;
+    setArenaPointer(e);
+    const hits = arenaRaycaster.intersectObjects(mistyArena.group.children, true);
+    for (const hit of hits) {
+      let obj = hit.object;
+      while (obj && obj.parent !== mistyArena.group) obj = obj.parent;
+      if (!obj || obj === mistyArena.group) continue;
+      // Skip the painted floor plate and the fog rim.
+      if (obj.geometry && (obj.geometry.type === 'CircleGeometry' || obj.geometry.type === 'RingGeometry' || obj.geometry.type === 'PlaneGeometry')) continue;
+      arenaSelected = obj;
+      arenaDragging = true;
+      // Keep the grab point fixed on the object so it doesn't snap its centre
+      // to the cursor when you start dragging. The arena group is rotated, so
+      // the world-space hit point must be converted into the group's local space.
+      if (arenaRaycaster.ray.intersectPlane(arenaGroundPlane, arenaHitPoint)) {
+        const localHit = mistyArena.group.worldToLocal(arenaHitPoint.clone());
+        arenaDragOffset.set(obj.position.x - localHit.x, 0, obj.position.z - localHit.z);
+      } else {
+        arenaDragOffset.set(0, 0, 0);
+      }
+      try { renderer.domElement.setPointerCapture(e.pointerId); } catch {}
+      e.preventDefault();
+      arenaSelectionRing.visible = true;
+      const wp = obj.getWorldPosition(new THREE.Vector3());
+      arenaSelectionRing.position.set(wp.x, 0.06, wp.z);
+      console.log('[arena] selected:', obj.userData.arenaKey || obj.name || obj.uuid, 'x:', obj.position.x.toFixed(1), 'z:', obj.position.z.toFixed(1));
+      return;
+    }
+    arenaSelected = null;
+    arenaSelectionRing.visible = false;
+    // Empty space + LMB = orbit the camera around the hero.
+    arenaCameraOrbiting = true;
+    arenaLastOrbitX = e.clientX;
+    arenaLastOrbitY = e.clientY;
+    e.preventDefault();
+  }
+
+  function onArenaPointerMove(e) {
+    if (arenaCameraOrbiting) {
+      const dx = e.clientX - arenaLastOrbitX;
+      const dy = e.clientY - arenaLastOrbitY;
+      orbitCamera(-dx * 0.005, -dy * 0.005);
+      arenaLastOrbitX = e.clientX;
+      arenaLastOrbitY = e.clientY;
+      return;
+    }
+    if (!arenaDragging || !arenaSelected) return;
+    setArenaPointer(e);
+    if (arenaRaycaster.ray.intersectPlane(arenaGroundPlane, arenaHitPoint)) {
+      const localHit = mistyArena.group.worldToLocal(arenaHitPoint.clone());
+      arenaSelected.position.x = localHit.x + arenaDragOffset.x;
+      arenaSelected.position.z = localHit.z + arenaDragOffset.z;
+      const wp = arenaSelected.getWorldPosition(new THREE.Vector3());
+      arenaSelectionRing.position.set(wp.x, 0.06, wp.z);
+    }
+  }
+
+  function onArenaPointerUp(e) {
+    try { if (e?.pointerId !== undefined) renderer.domElement.releasePointerCapture(e.pointerId); } catch {}
+    arenaCameraOrbiting = false;
+    if (arenaDragging && arenaSelected) {
+      mistyArena.saveLayout?.();
+      console.log('[arena] moved to:', arenaSelected.position.x.toFixed(1), arenaSelected.position.z.toFixed(1));
+    }
+    arenaDragging = false;
+  }
+
+  let arenaEditHint = null;
+  let arenaEditorPanel = null;
+
+  function arenaEditorSave() {
+    const json = JSON.stringify(mistyArena.list(), null, 2);
+    console.log('[arena] layout:\n' + json);
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(json).then(() => {
+        if (arenaEditorHintText) arenaEditorHintText.textContent = 'РЕДАКТОР АРЕНЫ • расстановка скопирована в буфер';
+      }).catch(() => {});
+    }
+  }
+
+  function arenaEditorLoad() {
+    const text = window.prompt('Вставьте JSON расстановки:');
+    if (!text) return;
+    try {
+      const items = JSON.parse(text);
+      mistyArena.clear();
+      arenaSelected = null;
+      for (const it of items) {
+        mistyArena.spawn(it.key, it.x, it.z, it.rot || 0, 1);
+      }
+      mistyArena.saveLayout?.();
+      console.log('[arena] loaded', items.length, 'props');
+    } catch (e) {
+      console.error('[arena] bad JSON', e);
+    }
+  }
+
+  let arenaEditorHintText = null;
+
+  function buildArenaEditorPanel() {
+    const panel = document.createElement('div');
+    panel.style.cssText = 'position:fixed;top:10px;right:10px;width:250px;max-height:calc(100vh - 20px);overflow:auto;z-index:99998;background:rgba(18,14,26,.96);border:1px solid #7c5cbf;border-radius:8px;padding:10px;color:#e8dfff;font:12px sans-serif;box-shadow:0 6px 24px rgba(0,0,0,.6)';
+    const title = document.createElement('div');
+    title.textContent = 'РЕДАКТОР АРЕНЫ';
+    title.style.cssText = 'font-weight:bold;color:#fbbf24;margin-bottom:8px';
+    panel.appendChild(title);
+
+    const moveBtn = document.createElement('button');
+    moveBtn.textContent = 'ДВИЖЕНИЕ ГЕРОЯ WASD: ВКЛ';
+    moveBtn.style.cssText = 'display:block;width:100%;margin-bottom:8px;padding:6px;background:#23402e;color:#c9f5d8;border:1px solid #3d8a5a;border-radius:4px;cursor:pointer';
+    moveBtn.onclick = () => {
+      const next = !arenaEditorHeroMovement;
+      setArenaEditorHeroMovement(next);
+      moveBtn.textContent = 'ДВИЖЕНИЕ ГЕРОЯ WASD: ' + (next ? 'ВКЛ' : 'ВЫКЛ');
+      console.log('[arena] hero movement:', next ? 'ON' : 'OFF');
+    };
+    panel.appendChild(moveBtn);
+
+    for (const key of mistyArena.templateKeys()) {
+      const btn = document.createElement('button');
+      btn.textContent = '+ ' + key;
+      btn.style.cssText = 'display:block;width:100%;margin:3px 0;padding:6px;background:#2c2140;color:#e8dfff;border:1px solid #6b4fa0;border-radius:4px;cursor:pointer;text-align:left';
+      btn.onclick = () => {
+        // targetX/targetZ are WORLD coordinates; spawn() places into the
+        // rotated arena group, so convert world -> group-local first.
+        const worldPoint = new THREE.Vector3(targetX, 0, targetZ);
+        const local = mistyArena.group.worldToLocal(worldPoint);
+        const obj = mistyArena.spawn(key, local.x, local.z, 0, 1);
+        if (obj) {
+          arenaSelected = obj;
+          mistyArena.saveLayout?.();
+          console.log('[arena] added', key, 'at world', targetX.toFixed(1), targetZ.toFixed(1));
+        }
+      };
+      panel.appendChild(btn);
+    }
+
+    const clearBtn = document.createElement('button');
+    clearBtn.textContent = 'ОЧИСТИТЬ СЦЕНУ (всё, кроме пола)';
+    clearBtn.style.cssText = 'display:block;width:100%;margin-top:8px;padding:6px;background:#5a1e2c;color:#ffd7dd;border:1px solid #9b2d4b;border-radius:4px;cursor:pointer';
+    clearBtn.onclick = () => {
+      mistyArena.clear();
+      mistyArena.saveLayout?.();
+      arenaSelected = null;
+      arenaSelectionRing.visible = false;
+      console.log('[arena] scene cleared');
+    };
+    panel.appendChild(clearBtn);
+
+    const del = document.createElement('button');
+    del.textContent = 'УДАЛИТЬ ВЫБРАННОЕ (Delete)';
+    del.style.cssText = 'display:block;width:100%;margin-top:8px;padding:6px;background:#5a1e2c;color:#ffd7dd;border:1px solid #9b2d4b;border-radius:4px;cursor:pointer';
+    del.onclick = () => {
+      if (arenaSelected) {
+        mistyArena.remove(arenaSelected);
+        mistyArena.saveLayout?.();
+        arenaSelected = null;
+      }
+    };
+    panel.appendChild(del);
+
+    const align = document.createElement('button');
+    align.textContent = 'ВЫРОВНЯТЬ МОДЕЛЬ [R]';
+    align.style.cssText = 'display:block;width:100%;margin-top:4px;padding:6px;background:#2f5a3a;color:#cfe8d4;border:1px solid #4a9a62;border-radius:4px;cursor:pointer';
+    align.onclick = () => alignArenaSelection();
+    panel.appendChild(align);
+
+    const save = document.createElement('button');
+    save.textContent = 'СКОПИРОВАТЬ РАССТАНОВКУ';
+    save.style.cssText = 'display:block;width:100%;margin-top:4px;padding:6px;background:#1e3a5a;color:#d7e8ff;border:1px solid #3b6ea5;border-radius:4px;cursor:pointer';
+    save.onclick = arenaEditorSave;
+    panel.appendChild(save);
+
+    const load = document.createElement('button');
+    load.textContent = 'ЗАГРУЗИТЬ JSON';
+    load.style.cssText = save.style.cssText;
+    load.onclick = arenaEditorLoad;
+    panel.appendChild(load);
+
+    const close = document.createElement('button');
+    close.textContent = 'ЗАКРЫТЬ (G)';
+    close.style.cssText = 'display:block;width:100%;margin-top:8px;padding:6px;background:#332b3f;color:#cbb8e8;border:1px solid #5a4a72;border-radius:4px;cursor:pointer';
+    close.onclick = () => setArenaEditMode(false);
+    panel.appendChild(close);
+
+    document.body.appendChild(panel);
+    return panel;
+  }
+
+  // Snap the selected prop to the nearest 90° so it lines up exactly with
+  // other props (Z/X rotate in 0.16 rad steps and can leave a 2-4° error).
+  function alignArenaSelection() {
+    if (!arenaSelected) return;
+    const step = Math.PI / 2;
+    arenaSelected.rotation.y = Math.round(arenaSelected.rotation.y / step) * step;
+    mistyArena.saveLayout?.();
+    console.log('[arena] aligned rotation:', (arenaSelected.rotation.y * 180 / Math.PI).toFixed(0), 'deg');
+    if (arenaEditorHintText) {
+      arenaEditorHintText.textContent = 'РЕДАКТОР АРЕНЫ • модель выровнена по 90°';
+    }
+  }
+
+  function onArenaKeyDown(e) {
+    if (e.code === 'KeyG') {
+      // The editor only belongs to the new arena (chapters 6+). On the old
+      // courtyard it would spawn invisible props and mess with the camera.
+      if (!arenaEditMode && currentBiome !== 'misty_forest') {
+        console.log('[arena] editor is available only on the new arena (chapter 6+)');
+        return;
+      }
+      setArenaEditMode(!arenaEditMode);
+      return;
+    }
+    if (!arenaEditMode) return;
+    if (e.code === 'Equal' || e.code === 'NumpadAdd') {
+      zoomCamera(-2);
+      return;
+    }
+    if (e.code === 'Minus' || e.code === 'NumpadSubtract') {
+      zoomCamera(2);
+      return;
+    }
+    if ((e.code === 'Delete' || e.code === 'Backspace') && arenaSelected) {
+      mistyArena.remove(arenaSelected);
+      arenaSelected = null;
+      arenaSelectionRing.visible = false;
+      return;
+    }
+    if (!arenaSelected) return;
+    if (e.code === 'KeyR') {
+      alignArenaSelection();
+      return;
+    }
+    if (e.code === 'KeyZ') arenaSelected.rotation.y -= 0.16;
+    else if (e.code === 'KeyX') arenaSelected.rotation.y += 0.16;
+    else return;
+    mistyArena.saveLayout?.();
+    console.log('[arena] rotation:', arenaSelected.rotation.y.toFixed(2));
+  }
+
+  // Change camera distance directly (works even while the editor locks orbit).
+  function zoomCamera(delta = 0) {
+    const next = Math.max(3, Math.min(68, orbitTargetDist + delta));
+    orbitDist = orbitTargetDist = next;
+  }
+
+  // Direct orbit used by the editor; ignores the normal camera lock.
+  function orbitCamera(dYaw = 0, dPitch = 0) {
+    orbitYaw = orbitTargetYaw += dYaw;
+    orbitPitch = orbitTargetPitch = Math.max(0.10, Math.min(1.48, orbitPitch + dPitch));
+  }
+
+  function onArenaWheel(e) {
+    if (!arenaEditMode) return;
+    e.preventDefault();
+    // Ctrl / Cmd + wheel = zoom the camera; plain wheel = rotate the model.
+    if (e.ctrlKey || e.metaKey) {
+      zoomCamera(Math.sign(e.deltaY) * 2);
+      return;
+    }
+    if (!arenaSelected) return;
+    arenaSelected.rotation.y += Math.sign(e.deltaY) * 0.1;
+    mistyArena.saveLayout?.();
+  }
+
+  function setArenaEditMode(enabled = true) {
+    if (enabled && currentBiome !== 'misty_forest') {
+      console.log('[arena] editor is available only on the new arena (chapter 6+)');
+      return;
+    }
+    arenaEditMode = Boolean(enabled);
+    if (arenaEditMode) {
+      renderer.domElement.addEventListener('pointerdown', onArenaPointerDown);
+      window.addEventListener('pointermove', onArenaPointerMove);
+      window.addEventListener('pointerup', onArenaPointerUp);
+      renderer.domElement.addEventListener('wheel', onArenaWheel, { passive: false });
+      // Remember where the free camera was, then snap back to the level's
+      // fixed viewpoint. Otherwise the painted floor would look tilted and
+      // stretched while editing.
+      if (!arenaEditorSavedOrbit) {
+        arenaEditorSavedOrbit = { yaw: orbitYaw, pitch: orbitPitch, dist: orbitDist };
+      }
+      setCameraPreset(activeCameraPreset || { yaw: 0, pitch: 0.95, dist: 11 });
+      // Freeze the combat camera so the mouse wheel only rotates the selected
+      // model and never zooms/moves the map while editing.
+      setCameraLock(true);
+      if (!arenaEditHint) {
+        arenaEditHint = document.createElement('div');
+        arenaEditorHintText = document.createElement('span');
+        arenaEditHint.appendChild(arenaEditorHintText);
+        arenaEditorHintText.textContent = 'РЕДАКТОР • WASD — герой • ЛКМ по модели — двигать • ЛКМ по пустому — поворот камеры • Z/X/колесо — поворот модели • R — выровнять по 90° • +/- — зум • Delete — удалить • G — выйти';
+        arenaEditHint.style.cssText = 'position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:99999;background:rgba(20,12,30,.92);color:#fbbf24;padding:8px 16px;border:1px solid #fbbf24;border-radius:6px;font:13px sans-serif;pointer-events:none';
+        document.body.appendChild(arenaEditHint);
+      }
+      if (!arenaEditorPanel) arenaEditorPanel = buildArenaEditorPanel();
+      console.log('[arena] edit mode ON — drag props with LMB, rotate with Z/X or wheel');
+    } else {
+      renderer.domElement.removeEventListener('pointerdown', onArenaPointerDown);
+      window.removeEventListener('pointermove', onArenaPointerMove);
+      window.removeEventListener('pointerup', onArenaPointerUp);
+      renderer.domElement.removeEventListener('wheel', onArenaWheel);
+      setCameraLock(false);
+      if (arenaEditHint) {
+        arenaEditHint.remove();
+        arenaEditHint = null;
+        arenaEditorHintText = null;
+      }
+      if (arenaEditorPanel) {
+        arenaEditorPanel.remove();
+        arenaEditorPanel = null;
+      }
+      arenaDragging = false;
+      arenaCameraOrbiting = false;
+      arenaSelected = null;
+      console.log('[arena] edit mode OFF');
+    }
+  }
+
+  window.addEventListener('keydown', onArenaKeyDown);
+
+  function setArenaEditorHeroMovement(enabled = true) {
+    arenaEditorHeroMovement = Boolean(enabled);
+  }
+
+  function getArenaProps() {
+    return mistyArena.group.children
+      .filter((o) => o !== mistyArena.group && o.geometry?.type !== 'CircleGeometry' && o.geometry?.type !== 'RingGeometry' && o.geometry?.type !== 'PlaneGeometry')
+      .map((o, i) => ({ index: i, name: o.name || o.uuid, x: +o.position.x.toFixed(2), z: +o.position.z.toFixed(2) }));
+  }
+
+  function setArenaPropPos(index, x, z) {
+    const prop = mistyArena.group.children.filter((o) => o.geometry?.type !== 'CircleGeometry' && o.geometry?.type !== 'RingGeometry' && o.geometry?.type !== 'PlaneGeometry')[index];
+    if (!prop) return false;
+    prop.position.x = x;
+    prop.position.z = z;
+    return true;
+  }
+
+  // Snap both current and target orbit values to a level-specific camera preset.
+  function setCameraPreset({ yaw = Math.PI / 4, pitch = 1.13, dist = 60 } = {}) {
+    activeCameraPreset = { yaw, pitch, dist };
+    orbitYaw = orbitTargetYaw = yaw;
+    orbitPitch = orbitTargetPitch = Math.max(0.10, Math.min(1.48, pitch));
+    orbitDist = orbitTargetDist = Math.max(3.0, Math.min(68.0, dist));
   }
 
   function getCombatOrbitYaw() {
@@ -3914,6 +5050,30 @@ export function createArenaWorld(canvas) {
     activeProjectiles.clear();
   }
 
+  // Simple training dummy (straw mannequin) for peaceful practice maps.
+  // Returns the spawned Group so callers can move/remove it.
+  function spawnTrainingDummy(x = 0, z = -4) {
+    const g = new THREE.Group();
+    const wood = new THREE.MeshStandardMaterial({ color: 0x6b4423, roughness: 0.9 });
+    const straw = new THREE.MeshStandardMaterial({ color: 0xc9a227, roughness: 1.0 });
+    const cloth = new THREE.MeshStandardMaterial({ color: 0x7a2d2d, roughness: 1.0 });
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 1.7, 8), wood);
+    post.position.y = 0.85;
+    const arms = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.12, 0.12), wood);
+    arms.position.y = 1.25;
+    const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.30, 0.85, 10), cloth);
+    torso.position.y = 1.15;
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), straw);
+    head.position.y = 1.78;
+    const rope = new THREE.Mesh(new THREE.TorusGeometry(0.31, 0.035, 6, 14), straw);
+    rope.position.y = 1.45; rope.rotation.x = Math.PI / 2;
+    [post, arms, torso, head, rope].forEach((m) => { m.castShadow = true; g.add(m); });
+    const y = getGroundHeight ? getGroundHeight(x, z) : 0;
+    g.position.set(x, y, z);
+    scene.add(g);
+    return g;
+  }
+
   return {
     ready,
     scene,
@@ -3925,13 +5085,30 @@ export function createArenaWorld(canvas) {
     getGroundHeight,
     adjustCombatOrbit,
     zoomCombatOrbit,
+    setCameraLock,
+    setCameraPreset,
+    zoomCamera,
+    orbitCamera,
+    setArenaEditMode,
+    isArenaEditMode: () => arenaEditMode,
+    setWeaponEditMode,
+    isWeaponEditMode: () => weaponEditMode,
+    saveWeaponLayout,
+    loadWeaponLayout,
+    isArenaEditorHeroMovement: () => arenaEditorHeroMovement,
+    setArenaEditorHeroMovement,
+    getArenaProps,
+    setArenaPropPos,
     getCombatOrbitYaw,
     resetCombatOrbit,
     setCameraMode,
     setArenaBiome,
+    isArenaCircular,
+    setDebugColliders,
     setHubStageFocus,
     addScreenShake,
     spawnParticles,
+    spawnTrainingDummy,
     spawnMuzzleFlash,
     spawnShellCasing,
     spawnSlashArc,
