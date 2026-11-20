@@ -6,46 +6,53 @@
 
 import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
+import { DRACOLoader } from '../vendor/DRACOLoader.js';
 import { clone as cloneSkinned } from '../vendor/SkeletonUtils.js';
-import { WEAPONS } from './config.js?v=20261117z25';
+import { WEAPONS } from './config.js?v=20261120z35';
+import {
+  getGeo,
+  getMat,
+  isMobileRuntimeDevice,
+  disposeOwnedWeaponMaterials,
+  createAnimController,
+  setBoneRelEuler,
+  solveMixamoArmIK
+} from './models/shared.js?v=20261120z40';
 
 const MODEL_PATHS = {
-  gunslinger_tripo: './assets/models/Gunslinger_Tripo.glb?v=20261117z25',
+  gunslinger_tripo: './assets/models/Gunslinger_Tripo.glb?v=20261120z34',
   // New clean warrior with Mixamo "Sword And Shield Run" baked in as Running_A.
-  warrior_run: './assets/models/Warrior_Run.glb?v=20261117z26',
+  warrior_run: './assets/models/Warrior_Run.glb?v=20261120z34',
 
-  sword_tripo: './assets/models/Sword_Tripo.glb?v=20261117z25',
-  shield_custom: './assets/models/Shield_Custom.glb?v=20261117final',
-  spear_tripo: './assets/models/Spear_Tripo.glb?v=20261117z25',
-  zweihander_tripo: './assets/models/Zweihander_Tripo.glb?v=20261117z25',
-  axe_tripo: './assets/models/Axe_Tripo.glb?v=20261117z25',
-  hammer_tripo: './assets/models/Hammer_Tripo.glb?v=20261117z25',
-  mage_tripo: './assets/models/Mage_Tripo.glb?v=20261117z25',
-  staff_tripo: './assets/models/Staff_Tripo.glb?v=20261117z25',
-  shotgun_tripo: './assets/models/Shotgun_Tripo.glb?v=20261117z25',
-  pistol_tripo: './assets/models/Pistol_Tripo.glb?v=20261117z25',
-  colt_tripo: './assets/models/Colt_Tripo.glb?v=20261117z25',
-  smg_tripo: './assets/models/SMG_Tripo.glb?v=20261117z25',
-  ak47_tripo: './assets/models/AK47_Tripo.glb?v=20261117z25',
-  zombie_tripo: './assets/models/Zombie_Tripo.glb?v=20261117z25',
-  tree_tripo: './assets/models/Tree_Tripo.glb?v=20261117z25',
-  dracula_tripo: './assets/models/Dracula_Tripo.glb?v=20261117z25',
-  mimic_tripo: './assets/models/Mimic_Tripo.glb?v=20261117z25',
-  chest_disguise_tripo: './assets/models/Chest_Disguise_Tripo.glb?v=20261117z25',
-  lich_tripo: './assets/models/Lich_Tripo.glb?v=20261117z25',
-  troll_tripo: './assets/models/Troll_Tripo.glb?v=20261117z25',
-  succubus_tripo: './assets/models/Succubus_Tripo.glb?v=20261117z25',
-  spider_tripo: './assets/models/Spider_Tripo.glb?v=20261117z25',
-  barbarian: './assets/models/Barbarian.glb',
-  knight: './assets/models/Knight.glb',
-  rogue: './assets/models/Rogue_Hooded.glb',
-  mage: './assets/models/Mage.glb',
-  skel_minion: './assets/models/Skeleton_Minion.glb',
-  skel_rogue: './assets/models/Skeleton_Rogue.glb',
-  skel_mage: './assets/models/Skeleton_Mage.glb',
-  skel_warrior: './assets/models/Skeleton_Warrior.glb',
-  chest: './assets/env/chest.glb',
-  chest_gold: './assets/env/chest_gold.glb'
+  sword_tripo: './assets/models/Sword_Tripo.glb?v=20261120z34',
+  shield_custom: './assets/models/Shield_Custom.glb?v=20261120z34',
+  spear_tripo: './assets/models/Spear_Tripo.glb?v=20261120z34',
+  zweihander_tripo: './assets/models/Zweihander_Tripo.glb?v=20261120z34',
+  axe_tripo: './assets/models/Axe_Tripo.glb?v=20261120z34',
+  hammer_tripo: './assets/models/Hammer_Tripo.glb?v=20261120z34',
+  mage_tripo: './assets/models/Mage_Tripo.glb?v=20261120z34',
+  staff_tripo: './assets/models/Staff_Tripo.glb?v=20261120z34',
+  shotgun_tripo: './assets/models/Shotgun_Tripo.glb?v=20261120z34',
+  pistol_tripo: './assets/models/Pistol_Tripo.glb?v=20261120z34',
+  colt_tripo: './assets/models/Colt_Tripo.glb?v=20261120z34',
+  smg_tripo: './assets/models/SMG_Tripo.glb?v=20261120z34',
+  ak47_tripo: './assets/models/AK47_Tripo.glb?v=20261120z34',
+  zombie_tripo: './assets/models/Zombie_Tripo.glb?v=20261120z34',
+  tree_tripo: './assets/models/Tree_Tripo.glb?v=20261120z34',
+  dracula_tripo: './assets/models/Dracula_Tripo.glb?v=20261120z34',
+  mimic_tripo: './assets/models/Mimic_Tripo.glb?v=20261120z34',
+  chest_disguise_tripo: './assets/models/Chest_Disguise_Tripo.glb?v=20261120z34',
+  lich_tripo: './assets/models/Lich_Tripo.glb?v=20261120z34',
+  troll_tripo: './assets/models/Troll_Tripo.glb?v=20261120z34',
+  succubus_tripo: './assets/models/Succubus_Tripo.glb?v=20261120z34',
+  spider_tripo: './assets/models/Spider_Tripo.glb?v=20261120z34',
+  barbarian: './assets/models/Barbarian.glb?v=20261120z34',
+  knight: './assets/models/Knight.glb?v=20261120z34',
+  skel_minion: './assets/models/Skeleton_Minion.glb?v=20261120z34',
+  skel_mage: './assets/models/Skeleton_Mage.glb?v=20261120z34',
+  skel_warrior: './assets/models/Skeleton_Warrior.glb?v=20261120z34',
+  chest: './assets/env/chest.glb?v=20261120z34',
+  chest_gold: './assets/env/chest_gold.glb?v=20261120z34'
 };
 
 const gltfCache = new Map();
@@ -55,16 +62,9 @@ const inFlightModelLoads = new Map();
 const failedModelKeys = new Set();
 let preloadPromise = null;
 let sharedModelLoader = null;
+let sharedDracoLoader = null;
 const cachedEyeEmissiveTextures = new Map();
 let cachedStaffGlobeAlphaTex = null;
-
-function isMobileRuntimeDevice() {
-  if (typeof navigator === 'undefined') return false;
-  return (
-    /iPhone|iPod|iPad|Android/i.test(navigator.userAgent || '') ||
-    ((navigator.maxTouchPoints || 0) > 0 && Math.min(window.innerWidth || 1280, window.innerHeight || 720) <= 720)
-  );
-}
 
 function buildStaffGlobeCutoutAlphaMap(img) {
   if (cachedStaffGlobeAlphaTex) return cachedStaffGlobeAlphaTex;
@@ -210,7 +210,8 @@ function createLivingStaffOrbVfx(orbRadius = 9.95, initialElement = 'water') {
     `
   });
 
-  const liquidSphere = new THREE.Mesh(new THREE.SphereGeometry(orbRadius, 36, 30), vortexMat);
+  const liquidSphereGeo = new THREE.SphereGeometry(orbRadius, 36, 30);
+  const liquidSphere = new THREE.Mesh(liquidSphereGeo, vortexMat);
   grp.add(liquidSphere);
 
   // 2. Glossy Undulating Turquoise Water Ribbon hugging the S-curve wooden shaft (Matches fb044451.mp4!)
@@ -368,7 +369,18 @@ function createLivingStaffOrbVfx(orbRadius = 9.95, initialElement = 'water') {
     }
   }
 
-  return { group: grp, setElementTheme, updateVfx };
+  function dispose() {
+    liquidSphereGeo.dispose();
+    shaftStreamGeo.dispose();
+    rayGeo.dispose();
+    dropGeo.dispose();
+    vortexMat.dispose();
+    shaftStreamMat.dispose();
+    burstMat.dispose();
+    dropMat.dispose();
+  }
+
+  return { group: grp, setElementTheme, updateVfx, dispose };
 }
 
 function buildTripoSkullEyeEmissiveMap(cacheKey, sceneRoot) {
@@ -497,7 +509,7 @@ function getWeaponAssetKey(weaponId = 'club') {
 }
 
 function getHeroAssetKey(classId = 'warrior') {
-  if (classId === 'gunslinger') return MODEL_PATHS.gunslinger_tripo ? 'gunslinger_tripo' : 'rogue';
+  if (classId === 'gunslinger') return MODEL_PATHS.gunslinger_tripo ? 'gunslinger_tripo' : 'skel_minion';
   if (classId === 'mage') return 'mage_tripo';
   return MODEL_PATHS.warrior_run ? 'warrior_run' : 'skel_warrior';
 }
@@ -505,7 +517,14 @@ function getHeroAssetKey(classId = 'warrior') {
 function loadSingleModelKey(key) {
   if (!key || !MODEL_PATHS[key] || gltfCache.has(key) || failedModelKeys.has(key)) return Promise.resolve();
   if (inFlightModelLoads.has(key)) return inFlightModelLoads.get(key);
-  if (!sharedModelLoader) sharedModelLoader = new GLTFLoader();
+  if (!sharedModelLoader) {
+    sharedModelLoader = new GLTFLoader();
+    if (!sharedDracoLoader) {
+      sharedDracoLoader = new DRACOLoader();
+      sharedDracoLoader.setDecoderPath('./vendor/draco/');
+    }
+    sharedModelLoader.setDRACOLoader(sharedDracoLoader);
+  }
   const url = MODEL_PATHS[key];
   const isMobile = isMobileRuntimeDevice();
 
@@ -532,12 +551,117 @@ function loadSingleModelKey(key) {
           clearTimeout(timer);
           const clipMap = new Map();
           for (const clip of gltf.animations || []) {
+            // Normalize Blender-exported clips whose keyframes start at a non-zero timestamp (e.g. t0 = 0.0333s or 0.0417s).
+            // Three.js loops [0, clip.duration], so t0 > 0 causes a 1-2 frame freeze + snap on every loop wrap.
+            // Clone each unique times buffer per clip because GLTFLoader shares input accessors across tracks/clips.
+            let minT = Infinity;
+            for (const tr of clip.tracks || []) {
+              if (tr?.times && tr.times.length > 0 && tr.times[0] < minT) {
+                minT = tr.times[0];
+              }
+            }
+            if (minT > 0.0001 && minT < 0.2) {
+              const shiftedTimesCache = new Map();
+              for (const tr of clip.tracks || []) {
+                if (!tr?.times || tr.times.length === 0) continue;
+                let shifted = shiftedTimesCache.get(tr.times);
+                if (!shifted) {
+                  const src = tr.times;
+                  shifted = new Float32Array(src.length);
+                  for (let i = 0; i < src.length; i++) {
+                    shifted[i] = Math.max(0, src[i] - minT);
+                  }
+                  shiftedTimesCache.set(src, shifted);
+                }
+                tr.times = shifted;
+              }
+              clip.resetDuration();
+            }
             // Strip lower-body leg tracks from Gunslinger Shoot_A / Shoot_B so 4-way movement legs stay crisp while firing!
             if (key === 'gunslinger_tripo' && /^Shoot_[AB](?:\.\d+)?$/i.test(clip.name || '')) {
               clip.tracks = (clip.tracks || []).filter((tr) => {
                 const nodePart = (tr?.name || '').split('.')[0] || '';
                 return !/(?:UpLeg|Leg|Foot|Toe)/i.test(nodePart);
               });
+            }
+            // Warrior Mixamo clips:
+            // 1) Convert Running_A & Running_Back to true in-place loops by detrending horizontal Hips.position.z drift
+            //    (preserves vertical bounce & lateral sway while eliminating loop-wrap snaps).
+            // 2) Strip Hips & lower-body leg tracks from melee attack clips so attacks play smoothly on the upper body
+            //    without hijacking running legs, twisting hips 75deg, or lunging the skeleton forward.
+            // 3) Stabilize Idle lower-body (Hips + legs/feet/toes) to frame 0 so both boots stay rock-solid planted
+            //    on the Hub pedestal with zero knee/foot micro-twitch while keeping natural upper-body breathing.
+            if (key === 'warrior_run') {
+              const LOWER_BODY_RE = /(?:Hips|UpLeg|Leg|Foot|Toe)/i;
+              if (/^(?:Running_A|Running_Back)(?:\.\d+)?$/i.test(clip.name || '')) {
+                const legMeans = new Map();
+                for (const tr of clip.tracks || []) {
+                  if (/^mixamorig:?Hips\.position$/i.test(tr?.name || '') && tr.values && tr.values.length >= 6) {
+                    const v = tr.values;
+                    const count = Math.floor(v.length / 3);
+                    const z0 = v[2];
+                    const z1 = v[(count - 1) * 3 + 2];
+                    const dz = z1 - z0;
+                    const denom = Math.max(1, count - 1);
+                    for (let i = 0; i < count; i++) {
+                      v[i * 3 + 2] -= z0 + dz * (i / denom);
+                    }
+                  } else if (/^Running_A(?:\.\d+)?$/i.test(clip.name || '') && /^mixamorig:?(LeftUpLeg|RightUpLeg|LeftLeg|RightLeg)\.quaternion$/i.test(tr?.name || '') && tr.values && tr.values.length >= 8) {
+                    const m = tr.name.match(/^mixamorig:?(LeftUpLeg|RightUpLeg|LeftLeg|RightLeg)\.quaternion$/i);
+                    const v = tr.values;
+                    const cnt = Math.floor(v.length / 4);
+                    let sx = v[0], sy = v[1], sz = v[2], sw = v[3];
+                    for (let i = 1; i < cnt; i++) {
+                      let x = v[i * 4], y = v[i * 4 + 1], z = v[i * 4 + 2], w = v[i * 4 + 3];
+                      if (x * sx + y * sy + z * sz + w * sw < 0) { x = -x; y = -y; z = -z; w = -w; }
+                      sx += x; sy += y; sz += z; sw += w;
+                    }
+                    const qMean = new THREE.Quaternion(sx, sy, sz, sw).normalize();
+                    legMeans.set(m[1], qMean);
+                  }
+                }
+                if (legMeans.size > 0) clip.userData = { ...(clip.userData || {}), legMeans };
+              } else if (/^(?:1H_Melee_Attack_Slice_Horizontal|Slash|Attack)(?:\.\d+)?$/i.test(clip.name || '')) {
+                clip.tracks = (clip.tracks || []).filter((tr) => {
+                  const nodePart = (tr?.name || '').split('.')[0] || '';
+                  return !LOWER_BODY_RE.test(nodePart);
+                });
+                clip.userData = { ...(clip.userData || {}), isUpperBodyMask: true };
+              } else if (/^Idle(?:\.\d+)?$/i.test(clip.name || '')) {
+                for (const tr of clip.tracks || []) {
+                  const trName = tr?.name || '';
+                  const isHipsPos = /^mixamorig:?Hips\.position$/i.test(trName);
+                  const isLowerRot = /^mixamorig:?(?:Hips|(?:Left|Right)(?:UpLeg|Leg|Foot|ToeBase|Toe_End))\.quaternion$/i.test(trName);
+                  if (!isHipsPos && !isLowerRot) continue;
+                  const stride = isHipsPos ? 3 : 4;
+                  const src = tr.values;
+                  if (!src || src.length < stride * 2) continue;
+                  const count = Math.floor(src.length / stride);
+                  const locked = new Float32Array(src.length);
+                  for (let i = 0; i < count; i++) {
+                    const base = i * stride;
+                    for (let c = 0; c < stride; c++) {
+                      locked[base + c] = src[c];
+                    }
+                  }
+                  tr.values = locked;
+                }
+              }
+              // Build complementary lower-body-only clip for Idle / Running_A / Running_Back
+              // so upper-body attacks play at 100% pure amplitude (0% Idle/Run dilution on arms & torso!)
+              if (/^(?:Idle|Running_A|Running_Back)(?:\.\d+)?$/i.test(clip.name || '')) {
+                const lowerTracks = (clip.tracks || []).filter((tr) => {
+                  const nodePart = (tr?.name || '').split('.')[0] || '';
+                  return LOWER_BODY_RE.test(nodePart);
+                });
+                if (lowerTracks.length > 0) {
+                  const cleanBase = (clip.name || '').replace(/\.\d+$/, '');
+                  const lowerName = `${cleanBase}__Lower`;
+                  if (!clipMap.has(lowerName)) {
+                    clipMap.set(lowerName, new THREE.AnimationClip(lowerName, clip.duration, lowerTracks));
+                  }
+                }
+              }
             }
             clipMap.set(clip.name, clip);
             const cleanClipName = clip.name.replace(/\.\d+$/, '');
@@ -699,8 +823,19 @@ export function getBootModelKeys(classId = 'warrior', weaponId = null, levelDef 
 
 export function getMissingHeroOrWeaponKeys(classId = 'warrior', weaponId = null) {
   const out = [];
-  const hk = getHeroAssetKey(classId);
-  if (hk && MODEL_PATHS[hk] && !gltfCache.has(hk) && !failedModelKeys.has(hk)) out.push(hk);
+  if (classId) {
+    const hk = getHeroAssetKey(classId);
+    if (hk && MODEL_PATHS[hk] && !gltfCache.has(hk) && !failedModelKeys.has(hk)) out.push(hk);
+    if (
+      classId === 'warrior' &&
+      !WEAPONS[weaponId]?.twoHanded &&
+      MODEL_PATHS.shield_custom &&
+      !gltfCache.has('shield_custom') &&
+      !failedModelKeys.has('shield_custom')
+    ) {
+      out.push('shield_custom');
+    }
+  }
   const wk = getWeaponAssetKey(weaponId);
   if (wk && MODEL_PATHS[wk] && !gltfCache.has(wk) && !failedModelKeys.has(wk)) out.push(wk);
   return out;
@@ -759,8 +894,10 @@ export function preloadModels(onProgressOrOpts, maybeOpts = null) {
     await Promise.all(workers1);
 
     // Kick off non-blocking background streaming of remaining models right after Hub unlocks!
-    if (tier2Keys.length > 0) {
-      const concTier2 = isMobile ? 2 : 3;
+    // Skip aggressive Tier-2 preload on mobile devices to avoid OOM from caching ~115 MB of
+    // unused GLBs; Hub and startBattle already stream needed keys on demand via ensureModelKeysLoaded().
+    if (!isMobile && tier2Keys.length > 0) {
+      const concTier2 = 3;
       let idx2 = 0;
       const runBg = () => {
         Array.from({ length: Math.min(concTier2, tier2Keys.length) }, async () => {
@@ -770,23 +907,11 @@ export function preloadModels(onProgressOrOpts, maybeOpts = null) {
           }
         });
       };
-      setTimeout(runBg, isMobile ? 450 : 120);
+      setTimeout(runBg, 120);
     }
   })();
 
   return preloadPromise;
-}
-
-const sharedGeo = new Map();
-function getGeo(key, fn) {
-  if (!sharedGeo.has(key)) sharedGeo.set(key, fn());
-  return sharedGeo.get(key);
-}
-
-const sharedMat = new Map();
-function getMat(key, fn) {
-  if (!sharedMat.has(key)) sharedMat.set(key, fn());
-  return sharedMat.get(key);
 }
 
 // Pre-computed KayKit bone target quaternions for Two-Handed Forward Carry (Gunslinger, Archer, Bomber)
@@ -923,6 +1048,8 @@ const ELEMENT_STAFF_COLORS = {
 
 function createHeroWeaponMesh(weaponId, mageElement = null) {
   const grp = new THREE.Group();
+  const ownedMats = [];
+  grp.userData.ownedMaterials = ownedMats;
   const ironMat = getMat('hw_iron', () => new THREE.MeshStandardMaterial({ color: 0x9ca3af, metalness: 0.80, roughness: 0.26 }));
   const darkIronMat = getMat('hw_dark_iron', () => new THREE.MeshStandardMaterial({ color: 0x374151, metalness: 0.78, roughness: 0.32 }));
   const walnutMat = getMat('hw_walnut', () => new THREE.MeshStandardMaterial({ color: 0x6b3e20, roughness: 0.68, metalness: 0.08 }));
@@ -997,9 +1124,13 @@ function createHeroWeaponMesh(weaponId, mageElement = null) {
           n.castShadow = true;
           n.receiveShadow = false;
           n.frustumCulled = false;
-          const m = n.material.clone();
-          if (m.color) m.color.setHex(0xffffff);
-          n.material = m;
+          const cloneOne = (orig) => {
+            const m = orig.clone();
+            if (m.color) m.color.setHex(0xffffff);
+            ownedMats.push(m);
+            return m;
+          };
+          n.material = Array.isArray(n.material) ? n.material.map(cloneOne) : cloneOne(n.material);
         }
       });
       grp.add(swClone);
@@ -1331,13 +1462,17 @@ function createHeroWeaponMesh(weaponId, mageElement = null) {
           n.castShadow = true;
           n.receiveShadow = true;
           n.frustumCulled = false;
-          const m = n.material.clone();
-          if (m.color) m.color.setHex(0xffffff);
-          if (m.emissive && accentInt > 0) {
-            m.emissive.setHex(accentHex);
-            m.emissiveIntensity = accentInt;
-          }
-          n.material = m;
+          const cloneOne = (orig) => {
+            const m = orig.clone();
+            if (m.color) m.color.setHex(0xffffff);
+            if (m.emissive && accentInt > 0) {
+              m.emissive.setHex(accentHex);
+              m.emissiveIntensity = accentInt;
+            }
+            ownedMats.push(m);
+            return m;
+          };
+          n.material = Array.isArray(n.material) ? n.material.map(cloneOne) : cloneOne(n.material);
         }
       });
 
@@ -1600,22 +1735,28 @@ function createHeroWeaponMesh(weaponId, mageElement = null) {
         n.castShadow = true;
         n.receiveShadow = false;
         n.frustumCulled = false;
-        const m = n.material.clone();
-        if (m.color) m.color.setHex(0xffffff);
-        n.material = m;
+        const cloneOne = (orig) => {
+          const m = orig.clone();
+          if (m.color) m.color.setHex(0xffffff);
+          ownedMats.push(m);
+          return m;
+        };
+        n.material = Array.isArray(n.material) ? n.material.map(cloneOne) : cloneOne(n.material);
       }
     });
 
     // Subtle additive elemental aura around the staff's top crystal sphere (-3.63, 80.82, 0.38 in staff local space)
+    const orbAuraMat = new THREE.MeshBasicMaterial({
+      color: crystalColor,
+      transparent: true,
+      opacity: 0.30,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+    ownedMats.push(orbAuraMat);
     const orbAura = new THREE.Mesh(
       getGeo('tripo_staff_orb_aura', () => new THREE.SphereGeometry(10.6, 14, 14)),
-      new THREE.MeshBasicMaterial({
-        color: crystalColor,
-        transparent: true,
-        opacity: 0.30,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false
-      })
+      orbAuraMat
     );
     orbAura.position.set(-3.63, 80.82, 0.38);
     stClone.add(orbAura);
@@ -1630,15 +1771,17 @@ function createHeroWeaponMesh(weaponId, mageElement = null) {
   staffPole.position.y = 0.52;
   const collar = new THREE.Mesh(getGeo('m_collar', () => new THREE.CylinderGeometry(0.11, 0.07, 0.14, 8)), brassMat);
   collar.position.y = 1.32;
+  const crystalMat = new THREE.MeshStandardMaterial({
+    color: crystalColor,
+    emissive: crystalEmissive,
+    emissiveIntensity: 1.65,
+    roughness: 0.15,
+    metalness: 0.1
+  });
+  ownedMats.push(crystalMat);
   const mainCrystal = new THREE.Mesh(
     getGeo('m_crystal', () => new THREE.OctahedronGeometry(0.22, 0)),
-    new THREE.MeshStandardMaterial({
-      color: crystalColor,
-      emissive: crystalEmissive,
-      emissiveIntensity: 1.65,
-      roughness: 0.15,
-      metalness: 0.1
-    })
+    crystalMat
   );
   mainCrystal.scale.set(0.85, 1.45, 0.85);
   mainCrystal.position.y = 1.58;
@@ -1729,6 +1872,13 @@ export function createArsenalShowcaseWeapon(weaponId = 'club', mageElement = 'wa
   if (weaponId === 'blunderbuss') { tintHex = 0xea580c; tintInt = 0.22; }
   else if (weaponId === 'gatling') { tintHex = 0x0284c7; tintInt = 0.25; }
 
+  const preOwnedMats = Array.isArray(rawModel?.userData?.ownedMaterials)
+    ? rawModel.userData.ownedMaterials.slice()
+    : [];
+  if (rawModel?.userData?.ownedMaterials) {
+    rawModel.userData.ownedMaterials.length = 0;
+  }
+
   rawModel.traverse((n) => {
     if (n.isMesh && n.material) {
       n.castShadow = true;
@@ -1750,6 +1900,9 @@ export function createArsenalShowcaseWeapon(weaponId = 'club', mageElement = 'wa
       n.material = Array.isArray(n.material) ? list : list[0];
     }
   });
+  for (const oldMat of preOwnedMats) {
+    if (oldMat?.dispose) oldMat.dispose();
+  }
 
   let showcaseStaffVfx = null;
   if (!isSword && !isShotgun && gltfCache.has('staff_tripo') && !isLocked) {
@@ -1816,6 +1969,13 @@ export function createArsenalShowcaseWeapon(weaponId = 'club', mageElement = 'wa
   }
 
   function dispose() {
+    if (showcaseStaffVfx) {
+      if (showcaseStaffVfx.group?.parent) {
+        showcaseStaffVfx.group.parent.remove(showcaseStaffVfx.group);
+      }
+      showcaseStaffVfx.dispose?.();
+      showcaseStaffVfx = null;
+    }
     for (const mat of showcaseMats) {
       if (mat?.dispose) mat.dispose();
     }
@@ -1851,147 +2011,35 @@ function createMagePotionFlask() {
   return grp;
 }
 
-function createAnimController(modelRoot, clipMap, idleClipName = 'Idle', moveClipName = 'Running_A') {
-  const mixer = new THREE.AnimationMixer(modelRoot);
-  const actions = new Map();
-
-  function getAction(name) {
-    if (!name || !clipMap) return null;
-    if (actions.has(name)) return actions.get(name);
-    const clip = clipMap.get(name);
-    if (!clip) return null;
-    const act = mixer.clipAction(clip);
-    actions.set(name, act);
-    return act;
-  }
-
-  let currentBase = null;
-  let activeAttackAction = null;
-
-  function setBaseState(clipName, timeScale = 1.0) {
-    const next = getAction(clipName) || getAction('Idle');
-    if (!next) return;
-    // Always update the playback rate (even for the already-active clip) so
-    // the gait frequency tracks travel speed; otherwise steps stay at frame 0
-    // rate and the feet slide across the ground.
-    next.timeScale = timeScale;
-    // Clear any paused state left over from the earlier syncPhase experiment
-    // (a paused clip freezes mid-pose and looks like a teleport).
-    if (next.paused) { next.paused = false; }
-    if (currentBase === next) return;
-    // Reset only when the clip is not already running (otherwise a reset at
-    // every Idle<->Run switch makes the pose jump like a teleport).
-    if (!next.isRunning()) next.reset();
-    next.fadeIn(0.22).play();
-    if (currentBase) currentBase.fadeOut(0.22);
-    currentBase = next;
-  }
-
-  let activeDeathAction = null;
-
-  function triggerOneShot(clipName, speed = 1.5) {
-    if (activeDeathAction) return;
-    const act = getAction(clipName);
-    if (!act) return;
-    if (activeAttackAction && activeAttackAction !== act) {
-      activeAttackAction.fadeOut(0.08);
-    }
-    act.reset();
-    act.setLoop(THREE.LoopOnce, 1);
-    act.clampWhenFinished = false;
-    act.timeScale = speed;
-    act.weight = 1.0;
-    act.fadeIn(0.05).play();
-    activeAttackAction = act;
-  }
-
-  function triggerHit(speed = 1.85) {
-    if (activeDeathAction) return false;
-    const act = getAction('Hit_A') || getAction('Hit_B');
-    if (!act) return false;
-    act.reset();
-    act.setLoop(THREE.LoopOnce, 1);
-    act.clampWhenFinished = false;
-    act.timeScale = speed;
-    act.weight = 0.85;
-    act.fadeIn(0.03).play();
-    return true;
-  }
-
-  function triggerDeath(speed = 1.48) {
-    const act =
-      getAction('Death_A') ||
-      getAction('Death_B') ||
-      getAction('Skeletons_Death_Resurrect');
-    if (!act) return false;
-    if (currentBase) {
-      currentBase.fadeOut(0.08);
-      currentBase = null;
-    }
-    if (activeAttackAction) {
-      activeAttackAction.fadeOut(0.06);
-      activeAttackAction = null;
-    }
-    act.reset();
-    act.setLoop(THREE.LoopOnce, 1);
-    act.clampWhenFinished = true;
-    act.timeScale = speed;
-    act.weight = 1.0;
-    act.fadeIn(0.05).play();
-    activeDeathAction = act;
-    return true;
-  }
-
-  function resetAlive() {
-    if (activeDeathAction) {
-      activeDeathAction.stop();
-      activeDeathAction = null;
-    }
-    if (activeAttackAction) {
-      activeAttackAction.stop();
-      activeAttackAction = null;
-    }
-    currentBase = null;
-    setBaseState(idleClipName, 1.0);
-    mixer.update(0.016);
-  }
-
-  function syncPhase(clipName, phase01 = 0) {
-    if (activeDeathAction) return false;
-    const act = getAction(clipName) || getAction(moveClipName) || getAction(idleClipName);
-    if (!act) return false;
-    const clip = act.getClip();
-    const dur = clip?.duration || 0.8;
-    const wrapped = ((phase01 % 1) + 1) % 1;
-    if (currentBase !== act) {
-      if (currentBase) currentBase.stop();
-      act.reset().play();
-      currentBase = act;
-    }
-    act.enabled = true;
-    act.paused = true;
-    act.weight = 1.0;
-    act.time = wrapped * dur;
-    mixer.update(0);
-    return true;
-  }
-
-  setBaseState(idleClipName, 1.0);
-  mixer.update(0.016);
-
-  return { mixer, setBaseState, syncPhase, triggerOneShot, triggerHit, triggerDeath, resetAlive };
-}
-
 // ============================================================================
 // 1. HERO FACTORY — Exact Undead Chibi Skeleton Trio matching User Reference!
-//    - gunslinger -> Skeleton_Rogue.glb (Hood + Red Scarf + Backpack + Two-Handed Forward Shotgun + Recoil/Reload!)
-//    - warrior    -> Skeleton_Warrior.glb (Horned Iron Helm + Red Scarf + Sword & Skull Shield + Orange Eyes)
-//    - mage       -> Skeleton_Mage.glb (Pointed Wizard Hat + Purple Robes + Crystal Staff & Potion + Orange Eyes)
+//    - gunslinger -> Gunslinger_Tripo.glb (fallback: Skeleton_Minion.glb)
+//    - warrior    -> Warrior_Run.glb (fallback: Skeleton_Warrior.glb)
+//    - mage       -> Mage_Tripo.glb (fallback: Skeleton_Mage.glb)
 // ============================================================================
 const CLASS_SKELETON_ASSET = {
   warrior: 'skel_warrior',
-  gunslinger: 'skel_rogue',
+  gunslinger: 'skel_minion',
   mage: 'skel_mage'
+};
+
+// Normalized [leftPlantPhase, rightPlantPhase] (0..1, after t0 -> 0 clip shift)
+// measured via 3D FK boot-strike & mocap foot-lock analysis on each hero GLB.
+// Parity 0 = Left boot strike, Parity 1 = Right boot strike.
+const HERO_FOOT_PLANT_PHASES = {
+  warrior_run: {
+    Running_A: [0.315, 0.835],     // 2.200s loop: L heel-plant Fr 20.8, R heel-plant Fr 55.1
+    Running_Back: [0.365, 0.835]   // 1.333s loop: L toe-plant Fr 14.6, R toe-plant Fr 33.4
+  },
+  gunslinger_tripo: {
+    Running_A: [0.47, 0.97],       // 0.833s loop: L plant Fr 9.4, R plant Fr 19.4
+    Running_Back: [0.51, 0.01],    // 0.833s loop: L plant Fr 10.2, R plant Fr 0.2
+    Strafe_Left: [0.50, 0.95],     // 0.833s loop: L plant Fr 10.0, R toe-plant Fr 19.0
+    Strafe_Right: [0.48, 0.02]     // 0.833s loop: L plant Fr 9.6, R plant Fr 0.4
+  },
+  mage_tripo: {
+    Running_A: [0.39, 0.87]        // 1.033s loop: L flat-lock Fr 12.0, R flat-lock Fr 27.0
+  }
 };
 
 const HERO_BASE_SCALE = 1.02;
@@ -2003,94 +2051,6 @@ const GUN_PIVOT_BASE_Z = 0.24;
 const TRIPO_GUN_PIVOT_X = 0.02;
 const TRIPO_GUN_PIVOT_Y = 0.78;
 const TRIPO_GUN_PIVOT_Z = 0.34;
-
-const _tmpEuler = new THREE.Euler(0, 0, 0, 'XYZ');
-const _tmpDeltaQ = new THREE.Quaternion();
-const _ikShoulderW = new THREE.Vector3();
-const _ikTargetW = new THREE.Vector3();
-const _ikPoleW = new THREE.Vector3();
-const _ikDir = new THREE.Vector3();
-const _ikPoleOrtho = new THREE.Vector3();
-const _ikElbowW = new THREE.Vector3();
-const _ikDesiredLocal = new THREE.Vector3();
-const _ikParentWorldQ = new THREE.Quaternion();
-const _ikRotQ = new THREE.Quaternion();
-const _yUnit = new THREE.Vector3(0, 1, 0);
-
-function setBoneRelEuler(boneEntry, rx = 0, ry = 0, rz = 0) {
-  if (!boneEntry) return;
-  _tmpEuler.set(rx, ry, rz, 'XYZ');
-  _tmpDeltaQ.setFromEuler(_tmpEuler);
-  boneEntry.node.quaternion.copy(boneEntry.restQ).multiply(_tmpDeltaQ);
-}
-
-// Exact 2-Bone Analytic Arm IK for Mixamo limbs (+Y local bone axis along limb)
-function solveMixamoArmIK(upperEntry, foreEntry, handEntry, targetWorldPos, poleWorldPos) {
-  if (!upperEntry || !foreEntry || !handEntry) return;
-  const uNode = upperEntry.node;
-  const fNode = foreEntry.node;
-  const hNode = handEntry.node;
-  if (!uNode.parent) return;
-
-  // Reset to rest before measuring/solving
-  uNode.quaternion.copy(upperEntry.restQ);
-  fNode.quaternion.copy(foreEntry.restQ);
-  uNode.parent.updateWorldMatrix(true, false);
-  uNode.updateMatrixWorld(true);
-
-  uNode.getWorldPosition(_ikShoulderW);
-  fNode.getWorldPosition(_ikElbowW);
-  hNode.getWorldPosition(_ikTargetW);
-
-  const L1 = _ikShoulderW.distanceTo(_ikElbowW);
-  const L2 = _ikElbowW.distanceTo(_ikTargetW);
-  if (L1 < 1e-4 || L2 < 1e-4) return;
-
-  _ikDir.subVectors(targetWorldPos, _ikShoulderW);
-  const rawDist = _ikDir.length();
-  if (rawDist < 1e-4) return;
-  _ikDir.divideScalar(rawDist);
-
-  const minD = Math.abs(L1 - L2) + 0.004;
-  const maxD = (L1 + L2) * 0.992;
-  const D = Math.max(minD, Math.min(maxD, rawDist));
-
-  const cosA = Math.max(-1, Math.min(1, (L1 * L1 + D * D - L2 * L2) / (2 * L1 * D)));
-  const sinA = Math.sqrt(Math.max(0, 1 - cosA * cosA));
-
-  _ikPoleOrtho.subVectors(poleWorldPos, _ikShoulderW);
-  _ikPoleOrtho.addScaledVector(_ikDir, -_ikPoleOrtho.dot(_ikDir));
-  if (_ikPoleOrtho.lengthSq() < 1e-6) {
-    _ikPoleOrtho.set(0, -1, -0.5).addScaledVector(_ikDir, -_ikDir.y).normalize();
-  } else {
-    _ikPoleOrtho.normalize();
-  }
-
-  // Desired elbow position in world space
-  _ikElbowW
-    .copy(_ikShoulderW)
-    .addScaledVector(_ikDir, L1 * cosA)
-    .addScaledVector(_ikPoleOrtho, L1 * sinA);
-
-  // Rotate UpperArm so its +Y axis points at _ikElbowW
-  uNode.parent.getWorldQuaternion(_ikParentWorldQ);
-  _ikDesiredLocal.subVectors(_ikElbowW, _ikShoulderW).normalize();
-  _ikDesiredLocal.applyQuaternion(_ikParentWorldQ.invert());
-  const uRestDir = _yUnit.clone().applyQuaternion(upperEntry.restQ).normalize();
-  _ikRotQ.setFromUnitVectors(uRestDir, _ikDesiredLocal);
-  uNode.quaternion.copy(_ikRotQ).multiply(upperEntry.restQ);
-  uNode.updateMatrixWorld(true);
-
-  // Rotate ForeArm so its +Y axis points at targetWorldPos
-  fNode.getWorldPosition(_ikElbowW);
-  uNode.getWorldQuaternion(_ikParentWorldQ);
-  _ikDesiredLocal.subVectors(targetWorldPos, _ikElbowW).normalize();
-  _ikDesiredLocal.applyQuaternion(_ikParentWorldQ.invert());
-  const fRestDir = _yUnit.clone().applyQuaternion(foreEntry.restQ).normalize();
-  _ikRotQ.setFromUnitVectors(fRestDir, _ikDesiredLocal);
-  fNode.quaternion.copy(_ikRotQ).multiply(foreEntry.restQ);
-  fNode.updateMatrixWorld(true);
-}
 
 export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement = 'fire') {
   if (classId && typeof classId === 'object') {
@@ -2126,6 +2086,7 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
   let currentMageElement = mageElement || 'fire';
   let isBeast = false;
   let flashTimer = 0;
+  let isDisposed = false;
 
   // Gunslinger two-handed carry pivot, recoil kick, pump rack & walk cycle state
   let gunCarryPivot = null;
@@ -2139,7 +2100,6 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
   let reloadBlend = 0;
   let walkPhase = 0;
   let moveBlend = 0;
-  let gaitDistance = 0;   // travelled distance used to phase-lock Mixamo clips
 
   let modelInstance = null;
   let animCtrl = null;
@@ -2205,7 +2165,8 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
 
     modelInstance.traverse((node) => {
       const nm = node.name || '';
-      const mxMatch = isTripoGunslinger ? nm.match(/^mixamorig:?(.+)$/) : null;
+      const mxMatch = (isTripoGunslinger || assetKey === 'warrior_run')
+        ? nm.match(/^mixamorig:?(.+)$/) : null;
       if (mxMatch) {
         const shortName = mxMatch[1];
         const entry = {
@@ -2629,57 +2590,175 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
     if (lowerArmR) lowerArmR.quaternion.slerp(GUN_LOWER_ARM_R_Q, 0.90);
   }
 
+  let currentWeaponStyle = '1h_sword';
+  let isCurrentWeaponTwoHanded = false;
+  let warriorLeftGripSocket = null;
+  let dashAnimTimer = 0;
+  let dashAnimDur = 0.22;
+  const warriorPoleL = new THREE.Object3D();
+  warriorPoleL.position.set(0.48, 0.72, -0.22);
+  root.add(warriorPoleL);
+  const _warriorGripW = new THREE.Vector3();
+  const _warriorPoleW = new THREE.Vector3();
+
+  function resolveHeroWeaponStyle(wId) {
+    const id = String(wId || 'club');
+    if (id === 'spear' || id === 'cleaver') return { style: 'spear', twoHanded: true };
+    if (id === 'zweihander') return { style: 'zweihander', twoHanded: true };
+    if (id === 'axe' || id === 'flail') return { style: 'axe', twoHanded: true };
+    if (id === 'boss_hammer' || id === 'hammer') return { style: 'hammer', twoHanded: true };
+    return { style: '1h_sword', twoHanded: Boolean(WEAPONS[id]?.twoHanded) };
+  }
+
+  function triggerDash(durationSec = 0.22) {
+    dashAnimDur = Math.max(0.12, Math.min(0.65, Number(durationSec) || 0.22));
+    dashAnimTimer = dashAnimDur;
+  }
+
   function setWeapon(newWeaponId, nextElement = null) {
     currentWeaponId = newWeaponId || currentWeaponId;
+    const styleInfo = resolveHeroWeaponStyle(currentWeaponId);
+    currentWeaponStyle = styleInfo.style;
+    isCurrentWeaponTwoHanded = styleInfo.twoHanded;
+    warriorLeftGripSocket = null;
     if (nextElement) currentMageElement = nextElement;
     if (embeddedStaffVfx) {
       embeddedStaffVfx.setElementTheme(currentMageElement);
     }
-    if (mountedWeaponObj && mountedWeaponObj.parent) {
-      mountedWeaponObj.parent.remove(mountedWeaponObj);
+    if (mountedWeaponObj) {
+      if (mountedWeaponObj.parent) {
+        mountedWeaponObj.parent.remove(mountedWeaponObj);
+      }
+      disposeOwnedWeaponMaterials(mountedWeaponObj);
+      mountedWeaponObj = null;
     }
-    mountedWeaponObj = null;
-    if (mountedShieldObj && mountedShieldObj.parent) {
-      mountedShieldObj.parent.remove(mountedShieldObj);
+    if (mountedShieldObj) {
+      if (mountedShieldObj.parent) {
+        mountedShieldObj.parent.remove(mountedShieldObj);
+      }
+      disposeOwnedWeaponMaterials(mountedShieldObj);
+      mountedShieldObj = null;
     }
-    mountedShieldObj = null;
 
     if (isTripoMage) {
       return;
     }
 
     if (isTripoWarrior) {
-      // warrior_run ships a clean body; its sword and shield are mounted here
-      // as children of the hand bones so they follow every animation exactly.
+      // warrior_run ships a clean body; its active weapon and (for 1H weapons)
+      // shield are mounted here as children of the hand bones so they follow
+      // every animation exactly.
       if (assetKey === 'warrior_run') {
-        // Sword in the right hand.
+        const useDefaultSword = currentWeaponId === 'club' || !WEAPONS[currentWeaponId];
+        const isTwoHanded = Boolean(WEAPONS[currentWeaponId]?.twoHanded);
+        const wantedWeaponId = currentWeaponId;
+
         if (handR) {
-          // Load the raw sword GLB and mount it directly — no procedural
-          // helper offsets, so the grip sits exactly at the hand bone origin.
-          const swordAsset = gltfCache.get('sword_tripo') || gltfCache.get(assetKey);
-          if (swordAsset?.scene) {
-            mountedWeaponObj = swordAsset.scene.clone(true);
-            mountedWeaponObj.name = 'HeroWeapon_Sword_Mount';
-            mountedWeaponObj.scale.setScalar(0.006);
-            mountedWeaponObj.position.set(-0.4787, 0.1255, 0.0683);
-            mountedWeaponObj.rotation.set(-1.04, 0.24, -1.52);
-            mountedWeaponObj.traverse((n) => { if (n.isMesh) { n.castShadow = true; n.frustumCulled = false; } });
-            handR.add(mountedWeaponObj);
+          if (useDefaultSword) {
+            // Starter Oath Broadsword: exact hand-tuned mount on warrior_run RightHand.
+            const swordAsset = gltfCache.get('sword_tripo');
+            if (swordAsset?.scene) {
+              mountedWeaponObj = swordAsset.scene.clone(true);
+              mountedWeaponObj.name = 'HeroWeapon_Sword_Mount';
+              mountedWeaponObj.scale.setScalar(0.006);
+              mountedWeaponObj.position.set(-0.4787, 0.1255, 0.0683);
+              mountedWeaponObj.rotation.set(-1.04, 0.24, -1.52);
+              mountedWeaponObj.traverse((n) => {
+                if (n.isMesh) {
+                  n.castShadow = true;
+                  n.frustumCulled = false;
+                }
+              });
+              handR.add(mountedWeaponObj);
+            } else {
+              mountedWeaponObj = createHeroWeaponMesh(currentWeaponId, null);
+              mountedWeaponObj.name = 'HeroWeapon_Sword_Mount';
+              handR.add(mountedWeaponObj);
+              if (MODEL_PATHS.sword_tripo && !failedModelKeys.has('sword_tripo')) {
+                loadSingleModelKey('sword_tripo').then(() => {
+                  if (!isDisposed && currentWeaponId === wantedWeaponId && gltfCache.has('sword_tripo')) {
+                    setWeapon(wantedWeaponId, currentMageElement);
+                  }
+                });
+              }
+            }
           } else {
-            mountedWeaponObj = createHeroWeaponMesh(currentWeaponId, null);
-            mountedWeaponObj.name = 'HeroWeapon_Sword_Mount';
-            handR.add(mountedWeaponObj);
+            // Purchased / boss Warrior weapons (Spear, Zweihander, Axe, Hammer):
+            // Upright Tripo GLBs (pommel at Y=0, tip at Y≈0.98). Mount inside a pivot
+            // placed at Sword_Tripo's exact palm grip point (-0.0235, 0.0415, -0.0086)
+            // and blade basis (-1.04, 0.24, -1.52) so the grip sits cleanly inside
+            // the right fist and the blade/spearhead points outward identically.
+            const weaponKey = getWeaponAssetKey(currentWeaponId);
+            const weaponAsset = weaponKey ? gltfCache.get(weaponKey) : null;
+            if (weaponAsset?.scene) {
+              const mountCfgByKey = {
+                spear_tripo: { scale: 1.05, gripY: 0.36, rotY: 0, centerZ: 0.021, gripLX: 0.01, gripLY: -0.25, gripLZ: 0.02 },
+                zweihander_tripo: { scale: 0.90, gripY: 0.14, rotY: Math.PI * 0.5, centerZ: 0, gripLX: 0.01, gripLY: 0.11, gripLZ: 0.01 },
+                axe_tripo: { scale: 0.74, gripY: 0.26, rotY: 0, centerZ: 0, gripLX: 0.01, gripLY: 0.15, gripLZ: 0.01 },
+                hammer_tripo: { scale: 0.78, gripY: 0.26, rotY: 0, centerZ: 0, gripLX: 0.01, gripLY: 0.16, gripLZ: 0.01 }
+              };
+              const cfg = mountCfgByKey[weaponKey] || { scale: 0.80, gripY: 0.24, rotY: 0, centerZ: 0, gripLX: 0.01, gripLY: 0.12, gripLZ: 0.01 };
+              const mountPivot = new THREE.Group();
+              mountPivot.name = 'HeroWeapon_Sword_Mount';
+              mountPivot.position.set(-0.0235, 0.0415, -0.0086);
+              mountPivot.rotation.set(-1.04, 0.24, -1.52);
+              mountPivot.userData.basePos = mountPivot.position.clone();
+              mountPivot.userData.baseQuat = mountPivot.quaternion.clone();
+
+              const wMesh = weaponAsset.scene.clone(true);
+              wMesh.scale.setScalar(cfg.scale);
+              wMesh.rotation.set(Math.PI, cfg.rotY, 0);
+              wMesh.position.set(0, cfg.gripY * cfg.scale, cfg.centerZ * cfg.scale);
+              wMesh.traverse((n) => {
+                if (n.isMesh) {
+                  n.castShadow = true;
+                  n.frustumCulled = false;
+                }
+              });
+              mountPivot.add(wMesh);
+
+              if (isTwoHanded) {
+                const gripL = new THREE.Object3D();
+                gripL.name = 'HeroWeapon_LeftGripTarget';
+                gripL.position.set(cfg.gripLX, cfg.gripLY, cfg.gripLZ);
+                mountPivot.add(gripL);
+                warriorLeftGripSocket = gripL;
+              }
+
+              handR.add(mountPivot);
+              mountedWeaponObj = mountPivot;
+            } else {
+              mountedWeaponObj = createHeroWeaponMesh(currentWeaponId, null);
+              mountedWeaponObj.name = 'HeroWeapon_Sword_Mount';
+              handR.add(mountedWeaponObj);
+              if (weaponKey && MODEL_PATHS[weaponKey] && !failedModelKeys.has(weaponKey)) {
+                loadSingleModelKey(weaponKey).then(() => {
+                  if (!isDisposed && currentWeaponId === wantedWeaponId && gltfCache.has(weaponKey)) {
+                    setWeapon(wantedWeaponId, currentMageElement);
+                  }
+                });
+              }
+            }
           }
         }
-        // Shield in the left hand (user's 3D model), bone-local placement.
-        if (handL && gltfCache.has('shield_custom')) {
-          const sh = gltfCache.get('shield_custom').scene.clone(true);
-          sh.name = 'HeroWeapon_Shield_Mount';
-          sh.scale.setScalar(0.42);
-          sh.position.set(0, -0.06, 0);
-          sh.rotation.set(Math.PI / 2, 0, 0);
-          handL.add(sh);
-          mountedShieldObj = sh;
+
+        // Shield in the left hand ONLY for 1-handed weapons (omit for 2H Spear/Zweihander/Axe/Hammer).
+        if (!isTwoHanded && handL) {
+          if (gltfCache.has('shield_custom')) {
+            const sh = gltfCache.get('shield_custom').scene.clone(true);
+            sh.name = 'HeroWeapon_Shield_Mount';
+            sh.scale.setScalar(0.42);
+            sh.position.set(-0.1763, 0.1213, -0.0632);
+            sh.rotation.set(-0.4292, -0.24, -2);
+            handL.add(sh);
+            mountedShieldObj = sh;
+          } else if (MODEL_PATHS.shield_custom && !failedModelKeys.has('shield_custom')) {
+            loadSingleModelKey('shield_custom').then(() => {
+              if (!isDisposed && currentWeaponId === wantedWeaponId && gltfCache.has('shield_custom')) {
+                setWeapon(wantedWeaponId, currentMageElement);
+              }
+            });
+          }
         }
         return;
       }
@@ -2826,7 +2905,7 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
     return Math.min(3.8, Math.max(fallbackSpeed, minNeededSpeed));
   }
 
-  function playAttackAnim(_weaponType = null, attackDuration = 0) {
+  function playAttackAnim(_weaponType = null, attackDuration = 0, comboStep = 1) {
     if (safeClass === 'gunslinger') {
       gunShotCounter += 1;
       gunKickTimer = Math.min(0.24, Math.max(0.12, (attackDuration || 0.25) * 0.65));
@@ -2844,24 +2923,45 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
     }
     if (!animCtrl) return;
     if (safeClass === 'warrior') {
+      const step = comboStep === 2 ? 2 : comboStep === 3 ? 3 : 1;
+      let targetClip = '1H_Melee_Attack_Slice_Horizontal';
+      let baseClipSpd = currentWeaponId === 'axe' || currentWeaponId === 'boss_hammer' ? 1.25 : 1.65;
+      if (isTripoWarrior) {
+        // Warrior_Run.glb carries 3 distinct sword-and-shield Mixamo clips:
+        //   1 -> 1H_Melee_Attack_Slice_Horizontal (wide horizontal sweep)
+        //   2 -> Slash (high wind-up diagonal downward cut)
+        //   3 -> Attack (heavy overhead two-arm slam finisher)
+        const desired =
+          step === 2 ? 'Slash' : step === 3 ? 'Attack' : '1H_Melee_Attack_Slice_Horizontal';
+        targetClip = asset?.clips?.has(desired) ? desired : '1H_Melee_Attack_Slice_Horizontal';
+      } else {
+        baseClipSpd = 1.85;
+        const desired =
+          currentWeaponId === 'flail'
+            ? '2H_Melee_Attack_Spin'
+            : currentWeaponId === 'cleaver'
+              ? '2H_Melee_Attack_Slice'
+              : step === 2
+                ? '1H_Melee_Attack_Slice_Diagonal'
+                : step === 3
+                  ? '1H_Melee_Attack_Chop'
+                  : '1H_Melee_Attack_Slice_Horizontal';
+        targetClip = asset?.clips?.has(desired) ? desired : '1H_Melee_Attack_Slice_Horizontal';
+      }
+      // Prevent same-clip restart spam, while allowing smooth cross-fade into the next combo clip
+      const remSec = animCtrl.getOneShotRemainingSec ? animCtrl.getOneShotRemainingSec() : (animCtrl.isOneShotActive?.() ? 0.2 : 0);
+      const activeClip = animCtrl.getActiveAttackClipName ? animCtrl.getActiveAttackClipName() : null;
+      const isDifferentComboClip = Boolean(activeClip && activeClip !== targetClip);
+      if (remSec > (isDifferentComboClip ? 0.24 : 0.06)) return;
+
       warriorAttackDur = attackDuration > 0 ? Math.max(0.28, Math.min(0.95, attackDuration * 0.85)) : 0.44;
       warriorAttackTimer = warriorAttackDur;
-      if (isTripoWarrior) {
-        const baseClipSpd = currentWeaponId === 'axe' || currentWeaponId === 'boss_hammer' ? 1.25 : 1.65;
-        animCtrl.triggerOneShot(
-          '1H_Melee_Attack_Slice_Horizontal',
-          computeSyncedClipSpeed('1H_Melee_Attack_Slice_Horizontal', baseClipSpd, attackDuration)
-        );
-        return;
-      }
-      const clip =
-        currentWeaponId === 'flail'
-          ? '2H_Melee_Attack_Spin'
-          : currentWeaponId === 'cleaver'
-            ? '2H_Melee_Attack_Slice'
-            : '1H_Melee_Attack_Slice_Horizontal';
-      animCtrl.triggerOneShot(clip, computeSyncedClipSpeed(clip, 1.85, attackDuration));
+      animCtrl.triggerOneShot(
+        targetClip,
+        computeSyncedClipSpeed(targetClip, baseClipSpd, attackDuration)
+      );
     } else {
+      if (animCtrl.isOneShotActive && animCtrl.isOneShotActive()) return;
       staffCastPulse = 1.0;
       const baseSpd = isTripoMage ? 1.72 : 1.9;
       animCtrl.triggerOneShot('Spellcast_Shoot', computeSyncedClipSpeed('Spellcast_Shoot', baseSpd, attackDuration));
@@ -2880,110 +2980,207 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
 
   const _wEuler = new THREE.Euler(0, 0, 0, 'XYZ');
   const _wQuat = new THREE.Quaternion();
+  const _strideMeanInv = new THREE.Quaternion();
+  const _strideDelta = new THREE.Quaternion();
+  const _strideAxis = new THREE.Vector3();
+  const _strideBoostQ = new THREE.Quaternion();
+  let warriorSprintBlend = 0;
 
   function applyWarriorWeaponAnimOverlay(safeDt, isMoving, elapsedTime) {
     if (safeClass !== 'warrior' || !modelInstance) return;
     if (warriorAttackTimer > 0) {
       warriorAttackTimer = Math.max(0, warriorAttackTimer - safeDt);
     }
-    const wId = currentWeaponId || 'club';
-    const isSpear = wId === 'spear';
-    const isAxe = wId === 'axe';
-    const isHammer = wId === 'boss_hammer';
-    const isZwei = wId === 'zweihander';
-    const isTwoHand = isSpear || isZwei || isAxe || isHammer;
+    const isSpear = currentWeaponStyle === 'spear';
+    const isAxe = currentWeaponStyle === 'axe';
+    const isHammer = currentWeaponStyle === 'hammer';
+    const isZwei = currentWeaponStyle === 'zweihander';
+    const isTwoHand = isCurrentWeaponTwoHanded || isSpear || isZwei || isAxe || isHammer;
 
-    // Reset lunge displacement smoothly when idle/running
+    // Keep 1H Oath Sword + Shield on warrior_run 100% pure golden Mixamo clip animation!
+    if (assetKey === 'warrior_run' && !isTwoHand) {
+      return;
+    }
+
+    const wChest = chestBone || mx.Spine2?.node || mx.Spine1?.node;
+    const wUpperR = upperArmR || mx.RightArm?.node;
+    const wLowerR = lowerArmR || mx.RightForeArm?.node;
+    const wShoulderL = mx.LeftShoulder?.node;
+    const wUpperL = upperArmL || mx.LeftArm?.node;
+    const wLowerL = lowerArmL || mx.LeftForeArm?.node;
+
+    if (mountedWeaponObj?.userData?.basePos && mountedWeaponObj?.userData?.baseQuat) {
+      mountedWeaponObj.position.copy(mountedWeaponObj.userData.basePos);
+      mountedWeaponObj.quaternion.copy(mountedWeaponObj.userData.baseQuat);
+    }
+
     let lungeZ = 0;
 
-    // Two-handed guard & heavy run posture for Spear / Zweihander / Axe / Hammer
+    // Distinct Two-Handed Carry & Guard Stance (Idle & Run)
     if (isTwoHand) {
-      const sway = isMoving ? Math.sin(elapsedTime * 9.5) * 0.08 : Math.sin(elapsedTime * 2.2) * 0.025;
-      if (upperArmL) {
-        _wEuler.set(0.28 + sway, 0.24, -0.42);
-        _wQuat.setFromEuler(_wEuler);
-        upperArmL.quaternion.multiply(_wQuat);
-      }
-      if (lowerArmL) {
-        _wEuler.set(-0.36, 0.34, 0.22);
-        _wQuat.setFromEuler(_wEuler);
-        lowerArmL.quaternion.multiply(_wQuat);
-      }
-      if (isSpear && upperArmR && warriorAttackTimer <= 0) {
-        // Carry spear angled forward at the ready
-        _wEuler.set(-0.22 + sway * 0.5, -0.18, 0.28);
-        _wQuat.setFromEuler(_wEuler);
-        upperArmR.quaternion.multiply(_wQuat);
-      } else if ((isAxe || isHammer || isZwei) && isMoving && upperArmR && warriorAttackTimer <= 0) {
-        // Heavy rested grip while charging in
-        _wEuler.set(0.14 + sway, 0.16, 0.18);
-        _wQuat.setFromEuler(_wEuler);
-        upperArmR.quaternion.multiply(_wQuat);
+      const sway = isMoving ? Math.sin(elapsedTime * 9.5) * 0.065 : Math.sin(elapsedTime * 2.2) * 0.022;
+      if (warriorAttackTimer <= 0) {
+        if (isSpear) {
+          // Spear: couched forward-angled guard across the right hip
+          if (wChest) {
+            _wEuler.set(0.05, -0.14, 0);
+            _wQuat.setFromEuler(_wEuler);
+            wChest.quaternion.multiply(_wQuat);
+          }
+          if (wUpperR) {
+            _wEuler.set(-0.24 + sway * 0.5, -0.18, 0.22);
+            _wQuat.setFromEuler(_wEuler);
+            wUpperR.quaternion.multiply(_wQuat);
+          }
+          if (wLowerR) {
+            _wEuler.set(0.10, -0.14, -0.22);
+            _wQuat.setFromEuler(_wEuler);
+            wLowerR.quaternion.multiply(_wQuat);
+          }
+        } else {
+          // Zweihander / Axe / Hammer: weighty diagonal two-handed battle carry
+          const heavyLift = isZwei ? -0.18 : 0.10;
+          if (wChest) {
+            _wEuler.set(0.04, 0.10, 0);
+            _wQuat.setFromEuler(_wEuler);
+            wChest.quaternion.multiply(_wQuat);
+          }
+          if (wUpperR) {
+            _wEuler.set(heavyLift + sway, 0.16, 0.18);
+            _wQuat.setFromEuler(_wEuler);
+            wUpperR.quaternion.multiply(_wQuat);
+          }
+          if (wLowerR) {
+            _wEuler.set(0.14, 0.12, -0.16);
+            _wQuat.setFromEuler(_wEuler);
+            wLowerR.quaternion.multiply(_wQuat);
+          }
+        }
       }
     }
 
+    // Distinct Two-Handed Attack Trajectories (Spear Thrust vs Heavy 2H Greatsword/Axe/Hammer Cleave)
     if (warriorAttackTimer > 0 && warriorAttackDur > 0) {
       const u = Math.max(0, Math.min(1, 1 - warriorAttackTimer / warriorAttackDur));
       if (isSpear) {
-        // Sharp forward spear thrust lunge!
-        const thrust = u < 0.38 ? u / 0.38 : Math.max(0, 1 - (u - 0.38) / 0.62);
-        const sharp = Math.sin(thrust * Math.PI * 0.5);
-        lungeZ = sharp * 0.28;
-        if (chestBone) {
-          _wEuler.set(sharp * 0.24, -sharp * 0.28, 0);
+        // Directed Forward Spear Thrust: snappy pullback -> straight piercing lunge -> recovery
+        const wind = u < 0.22 ? Math.sin((u / 0.22) * Math.PI * 0.5) : Math.max(0, 1 - (u - 0.22) / 0.14);
+        const thrust =
+          u < 0.20
+            ? 0
+            : u < 0.54
+              ? Math.sin(((u - 0.20) / 0.34) * Math.PI * 0.5)
+              : Math.max(0, 1 - (u - 0.54) / 0.46);
+        lungeZ = thrust * 0.26 - wind * 0.08;
+        if (wChest) {
+          _wEuler.set(thrust * 0.22 - wind * 0.08, -thrust * 0.34 + wind * 0.18, 0);
           _wQuat.setFromEuler(_wEuler);
-          chestBone.quaternion.multiply(_wQuat);
+          wChest.quaternion.multiply(_wQuat);
         }
-        if (upperArmR) {
-          _wEuler.set(-sharp * 0.72, -sharp * 0.48, 0.55 * sharp);
+        if (wUpperR) {
+          _wEuler.set(-thrust * 0.68 + wind * 0.26, -thrust * 0.42 + wind * 0.20, 0.46 * thrust);
           _wQuat.setFromEuler(_wEuler);
-          upperArmR.quaternion.multiply(_wQuat);
+          wUpperR.quaternion.multiply(_wQuat);
         }
-        if (lowerArmR) {
-          _wEuler.set(0, -0.35 * sharp, -0.45 * sharp);
+        if (wLowerR) {
+          _wEuler.set(0.10 * wind, -0.30 * thrust, -0.42 * thrust + 0.28 * wind);
           _wQuat.setFromEuler(_wEuler);
-          lowerArmR.quaternion.multiply(_wQuat);
+          wLowerR.quaternion.multiply(_wQuat);
         }
-      } else if (isAxe) {
-        // Wide sweeping left-right splash chop!
-        const sweep = Math.sin(u * Math.PI);
-        if (chestBone) {
-          _wEuler.set(0.18 * sweep, Math.cos(u * Math.PI) * 0.42, 0.12 * sweep);
+        if (mountedWeaponObj?.userData?.basePos) {
+          // Slide spear shaft directly along its forward tip axis (-Y in mountPivot)
+          mountedWeaponObj.translateY(-(thrust * 0.20 - wind * 0.09));
+          _wEuler.set(0.18 * thrust, 0, -0.14 * thrust);
           _wQuat.setFromEuler(_wEuler);
-          chestBone.quaternion.multiply(_wQuat);
+          mountedWeaponObj.quaternion.multiply(_wQuat);
         }
-        if (upperArmR) {
-          _wEuler.set(0.15 * sweep, Math.cos(u * Math.PI) * 0.55, -0.35 * sweep);
+      } else if (isZwei || isAxe || isHammer) {
+        // Heavy Wide Two-Handed Cleave with full torso wind-up twist & weighty arc follow-through
+        const wind = u < 0.28 ? Math.sin((u / 0.28) * Math.PI * 0.5) : 0;
+        const swing =
+          u < 0.28
+            ? 0
+            : u < 0.74
+              ? Math.sin(((u - 0.28) / 0.46) * Math.PI * 0.5)
+              : 1;
+        const release = u > 0.74 ? Math.max(0, 1 - (u - 0.74) / 0.26) : 1;
+        const heaviness = isHammer ? 1.28 : isAxe ? 1.18 : 1.12;
+        const yawTwist = (0.48 * wind - 0.62 * swing) * release;
+        const pitchSwing = (-0.64 * wind + (isZwei ? 0.72 : 1.05) * swing) * heaviness * release;
+        const rollArc = (0.36 * wind - (isAxe ? 0.78 : 0.62) * swing) * release;
+        if (wChest) {
+          _wEuler.set((0.26 * swing - 0.14 * wind) * release, yawTwist * 0.85, rollArc * 0.30);
           _wQuat.setFromEuler(_wEuler);
-          upperArmR.quaternion.multiply(_wQuat);
+          wChest.quaternion.multiply(_wQuat);
+        }
+        if (wUpperR) {
+          _wEuler.set(pitchSwing, yawTwist * 0.55, rollArc);
+          _wQuat.setFromEuler(_wEuler);
+          wUpperR.quaternion.multiply(_wQuat);
+        }
+        if (wLowerR) {
+          _wEuler.set(0.24 * swing * release, -0.16 * swing * release, (-0.30 * wind + 0.26 * swing) * release);
+          _wQuat.setFromEuler(_wEuler);
+          wLowerR.quaternion.multiply(_wQuat);
+        }
+        if (mountedWeaponObj?.userData?.baseQuat) {
+          _wEuler.set(-0.22 * wind * release + 0.18 * swing * release, 0, rollArc * 0.25);
+          _wQuat.setFromEuler(_wEuler);
+          mountedWeaponObj.quaternion.multiply(_wQuat);
         }
       } else {
-        // Sword ('club'), Zweihander & Hammer: diagonal TOP-DOWN overhead cleave (сверху вниз / наискось вниз)!
+        // Fallback KayKit 1H Sword diagonal chop
         const wind = u < 0.28 ? u / 0.28 : 0;
         const chop = u >= 0.28 ? Math.sin(Math.min(1, (u - 0.28) / 0.52) * Math.PI * 0.5) : 0;
         const release = u > 0.80 ? 1 - (u - 0.80) / 0.20 : 1;
-        const heaviness = isHammer ? 1.32 : isZwei ? 1.18 : 1.0;
-        const pitchDelta = (-0.82 * wind + 1.15 * chop) * heaviness * release;
+        const pitchDelta = (-0.82 * wind + 1.15 * chop) * release;
         const rollDelta = (0.35 * wind - 0.62 * chop) * release;
-        if (chestBone) {
+        if (wChest) {
           _wEuler.set(0.28 * chop * release - 0.14 * wind, -0.22 * chop * release, rollDelta * 0.35);
           _wQuat.setFromEuler(_wEuler);
-          chestBone.quaternion.multiply(_wQuat);
+          wChest.quaternion.multiply(_wQuat);
         }
-        if (upperArmR) {
+        if (wUpperR) {
           _wEuler.set(pitchDelta, -0.25 * chop * release, rollDelta);
           _wQuat.setFromEuler(_wEuler);
-          upperArmR.quaternion.multiply(_wQuat);
+          wUpperR.quaternion.multiply(_wQuat);
         }
-        if (lowerArmR) {
+        if (wLowerR) {
           _wEuler.set(0.25 * chop * release, 0, -0.32 * wind + 0.24 * chop * release);
           _wQuat.setFromEuler(_wEuler);
-          lowerArmR.quaternion.multiply(_wQuat);
+          wLowerR.quaternion.multiply(_wQuat);
         }
       }
     }
 
-    modelInstance.position.z = lungeZ;
+    // Procedural Two-Handed Left-Arm Grip onto shaft/hilt (2-Bone Analytic IK on Mixamo, quaternion fallback on KayKit)
+    if (isTwoHand) {
+      if (mx.LeftArm && mx.LeftForeArm && mx.LeftHand && warriorLeftGripSocket) {
+        if (wShoulderL) {
+          _wEuler.set(0.14, 0.22, -0.12);
+          _wQuat.setFromEuler(_wEuler);
+          wShoulderL.quaternion.multiply(_wQuat);
+        }
+        root.updateMatrixWorld(true);
+        warriorLeftGripSocket.getWorldPosition(_warriorGripW);
+        warriorPoleL.getWorldPosition(_warriorPoleW);
+        solveMixamoArmIK(mx.LeftArm, mx.LeftForeArm, mx.LeftHand, _warriorGripW, _warriorPoleW, 0.88);
+      } else {
+        const sway = isMoving ? Math.sin(elapsedTime * 9.5) * 0.07 : Math.sin(elapsedTime * 2.2) * 0.025;
+        if (wUpperL) {
+          _wEuler.set(0.28 + sway, 0.24, -0.42);
+          _wQuat.setFromEuler(_wEuler);
+          wUpperL.quaternion.multiply(_wQuat);
+        }
+        if (wLowerL) {
+          _wEuler.set(-0.36, 0.34, 0.22);
+          _wQuat.setFromEuler(_wEuler);
+          wLowerL.quaternion.multiply(_wQuat);
+        }
+      }
+    }
+
+    modelInstance.position.z = isTripoWarrior ? 0 : lungeZ;
   }
 
   function applyGunslingerWeaponAnimOverlay(safeDt, isMoving, elapsedTime) {
@@ -3093,8 +3290,20 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
     }
   }
 
-  function update(dt, isMoving = false, speedRatio = 1, elapsedTime = 0, moveLocalX = 0, moveLocalZ = 1) {
+  const footPlantMap = HERO_FOOT_PLANT_PHASES[assetKey] || null;
+  let prevLocomotionClip = null;
+  let prevLocomotionPhase = null;
+  let pendingFootstepEvent = null;
+
+  function consumeFootstepEvent() {
+    const ev = pendingFootstepEvent;
+    pendingFootstepEvent = null;
+    return ev;
+  }
+
+  function update(dt, isMoving = false, speedRatio = 1, elapsedTime = 0, moveLocalX = 0, moveLocalZ = 1, isSprinting = false) {
     const safeDt = Math.min(Math.max(dt || 0.016, 0), 0.1);
+    let activeRunClip = 'Running_A';
     if (animCtrl) {
       if (isMoving) {
         let runClip = isBeast && asset?.clips?.has('Running_B') ? 'Running_B' : 'Running_A';
@@ -3106,17 +3315,134 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
             runClip = 'Running_Back';
           }
         } else if (isTripoWarrior && moveLocalZ < -0.35 && asset?.clips?.has('Running_Back')) {
-          // New forward run (Running_A) vs old clip kept for walking BACKWARD.
           runClip = 'Running_Back';
         }
-        const runScale = assetKey === 'warrior_run'
-          ? Math.max(0.95, Math.min(1.6, speedRatio * 1.15))
-          : Math.max(0.95, Math.min(2.15, speedRatio * 1.32));
+        activeRunClip = runClip;
+        let runScale;
+        if (assetKey === 'warrior_run') {
+          runScale =
+            runClip === 'Running_Back'
+              ? Math.max(1.15, Math.min(2.9, speedRatio * 2.55))
+              : Math.max(1.45, Math.min(3.85, speedRatio * 3.15));
+        } else {
+          runScale = Math.max(0.95, Math.min(2.15, speedRatio * 1.32));
+        }
         animCtrl.setBaseState(runClip, runScale);
       } else {
         animCtrl.setBaseState('Idle', 1.0);
       }
+      animCtrl.updateOneShotFade?.(safeDt);
       animCtrl.mixer.update(safeDt);
+
+      // Sync footstep audio strictly to exact visual boot-plant phase crossings of the active run clip.
+      if (footPlantMap) {
+        pendingFootstepEvent = null;
+        if (isMoving) {
+          const plantPhases = footPlantMap[activeRunClip];
+          const lowerRunAct = plantPhases ? animCtrl.getAction?.(`${activeRunClip}__Lower`) : null;
+          const fullRunAct = plantPhases ? animCtrl.getAction?.(activeRunClip) : null;
+          const act = lowerRunAct && lowerRunAct.getEffectiveWeight() > 0.35 ? lowerRunAct : fullRunAct;
+          const dur = act?.getClip?.()?.duration || 0;
+          if (act && dur > 0.01 && act.getEffectiveWeight() > 0.35) {
+            const currPhase01 = (((act.time % dur) + dur) % dur) / dur;
+            if (prevLocomotionClip === activeRunClip && prevLocomotionPhase !== null) {
+              const wrapped = currPhase01 < prevLocomotionPhase;
+              for (let parity = 0; parity < plantPhases.length; parity++) {
+                const p = plantPhases[parity];
+                const crossed = wrapped
+                  ? p > prevLocomotionPhase || p <= currPhase01
+                  : prevLocomotionPhase < p && p <= currPhase01;
+                if (crossed) {
+                  pendingFootstepEvent = { parity, clipName: activeRunClip };
+                  break;
+                }
+              }
+            }
+            prevLocomotionClip = activeRunClip;
+            prevLocomotionPhase = currPhase01;
+          } else {
+            prevLocomotionClip = null;
+            prevLocomotionPhase = null;
+          }
+        } else {
+          prevLocomotionClip = null;
+          prevLocomotionPhase = null;
+        }
+      }
+    }
+
+    // Widen Warrior stride length anatomically along each leg bone's own swing axis
+    // and add a subtle athletic forward lean when sprinting (Shift), so faster movement
+    // looks grounded rather than pushed by an external force.
+    if (assetKey === 'warrior_run' && modelInstance && animCtrl) {
+      const targetSprint = isMoving && isSprinting && activeRunClip === 'Running_A' ? 1 : 0;
+      warriorSprintBlend += (targetSprint - warriorSprintBlend) * Math.min(1, safeDt * 9);
+      const runAct = animCtrl.getAction?.('Running_A');
+      const runWeight = runAct ? runAct.getEffectiveWeight() : 0;
+      const legMeans = runAct?.getClip?.()?.userData?.legMeans;
+      if (runWeight > 0.05 && legMeans) {
+        const amp = 1 + (0.22 + warriorSprintBlend * 0.28) * runWeight;
+        for (const [boneName, qMean] of legMeans.entries()) {
+          const bone = mx[boneName]?.node;
+          if (!bone) continue;
+          _strideMeanInv.copy(qMean).invert();
+          _strideDelta.copy(_strideMeanInv).multiply(bone.quaternion);
+          if (_strideDelta.w < 0) {
+            _strideDelta.x = -_strideDelta.x;
+            _strideDelta.y = -_strideDelta.y;
+            _strideDelta.z = -_strideDelta.z;
+            _strideDelta.w = -_strideDelta.w;
+          }
+          const sinHalf = Math.hypot(_strideDelta.x, _strideDelta.y, _strideDelta.z);
+          if (sinHalf > 1e-4) {
+            const halfAngle = Math.atan2(sinHalf, _strideDelta.w);
+            const scaledAngle = Math.min(1.22, halfAngle * 2 * amp);
+            _strideAxis.set(_strideDelta.x / sinHalf, _strideDelta.y / sinHalf, _strideDelta.z / sinHalf);
+            _strideBoostQ.setFromAxisAngle(_strideAxis, scaledAngle);
+            bone.quaternion.copy(qMean).multiply(_strideBoostQ);
+          }
+        }
+      }
+      const targetLean = (isMoving && activeRunClip === 'Running_A' ? 0.035 : 0) + warriorSprintBlend * 0.11;
+      modelInstance.rotation.x += (targetLean - modelInstance.rotation.x) * Math.min(1, safeDt * 10);
+    }
+
+    // Dynamic Dash lean + athletic arm sweep / crouch across all hero classes!
+    if (dashAnimTimer > 0 && modelInstance) {
+      dashAnimTimer = Math.max(0, dashAnimTimer - safeDt);
+      const dProg = dashAnimDur > 0 ? 1 - dashAnimTimer / dashAnimDur : 1;
+      const dEnv = Math.sin(Math.max(0, Math.min(1, dProg)) * Math.PI);
+      const baseLeanX =
+        assetKey === 'warrior_run'
+          ? (isMoving && activeRunClip === 'Running_A' ? 0.035 : 0) + warriorSprintBlend * 0.11
+          : 0;
+      modelInstance.rotation.x = baseLeanX + dEnv * 0.34;
+      modelInstance.position.y = -dEnv * 0.11;
+      const dSpine = mx.Spine2?.node || chestBone;
+      if (dSpine) {
+        _wEuler.set(dEnv * 0.24, 0, 0);
+        _wQuat.setFromEuler(_wEuler);
+        dSpine.quaternion.multiply(_wQuat);
+      }
+      if (!isCurrentWeaponTwoHanded) {
+        const dArmL = mx.LeftArm?.node || upperArmL;
+        const dArmR = mx.RightArm?.node || upperArmR;
+        if (dArmL) {
+          _wEuler.set(dEnv * 0.32, 0, -dEnv * 0.22);
+          _wQuat.setFromEuler(_wEuler);
+          dArmL.quaternion.multiply(_wQuat);
+        }
+        if (dArmR && safeClass !== 'gunslinger') {
+          _wEuler.set(dEnv * 0.28, 0, dEnv * 0.22);
+          _wQuat.setFromEuler(_wEuler);
+          dArmR.quaternion.multiply(_wQuat);
+        }
+      }
+    } else if (modelInstance) {
+      if (modelInstance.position.y !== 0) modelInstance.position.y = 0;
+      if (assetKey !== 'warrior_run' && modelInstance.rotation.x !== 0) {
+        modelInstance.rotation.x = 0;
+      }
     }
 
     applyWarriorWeaponAnimOverlay(safeDt, isMoving, elapsedTime);
@@ -3214,19 +3540,55 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
     }
   }
 
+  const hasSyncedFootsteps = Boolean(animCtrl && footPlantMap);
+  const getWeaponStyle = () => ({ style: currentWeaponStyle, twoHanded: isCurrentWeaponTwoHanded });
+  const heroAnimFacade = {
+    ...(animCtrl || {}),
+    triggerDash,
+    setWeapon,
+    getWeaponStyle,
+    playAttackAnim
+  };
+  root.userData.animCtrl = heroAnimFacade;
   root.userData.setWeapon = setWeapon;
   root.userData.setElement = setElement;
   root.userData.setBeastMode = setBeastMode;
   root.userData.setReloading = setReloading;
   root.userData.playAttackAnim = playAttackAnim;
+  root.userData.triggerDash = triggerDash;
+  root.userData.getWeaponStyle = getWeaponStyle;
   root.userData.flashHit = flashHit;
   root.userData.update = update;
+  if (hasSyncedFootsteps) {
+    root.userData.consumeFootstepEvent = consumeFootstepEvent;
+  }
 
   // Free the GPU memory owned by this particular copy of the hero.
   // Shared geometry/textures from gltfCache are intentionally NOT disposed —
   // other instances still use them. Only cloned materials, skeletons and
   // mixer bindings belong to this instance.
   function dispose() {
+    isDisposed = true;
+    if (mountedWeaponObj) {
+      if (mountedWeaponObj.parent) mountedWeaponObj.parent.remove(mountedWeaponObj);
+      disposeOwnedWeaponMaterials(mountedWeaponObj);
+      mountedWeaponObj = null;
+    }
+    if (mountedShieldObj) {
+      if (mountedShieldObj.parent) mountedShieldObj.parent.remove(mountedShieldObj);
+      disposeOwnedWeaponMaterials(mountedShieldObj);
+      mountedShieldObj = null;
+    }
+    if (embeddedStaffVfx) {
+      if (embeddedStaffVfx.group?.parent) {
+        embeddedStaffVfx.group.parent.remove(embeddedStaffVfx.group);
+      }
+      embeddedStaffVfx.dispose?.();
+      embeddedStaffVfx = null;
+    }
+    if (beastRing?.material?.dispose) {
+      beastRing.material.dispose();
+    }
     if (animCtrl?.mixer && modelInstance) {
       animCtrl.mixer.stopAllAction();
       animCtrl.mixer.uncacheRoot(modelInstance);
@@ -3242,7 +3604,7 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
     instanceMats.length = 0;
   }
 
-  return {
+  const heroHandle = {
     root,
     dispose,
     setWeapon,
@@ -3250,9 +3612,15 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
     setBeastMode,
     setReloading,
     playAttackAnim,
+    triggerDash,
+    getWeaponStyle,
     flashHit,
     update
   };
+  if (hasSyncedFootsteps) {
+    heroHandle.consumeFootstepEvent = consumeFootstepEvent;
+  }
+  return heroHandle;
 }
 
 // ============================================================================
@@ -5824,6 +6192,8 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
   let isDying = false;
   let proceduralFall = false;
   let hitJoltTimer = 0;
+  let hitReactCooldown = 0;
+  let hitTwistDir = 1;
   let baseClipOverride = null;
 
   const handle = {
@@ -5837,6 +6207,8 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
       isDying = false;
       proceduralFall = false;
       hitJoltTimer = 0;
+      hitReactCooldown = 0;
+      hitTwistDir = 1;
       flashTimer = 0;
       root.visible = true;
       root.position.y = 0;
@@ -5867,10 +6239,17 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
       }
       return null;
     },
-    playHitFlinch() {
+    triggerHitReact() {
       if (isDying) return;
-      hitJoltTimer = 0.12;
-      animCtrl?.triggerHit?.(1.9);
+      hitJoltTimer = 0.17;
+      hitTwistDir = -hitTwistDir;
+      if (hitReactCooldown <= 0) {
+        const playedClip = animCtrl?.triggerHit?.(1.9);
+        hitReactCooldown = playedClip ? 0.18 : 0.08;
+      }
+    },
+    playHitFlinch() {
+      handle.triggerHitReact();
     },
     playDeathCollapse() {
       if (isDying) return;
@@ -5967,20 +6346,35 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
       const safeDt = Math.min(Math.max(dt || 0.016, 0), 0.1);
       const isMoving = typeof arg2 === 'boolean' ? arg2 : true;
       const elapsedTime = typeof arg2 === 'boolean' ? (arg3 || 0) : (arg2 || 0);
+      if (hitReactCooldown > 0) {
+        hitReactCooldown = Math.max(0, hitReactCooldown - safeDt);
+      }
       if (animCtrl && !isDying && canonicalType !== 'corrupted_treant' && canonicalType !== 'mimic_chest') {
         const baseClip = baseClipOverride || (isMoving ? cfg.moveClip : (cfg.idleClip || cfg.moveClip));
         animCtrl.setBaseState(baseClip, baseClipOverride ? 1.35 : isMoving ? (cfg.moveSpeedAnim || 1.1) : 1.0);
+        animCtrl.updateOneShotFade?.();
         animCtrl.mixer.update(safeDt);
       }
       if (procRig) {
         procRig.update(safeDt, elapsedTime, isDying);
       }
 
-      if (hitJoltTimer > 0 && spawnedInst && !isDying) {
+      if (hitJoltTimer > 0 && !isDying) {
         hitJoltTimer = Math.max(0, hitJoltTimer - safeDt);
-        spawnedInst.rotation.x = -Math.sin((hitJoltTimer / 0.12) * Math.PI) * 0.24;
-      } else if (spawnedInst && !isDying && spawnedInst.rotation.x !== 0) {
-        spawnedInst.rotation.x = 0;
+        const jolt = Math.sin((hitJoltTimer / 0.17) * Math.PI);
+        if (spawnedInst) {
+          spawnedInst.rotation.x = -jolt * 0.28;
+          spawnedInst.rotation.z = hitTwistDir * jolt * 0.14;
+        }
+        root.scale.set(1 + jolt * 0.055, 1 - jolt * 0.075, 1 + jolt * 0.055);
+      } else if (!isDying) {
+        if (spawnedInst && (spawnedInst.rotation.x !== 0 || spawnedInst.rotation.z !== 0)) {
+          spawnedInst.rotation.x = 0;
+          spawnedInst.rotation.z = 0;
+        }
+        if (root.scale.x !== 1 || root.scale.y !== 1 || root.scale.z !== 1) {
+          root.scale.set(1, 1, 1);
+        }
       }
 
       if (wingGroup?.userData?.wingPivots && !isDying) {
@@ -6049,6 +6443,15 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
       }
     }
   };
+  const enemyAnimFacade = {
+    ...(animCtrl || {}),
+    triggerHitReact: () => handle.triggerHitReact(),
+    playHitFlinch: () => handle.playHitFlinch(),
+    playAttackAnim: (c) => handle.playAttackAnim(c),
+    playDeathCollapse: () => handle.playDeathCollapse()
+  };
+  root.userData.animCtrl = enemyAnimFacade;
+  root.userData.triggerHitReact = enemyAnimFacade.triggerHitReact;
   return handle;
 }
 
@@ -6062,21 +6465,30 @@ export function createPickupMesh(pickupType = 'xp') {
 
   let floatingPart = null;
   let beaconPart = null;
+  let fuseFlamePivot = null;
+  let fuseSparkMesh = null;
+  let barrelRuneMat = null;
+  let barrelHaloRing = null;
+  let cursedCrystalPivot = null;
+  let cursedShardsPivot = null;
+  let cursedGlowMat = null;
+  let cursedHaloRing = null;
   const damageMats = [];
+  const ownedMats = [];
   let shrinkRatio = 1.0;
   let damageGlow = 0.0;
 
   if (pickupType === 'xp') {
     floatingPart = new THREE.Mesh(
       getGeo('pk_xp', () => new THREE.OctahedronGeometry(0.28, 0)),
-      new THREE.MeshStandardMaterial({ color: 0x67e8f9, emissive: 0x06b6d4, emissiveIntensity: 0.9, roughness: 0.2 })
+      getMat('pk_xp_mat', () => new THREE.MeshStandardMaterial({ color: 0x67e8f9, emissive: 0x06b6d4, emissiveIntensity: 0.9, roughness: 0.2 }))
     );
     floatingPart.position.y = 0.45;
     visualPivot.add(floatingPart);
   } else if (pickupType === 'gold') {
     floatingPart = new THREE.Mesh(
       getGeo('pk_gold', () => new THREE.CylinderGeometry(0.24, 0.24, 0.1, 14)),
-      new THREE.MeshStandardMaterial({ color: 0xfacc15, emissive: 0xca8a04, emissiveIntensity: 0.5, metalness: 0.8, roughness: 0.25 })
+      getMat('pk_gold_mat', () => new THREE.MeshStandardMaterial({ color: 0xfacc15, emissive: 0xca8a04, emissiveIntensity: 0.5, metalness: 0.8, roughness: 0.25 }))
     );
     floatingPart.rotation.x = Math.PI * 0.32;
     floatingPart.position.y = 0.36;
@@ -6084,13 +6496,13 @@ export function createPickupMesh(pickupType = 'xp') {
   } else if (pickupType === 'heart') {
     floatingPart = new THREE.Mesh(
       getGeo('pk_heart', () => new THREE.DodecahedronGeometry(0.3, 0)),
-      new THREE.MeshStandardMaterial({ color: 0xf43f5e, emissive: 0xe11d48, emissiveIntensity: 0.85, roughness: 0.25 })
+      getMat('pk_heart_mat', () => new THREE.MeshStandardMaterial({ color: 0xf43f5e, emissive: 0xe11d48, emissiveIntensity: 0.85, roughness: 0.25 }))
     );
     floatingPart.position.y = 0.46;
     visualPivot.add(floatingPart);
   } else if (pickupType === 'clover') {
     const grp = new THREE.Group();
-    const leafMat = new THREE.MeshStandardMaterial({ color: 0x4ade80, emissive: 0x16a34a, emissiveIntensity: 0.9, roughness: 0.25 });
+    const leafMat = getMat('pk_clover_mat', () => new THREE.MeshStandardMaterial({ color: 0x4ade80, emissive: 0x16a34a, emissiveIntensity: 0.9, roughness: 0.25 }));
     for (let i = 0; i < 4; i++) {
       const leaf = new THREE.Mesh(getGeo('pk_leaf', () => new THREE.SphereGeometry(0.15, 8, 8)), leafMat);
       const a = (i / 4) * Math.PI * 2;
@@ -6113,6 +6525,7 @@ export function createPickupMesh(pickupType = 'xp') {
             const c = m.clone();
             if (isComp && c.color) c.color.lerp(new THREE.Color(0xa855f7), 0.35);
             damageMats.push(c);
+            ownedMats.push(c);
             return c;
           };
           n.material = Array.isArray(n.material) ? n.material.map(cloneOne) : cloneOne(n.material);
@@ -6133,6 +6546,7 @@ export function createPickupMesh(pickupType = 'xp') {
         roughness: 0.35
       });
       damageMats.push(crateMat, trimMat);
+      ownedMats.push(crateMat, trimMat);
       const box = new THREE.Mesh(getGeo('crate_box', () => new THREE.BoxGeometry(0.86, 0.82, 0.86)), crateMat);
       box.position.y = 0.41;
       box.castShadow = true;
@@ -6152,6 +6566,7 @@ export function createPickupMesh(pickupType = 'xp') {
             const warmGold = (m) => {
               const c = m.clone();
               if (c.color) c.color.lerp(new THREE.Color(0xfbbf24), 0.24);
+              ownedMats.push(c);
               return c;
             };
             n.material = Array.isArray(n.material) ? n.material.map(warmGold) : warmGold(n.material);
@@ -6162,14 +6577,7 @@ export function createPickupMesh(pickupType = 'xp') {
       });
       visualPivot.add(cloned);
     } else {
-      const baseMat = new THREE.MeshStandardMaterial({ color: 0x272038, metalness: 0.5, roughness: 0.4 });
-      const goldMat = new THREE.MeshStandardMaterial({
-        color: 0xfbbf24,
-        emissive: 0xd97706,
-        emissiveIntensity: 0.55,
-        metalness: 0.85,
-        roughness: 0.2
-      });
+      const baseMat = getMat('pk_relic_base_mat', () => new THREE.MeshStandardMaterial({ color: 0x272038, metalness: 0.5, roughness: 0.4 }));
       const chest = new THREE.Mesh(getGeo('relic_chest', () => new THREE.BoxGeometry(1.25, 0.82, 0.92)), baseMat);
       chest.position.y = 0.41;
       chest.castShadow = true;
@@ -6178,27 +6586,339 @@ export function createPickupMesh(pickupType = 'xp') {
 
     beaconPart = new THREE.Mesh(
       getGeo('relic_beam', () => new THREE.CylinderGeometry(0.32, 0.58, 7.5, 16, 1, true)),
-      new THREE.MeshBasicMaterial({
+      getMat('pk_relic_beam_mat', () => new THREE.MeshBasicMaterial({
         color: 0xfde047,
         transparent: true,
         opacity: 0.24,
         side: THREE.DoubleSide,
         depthWrite: false
-      })
+      }))
     );
     beaconPart.position.y = 3.8;
     root.add(beaconPart);
 
     floatingPart = new THREE.Mesh(
       getGeo('relic_star', () => new THREE.OctahedronGeometry(0.34, 0)),
-      new THREE.MeshStandardMaterial({ color: 0xfef08a, emissive: 0xf59e0b, emissiveIntensity: 1.4 })
+      getMat('pk_relic_star_mat', () => new THREE.MeshStandardMaterial({ color: 0xfef08a, emissive: 0xf59e0b, emissiveIntensity: 1.4 }))
     );
     floatingPart.position.y = 1.85;
     root.add(floatingPart);
+  } else if (pickupType === 'explosive_barrel') {
+    const barrelBodyMat = getMat('pk_eb_wood', () =>
+      new THREE.MeshStandardMaterial({
+        color: 0x991b1b,
+        emissive: 0x3b0707,
+        emissiveIntensity: 0.48,
+        roughness: 0.54,
+        metalness: 0.14
+      })
+    );
+    const barrelLidMat = getMat('pk_eb_lid_mat', () =>
+      new THREE.MeshStandardMaterial({ color: 0x3f1d1d, roughness: 0.72, metalness: 0.15 })
+    );
+    const ironHoopMat = getMat('pk_eb_iron', () =>
+      new THREE.MeshStandardMaterial({ color: 0x3f3f46, metalness: 0.84, roughness: 0.3 })
+    );
+    const fuseCordMat = getMat('pk_eb_fuse_mat', () =>
+      new THREE.MeshStandardMaterial({ color: 0xd6c7a1, roughness: 0.9, metalness: 0.05 })
+    );
+    const flameOuterMat = getMat('pk_eb_flame_out', () =>
+      new THREE.MeshBasicMaterial({ color: 0xf97316, transparent: true, opacity: 0.92 })
+    );
+    const flameCoreMat = getMat('pk_eb_flame_core', () =>
+      new THREE.MeshBasicMaterial({ color: 0xfef08a })
+    );
+    const haloMat = getMat('pk_eb_halo_mat', () =>
+      new THREE.MeshBasicMaterial({
+        color: 0xf97316,
+        transparent: true,
+        opacity: 0.38,
+        side: THREE.DoubleSide,
+        depthWrite: false
+      })
+    );
+
+    // Per-instance glowing fiery rune material (animated pulse + cleanly disposed in dispose())
+    barrelRuneMat = new THREE.MeshStandardMaterial({
+      color: 0xfef08a,
+      emissive: 0xf97316,
+      emissiveIntensity: 1.45,
+      roughness: 0.22,
+      metalness: 0.12
+    });
+    ownedMats.push(barrelRuneMat);
+    damageMats.push(barrelRuneMat);
+
+    // Bulging gothic powder keg body
+    const body = new THREE.Mesh(
+      getGeo('pk_eb_body', () => new THREE.CylinderGeometry(0.41, 0.45, 0.98, 12)),
+      barrelBodyMat
+    );
+    body.position.y = 0.49;
+    body.castShadow = true;
+    body.receiveShadow = true;
+    visualPivot.add(body);
+
+    const topLid = new THREE.Mesh(
+      getGeo('pk_eb_lid', () => new THREE.CylinderGeometry(0.38, 0.38, 0.06, 12)),
+      barrelLidMat
+    );
+    topLid.position.y = 0.98;
+    visualPivot.add(topLid);
+
+    // Forged iron reinforcement hoops (bottom, belly, top)
+    const hoopEndGeo = getGeo('pk_eb_hoop_end', () => {
+      const g = new THREE.TorusGeometry(0.422, 0.032, 6, 16);
+      g.rotateX(Math.PI * 0.5);
+      return g;
+    });
+    const hoopMidGeo = getGeo('pk_eb_hoop_mid', () => {
+      const g = new THREE.TorusGeometry(0.442, 0.036, 6, 16);
+      g.rotateX(Math.PI * 0.5);
+      return g;
+    });
+    const hoopBot = new THREE.Mesh(hoopEndGeo, ironHoopMat);
+    hoopBot.position.y = 0.17;
+    const hoopMid = new THREE.Mesh(hoopMidGeo, ironHoopMat);
+    hoopMid.position.y = 0.50;
+    const hoopTop = new THREE.Mesh(hoopEndGeo, ironHoopMat);
+    hoopTop.position.y = 0.83;
+    visualPivot.add(hoopBot, hoopMid, hoopTop);
+
+    // 4 Glowing Fiery Hazard Runes around the keg belly (readable from any camera angle!)
+    const runeGeo = getGeo('pk_eb_rune', () => new THREE.OctahedronGeometry(0.115, 0));
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2;
+      const rune = new THREE.Mesh(runeGeo, barrelRuneMat);
+      rune.position.set(Math.sin(a) * 0.44, 0.50, Math.cos(a) * 0.44);
+      rune.rotation.y = a;
+      rune.scale.set(0.95, 1.38, 0.34);
+      visualPivot.add(rune);
+    }
+
+    // Braided fuse cord + flickering live fuse flame & spark on top
+    const fuseCord = new THREE.Mesh(
+      getGeo('pk_eb_fuse', () => new THREE.CylinderGeometry(0.024, 0.03, 0.22, 6)),
+      fuseCordMat
+    );
+    fuseCord.position.set(0.02, 1.09, 0.01);
+    fuseCord.rotation.z = -0.18;
+    visualPivot.add(fuseCord);
+
+    fuseFlamePivot = new THREE.Group();
+    fuseFlamePivot.position.set(0.04, 1.21, 0.01);
+    const flameOuter = new THREE.Mesh(
+      getGeo('pk_eb_flame_out_geo', () => new THREE.ConeGeometry(0.115, 0.29, 7)),
+      flameOuterMat
+    );
+    flameOuter.position.y = 0.12;
+    const flameCore = new THREE.Mesh(
+      getGeo('pk_eb_flame_core_geo', () => new THREE.SphereGeometry(0.068, 7, 7)),
+      flameCoreMat
+    );
+    flameCore.position.y = 0.05;
+    fuseFlamePivot.add(flameOuter, flameCore);
+    visualPivot.add(fuseFlamePivot);
+
+    fuseSparkMesh = new THREE.Mesh(
+      getGeo('pk_eb_spark_geo', () => new THREE.OctahedronGeometry(0.045, 0)),
+      flameCoreMat
+    );
+    fuseSparkMesh.position.set(0.04, 1.42, 0.01);
+    visualPivot.add(fuseSparkMesh);
+
+    // Subtle glowing ground hazard ring so the keg stands out cleanly in combat
+    barrelHaloRing = new THREE.Mesh(
+      getGeo('pk_eb_halo_geo', () => {
+        const g = new THREE.RingGeometry(0.47, 0.65, 18);
+        g.rotateX(-Math.PI * 0.5);
+        return g;
+      }),
+      haloMat
+    );
+    barrelHaloRing.position.y = 0.03;
+    root.add(barrelHaloRing);
+  } else if (pickupType === 'cursed_chest') {
+    // Sinister Crimson-Violet Runic Cursed Chest (×3 Gold Jackpot + Ambush!)
+    cursedGlowMat = new THREE.MeshStandardMaterial({
+      color: 0xf0abfc,
+      emissive: 0xc026d3,
+      emissiveIntensity: 1.55,
+      roughness: 0.18,
+      metalness: 0.25
+    });
+    ownedMats.push(cursedGlowMat);
+    damageMats.push(cursedGlowMat);
+
+    const cursedChestAsset = gltfCache.get('chest_disguise_tripo') || gltfCache.get('chest_gold') || gltfCache.get('chest');
+    const isTripoCursed = Boolean(gltfCache.get('chest_disguise_tripo'));
+    if (cursedChestAsset?.scene) {
+      const cloned = cursedChestAsset.scene.clone(true);
+      cloned.scale.setScalar(isTripoCursed ? 1.95 : 0.96);
+      const darkObsidian = new THREE.Color(0x2e1042);
+      cloned.traverse((n) => {
+        if (n.isMesh && n.material) {
+          const cloneOne = (m) => {
+            const c = m.clone();
+            if (c.color) c.color.lerp(darkObsidian, 0.58);
+            if (c.emissive) {
+              c.emissive.setHex(0x6b1048);
+              c.emissiveIntensity = 0.45;
+            }
+            damageMats.push(c);
+            ownedMats.push(c);
+            return c;
+          };
+          n.material = Array.isArray(n.material) ? n.material.map(cloneOne) : cloneOne(n.material);
+          n.castShadow = true;
+          n.receiveShadow = true;
+        }
+      });
+      visualPivot.add(cloned);
+    } else {
+      const bodyMat = getMat('pk_cc_body_mat', () =>
+        new THREE.MeshStandardMaterial({
+          color: 0x2a1038,
+          emissive: 0x58103c,
+          emissiveIntensity: 0.42,
+          roughness: 0.48,
+          metalness: 0.35
+        })
+      );
+      const trimMat = getMat('pk_cc_trim_mat', () =>
+        new THREE.MeshStandardMaterial({
+          color: 0x3b2c4a,
+          metalness: 0.85,
+          roughness: 0.28
+        })
+      );
+      const box = new THREE.Mesh(
+        getGeo('pk_cc_box_geo', () => new THREE.BoxGeometry(0.92, 0.58, 0.68)),
+        bodyMat
+      );
+      box.position.y = 0.30;
+      box.castShadow = true;
+      box.receiveShadow = true;
+      const lid = new THREE.Mesh(
+        getGeo('pk_cc_lid_geo', () => new THREE.CylinderGeometry(0.34, 0.34, 0.92, 10, 1, false, 0, Math.PI)),
+        bodyMat
+      );
+      lid.rotation.z = Math.PI * 0.5;
+      lid.position.y = 0.59;
+      lid.castShadow = true;
+      const bandL = new THREE.Mesh(
+        getGeo('pk_cc_band_geo', () => new THREE.BoxGeometry(0.10, 0.64, 0.72)),
+        trimMat
+      );
+      bandL.position.set(-0.28, 0.34, 0);
+      const bandR = bandL.clone();
+      bandR.position.x = 0.28;
+      const clasp = new THREE.Mesh(
+        getGeo('pk_cc_clasp_geo', () => new THREE.OctahedronGeometry(0.11, 0)),
+        cursedGlowMat
+      );
+      clasp.position.set(0, 0.52, 0.36);
+      visualPivot.add(box, lid, bandL, bandR, clasp);
+    }
+
+    // Floating spinning crimson-violet cursed rune crystal above the chest
+    cursedCrystalPivot = new THREE.Group();
+    cursedCrystalPivot.position.set(0, 1.38, 0);
+    const crystal = new THREE.Mesh(
+      getGeo('pk_cc_crystal_geo', () => new THREE.OctahedronGeometry(0.22, 0)),
+      cursedGlowMat
+    );
+    crystal.scale.set(0.85, 1.55, 0.85);
+    const crystalHalo = new THREE.Mesh(
+      getGeo('pk_cc_cring_geo', () => {
+        const g = new THREE.TorusGeometry(0.32, 0.022, 6, 18);
+        g.rotateX(Math.PI * 0.35);
+        return g;
+      }),
+      getMat('pk_cc_ring_mat', () =>
+        new THREE.MeshBasicMaterial({
+          color: 0xf43f5e,
+          transparent: true,
+          opacity: 0.78,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false
+        })
+      )
+    );
+    cursedCrystalPivot.add(crystal, crystalHalo);
+    root.add(cursedCrystalPivot);
+
+    // 3 orbiting dark-crimson shards around the chest
+    cursedShardsPivot = new THREE.Group();
+    cursedShardsPivot.position.y = 0.78;
+    const shardGeo = getGeo('pk_cc_shard_geo', () => new THREE.OctahedronGeometry(0.085, 0));
+    const shardMat = getMat('pk_cc_shard_mat', () =>
+      new THREE.MeshBasicMaterial({
+        color: 0xe879f9,
+        transparent: true,
+        opacity: 0.88,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      })
+    );
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2;
+      const sh = new THREE.Mesh(shardGeo, shardMat);
+      sh.position.set(Math.cos(a) * 0.72, (i % 2 === 0 ? 0.08 : -0.08), Math.sin(a) * 0.72);
+      sh.scale.set(0.7, 1.5, 0.7);
+      cursedShardsPivot.add(sh);
+    }
+    root.add(cursedShardsPivot);
+
+    // Sinister crimson-violet ground hex halo
+    cursedHaloRing = new THREE.Mesh(
+      getGeo('pk_cc_halo_geo', () => {
+        const g = new THREE.RingGeometry(0.64, 0.94, 24);
+        g.rotateX(-Math.PI * 0.5);
+        return g;
+      }),
+      getMat('pk_cc_halo_mat', () =>
+        new THREE.MeshBasicMaterial({
+          color: 0xc026d3,
+          transparent: true,
+          opacity: 0.48,
+          side: THREE.DoubleSide,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false
+        })
+      )
+    );
+    cursedHaloRing.position.y = 0.035;
+    root.add(cursedHaloRing);
+
+    beaconPart = new THREE.Mesh(
+      getGeo('pk_cc_beacon_geo', () => new THREE.CylinderGeometry(0.18, 0.62, 2.35, 12, 1, true)),
+      getMat('pk_cc_beacon_mat', () =>
+        new THREE.MeshBasicMaterial({
+          color: 0x9333ea,
+          transparent: true,
+          opacity: 0.24,
+          side: THREE.DoubleSide,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false
+        })
+      )
+    );
+    beaconPart.position.y = 1.18;
+    root.add(beaconPart);
   }
 
   return {
     root,
+    dispose() {
+      for (const m of ownedMats) {
+        if (m?.dispose) m.dispose();
+      }
+      ownedMats.length = 0;
+      damageMats.length = 0;
+      barrelRuneMat = null;
+      cursedGlowMat = null;
+    },
     setShrinkRatio(r) {
       shrinkRatio = Math.max(0.45, Math.min(1.0, Number(r) || 1.0));
       visualPivot.scale.setScalar(shrinkRatio);
@@ -6206,8 +6926,10 @@ export function createPickupMesh(pickupType = 'xp') {
     setDamageGlow(r) {
       damageGlow = Math.max(0, Math.min(1, Number(r) || 0));
       for (const m of damageMats) {
-        m.emissive.setHex(damageGlow > 0.02 ? 0xef4444 : 0x000000);
-        m.emissiveIntensity = damageGlow * 1.3;
+        const restHex = m === barrelRuneMat ? 0xf97316 : m === cursedGlowMat ? 0xc026d3 : 0x000000;
+        const restInt = m === barrelRuneMat ? 1.45 : m === cursedGlowMat ? 1.55 : 0;
+        m.emissive.setHex(damageGlow > 0.02 ? 0xef4444 : restHex);
+        m.emissiveIntensity = damageGlow > 0.02 ? damageGlow * 1.6 : restInt;
       }
     },
     update(dt, elapsedTime = 0) {
@@ -6215,6 +6937,40 @@ export function createPickupMesh(pickupType = 'xp') {
       if (beaconPart) {
         const s = 0.88 + Math.sin(elapsedTime * 4.2) * 0.14;
         beaconPart.scale.set(s, 1, s);
+      }
+      if (fuseFlamePivot) {
+        const flick = 0.86 + Math.sin(elapsedTime * 21.0) * 0.16 + Math.cos(elapsedTime * 34.0) * 0.09;
+        fuseFlamePivot.scale.set(0.92 + Math.sin(elapsedTime * 17.0) * 0.12, flick * 1.15, 0.92 + Math.cos(elapsedTime * 19.0) * 0.12);
+        fuseFlamePivot.rotation.z = Math.sin(elapsedTime * 13.0) * 0.16;
+      }
+      if (fuseSparkMesh) {
+        const u = (elapsedTime * 2.6) % 1;
+        const a = elapsedTime * 9.5;
+        fuseSparkMesh.position.set(0.04 + Math.cos(a) * (0.04 + u * 0.11), 1.32 + u * 0.36, 0.01 + Math.sin(a) * (0.04 + u * 0.11));
+        fuseSparkMesh.scale.setScalar(Math.max(0.15, (1 - u) * 1.15));
+      }
+      if (barrelRuneMat && damageGlow <= 0.02) {
+        barrelRuneMat.emissiveIntensity = 1.25 + Math.sin(elapsedTime * 6.5) * 0.45;
+      }
+      if (barrelHaloRing) {
+        const hs = 0.94 + Math.sin(elapsedTime * 5.0) * 0.08;
+        barrelHaloRing.scale.set(hs, 1, hs);
+      }
+      if (cursedCrystalPivot) {
+        cursedCrystalPivot.rotation.y = elapsedTime * 2.1;
+        cursedCrystalPivot.position.y = 1.36 + Math.sin(elapsedTime * 3.6) * 0.11;
+      }
+      if (cursedShardsPivot) {
+        cursedShardsPivot.rotation.y = -elapsedTime * 2.6;
+        cursedShardsPivot.position.y = 0.78 + Math.cos(elapsedTime * 3.0) * 0.06;
+      }
+      if (cursedGlowMat && damageGlow <= 0.02) {
+        cursedGlowMat.emissiveIntensity = 1.35 + Math.sin(elapsedTime * 5.8) * 0.55;
+      }
+      if (cursedHaloRing) {
+        const cs = 0.92 + Math.sin(elapsedTime * 4.4) * 0.10;
+        cursedHaloRing.scale.set(cs, 1, cs);
+        cursedHaloRing.rotation.z = elapsedTime * 0.85;
       }
       if (damageGlow > 0.05) {
         visualPivot.position.x = Math.sin(elapsedTime * 55) * damageGlow * 0.06;

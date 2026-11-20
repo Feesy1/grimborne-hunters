@@ -9,8 +9,9 @@ import {
   MAGE_ELEMENT_ORDER,
   MAGE_ELEMENT_UNLOCK_COSTS,
   MAGE_TALENT_TREE,
-  CLASS_TALENT_TREES
-} from './config.js?v=20261117z25';
+  CLASS_TALENT_TREES,
+  DAILY_QUEST_TEMPLATES
+} from './config.js?v=20261120z35';
 
 export const WEAPON_MAX_SHOP_LEVEL = WEAPON_MAX_LEVEL || 12;
 
@@ -119,16 +120,169 @@ function getHeroXpToNext(level = 1) {
   return Math.round(95 * Math.pow(1.32, Math.max(0, Math.floor(Number(level) || 1) - 1)));
 }
 
+const DAILY_QUEST_KINDS_ORDER = ['kills', 'barrels_chests', 'bosses_waves'];
+const DAILY_QUEST_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function getTodayDateKey(dateObj = new Date()) {
+  const d = dateObj instanceof Date && !Number.isNaN(dateObj.getTime()) ? dateObj : new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function normalizeDailyQuestKind(kind) {
+  const raw = String(kind || '').trim().toLowerCase();
+  if (raw === 'kills' || raw === 'kill' || raw === 'enemy' || raw === 'enemies' || raw === 'slay') {
+    return 'kills';
+  }
+  if (
+    raw === 'barrels_chests' ||
+    raw === 'barrel' ||
+    raw === 'barrels' ||
+    raw === 'chest' ||
+    raw === 'chests' ||
+    raw === 'cursed_chest' ||
+    raw === 'crate' ||
+    raw === 'crates'
+  ) {
+    return 'barrels_chests';
+  }
+  if (
+    raw === 'bosses_waves' ||
+    raw === 'boss' ||
+    raw === 'bosses' ||
+    raw === 'wave' ||
+    raw === 'waves' ||
+    raw === 'endless_wave' ||
+    raw === 'chapter'
+  ) {
+    return 'bosses_waves';
+  }
+  return raw;
+}
+
+function hashDateKey(dateKey) {
+  let h = 2166136261;
+  const s = String(dateKey || '');
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function buildDailyQuestsForDate(dateKey) {
+  const seed = hashDateKey(dateKey || getTodayDateKey());
+  const templates = Array.isArray(DAILY_QUEST_TEMPLATES) ? DAILY_QUEST_TEMPLATES : [];
+  const picked = [];
+  for (let i = 0; i < DAILY_QUEST_KINDS_ORDER.length; i++) {
+    const kind = DAILY_QUEST_KINDS_ORDER[i];
+    const pool = templates.filter((t) => t && t.kind === kind);
+    if (!pool.length) continue;
+    const tpl = pool[(seed + i * 7) % pool.length];
+    picked.push({
+      id: String(tpl.id),
+      kind: tpl.kind,
+      titleRu: String(tpl.titleRu || tpl.id),
+      target: clampInt(tpl.target, 1, 99999, 1),
+      progress: 0,
+      rewardGold: clampInt(tpl.rewardGold, 10, 99999, 100),
+      claimed: false
+    });
+  }
+  return picked;
+}
+
+function sanitizeDailyQuestsList(list, dateKey) {
+  const fallback = buildDailyQuestsForDate(dateKey);
+  if (!Array.isArray(list) || list.length === 0) return fallback;
+  const tplById = new Map((Array.isArray(DAILY_QUEST_TEMPLATES) ? DAILY_QUEST_TEMPLATES : []).map((t) => [t.id, t]));
+  const out = [];
+  const seen = new Set();
+  for (let i = 0; i < list.length && out.length < 3; i++) {
+    const raw = list[i];
+    if (!raw || typeof raw !== 'object' || !raw.id) continue;
+    const id = String(raw.id);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const tpl = tplById.get(id);
+    const target = clampInt(raw.target ?? tpl?.target, 1, 99999, 1);
+    out.push({
+      id,
+      kind: normalizeDailyQuestKind(raw.kind || tpl?.kind || 'kills'),
+      titleRu: String(raw.titleRu || tpl?.titleRu || id),
+      target,
+      progress: clampInt(raw.progress, 0, target, 0),
+      rewardGold: clampInt(raw.rewardGold ?? tpl?.rewardGold, 10, 99999, 100),
+      claimed: Boolean(raw.claimed)
+    });
+  }
+  return out.length === 3 ? out : fallback;
+}
+
+function mergeDailyQuestsState(localState, cloudState) {
+  const todayKey = getTodayDateKey();
+  const localDate = typeof localState?.dailyQuestsDate === 'string' && DAILY_QUEST_DATE_RE.test(localState.dailyQuestsDate)
+    ? localState.dailyQuestsDate
+    : '';
+  const cloudDate = typeof cloudState?.dailyQuestsDate === 'string' && DAILY_QUEST_DATE_RE.test(cloudState.dailyQuestsDate)
+    ? cloudState.dailyQuestsDate
+    : '';
+
+  if (localDate && localDate === cloudDate) {
+    const localList = sanitizeDailyQuestsList(localState.dailyQuests, localDate);
+    const cloudList = sanitizeDailyQuestsList(cloudState.dailyQuests, cloudDate);
+    const byId = new Map();
+    for (const q of localList) byId.set(q.id, { ...q });
+    for (const q of cloudList) {
+      const prev = byId.get(q.id);
+      if (prev) {
+        const target = Math.max(prev.target, q.target);
+        prev.target = target;
+        prev.progress = clampInt(Math.max(prev.progress, q.progress), 0, target, 0);
+        prev.claimed = Boolean(prev.claimed || q.claimed);
+      } else if (byId.size < 3) {
+        byId.set(q.id, { ...q });
+      }
+    }
+    return {
+      dailyQuestsDate: localDate,
+      dailyQuests: sanitizeDailyQuestsList(Array.from(byId.values()), localDate)
+    };
+  }
+
+  if (localDate && (!cloudDate || localDate > cloudDate)) {
+    return {
+      dailyQuestsDate: localDate,
+      dailyQuests: sanitizeDailyQuestsList(localState.dailyQuests, localDate)
+    };
+  }
+  if (cloudDate) {
+    return {
+      dailyQuestsDate: cloudDate,
+      dailyQuests: sanitizeDailyQuestsList(cloudState.dailyQuests, cloudDate)
+    };
+  }
+  return {
+    dailyQuestsDate: todayKey,
+    dailyQuests: buildDailyQuestsForDate(todayKey)
+  };
+}
+
 function createDefaultState(zeroGold = false) {
   const classUpgrades = createDefaultClassUpgrades();
   const classTalents = createDefaultAllClassTalents();
   const mageTalents = classTalents.mage;
+  const todayKey = getTodayDateKey();
   return {
     gold: zeroGold ? 0 : 0,
     selectedClass: 'warrior',
     maxUnlockedLevel: 1,
     heroLevel: 1,
     heroXp: 0,
+    bestEndlessKills: 0,
+    bestEndlessTimeSec: 0,
     levelStars: {},
     difficultyMode: 'normal',
     unlockedBlueprints: {},
@@ -154,7 +308,10 @@ function createDefaultState(zeroGold = false) {
     },
     classUpgrades,
     classTalents,
-    mageTalents
+    mageTalents,
+    dailyQuestsDate: todayKey,
+    dailyQuests: buildDailyQuestsForDate(todayKey),
+    onboardingDone: false
   };
 }
 
@@ -162,6 +319,162 @@ function clampInt(value, min, max, fallback) {
   const num = Number(value);
   if (!Number.isFinite(num)) return fallback;
   return Math.max(min, Math.min(max, Math.floor(num)));
+}
+
+function mergeTruthyMap(a, b) {
+  const out = {};
+  const absorb = (src) => {
+    if (!src) return;
+    if (Array.isArray(src)) {
+      for (let i = 0; i < src.length; i++) {
+        if (src[i]) out[String(src[i])] = true;
+      }
+    } else if (typeof src === 'object') {
+      for (const [k, v] of Object.entries(src)) {
+        if (v) out[k] = true;
+      }
+    }
+  };
+  absorb(a);
+  absorb(b);
+  return out;
+}
+
+function mergeMaxNumMap(a, b, fallback = 0) {
+  const out = {};
+  const keys = new Set([
+    ...(a && typeof a === 'object' ? Object.keys(a) : []),
+    ...(b && typeof b === 'object' ? Object.keys(b) : [])
+  ]);
+  for (const k of keys) {
+    const va = Number(a?.[k]);
+    const vb = Number(b?.[k]);
+    const na = Number.isFinite(va) ? va : fallback;
+    const nb = Number.isFinite(vb) ? vb : fallback;
+    out[k] = Math.max(na, nb);
+  }
+  return out;
+}
+
+// Non-destructive Yandex Cloud <-> Local save merger:
+// Always preserves maximum progression (gold, hero XP/level, chapters, stars, shop & talent ranks,
+// Endless records) and unions unlocked weapons, blueprints, relics, and achievements.
+export function mergeCloudState(localState, cloudState) {
+  const hasLocal = localState && typeof localState === 'object' && Object.keys(localState).length > 0;
+  const hasCloud = cloudState && typeof cloudState === 'object' && Object.keys(cloudState).length > 0;
+  if (!hasLocal && !hasCloud) return createDefaultState();
+  if (!hasCloud) return { ...localState };
+  if (!hasLocal) return { ...cloudState };
+
+  const localTs = Number(localState.updatedAt || 0);
+  const cloudTs = Number(cloudState.updatedAt || 0);
+  const primary = cloudTs > localTs ? cloudState : localState;
+  const secondary = cloudTs > localTs ? localState : cloudState;
+
+  const localHeroLvl = clampInt(localState.heroLevel, 1, 50, 1);
+  const cloudHeroLvl = clampInt(cloudState.heroLevel, 1, 50, 1);
+  const localHeroXp = clampInt(localState.heroXp, 0, 999999, 0);
+  const cloudHeroXp = clampInt(cloudState.heroXp, 0, 999999, 0);
+  let heroLevel = localHeroLvl;
+  let heroXp = localHeroXp;
+  if (cloudHeroLvl > localHeroLvl) {
+    heroLevel = cloudHeroLvl;
+    heroXp = cloudHeroXp;
+  } else if (cloudHeroLvl === localHeroLvl) {
+    heroXp = Math.max(localHeroXp, cloudHeroXp);
+  }
+
+  const unlockedWeapons = mergeTruthyMap(localState.unlockedWeapons, cloudState.unlockedWeapons);
+  unlockedWeapons.club = true;
+  unlockedWeapons.usp_pistol = true;
+  unlockedWeapons.spark_staff = true;
+
+  const weaponShopLevels = mergeMaxNumMap(localState.weaponShopLevels, cloudState.weaponShopLevels, 1);
+  const levelStars = mergeMaxNumMap(localState.levelStars, cloudState.levelStars, 0);
+  const unlockedBlueprints = mergeTruthyMap(localState.unlockedBlueprints, cloudState.unlockedBlueprints);
+  const bossHammerAttemptedStages = mergeTruthyMap(localState.bossHammerAttemptedStages, cloudState.bossHammerAttemptedStages);
+  const unlockedMageElements = mergeTruthyMap(localState.unlockedMageElements, cloudState.unlockedMageElements);
+  unlockedMageElements.water = true;
+
+  const classUpgrades = {};
+  for (const clsId of Object.keys(CLASSES)) {
+    classUpgrades[clsId] = mergeMaxNumMap(
+      localState.classUpgrades?.[clsId],
+      cloudState.classUpgrades?.[clsId],
+      0
+    );
+  }
+
+  const classTalents = {};
+  for (const clsId of Object.keys(CLASS_TALENT_TREES)) {
+    const localBucket = clsId === 'mage'
+      ? mergeMaxNumMap(localState.classTalents?.mage, localState.mageTalents, 0)
+      : localState.classTalents?.[clsId];
+    const cloudBucket = clsId === 'mage'
+      ? mergeMaxNumMap(cloudState.classTalents?.mage, cloudState.mageTalents, 0)
+      : cloudState.classTalents?.[clsId];
+    classTalents[clsId] = mergeMaxNumMap(localBucket, cloudBucket, 0);
+  }
+  const mageTalents = { ...(classTalents.mage || {}) };
+
+  const equippedWeapons = {
+    ...(secondary.equippedWeapons || {}),
+    ...(primary.equippedWeapons || {})
+  };
+  for (const [clsId, clsDef] of Object.entries(CLASSES)) {
+    const eq = equippedWeapons[clsId];
+    if (!eq || !WEAPONS[eq] || !unlockedWeapons[eq]) {
+      equippedWeapons[clsId] = clsDef.starterWeapon;
+    }
+  }
+
+  const merged = {
+    ...secondary,
+    ...primary,
+    gold: Math.max(clampInt(localState.gold, 0, 99999999, 0), clampInt(cloudState.gold, 0, 99999999, 0)),
+    maxUnlockedLevel: Math.max(
+      clampInt(localState.maxUnlockedLevel, 1, LEVELS.length, 1),
+      clampInt(cloudState.maxUnlockedLevel, 1, LEVELS.length, 1)
+    ),
+    heroLevel,
+    heroXp,
+    bestEndlessKills: Math.max(
+      clampInt(localState.bestEndlessKills, 0, 9999999, 0),
+      clampInt(cloudState.bestEndlessKills, 0, 9999999, 0)
+    ),
+    bestEndlessTimeSec: Math.max(
+      clampInt(localState.bestEndlessTimeSec, 0, 9999999, 0),
+      clampInt(cloudState.bestEndlessTimeSec, 0, 9999999, 0)
+    ),
+    levelStars,
+    unlockedWeapons,
+    equippedWeapons,
+    gunslingerUspStarterMigrated: Boolean(
+      localState.gunslingerUspStarterMigrated || cloudState.gunslingerUspStarterMigrated
+    ),
+    weaponShopLevels,
+    unlockedBlueprints,
+    bossHammerAttemptedStages,
+    unlockedMageElements,
+    classUpgrades,
+    classTalents,
+    mageTalents,
+    ...mergeDailyQuestsState(localState, cloudState),
+    onboardingDone: Boolean(localState.onboardingDone || cloudState.onboardingDone),
+    updatedAt: Math.max(localTs, cloudTs, Date.now())
+  };
+
+  if (localState.unlockedRelics || cloudState.unlockedRelics) {
+    merged.unlockedRelics = mergeTruthyMap(localState.unlockedRelics, cloudState.unlockedRelics);
+  }
+  if (localState.achievements || cloudState.achievements) {
+    merged.achievements = mergeTruthyMap(localState.achievements, cloudState.achievements);
+  }
+  if (localState.heroUpgrades || cloudState.heroUpgrades) {
+    merged.heroUpgrades = mergeMaxNumMap(localState.heroUpgrades, cloudState.heroUpgrades, 0);
+  }
+
+  return merged;
 }
 
 function getPerkStacks(perks, perkId) {
@@ -221,6 +534,8 @@ export function createProgressionStore(initialSave = null) {
       heroLevel,
       heroXp,
       heroXpNext,
+      bestEndlessKills: clampInt(state.bestEndlessKills, 0, 9999999, 0),
+      bestEndlessTimeSec: clampInt(state.bestEndlessTimeSec, 0, 9999999, 0),
       levelStars: { ...(state.levelStars || {}) },
       difficultyMode: state.difficultyMode === 'hard' ? 'hard' : 'normal',
       unlockedBlueprints: { ...(state.unlockedBlueprints || {}) },
@@ -232,10 +547,16 @@ export function createProgressionStore(initialSave = null) {
       unlockedMageElements: { water: true },
       unlockedWeapons: { ...state.unlockedWeapons },
       equippedWeapons: { ...state.equippedWeapons },
+      gunslingerUspStarterMigrated: Boolean(state.gunslingerUspStarterMigrated),
       weaponShopLevels: { ...state.weaponShopLevels },
       classUpgrades,
       // Active class mirror for UI helpers reading state.heroUpgrades
-      heroUpgrades: { ...classUpgrades[activeCls] }
+      heroUpgrades: { ...classUpgrades[activeCls] },
+      dailyQuestsDate: state.dailyQuestsDate || getTodayDateKey(),
+      dailyQuests: Array.isArray(state.dailyQuests)
+        ? state.dailyQuests.map((q) => ({ ...q }))
+        : buildDailyQuestsForDate(state.dailyQuestsDate || getTodayDateKey()),
+      onboardingDone: Boolean(state.onboardingDone)
     };
   }
 
@@ -258,6 +579,8 @@ export function createProgressionStore(initialSave = null) {
       base.heroLevel = clampInt(Math.min(8, Math.max(2, Math.floor(base.maxUnlockedLevel * 0.35))), 1, 50, 1);
     }
     base.heroXp = clampInt(savedObj.heroXp, 0, 999999, 0);
+    base.bestEndlessKills = clampInt(savedObj.bestEndlessKills, 0, 9999999, 0);
+    base.bestEndlessTimeSec = clampInt(savedObj.bestEndlessTimeSec, 0, 9999999, 0);
     if (savedObj.mageTalents && typeof savedObj.mageTalents === 'object') {
       for (const node of MAGE_TALENT_TREE) {
         if (savedObj.mageTalents[node.id] !== undefined) {
@@ -375,6 +698,20 @@ export function createProgressionStore(initialSave = null) {
         }
       }
     }
+
+    const todayKey = getTodayDateKey();
+    const savedDailyDate =
+      typeof savedObj.dailyQuestsDate === 'string' && DAILY_QUEST_DATE_RE.test(savedObj.dailyQuestsDate)
+        ? savedObj.dailyQuestsDate
+        : '';
+    if (savedDailyDate === todayKey && Array.isArray(savedObj.dailyQuests)) {
+      base.dailyQuestsDate = todayKey;
+      base.dailyQuests = sanitizeDailyQuestsList(savedObj.dailyQuests, todayKey);
+    } else {
+      base.dailyQuestsDate = todayKey;
+      base.dailyQuests = buildDailyQuestsForDate(todayKey);
+    }
+    base.onboardingDone = Boolean(savedObj.onboardingDone);
 
     state = base;
     return cloneState();
@@ -782,6 +1119,15 @@ export function createProgressionStore(initialSave = null) {
     const critFangStacks = getPerkStacks(perks, 'crit_fang');
     const greedStacks = getPerkStacks(perks, 'greed_contract');
 
+    // Stage 2 Synergistic Roguelike In-Run Perks
+    const dashFireTrailStacks = getPerkStacks(perks, 'dash_fire_trail');
+    const shieldThornsStacks = getPerkStacks(perks, 'shield_thorns_wave');
+    const critChainStacks = getPerkStacks(perks, 'crit_chain_lightning');
+    const vampiricHarvestStacks = getPerkStacks(perks, 'vampiric_harvest');
+    const rapidCadenceStacks = getPerkStacks(perks, 'rapid_cadence');
+    const frostShatterStacks = getPerkStacks(perks, 'frost_shatter');
+    const executionerStacks = getPerkStacks(perks, 'executioner_cleave');
+
     // Essential shop weapon scaling (+24% damage & +3.5% reload/attack cadence per shop level)
     const shopDamageMult = 1 + shopLevelsAbove * 0.24;
     const shopReloadMult = 1 + shopLevelsAbove * 0.035;
@@ -811,6 +1157,7 @@ export function createProgressionStore(initialSave = null) {
       gMine * 0.18;
     const perkHasteMult =
       1 +
+      rapidCadenceStacks * 0.18 +
       tVel * 0.07 +
       wStride * 0.08 +
       gQuick * 0.07 +
@@ -818,6 +1165,7 @@ export function createProgressionStore(initialSave = null) {
       (isShotgunWpn ? gShotBlitz * 0.12 : 0);
     const perkReloadMult =
       1 +
+      rapidCadenceStacks * 0.18 +
       gunReloadStacks * 0.28 +
       (isLightWpn ? gLightArms * 0.18 : 0) +
       (isShotgunWpn ? gShotBlitz * 0.20 : 0);
@@ -826,17 +1174,16 @@ export function createProgressionStore(initialSave = null) {
       greedStacks * 0.07 +
       tVel * 0.06 +
       wStride * 0.06 +
-      gQuick * 0.07 +
-      (isRifleWpn ? gRifleStab * 0.11 : 0);
+      gQuick * 0.07;
 
     const weaponMoveMult = Math.min(1.12, (wpn.moveSpeedMult ?? 1.0) + (isRifleWpn ? gRifleStab * 0.11 : 0));
-    const maxHp = Math.round(cls.maxHp + vitalityLvl * 15 + warBannerStacks * 24 + tFlow * 12 + wGrip * 18);
+    const maxHp = Math.round(cls.maxHp + vitalityLvl * 15 + warBannerStacks * 24 + tFlow * 12 + wGrip * 18 + vampiricHarvestStacks * 15);
     const moveSpeed = +(cls.moveSpeed * weaponMoveMult * heroAgilityMult * perkMoveMult).toFixed(3);
     const damageBlock = Math.min(
       0.78,
       +(cls.damageBlock + wardLvl * 0.03 + wShield * 0.07 + gRico * 0.06 + tWard * 0.04).toFixed(4)
     );
-    const blockChance = Math.min(0.65, (cls.blockChance || 0) + wShield * 0.08);
+    const blockChance = Math.min(0.65, (cls.blockChance || 0) + wShield * 0.08 + shieldThornsStacks * 0.05);
     const dodgeChance = 0;
 
     const damage = Math.max(
@@ -857,8 +1204,8 @@ export function createProgressionStore(initialSave = null) {
     const range = +(wpn.range * (wpn.type === 'melee' ? 1 + runLevelsAbove * 0.04 : runWeaponAreaMult) * meleeReachMult).toFixed(3);
     const arcAngle = wpn.arcAngle
       ? Math.min(
-          Math.PI * 1.15,
-          +(wpn.arcAngle * (1 + runLevelsAbove * 0.03)).toFixed(4)
+          Math.PI * 1.45,
+          +(wpn.arcAngle * (1 + runLevelsAbove * 0.03) * (1 + executionerStacks * 0.18)).toFixed(4)
         )
       : 0;
 
@@ -874,7 +1221,8 @@ export function createProgressionStore(initialSave = null) {
         (cls.id === 'warrior' ? wBlood * 0.05 : 0) +
         (isPistolWpn ? gPistolMast * 0.08 : 0) +
         (isRifleWpn ? gRifleCore * 0.07 : 0) +
-        gExp * 0.10
+        gExp * 0.10 +
+        executionerStacks * 0.08
       ).toFixed(3)
     );
 
@@ -892,9 +1240,11 @@ export function createProgressionStore(initialSave = null) {
     const pierce =
       (wpn.pierce || 1) +
       (isPistolWpn && gDead > 0 ? 1 : 0) +
-      (isRifleWpn && gRifleStab >= 2 ? 1 : 0);
+      (isRifleWpn && gRifleStab >= 2 ? 1 : 0) +
+      executionerStacks;
     const projectileSpeed = wpn.projectileSpeed ? +wpn.projectileSpeed.toFixed(2) : 0;
     const pickupRadius = +(3.8 * perkMoveMult).toFixed(3);
+    const dashCooldownMult = Math.max(0.40, +(1 - rapidCadenceStacks * 0.20).toFixed(3));
 
     // Magazine & Reload metrics (Gunslinger) + Continuous Mana Pool & Regen (Mage)
     const usesMana = cls.id === 'mage' || wpn.type === 'magic';
@@ -930,7 +1280,10 @@ export function createProgressionStore(initialSave = null) {
     const manaCost = usesMana ? +((wpn.manaCost || 8) * manaCostMult).toFixed(2) : 0;
 
     // Crit & Class Blessing parameters
-    const critChance = Math.min(0.85, +(0.05 + critFangStacks * 0.15 + tCrit * 0.10 + wBlood * 0.10 + wOrbit * 0.10 + gDead * 0.11).toFixed(4));
+    const critChance = Math.min(
+      0.85,
+      +(0.05 + critFangStacks * 0.15 + critChainStacks * 0.08 + tCrit * 0.10 + wBlood * 0.10 + wOrbit * 0.10 + gDead * 0.11).toFixed(4)
+    );
     const critMult = +(1.80 + tCrit * 0.15 + wBlood * 0.15 + gDead * 0.16).toFixed(2);
     const goldMult = +(1 + greedStacks * 0.35).toFixed(3);
 
@@ -952,6 +1305,7 @@ export function createProgressionStore(initialSave = null) {
       pierce,
       projectileSpeed: mageElement === 'lightning' ? +(projectileSpeed * 1.32).toFixed(2) : projectileSpeed,
       pickupRadius,
+      dashCooldownMult,
       magSize,
       reloadTime,
       reloadPerShellTime,
@@ -972,6 +1326,13 @@ export function createProgressionStore(initialSave = null) {
       critChance,
       critMult,
       critExplosionStacks: critFangStacks,
+      dashFireTrailStacks,
+      shieldThornsStacks,
+      critChainStacks,
+      vampiricHarvestStacks,
+      rapidCadenceStacks,
+      frostShatterStacks,
+      executionerStacks,
       mageTwinStacks,
       mageCatalystStacks,
       mageMeteorStacks,
@@ -992,63 +1353,53 @@ export function createProgressionStore(initialSave = null) {
     };
   }
 
-  function rollLevelUpChoices(currentWeaponDef, weaponRunLevel = 1, currentPerks = {}, soulLevel = 2) {
-    const resolvedWeapon =
-      typeof currentWeaponDef === 'string'
-        ? WEAPONS[currentWeaponDef] || WEAPONS.club
-        : currentWeaponDef || WEAPONS.club;
-
-    const activeClsId = resolvedWeapon.classId || state.selectedClass || 'warrior';
-    const curWpnLvl = Math.max(1, Math.floor(Number(weaponRunLevel) || 1));
-    const nextWpnRank = curWpnLvl + 1;
-    const isMageWpn = activeClsId === 'mage' || resolvedWeapon.type === 'magic';
-    const isGunWpn = activeClsId === 'gunslinger' || resolvedWeapon.type === 'ranged';
-
-    const weaponChoice = {
-      id: 'weapon_level_up',
-      weaponId: resolvedWeapon.id,
-      weaponType: resolvedWeapon.type,
-      weaponNameRu: resolvedWeapon.nameRu,
-      nextRank: nextWpnRank,
-      maxStacks: 5,
-      soulLevel,
-      nameRu: isMageWpn
-        ? `Чары: ${resolvedWeapon.nameRu}`
-        : isGunWpn
-          ? `Калибр: ${resolvedWeapon.nameRu}`
-          : `Закалка: ${resolvedWeapon.nameRu}`,
-      statBadgeRu: isMageWpn
-        ? '+16% МАГИЧЕСКИЙ УРОН • +8% ОБЛАСТЬ ЧАР'
-        : isGunWpn
-          ? '+16% УРОН ВЫСТРЕЛА • +8% ДАЛЬНОСТЬ'
-          : '+16% РУБЯЩИЙ УРОН • +8% РАЗМАХ КЛИНКА',
-      categoryRu: isMageWpn
-        ? 'ВОЗВЫШЕНИЕ ПОСОХА'
-        : isGunWpn
-          ? 'ОРУЖЕЙНОЕ МАСТЕРСТВО'
-          : 'МАСТЕРСТВО КЛИНКА',
-      theme: 'gold',
-      descRu: isMageWpn
-        ? `Усиливает магический поток посоха до ${nextWpnRank}-го ранга: +16% к магическому урону и шире радиус взрывов стихии.`
-        : isGunWpn
-          ? `Растачивает ствол до ${nextWpnRank}-го ранга: +16% к урону каждой дробины и дальше прицельный бой.`
-          : `Перековывает клинок до ${nextWpnRank}-го ранга: +16% к рубящему урону и шире дуга рассечения.`,
-      icon: isMageWpn ? '🔮' : isGunWpn ? '🔫' : '⚔️',
-      isWeaponLevelUp: true
+  function recordEndlessRun(killsCount, timeSec) {
+    const k = clampInt(killsCount, 0, 9999999, 0);
+    const t = clampInt(timeSec, 0, 9999999, 0);
+    const prevKills = clampInt(state.bestEndlessKills, 0, 9999999, 0);
+    const prevTime = clampInt(state.bestEndlessTimeSec, 0, 9999999, 0);
+    const isNewBestKills = k > prevKills;
+    const isNewBestTime = t > prevTime;
+    if (isNewBestKills) state.bestEndlessKills = k;
+    if (isNewBestTime) state.bestEndlessTimeSec = t;
+    return {
+      bestEndlessKills: state.bestEndlessKills,
+      bestEndlessTimeSec: state.bestEndlessTimeSec,
+      isNewBestKills,
+      isNewBestTime,
+      isNewRecord: isNewBestKills || isNewBestTime
     };
+  }
 
-    // Strictly filter by class so Mage, Gunslinger & Warrior each get their own distinct upgrades!
-    const classPerks = [];
-    const sharedPerks = [];
+  function rollLevelUpChoices(classOrWeapon, weaponRunLevelOrPerks = 1, currentPerksArg = {}, soulLevel = 2) {
+    let activeClsId = state.selectedClass || 'warrior';
+    let currentPerks = currentPerksArg;
+    let resolvedSoulLevel = soulLevel;
+
+    if (typeof classOrWeapon === 'string' && CLASSES[classOrWeapon]) {
+      activeClsId = classOrWeapon;
+      if (weaponRunLevelOrPerks && typeof weaponRunLevelOrPerks === 'object') {
+        currentPerks = weaponRunLevelOrPerks;
+        if (typeof currentPerksArg === 'number') {
+          resolvedSoulLevel = currentPerksArg;
+        }
+      }
+    } else if (classOrWeapon && typeof classOrWeapon === 'object' && classOrWeapon.classId) {
+      activeClsId = classOrWeapon.classId;
+    } else if (typeof classOrWeapon === 'string' && WEAPONS[classOrWeapon]) {
+      activeClsId = WEAPONS[classOrWeapon].classId || activeClsId;
+    }
+
+    const availablePerks = [];
+    const fallbackPerks = [];
     for (const perk of RUN_UPGRADES) {
       if (perk.onlyClass && perk.onlyClass !== activeClsId) continue;
       const maxS = perk.maxStacks || 3;
       const curS = getPerkStacks(currentPerks, perk.id);
-      if (curS >= maxS) continue;
-      if (perk.onlyClass === activeClsId) {
-        classPerks.push(perk);
+      if (curS < maxS) {
+        availablePerks.push(perk);
       } else {
-        sharedPerks.push(perk);
+        fallbackPerks.push(perk);
       }
     }
 
@@ -1061,48 +1412,30 @@ export function createProgressionStore(initialSave = null) {
       }
       return arr;
     };
-    shuffle(classPerks);
-    shuffle(sharedPerks);
+    shuffle(availablePerks);
+    shuffle(fallbackPerks);
 
-    // Guarantee at least 2 class-exclusive blessings when available so every class feels deeply unique!
-    const availablePerks = [];
-    while (classPerks.length > 0 && availablePerks.length < 2) {
-      availablePerks.push(classPerks.shift());
-    }
-    const restPool = shuffle([...classPerks, ...sharedPerks]);
-    availablePerks.push(...restPool);
-
+    const pool = [...availablePerks, ...fallbackPerks];
     const choices = [];
-    const canOfferWeaponRank = curWpnLvl < 5;
-    const includeWeaponRank =
-      canOfferWeaponRank && (Math.random() < 0.28 || availablePerks.length < 3);
-
-    if (includeWeaponRank) {
-      choices.push(weaponChoice);
-    }
-
-    const neededPerks = 3 - choices.length;
-    for (let i = 0; i < neededPerks && i < availablePerks.length; i++) {
-      const perk = availablePerks[i];
+    for (let i = 0; i < 3 && i < pool.length; i++) {
+      const perk = pool[i];
       const curStacks = getPerkStacks(currentPerks, perk.id);
       const maxStacks = perk.maxStacks || 3;
       choices.push({
         id: perk.id,
         nextRank: curStacks + 1,
+        currentStacks: curStacks,
         maxStacks,
-        soulLevel,
+        soulLevel: resolvedSoulLevel,
         nameRu: perk.nameRu,
         categoryRu: perk.categoryRu || 'БЛАГОСЛОВЕНИЕ',
         statBadgeRu: perk.statBadgeRu || '',
         theme: perk.theme || 'amber',
         descRu: perk.descRu,
         icon: perk.icon,
+        iconKind: perk.iconKind || 'flame',
         isWeaponLevelUp: false
       });
-    }
-
-    if (choices.length === 0) {
-      choices.push(weaponChoice);
     }
 
     return choices;
@@ -1159,6 +1492,71 @@ export function createProgressionStore(initialSave = null) {
     return { ok: false, reason: 'gold', cost };
   }
 
+  function ensureDailyQuests(dateKey = getTodayDateKey()) {
+    const targetDate = typeof dateKey === 'string' && DAILY_QUEST_DATE_RE.test(dateKey)
+      ? dateKey
+      : getTodayDateKey();
+    const needsReset =
+      state.dailyQuestsDate !== targetDate ||
+      !Array.isArray(state.dailyQuests) ||
+      state.dailyQuests.length !== 3;
+    if (needsReset) {
+      state.dailyQuestsDate = targetDate;
+      state.dailyQuests = buildDailyQuestsForDate(targetDate);
+    }
+    return {
+      date: state.dailyQuestsDate,
+      quests: state.dailyQuests.map((q) => ({ ...q })),
+      reset: needsReset
+    };
+  }
+
+  function recordDailyProgress(kind, delta = 1) {
+    ensureDailyQuests();
+    const normKind = normalizeDailyQuestKind(kind);
+    const inc = Math.max(0, Math.floor(Number(delta) || 0));
+    if (!normKind || inc <= 0) return [];
+    const newlyCompleted = [];
+    for (let i = 0; i < state.dailyQuests.length; i++) {
+      const q = state.dailyQuests[i];
+      if (!q || q.kind !== normKind) continue;
+      const before = q.progress;
+      const next = Math.min(q.target, before + inc);
+      if (next !== before) {
+        q.progress = next;
+        if (before < q.target && next >= q.target && !q.claimed) {
+          newlyCompleted.push({ ...q });
+        }
+      }
+    }
+    return newlyCompleted;
+  }
+
+  function claimDailyQuest(id) {
+    ensureDailyQuests();
+    if (!id) return { ok: false, reason: 'not_found' };
+    const quest = state.dailyQuests.find((q) => q && q.id === id);
+    if (!quest) return { ok: false, reason: 'not_found' };
+    if (quest.claimed) return { ok: false, reason: 'already_claimed', quest: { ...quest } };
+    if (quest.progress < quest.target) {
+      return { ok: false, reason: 'incomplete', quest: { ...quest } };
+    }
+    quest.claimed = true;
+    addGold(quest.rewardGold);
+    return {
+      ok: true,
+      id: quest.id,
+      rewardGold: quest.rewardGold,
+      gold: state.gold,
+      quest: { ...quest }
+    };
+  }
+
+  function completeOnboarding() {
+    state.onboardingDone = true;
+    return true;
+  }
+
   function resetAllProgress() {
     state = createDefaultState(true);
     return cloneState();
@@ -1167,13 +1565,22 @@ export function createProgressionStore(initialSave = null) {
   if (initialSave) {
     loadState(initialSave);
   }
+  ensureDailyQuests();
 
   return {
     getState,
     loadState,
+    mergeCloudState: (localOrCloud, maybeCloud) =>
+      maybeCloud !== undefined
+        ? mergeCloudState(localOrCloud, maybeCloud)
+        : mergeCloudState(cloneState(), localOrCloud),
     resetAllProgress,
     addGold,
     selectClass,
+    ensureDailyQuests,
+    recordDailyProgress,
+    claimDailyQuest,
+    completeOnboarding,
     getMageElementState,
     getMageElementUnlockCost,
     selectOrUnlockMageElement,
@@ -1195,6 +1602,7 @@ export function createProgressionStore(initialSave = null) {
     buyHeroUpgrade,
     unlockNextLevel,
     recordLevelStars,
+    recordEndlessRun,
     setDifficultyMode,
     addHeroXp,
     getHeroXpToNext,

@@ -15,7 +15,7 @@ export const CLASSES = {
     descEn: 'Armored skeleton bruiser with high health, shield block, and sweeping blade strikes.',
     portrait: './assets/ui/portrait_warrior.png',
     maxHp: 145,
-    moveSpeed: 3.3,
+    moveSpeed: 4.4,
     damageBlock: 0.26,
     blockChance: 0.22,
     colorPrimary: 0x8b2635,
@@ -935,8 +935,8 @@ export const ENEMY_TYPES = {
   },
   boss_warden: {
     id: 'boss_warden',
-    nameRu: 'Тролль-Костолом',
-    roleHintRu: 'Босс с боевым молотом • Вихрь джаггернаута',
+    nameRu: 'Огр-Костолом',
+    roleHintRu: 'Босс IV Акта • Молот и вихрь джаггернаута',
     isBoss: true,
     bossAct: 4,
     hp: 2150,
@@ -1008,7 +1008,7 @@ const CHAPTER_METADATA = [
   ['Трясина Мимиков', 'Кислотная слизь, пауки мрака и тяжёлые древни проверяют закалку твоего оружия.', 'stage_1.jpg', ['dark_spider', 'toxic_slime', 'mimic_chest', 'iron_knight', 'corrupted_treant']],
   ['Ковен Полуночи', 'Графы-вампиры, теневые духи и культисты заливают мшистые плиты тёмной магией.', 'stage_4.jpg', ['shadow_wisp', 'vampire_lord', 'mummy', 'dark_cultist', 'gargoyle']],
   ['Гнев Древнего Леса', 'Безостановочный штурм оборотней, крылатых бесов и бронированных стражей.', 'stage_3.jpg', ['werewolf', 'hell_imp', 'cursed_footman', 'iron_knight', 'corrupted_treant']],
-  ['Курган Огра-Костолома', 'Конец IV Акта: выдержи сокрушительные удары молота исполинского Огра-Костолома!', 'stage_5.jpg', ['goblin', 'werewolf', 'iron_knight', 'dark_cultist', 'gargoyle']],
+  ['Курган Огра-Костолома', 'Конец IV Акта: выдержи сокрушительные удары молота Огра-Костолома и магмовый натиск Демона Преисподней!', 'stage_5.jpg', ['goblin', 'werewolf', 'iron_knight', 'dark_cultist', 'gargoyle']],
 
   // ACT V: Гнездо Пепельного Дракона (Levels 21-25 — Карта «Туманный Лес»)
   ['Дыхание Вулкана', 'Лесной туман багровеет от пепла: бесы преисподней и теневые духи идут в атаку.', 'stage_5.jpg', ['ember_skeleton', 'hell_imp', 'shadow_wisp', 'vampire_lord', 'dark_cultist']],
@@ -1024,7 +1024,7 @@ const ROMAN = [
   'XXI', 'XXII', 'XXIII', 'XXIV', 'XXV'
 ];
 
-const ACT_BOSS_ORDER = ['boss_troll', 'boss_archlich', 'boss_cthulhu', 'boss_troll', 'boss_ashlord'];
+const ACT_BOSS_ORDER = ['boss_troll', 'boss_archlich', 'boss_cthulhu', 'boss_warden', 'boss_ashlord'];
 
 // Progressive 1-new-unit-per-stage ladder: previewed as Mini-Boss on Stage N, graduates into Horde on Stage N+1
 const CUMULATIVE_ENEMY_LADDER = [
@@ -1039,6 +1039,7 @@ const CUMULATIVE_ENEMY_LADDER = [
   'ember_skeleton',
   'iron_knight',
   'succubus',
+  'shadow_wisp',
   'werewolf',
   'goblin',
   'gargoyle',
@@ -1055,13 +1056,13 @@ export const LEVELS = CHAPTER_METADATA.map(([titleRu, subRu, bannerFile, _pool],
     lvl === 5
       ? ['boss_troll']
       : lvl === 10
-        ? ['boss_troll', 'boss_archlich']
+        ? ['boss_archlich', 'boss_troll']
         : lvl === 15
-          ? ['boss_troll', 'boss_troll', 'boss_archlich']
+          ? ['boss_cthulhu']
           : lvl === 20
-            ? ['boss_troll', 'boss_troll', 'boss_archlich', 'boss_archlich']
+            ? ['boss_warden', 'boss_butcher']
             : lvl === 25
-              ? ['boss_ashlord', 'boss_troll']
+              ? ['boss_ashlord']
               : [];
   const bossId = finaleBosses[0] || null;
   const coBossId = finaleBosses.length > 1 ? finaleBosses[1] : null;
@@ -1110,239 +1111,94 @@ export const LEVELS = CHAPTER_METADATA.map(([titleRu, subRu, bannerFile, _pool],
   };
 });
 
-// Distinct Class-Specific Blessings of Souls (Unique active mechanics per Hero Class!)
+// Synergistic Roguelike In-Run Blessings (3-card level-up choices during battle!)
 export const RUN_UPGRADES = [
-  // =========================================================================
-  // 🔮 ПЕПЕЛЬНЫЙ МАГ (6 Уникальных Магических Благословений)
-  // =========================================================================
   {
-    id: 'mage_arcane_surge',
-    onlyClass: 'mage',
-    nameRu: 'Тайное Могущество',
-    categoryRu: 'ЧАРЫ ПОСОХА',
-    statBadgeRu: '+20% МАГ. УРОН • +15% ОБЛАСТЬ ЧАР',
-    descRu: 'Наполняет кристалл посоха эфиром: +20% к магическому урону заклинаний и +15% к радиусу стихийного взрыва.',
-    theme: 'violet',
-    maxStacks: 3,
-    icon: '🔮'
-  },
-  {
-    id: 'mage_twin_cast',
-    onlyClass: 'mage',
-    nameRu: 'Раздвоение Кометы',
-    categoryRu: 'ВЫСШАЯ МАГИЯ',
-    statBadgeRu: '40% ШАНС ДВОЙНОГО ЗАЛПА БЕЗ МАНЫ',
-    descRu: 'При каждом взмахе посоха с шансом 40% (до 100%) бесплатно выпускает второй стихийный снаряд под углом.',
-    theme: 'cyan',
-    maxStacks: 3,
-    icon: '✨'
-  },
-  {
-    id: 'mage_elem_catalyst',
-    onlyClass: 'mage',
-    nameRu: 'Резонанс Стихии',
-    categoryRu: 'ВЛАСТЬ СТИХИЙ',
-    statBadgeRu: 'СВЕРХУСИЛЕНИЕ АКТИВНОЙ СТИХИИ',
-    descRu: 'Огонь: +1 доп. стак напалма за удар. Вода: +5% к шансу Водяной Сферы. Молния: +1 цель цепи. Воздух: вихрь режет врагов.',
-    theme: 'ice',
-    maxStacks: 3,
-    icon: '🌀'
-  },
-  {
-    id: 'mage_meteor_shower',
-    onlyClass: 'mage',
-    nameRu: 'Звездопад Архонта',
-    categoryRu: 'КАТАКЛИЗМ',
-    statBadgeRu: 'МЕТЕОР С НЕБЕС КАЖДЫЕ 4.2 СЕК',
-    descRu: 'Каждые 4.2 секунды с небес на гущу врагов обрушивается стихийный метеор, взрывая брусчатку в радиусе 3.8м.',
+    id: 'dash_fire_trail',
+    nameRu: 'Огненный След',
+    categoryRu: 'СИНЕРГИЯ РЫВКА',
+    statBadgeRu: 'РЫВОК ПОДЖИГАЕТ ПОЛ • ОГНЕННЫЙ AoE-УРОН',
+    descRu: 'Во время рывка [Space] оставляет за спиной полосу тлеющего пламени, поджигающую преследующую нежить.',
     theme: 'flame',
     maxStacks: 3,
-    icon: '☄️'
+    iconKind: 'flame',
+    icon: '🔥'
   },
   {
-    id: 'mage_arcane_ward',
-    onlyClass: 'mage',
-    nameRu: 'Сфера Отражения',
-    categoryRu: 'ОБЕРЕГ МАГА',
-    statBadgeRu: 'ЩИТ ЧАР ПОГЛОЩАЕТ УДАР И ВЗРЫВАЕТСЯ',
-    descRu: 'Раз в 8 секунд окутывает мага рунным куполом: при ударе блокирует 65% урона и отбрасывает врагов взрывом магии.',
-    theme: 'violet',
+    id: 'shield_thorns_wave',
+    nameRu: 'Шипованная Волна',
+    categoryRu: 'КОНТРУДАР',
+    statBadgeRu: '+5% БЛОК • ВОЛНА ШИПОВ ПРИ УДАРЕ И БЛОКЕ',
+    descRu: 'Усиливает блок на +5%. При блокировании или получении урона выпускает стальную волну шипов с отбрасыванием.',
+    theme: 'steel',
     maxStacks: 3,
+    iconKind: 'shield',
     icon: '🛡️'
   },
   {
-    id: 'mage_mana_font',
-    onlyClass: 'mage',
-    nameRu: 'Астральный Колодец',
-    categoryRu: 'ПОТОК МАНЫ',
-    statBadgeRu: '-18% ТРАТА МАНЫ • ВОЛНА ЧАР КАЖДЫЙ 6-Й КАСТ',
-    descRu: 'Снижает стоимость заклинаний на 18%, а каждый 6-й выстрел выпускает кольцо чар вокруг мага и возвращает +16 маны.',
-    theme: 'emerald',
-    maxStacks: 3,
-    icon: '💧'
-  },
-
-  // =========================================================================
-  // 🔫 ОХОТНИК-СТРЕЛОК (6 Уникальных Оружейных Благословений)
-  // =========================================================================
-  {
-    id: 'gun_heavy_buckshot',
-    onlyClass: 'gunslinger',
-    nameRu: 'Вольфрамовая Картечь',
-    categoryRu: 'ОРУЖЕЙНИК',
-    statBadgeRu: '+2 ДРОБИНЫ В ЗАЛПЕ • +14% УРОН СТВОЛА',
-    descRu: 'Заряжает гильзы тяжёлой сечкой: каждый выстрел выпускает на +2 раскалённые дробины больше и бьёт на 14% сильнее.',
-    theme: 'amber',
-    maxStacks: 3,
-    icon: '💥'
-  },
-  {
-    id: 'gun_ricochet',
-    onlyClass: 'gunslinger',
-    nameRu: 'Рикошет Свинца',
-    categoryRu: 'МЕТКИЙ СТРЕЛОК',
-    statBadgeRu: '50% ШАНС ОТСКОКА ДРОБИ В СОСЕДА',
-    descRu: 'Попавшие картечины с шансом 50% (до 100%) с искрами рикошетят от костей в ближайшего соседнего врага на 65% урона.',
+    id: 'crit_chain_lightning',
+    nameRu: 'Цепь Молний',
+    categoryRu: 'КРИТ-СИНЕРГИЯ',
+    statBadgeRu: '+8% КРИТ • ЦЕПНАЯ МОЛНИЯ В 2 СОСЕДЕЙ',
+    descRu: 'Повышает шанс крита на +8%. Каждый критический удар бьёт цепной молнией в 2 ближайших врагов (+1 цель за ранг).',
     theme: 'cyan',
     maxStacks: 3,
+    iconKind: 'lightning',
     icon: '⚡'
   },
   {
-    id: 'gun_explosive_slugs',
-    onlyClass: 'gunslinger',
-    nameRu: 'Пороховая Детонация',
-    categoryRu: 'ЧЁРНЫЙ ПОРОХ',
-    statBadgeRu: 'КАЖДЫЙ 3-Й ВЫСТРЕЛ — РАЗРЫВНОЙ ЗАЛП',
-    descRu: 'Каждый 3-й выстрел из дробовика взрывается при попадании огненными осколками по площади (+40% урона).',
-    theme: 'flame',
-    maxStacks: 3,
-    icon: '🧨'
-  },
-  {
-    id: 'gun_tactical_reload',
-    onlyClass: 'gunslinger',
-    nameRu: 'Пороховой Рывок',
-    categoryRu: 'ТАКТИКА ОХОТНИКА',
-    statBadgeRu: '+28% ПЕРЕЗАРЯДКА • ВОЛНА И СПРИНТ',
-    descRu: 'Ускоряет перезарядку на 28%. Начало перезарядки отбрасывает наседающих тварей взрывом и ускоряет бег на +35%.',
-    theme: 'emerald',
-    maxStacks: 3,
-    icon: '💨'
-  },
-  {
-    id: 'ammo_pouch',
-    onlyClass: 'gunslinger',
-    nameRu: 'Последний Козырь',
-    categoryRu: 'БОЕЗАПАС',
-    statBadgeRu: '+2 ПАТРОНА • ПОСЛЕДНИЙ ВЫСТРЕЛ ×2.0',
-    descRu: 'Увеличивает магазин ружья на +2 гильзы, а последний патрон в обойме всегда наносит сокрушительный ×2.0 урон!',
-    theme: 'gold',
-    maxStacks: 3,
-    icon: '🎯'
-  },
-  {
-    id: 'gun_shrapnel_mine',
-    onlyClass: 'gunslinger',
-    nameRu: 'Шрапнельный Капкан',
-    categoryRu: 'ЛОВУШКА',
-    statBadgeRu: 'БРОСАЕТ РАЗРЫВНУЮ МИНУ КАЖДЫЕ 5 СЕК',
-    descRu: 'На бегу стрелок каждые 5 секунд оставляет за спиной пороховой капкан, разрывающий наступивших мертвецов.',
+    id: 'vampiric_harvest',
+    nameRu: 'Кровавая Жатва',
+    categoryRu: 'ЖИВУЧЕСТЬ',
+    statBadgeRu: '+15 МАКС. HP • ДОБИВАНИЯ ЛЕЧАТ ГЕРОЯ',
+    descRu: 'Увеличивает макс. здоровье на +15. Каждые 3 убийства (и каждая казнь элитки или босса) восстанавливают HP в бою.',
     theme: 'crimson',
     maxStacks: 3,
-    icon: '💣'
-  },
-
-  // =========================================================================
-  // ⚔️ ВОИН КЛЯТВЫ (6 Уникальных Ратных Благословений)
-  // =========================================================================
-  {
-    id: 'war_orbit_blades',
-    onlyClass: 'warrior',
-    nameRu: 'Клинки Предков',
-    categoryRu: 'РЕЛИКВИЯ СКЛЕПА',
-    statBadgeRu: 'ВРАЩАЮЩИЕСЯ МЕЧИ ДУШ ВОКРУГ ВОИНА',
-    descRu: 'Призывает парящие призрачные мечи (2 / 3 / 4 клинка), которые непрерывно кружатся вокруг Воина и рубят нежить.',
-    theme: 'gold',
-    maxStacks: 3,
-    icon: '🗡️'
-  },
-  {
-    id: 'war_seismic_slam',
-    onlyClass: 'warrior',
-    nameRu: 'Раскол Брусчатки',
-    categoryRu: 'ЯРОСТЬ СТАЛИ',
-    statBadgeRu: 'КАЖДЫЙ 3-Й ВЗМАХ БЬЁТ РАЗЛОМОМ ЗЕМЛИ',
-    descRu: 'Каждый 3-й удар мечом раскалывает камни золотой волной в радиусе 4.6м, нанося 110% урона и оглушая врагов.',
-    theme: 'amber',
-    maxStacks: 3,
-    icon: '🌋'
-  },
-  {
-    id: 'war_shield_thorns',
-    onlyClass: 'warrior',
-    nameRu: 'Шипованный Бастион',
-    categoryRu: 'ЩИТ КЛЯТВЫ',
-    statBadgeRu: '+7% БЛОК • ОТВЕТНЫЙ ВЗРЫВ ОСКОЛКОВ',
-    descRu: 'Укрепляет щит (+7% к блоку), а каждый отражённый или принятый удар бьёт всех врагов вокруг стальной волной!',
-    theme: 'steel',
-    maxStacks: 3,
-    icon: '🛡️'
-  },
-  {
-    id: 'war_whirlwind',
-    onlyClass: 'warrior',
-    nameRu: 'Вихрь Жнеца',
-    categoryRu: 'МАСТЕР МЕЧА',
-    statBadgeRu: '+25% ДУГА УДАРА • ВИХРЬ 360° РАЗ В 4.5 СЕК',
-    descRu: 'Расширяет дугу меча на 25%, а каждые 4.5 секунды Воин автоматически проводит круговой разрубающий вихрь на 360°!',
-    theme: 'crimson',
-    maxStacks: 3,
-    icon: '🌪️'
-  },
-  {
-    id: 'war_blood_cleave',
-    onlyClass: 'warrior',
-    nameRu: 'Казнь Кровопийцы',
-    categoryRu: 'КЛЯТВА КРОВИ',
-    statBadgeRu: '+50% ПО РАНЕНЫМ • ЛЕЧЕНИЕ ОТ КАЗНЕЙ',
-    descRu: 'Наносит +50% урона врагам с менее 45% здоровья, а каждые 9 разрубленных тварей исцеляют Воина на +12 HP.',
-    theme: 'crimson',
-    maxStacks: 3,
+    iconKind: 'vampire',
     icon: '🩸'
   },
   {
-    id: 'war_iron_banner',
-    onlyClass: 'warrior',
-    nameRu: 'Гнев Несокрушимого',
-    categoryRu: 'БЕРСЕРК',
-    statBadgeRu: '+24 МАКС. HP • ДО +45% ЯРОСТИ ПРИ РАНЕНИИ',
-    descRu: 'Даёт +24 к макс. здоровью. Чем сильнее изранен Воин, тем быстрее и мощнее он рубит мечом (до +45% за ранг)!',
-    theme: 'flame',
+    id: 'rapid_cadence',
+    nameRu: 'Вихревой Темп',
+    categoryRu: 'ТЕМП БОЯ',
+    statBadgeRu: '+18% СКОРОСТЬ АТАКИ • -20% ОТКАТ РЫВКА',
+    descRu: 'Ускоряет удары, стрельбу и перезарядку на +18%, а также сокращает откат рывка [Space] на 20% за ранг.',
+    theme: 'emerald',
     maxStacks: 3,
-    icon: '🔥'
+    iconKind: 'cadence',
+    icon: '💨'
   },
-
-  // =========================================================================
-  // 💀 РЕДКИЕ ОБЩИЕ ТЁМНЫЕ РЕЛИКВИИ (С Активным Эффектом!)
-  // =========================================================================
   {
-    id: 'crit_fang',
-    nameRu: 'Жнец Черепов',
-    categoryRu: 'СМЕРТОНОСНОСТЬ',
-    statBadgeRu: '+15% КРИТ • ВЗРЫВ ДУШИ ПРИ КРИТЕ',
-    descRu: 'Повышает шанс крита на 15%. Каждый критический удар взрывает цель астральной вспышкой, ранящей соседей!',
-    theme: 'crimson',
+    id: 'frost_shatter',
+    nameRu: 'Ледяной Раскол',
+    categoryRu: 'МОРОЗНАЯ ЦЕПЬ',
+    statBadgeRu: 'ЗАМЕДЛЕНИЕ ВРАГОВ • ЛЕДЯНОЙ ВЗРЫВ ПРИ СМЕРТИ',
+    descRu: 'Удары и снаряды сковывают врагов морозом; гибель замедленной цели взрывает её ледяными осколками по соседям.',
+    theme: 'ice',
     maxStacks: 3,
-    icon: '💀'
+    iconKind: 'frost',
+    icon: '❄️'
+  },
+  {
+    id: 'executioner_cleave',
+    nameRu: 'Удар Палача',
+    categoryRu: 'КАЗНЬ',
+    statBadgeRu: '+25% ПО ЦЕЛЯМ <40% HP • ШИРЕ ДУГА / +1 ПРОБИТИЕ',
+    descRu: 'Наносит +25% урона раненым целям (ниже 40% HP), расширяет дугу удара на +18% и даёт +1 пробитие снарядам.',
+    theme: 'amber',
+    maxStacks: 3,
+    iconKind: 'cleave',
+    icon: '⚔️'
   },
   {
     id: 'greed_contract',
     nameRu: 'Печать Алчности',
     categoryRu: 'ТРОФЕИ ОХОТЫ',
-    statBadgeRu: '+35% ЗОЛОТА • УСКОРЕНИЕ ОТ ТРОФЕЕВ',
-    descRu: 'Увеличивает добычу золота за каждого убитого монстра на 35% и даёт +7% к скорости движения.',
+    statBadgeRu: '+35% ЗОЛОТА • +7% СКОРОСТЬ БЕГА',
+    descRu: 'Увеличивает добычу золота за убитых монстров на +35% и ускоряет передвижение героя по арене.',
     theme: 'gold',
     maxStacks: 3,
+    iconKind: 'gold',
     icon: '🪙'
   }
 ];
@@ -1774,3 +1630,49 @@ export const CLASS_TALENT_TREES = {
   warrior: WARRIOR_TALENT_TREE,
   gunslinger: GUNSLINGER_TALENT_TREE
 };
+
+// Daily Quests Pool (3 deterministic quests per YYYY-MM-DD: 1 kills, 1 barrels/chests, 1 bosses/waves)
+export const DAILY_QUEST_TEMPLATES = [
+  {
+    id: 'dq_slay_35',
+    kind: 'kills',
+    titleRu: 'Истребить 35 тварей в бою',
+    target: 35,
+    rewardGold: 85
+  },
+  {
+    id: 'dq_slay_75',
+    kind: 'kills',
+    titleRu: 'Сразить 75 врагов за день',
+    target: 75,
+    rewardGold: 150
+  },
+  {
+    id: 'dq_barrels_5',
+    kind: 'barrels_chests',
+    titleRu: 'Взорвать 5 бочек или открыть сундуков',
+    target: 5,
+    rewardGold: 95
+  },
+  {
+    id: 'dq_chests_8',
+    kind: 'barrels_chests',
+    titleRu: 'Активировать 8 бочек и сундуков',
+    target: 8,
+    rewardGold: 145
+  },
+  {
+    id: 'dq_boss_2',
+    kind: 'bosses_waves',
+    titleRu: 'Победить боссов или пройти волны (2)',
+    target: 2,
+    rewardGold: 130
+  },
+  {
+    id: 'dq_boss_4',
+    kind: 'bosses_waves',
+    titleRu: 'Одолеть боссов или пройти волны (4)',
+    target: 4,
+    rewardGold: 190
+  }
+];

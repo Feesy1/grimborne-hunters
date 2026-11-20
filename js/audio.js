@@ -7,22 +7,38 @@ export function createAudioEngine() {
   let sfxGain = null;
   let musicGain = null;
   let musicFilter = null;
-  let musicGuitarShaper = null;
-  let musicGuitarPostLp = null;
   let compressor = null;
   let whiteNoiseBuffer = null;
   let brownNoiseBuffer = null;
   const externalSampleBuffers = new Map();
   let uspShotCycleIdx = 0;
+  let coinPitchStreak = 0;
+  let lastCoinAt = 0;
+  const lastFootstepChoice = Object.create(null);
 
   function preloadExternalSamples(audioCtx) {
     if (!audioCtx || typeof fetch === 'undefined') return;
+    const stepVer = '20261120z28';
     const files = [
       ['usp_1', './assets/audio/usp_shot_1.wav?v=20261117z25'],
       ['usp_2', './assets/audio/usp_shot_2.wav?v=20261117z25'],
       ['usp_3', './assets/audio/usp_shot_3.wav?v=20261117z25'],
       ['map_open', './assets/audio/map_open.wav?v=20261117z25'],
-      ['portal_enter', './assets/audio/portal_enter.wav?v=20261117z25']
+      ['portal_enter', './assets/audio/portal_enter.wav?v=20261117z25'],
+      ['step_warrior_1', `./assets/audio/step_warrior_1.wav?v=${stepVer}`],
+      ['step_warrior_2', `./assets/audio/step_warrior_2.wav?v=${stepVer}`],
+      ['step_warrior_3', `./assets/audio/step_warrior_3.wav?v=${stepVer}`],
+      ['step_warrior_4', `./assets/audio/step_warrior_4.wav?v=${stepVer}`],
+      ['step_warrior_5', `./assets/audio/step_warrior_5.wav?v=${stepVer}`],
+      ['step_warrior_6', `./assets/audio/step_warrior_6.wav?v=${stepVer}`],
+      ['step_gunslinger_1', `./assets/audio/step_gunslinger_1.wav?v=${stepVer}`],
+      ['step_gunslinger_2', `./assets/audio/step_gunslinger_2.wav?v=${stepVer}`],
+      ['step_gunslinger_3', `./assets/audio/step_gunslinger_3.wav?v=${stepVer}`],
+      ['step_gunslinger_4', `./assets/audio/step_gunslinger_4.wav?v=${stepVer}`],
+      ['step_mage_1', `./assets/audio/step_mage_1.wav?v=${stepVer}`],
+      ['step_mage_2', `./assets/audio/step_mage_2.wav?v=${stepVer}`],
+      ['step_mage_3', `./assets/audio/step_mage_3.wav?v=${stepVer}`],
+      ['step_mage_4', `./assets/audio/step_mage_4.wav?v=${stepVer}`]
     ];
     for (const [key, url] of files) {
       if (externalSampleBuffers.has(key)) continue;
@@ -40,7 +56,8 @@ export function createAudioEngine() {
   }
 
   function playSampleBuffer(key, gainPeak = 0.65, rate = 1.0) {
-    if (!ctx || !masterGain) return false;
+    const dest = compressor || sfxGain;
+    if (!ctx || !dest) return false;
     const buf = externalSampleBuffers.get(key);
     if (!buf) {
       preloadExternalSamples(ctx);
@@ -52,8 +69,75 @@ export function createAudioEngine() {
     const g = ctx.createGain();
     g.gain.value = gainPeak;
     src.connect(g);
-    g.connect(masterGain);
+    g.connect(dest);
+    src.onended = () => {
+      try { src.disconnect(); } catch {}
+      try { g.disconnect(); } catch {}
+    };
     src.start(0);
+    return true;
+  }
+
+  function playFootstepSample(key, {
+    gainPeak = 0.38,
+    rate = 1.0,
+    lowShelfDb = 0,
+    highShelfDb = 0,
+    lpFreq = 0
+  } = {}) {
+    if (!ctx || !compressor) return false;
+    const buf = externalSampleBuffers.get(key);
+    if (!buf) {
+      preloadExternalSamples(ctx);
+      return false;
+    }
+    const t0 = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.playbackRate.setValueAtTime(rate, t0);
+
+    let tail = src;
+    const nodes = [src];
+    if (lowShelfDb !== 0) {
+      const ls = ctx.createBiquadFilter();
+      ls.type = 'lowshelf';
+      ls.frequency.setValueAtTime(135, t0);
+      ls.gain.setValueAtTime(lowShelfDb, t0);
+      tail.connect(ls);
+      tail = ls;
+      nodes.push(ls);
+    }
+    if (highShelfDb !== 0) {
+      const hs = ctx.createBiquadFilter();
+      hs.type = 'highshelf';
+      hs.frequency.setValueAtTime(1850, t0);
+      hs.gain.setValueAtTime(highShelfDb, t0);
+      tail.connect(hs);
+      tail = hs;
+      nodes.push(hs);
+    }
+    if (lpFreq > 0) {
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.setValueAtTime(lpFreq, t0);
+      lp.Q.setValueAtTime(0.7, t0);
+      tail.connect(lp);
+      tail = lp;
+      nodes.push(lp);
+    }
+
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(gainPeak, t0);
+    tail.connect(g);
+    g.connect(compressor);
+    nodes.push(g);
+
+    src.onended = () => {
+      for (let i = 0; i < nodes.length; i++) {
+        try { nodes[i].disconnect(); } catch {}
+      }
+    };
+    src.start(t0);
     return true;
   }
   let distortionCurve = null;
@@ -130,12 +214,15 @@ export function createAudioEngine() {
 
       musicFilter = ctx.createBiquadFilter();
       musicFilter.type = 'lowpass';
-      musicFilter.frequency.setValueAtTime(musicMode === 'hub' ? 520 : 4400, ctx.currentTime);
-      musicFilter.Q.setValueAtTime(1.1, ctx.currentTime);
+      musicFilter.frequency.setValueAtTime(
+        musicMode === 'hub' ? 540 : musicMode === 'boss' ? 980 : 780,
+        ctx.currentTime
+      );
+      musicFilter.Q.setValueAtTime(0.95, ctx.currentTime);
 
       musicGain = ctx.createGain();
       musicGain.gain.setValueAtTime(
-        muted || suspendedBySystem || musicMode === 'off' ? 0.0001 : Math.max(0.0001, musicVolume * 0.44),
+        muted || suspendedBySystem || musicMode === 'off' ? 0.0001 : Math.max(0.0001, musicVolume * 0.36),
         ctx.currentTime
       );
 
@@ -160,15 +247,7 @@ export function createAudioEngine() {
       }
 
       distortionCurve = makeDistortionCurve(42);
-      musicGuitarShaper = ctx.createWaveShaper();
-      musicGuitarShaper.curve = distortionCurve;
-      musicGuitarShaper.oversample = 'none';
-      musicGuitarPostLp = ctx.createBiquadFilter();
-      musicGuitarPostLp.type = 'lowpass';
-      musicGuitarPostLp.frequency.setValueAtTime(2150, ctx.currentTime);
-      musicGuitarPostLp.Q.setValueAtTime(0.9, ctx.currentTime);
-      musicGuitarShaper.connect(musicGuitarPostLp);
-      musicGuitarPostLp.connect(musicFilter);
+      preloadExternalSamples(ctx);
     } catch {
       ctx = null;
     }
@@ -188,81 +267,196 @@ export function createAudioEngine() {
       sfxGain.gain.setTargetAtTime(targetSfx, t, 0.018);
     }
     if (musicGain) {
-      const modeMult = musicMode === 'off' ? 0 : musicMode === 'hub' ? 0.34 : musicMode === 'boss' ? 0.56 : 0.46;
+      const modeMult = musicMode === 'off' ? 0 : musicMode === 'hub' ? 0.34 : musicMode === 'boss' ? 0.42 : 0.36;
       const targetMusic = muted || suspendedBySystem || musicVolume <= 0.001 ? 0.0001 : Math.max(0.0001, musicVolume * modeMult);
       musicGain.gain.cancelScheduledValues(t);
       musicGain.gain.setTargetAtTime(targetMusic, t, 0.05);
     }
     if (musicFilter) {
-      const targetCutoff = musicMode === 'hub' ? 540 : musicMode === 'boss' ? 5200 : 4200;
+      const targetCutoff = musicMode === 'hub' ? 540 : musicMode === 'boss' ? 980 : 780;
       musicFilter.frequency.setTargetAtTime(targetCutoff, t, 0.08);
     }
   }
 
   // =========================================================================
-  // Procedural DOOM-Inspired Argent/Thrash Metal & Dark-Fantasy Music Sequencer
+  // Procedural Dark-Fantasy Hub & Restrained Combat/Boss Ambient Sequencer
   // =========================================================================
-  // Iconic E1M1 / Argent chromatic drop-E guitar steps (frequencies in Hz, 0 = rest)
-  const DOOM_COMBAT_RIFF = [
-    82.41, 0, 82.41, 164.81, 82.41, 0, 82.41, 146.83,
-    82.41, 0, 82.41, 130.81, 82.41, 0, 116.54, 123.47,
-    82.41, 0, 82.41, 164.81, 82.41, 0, 82.41, 146.83,
-    82.41, 0, 82.41, 130.81, 82.41, 116.54, 98.00, 110.00
-  ];
-  const DOOM_BOSS_RIFF = [
-    73.42, 73.42, 146.83, 73.42, 110.00, 73.42, 155.56, 73.42,
-    73.42, 73.42, 146.83, 138.59, 130.81, 116.54, 98.00, 110.00,
-    73.42, 73.42, 164.81, 73.42, 146.83, 73.42, 174.61, 164.81,
-    146.83, 130.81, 116.54, 98.00, 87.31, 82.41, 73.42, 92.50
-  ];
   const HUB_DARK_PULSE = [
     82.41, 0, 0, 0, 0, 0, 98.00, 0,
     110.00, 0, 0, 0, 98.00, 0, 87.31, 0,
     82.41, 0, 0, 0, 0, 0, 123.47, 0,
     110.00, 0, 98.00, 0, 92.50, 0, 87.31, 0
   ];
+  // Restrained dark D-minor / Phrygian sub-bass drone for arena combat (zero harsh distortion!)
+  const COMBAT_DARK_DRONE = [
+    73.42, 0, 0, 0, 0, 0, 0, 0,
+    77.78, 0, 0, 0, 0, 0, 0, 0,
+    55.00, 0, 0, 0, 0, 0, 0, 0,
+    87.31, 0, 0, 0, 82.41, 0, 0, 0
+  ];
+  // Deeper ominous C-Phrygian ritual drone for boss fights
+  const BOSS_DARK_DRONE = [
+    65.41, 0, 0, 0, 0, 0, 0, 0,
+    69.30, 0, 0, 0, 0, 0, 0, 0,
+    49.00, 0, 0, 0, 0, 0, 0, 0,
+    51.91, 0, 0, 0, 61.74, 0, 0, 0
+  ];
 
   function scheduleMusicNote(stepIdx, t) {
-    if (!ctx || !musicFilter || !distortionCurve || muted || suspendedBySystem || musicMode !== 'hub' || musicVolume <= 0.001) {
+    if (!ctx || !musicFilter || muted || suspendedBySystem || musicMode === 'off' || musicVolume <= 0.001) {
       return;
     }
 
-    const isHub = true;
-    const table = HUB_DARK_PULSE;
-    const freq = table[stepIdx % table.length];
+    const step = stepIdx % 32;
 
-    // Gentle Dark-Fantasy Hub Sub-Pulse (DOOM Slayer / Doomsday combat metal removed per user request)
-    if (freq > 0) {
-      const dur = 0.34;
-      const osc = ctx.createOscillator();
+    if (musicMode === 'hub') {
+      const freq = HUB_DARK_PULSE[step];
+      if (freq > 0) {
+        const dur = 0.34;
+        const osc = ctx.createOscillator();
+        const sub = ctx.createOscillator();
+        const g = ctx.createGain();
+
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, t);
+        sub.type = 'sine';
+        sub.frequency.setValueAtTime(freq * 0.5, t);
+
+        const amp = 0.12;
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.linearRampToValueAtTime(amp, t + 0.012);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+
+        osc.connect(g);
+        sub.connect(g);
+        g.connect(musicFilter);
+        osc.onended = () => {
+          try { osc.disconnect(); } catch {}
+          try { sub.disconnect(); } catch {}
+          try { g.disconnect(); } catch {}
+        };
+
+        osc.start(t);
+        sub.start(t);
+        osc.stop(t + dur + 0.015);
+        sub.stop(t + dur + 0.015);
+      }
+      return;
+    }
+
+    // Restrained dark-fantasy combat & boss ambient (warm low drone + muted frame-drum pulse)
+    const isBoss = musicMode === 'boss';
+    const droneTable = isBoss ? BOSS_DARK_DRONE : COMBAT_DARK_DRONE;
+    const droneFreq = droneTable[step];
+
+    if (droneFreq > 0) {
+      const dur = isBoss ? 0.92 : 0.86;
       const sub = ctx.createOscillator();
+      const pad = ctx.createOscillator();
       const g = ctx.createGain();
 
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(freq, t);
       sub.type = 'sine';
-      sub.frequency.setValueAtTime(freq * 0.5, t);
+      sub.frequency.setValueAtTime(droneFreq, t);
+      pad.type = 'triangle';
+      pad.frequency.setValueAtTime(droneFreq * 1.5, t); // Soft fifth overtone
 
-      if (musicGuitarPostLp) {
-        musicGuitarPostLp.frequency.setTargetAtTime(420, t, 0.04);
-      }
-
-      const amp = 0.12;
+      const peak = isBoss ? 0.11 : 0.092;
       g.gain.setValueAtTime(0.0001, t);
-      g.gain.linearRampToValueAtTime(amp, t + 0.012);
+      g.gain.linearRampToValueAtTime(peak, t + 0.055);
       g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
 
-      osc.connect(g);
+      const padGain = ctx.createGain();
+      padGain.gain.setValueAtTime(0.32, t);
+
       sub.connect(g);
+      pad.connect(padGain);
+      padGain.connect(g);
       g.connect(musicFilter);
-      osc.onended = () => {
+      sub.onended = () => {
+        try { sub.disconnect(); } catch {}
+        try { pad.disconnect(); } catch {}
+        try { padGain.disconnect(); } catch {}
         try { g.disconnect(); } catch {}
       };
 
-      osc.start(t);
       sub.start(t);
-      osc.stop(t + dur + 0.015);
-      sub.stop(t + dur + 0.015);
+      pad.start(t);
+      sub.stop(t + dur + 0.02);
+      pad.stop(t + dur + 0.02);
+    }
+
+    // Muffled war-drum / heartbeat low tom on soft rhythmic grid
+    const subStep = step % 8;
+    const isMainBeat = subStep === 0;
+    const isOffBeat = isBoss ? (subStep === 3 || subStep === 6) : subStep === 4;
+    if (isMainBeat || isOffBeat) {
+      const drumDur = isMainBeat ? 0.22 : 0.14;
+      const drumOsc = ctx.createOscillator();
+      const drumGain = ctx.createGain();
+      drumOsc.type = 'sine';
+      const startHz = isMainBeat ? (isBoss ? 86 : 78) : (isBoss ? 68 : 64);
+      const endHz = isMainBeat ? 36 : 38;
+      drumOsc.frequency.setValueAtTime(startHz, t);
+      drumOsc.frequency.exponentialRampToValueAtTime(endHz, t + drumDur);
+
+      const drumAmp = isMainBeat ? (isBoss ? 0.13 : 0.105) : (isBoss ? 0.075 : 0.058);
+      drumGain.gain.setValueAtTime(0.0001, t);
+      drumGain.gain.linearRampToValueAtTime(drumAmp, t + 0.008);
+      drumGain.gain.exponentialRampToValueAtTime(0.0001, t + drumDur);
+
+      drumOsc.connect(drumGain);
+      drumGain.connect(musicFilter);
+      drumOsc.onended = () => {
+        try { drumOsc.disconnect(); } catch {}
+        try { drumGain.disconnect(); } catch {}
+      };
+      drumOsc.start(t);
+      drumOsc.stop(t + drumDur + 0.015);
+    }
+
+    // Subtle muffled brush/shaker texture on weak subdivisions
+    if (step % 4 === 2 && brownNoiseBuffer) {
+      const nSrc = ctx.createBufferSource();
+      nSrc.buffer = brownNoiseBuffer;
+      const nLp = ctx.createBiquadFilter();
+      nLp.type = 'bandpass';
+      nLp.frequency.setValueAtTime(isBoss ? 520 : 440, t);
+      nLp.Q.setValueAtTime(1.4, t);
+      const nGain = ctx.createGain();
+      const nDur = 0.065;
+      nGain.gain.setValueAtTime(0.0001, t);
+      nGain.gain.linearRampToValueAtTime(isBoss ? 0.026 : 0.020, t + 0.006);
+      nGain.gain.exponentialRampToValueAtTime(0.0001, t + nDur);
+
+      nSrc.connect(nLp);
+      nLp.connect(nGain);
+      nGain.connect(musicFilter);
+      nSrc.onended = () => {
+        try { nSrc.disconnect(); } catch {}
+        try { nLp.disconnect(); } catch {}
+        try { nGain.disconnect(); } catch {}
+      };
+      nSrc.start(t, Math.random() * 0.5, nDur + 0.01);
+    }
+
+    // Whisper-soft eerie dark bell overtone on bar downbeats during boss encounters
+    if (isBoss && (step === 0 || step === 16)) {
+      const bellOsc = ctx.createOscillator();
+      const bellGain = ctx.createGain();
+      bellOsc.type = 'sine';
+      const bellHz = step === 0 ? 261.63 : 277.18;
+      bellOsc.frequency.setValueAtTime(bellHz, t);
+      bellGain.gain.setValueAtTime(0.0001, t);
+      bellGain.gain.linearRampToValueAtTime(0.024, t + 0.02);
+      bellGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.72);
+      bellOsc.connect(bellGain);
+      bellGain.connect(musicFilter);
+      bellOsc.onended = () => {
+        try { bellOsc.disconnect(); } catch {}
+        try { bellGain.disconnect(); } catch {}
+      };
+      bellOsc.start(t);
+      bellOsc.stop(t + 0.75);
     }
   }
 
@@ -274,7 +468,7 @@ export function createAudioEngine() {
   }
 
   function startMusicLoop() {
-    if (musicMode !== 'hub' || muted || suspendedBySystem || musicVolume <= 0.001) {
+    if (musicMode === 'off' || muted || suspendedBySystem || musicVolume <= 0.001) {
       stopMusicLoop();
       return;
     }
@@ -282,7 +476,7 @@ export function createAudioEngine() {
     if (!ctx) return;
     nextNoteTime = Math.max(ctx.currentTime + 0.04, nextNoteTime || ctx.currentTime + 0.04);
     musicTimerId = setInterval(() => {
-      if (musicMode !== 'hub' || muted || suspendedBySystem || musicVolume <= 0.001) {
+      if (musicMode === 'off' || muted || suspendedBySystem || musicVolume <= 0.001) {
         stopMusicLoop();
         return;
       }
@@ -290,7 +484,7 @@ export function createAudioEngine() {
         if (ctx) nextNoteTime = ctx.currentTime + 0.05;
         return;
       }
-      const bpm = 96;
+      const bpm = musicMode === 'boss' ? 114 : musicMode === 'combat' ? 104 : 96;
       const stepSec = 60 / bpm / 4;
       const horizon = ctx.currentTime + 0.18;
       if (nextNoteTime < ctx.currentTime - 0.10) {
@@ -313,6 +507,7 @@ export function createAudioEngine() {
       audio.resume().catch(() => {});
     }
     unlocked = true;
+    preloadExternalSamples(audio);
     startMusicLoop();
   }
 
@@ -1037,57 +1232,146 @@ export function createAudioEngine() {
       });
     },
 
-    playFootstep(classId = 'gunslinger', stepParity = 0) {
-      if (!readyToPlay() || !canTrigger('footstep', 135)) return;
-      const alt = stepParity % 2 === 0 ? 0.96 : 1.04;
-      const jitter = alt * (0.97 + Math.random() * 0.06);
-      const isHeavy = classId === 'warrior';
-      const isLight = classId === 'mage';
+    playFootstep(classId = 'gunslinger', stepParity = 0, isSprinting = false) {
+      const minStepMs = isSprinting ? 160 : 180;
+      if (!readyToPlay() || !canTrigger('footstep', minStepMs)) return;
 
-      // 1. Grounded leather-boot heel thud on dark cobblestones (matching reference video stride!)
-      playTone({
-        type: 'sine',
-        freqStart: (isHeavy ? 118 : isLight ? 148 : 134) * jitter,
-        freqEnd: (isHeavy ? 38 : 44) * jitter,
-        duration: isHeavy ? 0.085 : 0.072,
-        gainPeak: isHeavy ? 0.20 : isLight ? 0.13 : 0.17,
-        attack: 0.002
+      preloadExternalSamples(ctx);
+
+      const isWarrior = classId === 'warrior';
+      const isMage = classId === 'mage';
+      const pool = isWarrior ? 'warrior' : isMage ? 'mage' : 'gunslinger';
+      const parity = Math.abs(stepParity | 0) % 2; // 0 = left foot, 1 = right foot
+
+      // Odd indices (1,3,5) are recorded Left-foot steps; even indices (2,4,6) are Right-foot steps
+      const candidates = isWarrior
+        ? (parity === 0 ? [1, 3, 5] : [2, 4, 6])
+        : (parity === 0 ? [1, 3] : [2, 4]);
+
+      const choiceSlot = `${pool}_${parity}`;
+      const prevChoice = lastFootstepChoice[choiceSlot];
+      const fresh = candidates.length > 1 ? candidates.filter((n) => n !== prevChoice) : candidates;
+      const pickedNum = fresh[Math.floor(Math.random() * fresh.length)];
+      lastFootstepChoice[choiceSlot] = pickedNum;
+
+      // Pick decoded sample for this foot, or any decoded sample in the class pool before falling back
+      let sampleKey = `step_${pool}_${pickedNum}`;
+      if (!externalSampleBuffers.get(sampleKey)) {
+        const totalVariants = isWarrior ? 6 : 4;
+        for (let i = 1; i <= totalVariants; i++) {
+          const altKey = `step_${pool}_${i}`;
+          if (externalSampleBuffers.get(altKey)) {
+            sampleKey = altKey;
+            break;
+          }
+        }
+      }
+
+      const footTilt = parity === 0 ? 0.978 : 1.018;
+      const rateJitter = 0.96 + Math.random() * 0.08;
+      const gainJitter = 0.93 + Math.random() * 0.14;
+      const sprintRate = isSprinting ? (isWarrior ? 1.09 : 1.08) : 1.0;
+      const baseGain = isWarrior
+        ? (isSprinting ? 0.54 : 0.38)
+        : isMage
+          ? (isSprinting ? 0.38 : 0.27)
+          : (isSprinting ? 0.46 : 0.33);
+
+      const playedSample = playFootstepSample(sampleKey, {
+        gainPeak: baseGain * gainJitter,
+        rate: footTilt * sprintRate * rateJitter,
+        lowShelfDb: isSprinting ? (isWarrior ? 3.5 : isMage ? 1.4 : 2.2) : 0,
+        highShelfDb: isSprinting ? (isWarrior ? 4.0 : isMage ? 2.4 : 3.2) : (Math.random() * 1.4 - 0.7),
+        lpFreq: isMage ? (isSprinting ? 3100 : 2500) : 0
       });
 
-      // 2. Crisp cobblestone sole tap / grit crunch
+      if (playedSample) {
+        if (isWarrior && isSprinting) {
+          // Subtle dry gravel kick / push-off grit on heavy sprint stride (pure filtered noise, zero tonal sweep)
+          playFilteredNoise({
+            brown: false,
+            filterType: 'bandpass',
+            freqStart: (1720 + Math.random() * 340) * footTilt,
+            freqEnd: 1180 * footTilt,
+            q: 1.5,
+            startTime: 0.030 + Math.random() * 0.012,
+            duration: 0.044,
+            gainPeak: 0.052 * gainJitter,
+            attack: 0.004
+          });
+        } else if (isMage) {
+          // Whisper-quiet misty cloak / damp earth air shimmer (pure softly filtered noise, zero oscillator)
+          playFilteredNoise({
+            brown: false,
+            filterType: 'bandpass',
+            freqStart: (2350 + Math.random() * 320) * footTilt,
+            freqEnd: 1580 * footTilt,
+            q: 2.1,
+            startTime: 0.014,
+            duration: isSprinting ? 0.052 : 0.068,
+            gainPeak: (isSprinting ? 0.028 : 0.020) * gainJitter,
+            attack: 0.010
+          });
+        }
+        return;
+      }
+
+      // Instant dry multi-grain foley fallback (while WAVs finish initial decode):
+      // Strictly filtered brown/white noise — ZERO pitched sine/triangle rubbery sweeps!
+      const sprintBoost = isSprinting ? 1.34 : 1.0;
+      const toeOffset = (isSprinting ? 0.030 : 0.042) + Math.random() * 0.010;
+      const fJitter = footTilt * rateJitter;
+
+      // Phase 1: Dry low-passed boot-heel mass impact on stone/earth
+      playFilteredNoise({
+        brown: true,
+        filterType: 'lowpass',
+        freqStart: (isWarrior ? 215 : isMage ? 240 : 255) * fJitter,
+        freqEnd: (isWarrior ? 92 : 125) * fJitter,
+        q: 0.85,
+        startTime: 0,
+        duration: isWarrior ? 0.048 : 0.038,
+        gainPeak: (isWarrior ? 0.34 : isMage ? 0.18 : 0.25) * sprintBoost * gainJitter,
+        attack: isMage ? 0.006 : 0.002
+      });
+
+      // Phase 1b: Cobblestone sole contact transient
       playFilteredNoise({
         brown: false,
         filterType: 'bandpass',
-        freqStart: (isLight ? 1380 : 1140) * jitter,
-        freqEnd: 440 * jitter,
-        q: 1.85,
-        startTime: 0.004,
-        duration: 0.052,
-        gainPeak: isLight ? 0.10 : 0.135,
+        freqStart: (isWarrior ? 760 : isMage ? 640 : 940) * fJitter,
+        freqEnd: (isWarrior ? 420 : 520) * fJitter,
+        q: 1.35,
+        startTime: 0.002,
+        duration: 0.026,
+        gainPeak: (isWarrior ? 0.16 : isMage ? 0.08 : 0.14) * sprintBoost * gainJitter,
         attack: 0.002
       });
 
-      // 3. Subtle gear / backpack strap / armor micro-detail
-      if (isHeavy) {
-        playTone({
-          type: 'triangle',
-          freqStart: 1420 * jitter,
-          freqEnd: 980 * jitter,
-          startTime: 0.014,
-          duration: 0.035,
-          gainPeak: 0.045,
-          attack: 0.002
-        });
-      } else if (classId === 'gunslinger') {
+      // Phase 2: Delayed toe-off & graveyard gravel/earth grit scrape
+      playFilteredNoise({
+        brown: false,
+        filterType: 'bandpass',
+        freqStart: (isWarrior ? 1680 : isMage ? 1420 : 1960) * fJitter * (isSprinting ? 1.18 : 1.0),
+        freqEnd: (isWarrior ? 980 : 880) * fJitter,
+        q: 1.55,
+        startTime: toeOffset,
+        duration: isSprinting ? 0.048 : 0.062,
+        gainPeak: (isWarrior ? 0.14 : isMage ? 0.085 : 0.115) * sprintBoost * gainJitter,
+        attack: 0.005
+      });
+
+      // Micro gravel crackle grain + subtle warrior leather/plate weight rustle
+      if (isWarrior) {
         playFilteredNoise({
           brown: false,
           filterType: 'bandpass',
-          freqStart: 2350 * jitter,
-          freqEnd: 1650 * jitter,
-          q: 3.2,
-          startTime: 0.012,
-          duration: 0.036,
-          gainPeak: 0.055,
+          freqStart: 2250 * fJitter,
+          freqEnd: 1380 * fJitter,
+          q: 2.1,
+          startTime: toeOffset + 0.012,
+          duration: 0.028,
+          gainPeak: 0.065 * sprintBoost * gainJitter,
           attack: 0.003
         });
       }
@@ -1577,9 +1861,216 @@ export function createAudioEngine() {
       });
     },
 
-    playHit() {
+    playDash() {
+      if (!readyToPlay() || !canTrigger('dash', 90)) return;
+      const jitter = 0.94 + Math.random() * 0.12;
+      // Crisp aerodynamic wind-cut whoosh
+      playFilteredNoise({
+        brown: false,
+        filterType: 'bandpass',
+        freqStart: 1950 * jitter,
+        freqEnd: 380 * jitter,
+        q: 1.85,
+        duration: 0.17,
+        gainPeak: 0.30,
+        attack: 0.008
+      });
+      // Soft air rush tail
+      playFilteredNoise({
+        brown: true,
+        filterType: 'lowpass',
+        freqStart: 680 * jitter,
+        freqEnd: 150,
+        q: 0.9,
+        startTime: 0.015,
+        duration: 0.19,
+        gainPeak: 0.22,
+        attack: 0.012
+      });
+      // Quick kinetic impulse pitch drop
+      playTone({
+        type: 'sine',
+        freqStart: 240 * jitter,
+        freqEnd: 78,
+        duration: 0.11,
+        gainPeak: 0.16,
+        attack: 0.004
+      });
+    },
+
+    playHit(weaponId = null) {
       if (!readyToPlay() || !canTrigger('hit', 30)) return;
-      const jitter = 0.9 + Math.random() * 0.2;
+      const jitter = 0.92 + Math.random() * 0.16;
+      const wId = typeof weaponId === 'string' ? weaponId : '';
+
+      if (wId === 'club') {
+        // Starter Sword: crisp steel cut + clean flesh/bone thump + subtle edge ring
+        playTone({
+          type: 'triangle',
+          freqStart: 245 * jitter,
+          freqEnd: 84,
+          duration: 0.075,
+          gainPeak: 0.24,
+          attack: 0.0018
+        });
+        playFilteredNoise({
+          brown: false,
+          filterType: 'bandpass',
+          freqStart: 2150 * jitter,
+          freqEnd: 680,
+          q: 1.9,
+          duration: 0.06,
+          gainPeak: 0.20,
+          attack: 0.0015
+        });
+        playTone({
+          type: 'sine',
+          freqStart: 1080 * jitter,
+          freqEnd: 940 * jitter,
+          duration: 0.07,
+          gainPeak: 0.075,
+          attack: 0.0015
+        });
+        return;
+      }
+
+      if (wId === 'spear') {
+        // Battle Spear: tight piercing thrust snap + sharp metallic point puncture
+        playTone({
+          type: 'triangle',
+          freqStart: 320 * jitter,
+          freqEnd: 118,
+          duration: 0.062,
+          gainPeak: 0.22,
+          attack: 0.0012
+        });
+        playFilteredNoise({
+          brown: false,
+          filterType: 'bandpass',
+          freqStart: 2750 * jitter,
+          freqEnd: 860,
+          q: 2.3,
+          duration: 0.055,
+          gainPeak: 0.22,
+          attack: 0.0012
+        });
+        playTone({
+          type: 'sine',
+          freqStart: 1560 * jitter,
+          freqEnd: 1120,
+          duration: 0.055,
+          gainPeak: 0.09,
+          attack: 0.001
+        });
+        return;
+      }
+
+      if (wId === 'zweihander') {
+        // Greatsword: weighty deep cleave crunch + broad resonant steel ring
+        playDistortedThump({
+          type: 'triangle',
+          freqStart: 162 * jitter,
+          freqEnd: 42,
+          duration: 0.135,
+          gainPeak: 0.30,
+          attack: 0.002,
+          filterFreq: 620
+        });
+        playFilteredNoise({
+          brown: false,
+          filterType: 'bandpass',
+          freqStart: 1420 * jitter,
+          freqEnd: 360,
+          q: 1.5,
+          duration: 0.095,
+          gainPeak: 0.22,
+          attack: 0.002
+        });
+        playTone({
+          type: 'triangle',
+          freqStart: 860 * jitter,
+          freqEnd: 790 * jitter,
+          duration: 0.14,
+          gainPeak: 0.11,
+          attack: 0.002
+        });
+        return;
+      }
+
+      if (wId === 'axe' || wId === 'cleaver') {
+        // Battle Axe: brutal heavy iron chop + coarse bone/wood bite
+        playDistortedThump({
+          type: 'sawtooth',
+          freqStart: 178 * jitter,
+          freqEnd: 46,
+          duration: 0.125,
+          gainPeak: 0.32,
+          attack: 0.0018,
+          filterFreq: 560
+        });
+        playFilteredNoise({
+          brown: true,
+          filterType: 'lowpass',
+          freqStart: 1120 * jitter,
+          freqEnd: 240,
+          q: 1.25,
+          duration: 0.10,
+          gainPeak: 0.26,
+          attack: 0.002
+        });
+        playFilteredNoise({
+          brown: false,
+          filterType: 'bandpass',
+          freqStart: 1680 * jitter,
+          freqEnd: 420,
+          q: 1.4,
+          duration: 0.075,
+          gainPeak: 0.18,
+          attack: 0.0018
+        });
+        return;
+      }
+
+      if (wId === 'boss_hammer' || wId === 'flail') {
+        // Bonecrusher Hammer: seismic sub-bass crush + iron anvil ring
+        playDistortedThump({
+          type: 'sine',
+          freqStart: 122 * jitter,
+          freqEnd: 28,
+          duration: 0.19,
+          gainPeak: 0.40,
+          attack: 0.002,
+          filterFreq: 420
+        });
+        playFilteredNoise({
+          brown: true,
+          filterType: 'lowpass',
+          freqStart: 920 * jitter,
+          freqEnd: 160,
+          q: 1.1,
+          duration: 0.14,
+          gainPeak: 0.28,
+          attack: 0.002
+        });
+        playTone({
+          type: 'triangle',
+          freqStart: 620 * jitter,
+          freqEnd: 560 * jitter,
+          duration: 0.16,
+          gainPeak: 0.13,
+          attack: 0.0015
+        });
+        playTone({
+          type: 'sine',
+          freqStart: 940 * jitter,
+          freqEnd: 880 * jitter,
+          duration: 0.12,
+          gainPeak: 0.08,
+          attack: 0.0015
+        });
+        return;
+      }
+
       playTone({
         type: 'triangle',
         freqStart: 210 * jitter,
@@ -1659,29 +2150,67 @@ export function createAudioEngine() {
 
     playBlock() {
       if (!readyToPlay() || !canTrigger('block', 45)) return;
-      const jitter = 0.96 + Math.random() * 0.08;
-      // Inharmonic forged-steel shield clang partials
-      const partials = [560, 845, 1315, 2040];
-      const gains = [0.22, 0.18, 0.14, 0.09];
+      const jitter = 0.95 + Math.random() * 0.10;
+      // Solid forged-iron shield body thud
+      playTone({
+        type: 'triangle',
+        freqStart: 220 * jitter,
+        freqEnd: 82,
+        duration: 0.095,
+        gainPeak: 0.28,
+        attack: 0.0012
+      });
+      // Enhanced resonant forged-steel shield clang partials
+      const partials = [490, 742, 1185, 1890, 2740];
+      const gains = [0.26, 0.22, 0.17, 0.12, 0.08];
       for (let i = 0; i < partials.length; i++) {
         playTone({
           type: i % 2 === 0 ? 'triangle' : 'sine',
           freqStart: partials[i] * jitter,
-          freqEnd: partials[i] * jitter * 0.97,
-          duration: 0.24 - i * 0.03,
+          freqEnd: partials[i] * jitter * 0.965,
+          duration: 0.29 - i * 0.032,
           gainPeak: gains[i],
-          attack: 0.0015
+          attack: 0.0012
         });
       }
       playFilteredNoise({
         brown: false,
-        filterType: 'highpass',
-        freqStart: 3200,
-        freqEnd: 1800,
-        q: 2.0,
-        duration: 0.05,
-        gainPeak: 0.16,
+        filterType: 'bandpass',
+        freqStart: 3600 * jitter,
+        freqEnd: 1450,
+        q: 1.9,
+        duration: 0.07,
+        gainPeak: 0.22,
         attack: 0.001
+      });
+    },
+
+    playShieldBlock() {
+      this.playBlock();
+    },
+
+    playBeastReady() {
+      if (!readyToPlay() || !canTrigger('beast_ready', 160)) return;
+      // Resonant dark-fantasy golden warhorn + harmonic ready chord
+      playTone({
+        type: 'triangle',
+        freqStart: 220,
+        freqEnd: 293.66,
+        duration: 0.24,
+        gainPeak: 0.20,
+        attack: 0.015
+      });
+      const notes = [440, 587.33, 880];
+      notes.forEach((f, idx) => {
+        playTone({
+          type: 'sine',
+          freqStart: f,
+          freqEnd: f * 1.01,
+          startTime: idx * 0.055,
+          duration: 0.34,
+          gainPeak: 0.14 - idx * 0.02,
+          attack: 0.008
+        });
       });
     },
 
@@ -1771,23 +2300,31 @@ export function createAudioEngine() {
         return;
       }
 
-      // Default: 'gold' / 'coin' crisp metallic chime
-      if (!canTrigger('pickup_gold', 35)) return;
+      // Default: 'gold' / 'coin' crisp metallic chime with rising pitch on rapid pickup streaks
+      if (!canTrigger('pickup_gold', 50)) return;
+      const now = performance.now();
+      if (now - lastCoinAt <= 950) {
+        coinPitchStreak = Math.min(10, coinPitchStreak + 1);
+      } else {
+        coinPitchStreak = 0;
+      }
+      lastCoinAt = now;
+      const pitchMult = Math.pow(1.059463, coinPitchStreak);
       playTone({
         type: 'sine',
-        freqStart: 987.77, // B5
-        freqEnd: 987.77,
-        duration: 0.09,
-        gainPeak: 0.18,
+        freqStart: 987.77 * pitchMult, // B5 climbing smoothly per streak step
+        freqEnd: 987.77 * pitchMult,
+        duration: 0.085,
+        gainPeak: 0.15,
         attack: 0.002
       });
       playTone({
         type: 'sine',
-        freqStart: 1318.51, // E6
-        freqEnd: 1318.51,
-        startTime: 0.055,
-        duration: 0.18,
-        gainPeak: 0.20,
+        freqStart: 1318.51 * pitchMult, // E6 climbing smoothly per streak step
+        freqEnd: 1318.51 * pitchMult,
+        startTime: 0.05,
+        duration: 0.16,
+        gainPeak: 0.17,
         attack: 0.002
       });
     },
@@ -1942,7 +2479,7 @@ export function createAudioEngine() {
         nextNoteTime = ctx.currentTime + 0.05;
       }
       syncGain();
-      if (next === 'hub') startMusicLoop();
+      if (next !== 'off') startMusicLoop();
       else stopMusicLoop();
     },
 

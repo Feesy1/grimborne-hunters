@@ -7,7 +7,6 @@
 // - Single Floating Bottom-Left iPhone / Mobile Virtual Joystick with Auto-Aim
 
 import {
-  WEAPON_MAX_LEVEL,
   CLASSES,
   MAGE_ELEMENTS,
   MAGE_ELEMENT_ORDER,
@@ -18,990 +17,35 @@ import {
   RUN_UPGRADES,
   MAGE_TALENT_TREE,
   CLASS_TALENT_TREES
-} from './config.js?v=20261117z25';
+} from './config.js?v=20261120z35';
 import { attachSeamlessLoop } from './ambientVideo.js?v=20261117z25';
-
-const CLASS_ORDER = ['warrior', 'gunslinger', 'mage'];
-
-const CLASS_META = {
-  warrior: {
-    bg: 'linear-gradient(145deg, #7f1d1d 0%, #2a0810 100%)',
-    accent: '#ef4444',
-    glow: 'rgba(239, 68, 68, 0.42)',
-    border: '#f87171',
-    roleShortRu: 'Ближний бой • Стальной щит и клинок',
-    roleShortEn: 'Melee • Iron Shield & Broadsword',
-    loreShortRu: 'Неудержимый латник со щитом: держит удар в гуще орды и рубит нежить широкими дугами.',
-    loreShortEn: 'Armored vanguard blocking heavy blows and cleaving undead hordes in wide arcs.'
-  },
-  gunslinger: {
-    bg: 'linear-gradient(145deg, #1e3a5f 0%, #5c3415 100%)',
-    accent: '#f59e0b',
-    glow: 'rgba(245, 158, 11, 0.42)',
-    border: '#fbbf24',
-    roleShortRu: 'Дробовик • Мощная картечь и отдача',
-    roleShortEn: 'Shotgunner • Heavy Buckshot & Reload',
-    loreShortRu: 'Ловкий охотник с тяжёлым ружьём: рвёт дистанцию, бьёт веером картечи в упор и перезаряжает на бегу.',
-    loreShortEn: 'Swift hooded hunter blasting devastating close-range buckshot volleys on the move.'
-  },
-  mage: {
-    bg: 'linear-gradient(145deg, #581c87 0%, #17153b 100%)',
-    accent: '#a855f7',
-    glow: 'rgba(168, 85, 247, 0.44)',
-    border: '#c084fc',
-    roleShortRu: 'Тёмные чары • Взрывные кометы',
-    roleShortEn: 'Arcane • Explosive Comets & AoE',
-    loreShortRu: 'Заклинатель кристального посоха: выжигает скопления чудовищ разрывными кометами и рунами.',
-    loreShortEn: 'Arcane spellcaster incinerating monster packs with explosive astral comets.'
-  }
-};
-
-const ACT_DEFS = [
-  { act: 1, roman: 'I', titleRu: 'Акт I: Погост (1–5)', titleEn: 'Act I: Graveyard (1–5)', shortRu: 'Акт I' },
-  { act: 2, roman: 'II', titleRu: 'Акт II: Лагерь (6–10)', titleEn: 'Act II: Camp (6–10)', shortRu: 'Акт II' },
-  { act: 3, roman: 'III', titleRu: 'Акт III: Чаща (11–15)', titleEn: 'Act III: Thicket (11–15)', shortRu: 'Акт III' },
-  { act: 4, roman: 'IV', titleRu: 'Акт IV: Катакомбы (16–20)', titleEn: 'Act IV: Catacombs (16–20)', shortRu: 'Акт IV' },
-  { act: 5, roman: 'V', titleRu: 'Акт V: Престол (21–25)', titleEn: 'Act V: Throne (21–25)', shortRu: 'Акт V' }
-];
-
-const TIER_ROMAN = { 1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V' };
-const RANK_ROMAN = ['0', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
-
-const DEFAULT_MASTERY_DEFS = [
-  {
-    keyCandidates: ['vitality', 'hp', 'maxHp', 'health'],
-    defaultKey: 'vitality',
-    runeType: 'hp',
-    nameRu: 'Живучесть',
-    nameEn: 'Vitality',
-    bonusRu: '+15 к макс. здоровью за ур.',
-    bonusEn: '+15 Max HP / lv',
-    baseCost: 40,
-    costScale: 1.38,
-    maxLevel: 8
-  },
-  {
-    keyCandidates: ['might', 'power', 'damage', 'attack'],
-    defaultKey: 'might',
-    runeType: 'might',
-    nameRu: 'Мощь охотника',
-    nameEn: 'Hunter Might',
-    bonusRu: '+10% ко всему урону за ур.',
-    bonusEn: '+10% Damage / lv',
-    baseCost: 45,
-    costScale: 1.38,
-    maxLevel: 8
-  },
-  {
-    keyCandidates: ['agility', 'speed', 'moveSpeed', 'haste'],
-    defaultKey: 'agility',
-    runeType: 'spd',
-    nameRu: 'Стремительность',
-    nameEn: 'Agility',
-    bonusRu: '+4% к скорости бега и темпу атак',
-    bonusEn: '+4% Speed & Haste / lv',
-    baseCost: 45,
-    costScale: 1.42,
-    maxLevel: 6
-  },
-  {
-    keyCandidates: ['ward', 'block', 'armor', 'damageBlock', 'defense'],
-    defaultKey: 'ward',
-    runeType: 'blk',
-    nameRu: 'Закалённый оберег',
-    nameEn: 'Tempered Ward',
-    bonusRu: '+3% к блоку урона за ур.',
-    bonusEn: '+3% Block / lv',
-    baseCost: 40,
-    costScale: 1.42,
-    maxLevel: 6
-  },
-  {
-    keyCandidates: ['mana_flow', 'manaRegen', 'mana'],
-    defaultKey: 'mana_flow',
-    onlyClass: 'mage',
-    runeType: 'blk',
-    nameRu: 'Поток маны',
-    nameEn: 'Mana Flow',
-    bonusRu: '+20% к регену маны и +15 к мане за ур.',
-    bonusEn: '+20% Mana Regen & +15 Mana / lv',
-    baseCost: 40,
-    costScale: 1.38,
-    maxLevel: 8
-  }
-];
-
-let svgUidCounter = 0;
-
-function nextSvgUid(prefix = 'g') {
-  svgUidCounter = (svgUidCounter + 1) % 999999;
-  return `${prefix}${svgUidCounter}`;
-}
-
-function makeSvgNode(markup, className = '') {
-  const tpl = document.createElement('template');
-  tpl.innerHTML = markup.trim();
-  const svg = tpl.content.firstElementChild;
-  if (svg && className) {
-    svg.setAttribute('class', className);
-  }
-  return svg;
-}
-
-// ============================================================================
-// CUSTOM VECTOR ARTWORK GENERATORS (WEAPONS, STAT RUNES, TAROT RELICS, MANDALA)
-// ============================================================================
-
-export function createWeaponSvg(weaponId, className = 'weapon-vector-svg') {
-  const id = String(weaponId || 'club');
-  const u = nextSvgUid('wpn');
-  let defs = '';
-  let body = '';
-
-  switch (id) {
-    case 'club': // Клинок Клятвы — Ornate Gothic Broadsword
-      defs = `
-        <linearGradient id="${u}_b" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="#f8fafc"/>
-          <stop offset="48%" stop-color="#cbd5e1"/>
-          <stop offset="100%" stop-color="#64748b"/>
-        </linearGradient>
-        <linearGradient id="${u}_g" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="#fef08a"/>
-          <stop offset="55%" stop-color="#eab308"/>
-          <stop offset="100%" stop-color="#92400e"/>
-        </linearGradient>`;
-      body = `
-        <circle cx="32" cy="32" r="24" fill="rgba(217,119,6,0.12)"/>
-        <polygon points="53,11 49,23 26,46 18,46 18,38 41,15" fill="url(#${u}_b)" stroke="#e2e8f0" stroke-width="1.1"/>
-        <line x1="47" y1="17" x2="24" y2="40" stroke="#475569" stroke-width="2.2" stroke-linecap="round"/>
-        <path d="M13 33 L31 51 L28 54 L10 36 Z" fill="url(#${u}_g)" stroke="#fde047" stroke-width="0.9"/>
-        <path d="M18 44 L11 51 L13 53 L20 46 Z" fill="#78350f" stroke="#f59e0b" stroke-width="0.8"/>
-        <circle cx="10.5" cy="53.5" r="3.2" fill="url(#${u}_g)" stroke="#fef08a" stroke-width="0.9"/>
-        <circle cx="22" cy="42" r="2.1" fill="#dc2626"/>`;
-      break;
-
-    case 'spear': // Боевое Копьё — Ornate Long Steel Spear
-    case 'cleaver':
-      defs = `
-        <linearGradient id="${u}_b" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="#e0f2fe"/>
-          <stop offset="50%" stop-color="#38bdf8"/>
-          <stop offset="100%" stop-color="#334155"/>
-        </linearGradient>`;
-      body = `
-        <circle cx="32" cy="32" r="24" fill="rgba(56,189,248,0.14)"/>
-        <line x1="10" y1="54" x2="40" y2="24" stroke="#78350f" stroke-width="3.6" stroke-linecap="round"/>
-        <polygon points="56,8 47,26 39,25 38,17" fill="url(#${u}_b)" stroke="#bae6fd" stroke-width="1.1"/>
-        <path d="M35 20 L44 29" stroke="#f59e0b" stroke-width="2.4" stroke-linecap="round"/>`;
-      break;
-
-    case 'zweihander': // Цвайхандер — Two-Handed Greatsword
-      defs = `
-        <linearGradient id="${u}_b" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="#f8fafc"/>
-          <stop offset="50%" stop-color="#cbd5e1"/>
-          <stop offset="100%" stop-color="#475569"/>
-        </linearGradient>`;
-      body = `
-        <circle cx="32" cy="32" r="25" fill="rgba(203,213,225,0.14)"/>
-        <polygon points="56,8 51,21 25,47 17,47 17,39 43,13" fill="url(#${u}_b)" stroke="#f8fafc" stroke-width="1.1"/>
-        <path d="M11 32 L32 53" stroke="#eab308" stroke-width="3.2" stroke-linecap="round"/>
-        <line x1="20" y1="44" x2="9" y2="55" stroke="#78350f" stroke-width="3.4" stroke-linecap="round"/>`;
-      break;
-
-    case 'axe': // Боевая Секира — Double-Bitted Iron War Axe
-    case 'flail':
-      defs = `
-        <linearGradient id="${u}_b" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="#e2e8f0"/>
-          <stop offset="55%" stop-color="#94a3b8"/>
-          <stop offset="100%" stop-color="#475569"/>
-        </linearGradient>`;
-      body = `
-        <circle cx="32" cy="32" r="25" fill="rgba(239,68,68,0.15)"/>
-        <line x1="11" y1="53" x2="45" y2="19" stroke="#5c2d16" stroke-width="4.2" stroke-linecap="round"/>
-        <path d="M35 12 C48 9 56 17 51 28 L39 24 Z" fill="url(#${u}_b)" stroke="#f8fafc" stroke-width="1.1"/>
-        <path d="M52 29 C55 42 47 50 36 45 L40 33 Z" fill="url(#${u}_b)" stroke="#f8fafc" stroke-width="1.1"/>
-        <rect x="37" y="21" width="8" height="8" rx="1.5" transform="rotate(-45 41 25)" fill="#b45309" stroke="#fbbf24" stroke-width="1"/>`;
-      break;
-
-    case 'boss_hammer': // Молот Костолома — Exclusive Boss Warhammer
-      defs = `
-        <linearGradient id="${u}_b" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="#fef08a"/>
-          <stop offset="45%" stop-color="#d97706"/>
-          <stop offset="100%" stop-color="#78350f"/>
-        </linearGradient>`;
-      body = `
-        <circle cx="32" cy="32" r="25" fill="rgba(245,158,11,0.18)"/>
-        <line x1="11" y1="53" x2="43" y2="21" stroke="#451a03" stroke-width="4.6" stroke-linecap="round"/>
-        <rect x="29" y="10" width="22" height="14" rx="2.5" transform="rotate(45 40 17)" fill="url(#${u}_b)" stroke="#fef08a" stroke-width="1.2"/>`;
-      break;
-
-    case 'usp_pistol': // Тактический USP — Modern Tactical Handgun
-      defs = `
-        <linearGradient id="${u}_m" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="#cbd5e1"/>
-          <stop offset="55%" stop-color="#64748b"/>
-          <stop offset="100%" stop-color="#0f172a"/>
-        </linearGradient>`;
-      body = `
-        <circle cx="32" cy="32" r="24" fill="rgba(148,163,184,0.14)"/>
-        <rect x="16" y="21" width="34" height="8" rx="1.5" fill="url(#${u}_m)" stroke="#e2e8f0" stroke-width="0.9"/>
-        <path d="M18 29 L28 29 L24 44 L15 44 Z" fill="#1e293b" stroke="#94a3b8" stroke-width="0.9"/>`;
-      break;
-
-    case 'colt': // Револьвер Кольт — Chrome Six-Shooter Magnum Revolver
-      defs = `
-        <linearGradient id="${u}_m" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="#f8fafc"/>
-          <stop offset="55%" stop-color="#94a3b8"/>
-          <stop offset="100%" stop-color="#334155"/>
-        </linearGradient>`;
-      body = `
-        <circle cx="32" cy="32" r="25" fill="rgba(251,191,36,0.14)"/>
-        <g transform="rotate(-14 32 32)">
-          <rect x="25" y="19" width="29" height="6.2" rx="1.4" fill="url(#${u}_m)" stroke="#f8fafc" stroke-width="0.9"/>
-          <rect x="28" y="25.2" width="19" height="3.2" rx="1" fill="#64748b"/>
-          <rect x="19" y="21" width="11" height="10" rx="2" fill="#e2e8f0" stroke="#fbbf24" stroke-width="1"/>
-          <circle cx="24.5" cy="26" r="2.2" fill="#d97706"/>
-          <path d="M19 29 L12 44 L20 45 L24 31 Z" fill="#78350f" stroke="#d97706" stroke-width="0.9"/>
-        </g>`;
-      break;
-
-    case 'smg': // Пистолет-пулемёт — Submachine Gun
-      defs = `
-        <linearGradient id="${u}_m" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="#e2e8f0"/>
-          <stop offset="55%" stop-color="#475569"/>
-          <stop offset="100%" stop-color="#1e293b"/>
-        </linearGradient>`;
-      body = `
-        <circle cx="32" cy="32" r="24" fill="rgba(245,158,11,0.14)"/>
-        <rect x="13" y="22" width="38" height="9" rx="2" fill="url(#${u}_m)" stroke="#cbd5e1" stroke-width="0.9"/>
-        <rect x="31" y="31" width="6" height="17" rx="1.5" transform="rotate(-10 34 39)" fill="#334155" stroke="#94a3b8" stroke-width="0.9"/>
-        <path d="M16 31 L23 31 L20 43 L14 43 Z" fill="#78350f" stroke="#d97706" stroke-width="0.8"/>`;
-      break;
-
-    case 'ak47': // АК-47 — Assault Rifle
-      defs = `
-        <linearGradient id="${u}_m" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="#e2e8f0"/>
-          <stop offset="55%" stop-color="#475569"/>
-          <stop offset="100%" stop-color="#1e293b"/>
-        </linearGradient>`;
-      body = `
-        <circle cx="32" cy="32" r="25" fill="rgba(239,68,68,0.14)"/>
-        <path d="M8 28 L19 25 L19 33 L8 37 Z" fill="#78350f" stroke="#d97706" stroke-width="0.9"/>
-        <rect x="19" y="24" width="35" height="6.5" rx="1.5" fill="url(#${u}_m)" stroke="#cbd5e1" stroke-width="0.9"/>
-        <path d="M32 30.5 C32 39 36 45 41 47 L36 48 C30 45 27 38 27 30.5 Z" fill="#92400e" stroke="#f59e0b" stroke-width="0.9"/>`;
-      break;
-
-    case 'pistol': // Охотничье ружьё — Heavy Pump-Action Shotgun
-      defs = `
-        <linearGradient id="${u}_m" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="#f1f5f9"/>
-          <stop offset="55%" stop-color="#94a3b8"/>
-          <stop offset="100%" stop-color="#334155"/>
-        </linearGradient>
-        <linearGradient id="${u}_w" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="#b45309"/>
-          <stop offset="100%" stop-color="#451a03"/>
-        </linearGradient>`;
-      body = `
-        <circle cx="32" cy="32" r="25" fill="rgba(251,191,36,0.14)"/>
-        <g transform="rotate(-28 32 32)">
-          <rect x="20" y="24" width="36" height="4.2" rx="1.2" fill="url(#${u}_m)" stroke="#e2e8f0" stroke-width="0.8"/>
-          <rect x="22" y="28.6" width="28" height="3.1" rx="1" fill="#64748b"/>
-          <rect x="31" y="27.8" width="13" height="5.4" rx="1.6" fill="url(#${u}_w)" stroke="#fbbf24" stroke-width="0.9"/>
-          <line x1="34" y1="28.2" x2="34" y2="33" stroke="#fde68a" stroke-width="0.9"/>
-          <line x1="37.5" y1="28.2" x2="37.5" y2="33" stroke="#fde68a" stroke-width="0.9"/>
-          <line x1="41" y1="28.2" x2="41" y2="33" stroke="#fde68a" stroke-width="0.9"/>
-          <rect x="19" y="24.5" width="11" height="6.8" rx="1.4" fill="#d97706" stroke="#fef08a" stroke-width="0.9"/>
-          <path d="M19 26 L6 31 L7 39 L18 33 L21 31 Z" fill="url(#${u}_w)" stroke="#f59e0b" stroke-width="0.9"/>
-          <path d="M22 31.3 C22 35 26 35 26 31.3" fill="none" stroke="#cbd5e1" stroke-width="1.3"/>
-        </g>`;
-      break;
-
-    case 'blunderbuss': // Двуствольный мушкетон «Гром» — Twin-Barrel Flared Shotgun
-      defs = `
-        <linearGradient id="${u}_m" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stop-color="#94a3b8"/>
-          <stop offset="65%" stop-color="#e2e8f0"/>
-          <stop offset="100%" stop-color="#fb923c"/>
-        </linearGradient>
-        <linearGradient id="${u}_w" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="#c2410c"/>
-          <stop offset="100%" stop-color="#431407"/>
-        </linearGradient>`;
-      body = `
-        <circle cx="32" cy="32" r="25" fill="rgba(249,115,22,0.17)"/>
-        <g transform="rotate(-28 32 32)">
-          <path d="M21 22.5 L51 22 L56 19.8 L56 26.8 L51 25.8 L21 26.2 Z" fill="url(#${u}_m)" stroke="#fed7aa" stroke-width="0.8"/>
-          <path d="M21 27 L51 26.8 L56 26.2 L56 32.8 L51 30.8 L21 30.8 Z" fill="url(#${u}_m)" stroke="#fed7aa" stroke-width="0.8"/>
-          <rect x="33" y="22" width="3.5" height="9.2" rx="1" fill="#f59e0b"/>
-          <rect x="18" y="23" width="9" height="8.2" rx="1.5" fill="#ea580c" stroke="#fde047" stroke-width="0.9"/>
-          <path d="M19 20 L22 23 M22 20 L24 23" stroke="#fde047" stroke-width="1.6" stroke-linecap="round"/>
-          <path d="M18 25 L5 31 L7 40 L19 32.5 Z" fill="url(#${u}_w)" stroke="#fb923c" stroke-width="0.9"/>
-        </g>`;
-      break;
-
-    case 'gatling': // Барабанный дробовик «Шквал» — Revolving Drum Auto-Shotgun
-      defs = `
-        <linearGradient id="${u}_m" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="#e0f2fe"/>
-          <stop offset="55%" stop-color="#38bdf8"/>
-          <stop offset="100%" stop-color="#1e293b"/>
-        </linearGradient>`;
-      body = `
-        <circle cx="32" cy="32" r="25" fill="rgba(56,189,248,0.16)"/>
-        <g transform="rotate(-26 32 32)">
-          <rect x="20" y="22.5" width="36" height="6.2" rx="1.5" fill="url(#${u}_m)" stroke="#bae6fd" stroke-width="0.9"/>
-          <line x1="36" y1="24.5" x2="52" y2="24.5" stroke="#0f172a" stroke-width="1.4" stroke-dasharray="2.5 2"/>
-          <circle cx="31" cy="33" r="7.4" fill="#1e293b" stroke="#fbbf24" stroke-width="1.5"/>
-          <circle cx="31" cy="33" r="2.4" fill="#38bdf8"/>
-          <circle cx="31" cy="28.3" r="1.2" fill="#fde047"/>
-          <circle cx="35.2" cy="31" r="1.2" fill="#fde047"/>
-          <circle cx="34" cy="36.2" r="1.2" fill="#fde047"/>
-          <circle cx="28" cy="36.2" r="1.2" fill="#fde047"/>
-          <circle cx="26.8" cy="31" r="1.2" fill="#fde047"/>
-          <path d="M20 24 L6 29 L7 37 L20 30.5 Z" fill="#334155" stroke="#7dd3fc" stroke-width="0.9"/>
-        </g>`;
-      break;
-
-    case 'spark_staff': // Посох гибельных искр — Violet Crystal Arcane Staff
-      defs = `
-        <radialGradient id="${u}_c" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stop-color="#faf5ff"/>
-          <stop offset="55%" stop-color="#c084fc"/>
-          <stop offset="100%" stop-color="#6b21a8"/>
-        </radialGradient>`;
-      body = `
-        <circle cx="39" cy="23" r="18" fill="rgba(192,132,252,0.2)"/>
-        <line x1="12" y1="52" x2="38" y2="26" stroke="#78350f" stroke-width="4.2" stroke-linecap="round"/>
-        <line x1="12" y1="52" x2="38" y2="26" stroke="#d97706" stroke-width="1.4" stroke-linecap="round"/>
-        <path d="M32 29 C30 20 37 12 46 13 M35 32 C44 34 52 27 51 18" fill="none" stroke="#e9d5ff" stroke-width="2" stroke-linecap="round"/>
-        <polygon points="48,11 52,20 43,25 39,16" fill="url(#${u}_c)" stroke="#f3e8ff" stroke-width="1.1"/>
-        <polyline points="29,14 34,16 31,21" fill="none" stroke="#e879f9" stroke-width="1.3" stroke-linecap="round"/>
-        <polyline points="50,29 47,34 53,35" fill="none" stroke="#e879f9" stroke-width="1.3" stroke-linecap="round"/>`;
-      break;
-
-    case 'cinder_tome': // Посох багрового пепла — Pyromancer Cinder Staff
-      defs = `
-        <radialGradient id="${u}_f" cx="50%" cy="50%" r="55%">
-          <stop offset="0%" stop-color="#fef08a"/>
-          <stop offset="52%" stop-color="#f97316"/>
-          <stop offset="100%" stop-color="#be123c"/>
-        </radialGradient>`;
-      body = `
-        <circle cx="40" cy="23" r="19" fill="rgba(244,63,94,0.22)"/>
-        <line x1="11" y1="53" x2="37" y2="27" stroke="#3f1d28" stroke-width="4.5" stroke-linecap="round"/>
-        <line x1="13" y1="51" x2="36" y2="28" stroke="#fb7185" stroke-width="1.2" stroke-dasharray="3 3"/>
-        <path d="M31 28 C29 19 36 11 44 10 C42 16 46 18 49 14 C54 22 49 32 39 33 Z" fill="url(#${u}_f)" stroke="#fde047" stroke-width="1.1"/>
-        <circle cx="42" cy="23" r="4" fill="#fffbeb"/>
-        <path d="M31 31 L39 23 L41 33" fill="none" stroke="#fbbf24" stroke-width="2" stroke-linecap="round"/>`;
-      break;
-
-    case 'void_orb': // Скипетр пустотного разлома — Void Rift Scepter
-      defs = `
-        <radialGradient id="${u}_v" cx="45%" cy="42%" r="55%">
-          <stop offset="0%" stop-color="#312e81"/>
-          <stop offset="68%" stop-color="#090717"/>
-          <stop offset="100%" stop-color="#818cf8"/>
-        </radialGradient>`;
-      body = `
-        <circle cx="41" cy="23" r="19" fill="rgba(129,140,248,0.22)"/>
-        <line x1="11" y1="53" x2="36" y2="28" stroke="#4338ca" stroke-width="4.2" stroke-linecap="round"/>
-        <line x1="11" y1="53" x2="36" y2="28" stroke="#fde047" stroke-width="1.4" stroke-linecap="round"/>
-        <path d="M30 25 C30 14 40 9 49 12 M39 34 C49 34 55 24 52 15" fill="none" stroke="#fde047" stroke-width="2" stroke-linecap="round"/>
-        <circle cx="43" cy="21" r="8.2" fill="url(#${u}_v)" stroke="#a5b4fc" stroke-width="1.3"/>
-        <ellipse cx="43" cy="21" rx="13" ry="4.2" transform="rotate(-32 43 21)" fill="none" stroke="#c7d2fe" stroke-width="1.4"/>
-        <circle cx="46" cy="18" r="1.6" fill="#ffffff"/>`;
-      break;
-
-    default:
-      body = `
-        <polygon points="52,12 48,24 25,47 17,47 17,39 40,16" fill="#cbd5e1" stroke="#f8fafc" stroke-width="1.2"/>
-        <path d="M13 34 L30 51" stroke="#eab308" stroke-width="3.5" stroke-linecap="round"/>`;
-      break;
-  }
-
-  return makeSvgNode(
-    `<svg viewBox="0 0 64 64" width="64" height="64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <defs>${defs}</defs>
-      ${body}
-    </svg>`,
-    className
-  );
-}
-
-function createStatRuneSvg(kind) {
-  let path = '';
-  if (kind === 'hp') {
-    path = `
-      <path d="M12 20.5 C12 20.5 4 15.2 4 9.3 C4 6.4 6.3 4.2 9 4.2 C10.7 4.2 12 5.2 12 6.5 C12 5.2 13.3 4.2 15 4.2 C17.7 4.2 20 6.4 20 9.3 C20 15.2 12 20.5 12 20.5 Z" fill="#ef4444" stroke="#fca5a5" stroke-width="1.4"/>
-      <path d="M8.2 8.2 C8.2 7.2 9 6.6 9.8 6.6" stroke="#fee2e2" stroke-width="1.4" stroke-linecap="round"/>`;
-  } else if (kind === 'spd') {
-    path = `
-      <path d="M3 10 H15.5 C17.4 10 18.8 8.6 18.8 6.8 C18.8 5.1 17.4 3.8 15.7 3.8 C14.2 3.8 13.1 4.8 13 6.1" stroke="#fbbf24" stroke-width="1.8" stroke-linecap="round"/>
-      <path d="M2 14 H18.2 C20.1 14 21.5 15.4 21.5 17.2 C21.5 18.9 20.1 20.2 18.4 20.2 C16.9 20.2 15.8 19.2 15.6 17.9" stroke="#fde047" stroke-width="1.8" stroke-linecap="round"/>
-      <path d="M5 17.5 H12" stroke="#f59e0b" stroke-width="1.6" stroke-linecap="round"/>`;
-  } else if (kind === 'blk') {
-    path = `
-      <path d="M12 3 L19.5 6 V11.8 C19.5 16.5 16.2 19.9 12 21.4 C7.8 19.9 4.5 16.5 4.5 11.8 V6 L12 3 Z" fill="#7c3aed" stroke="#ddd6fe" stroke-width="1.4"/>
-      <path d="M12 6 V18.5 M7.5 11.2 H16.5" stroke="#ede9fe" stroke-width="1.4" stroke-linecap="round"/>`;
-  } else {
-    // 'might' — crossed blades
-    path = `
-      <path d="M5 19 L18.5 5.5 M15 5 H19 V9" stroke="#fbbf24" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M19 19 L5.5 5.5 M9 5 H5 V9" stroke="#f87171" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
-      <circle cx="12" cy="12" r="2.2" fill="#fef08a"/>`;
-  }
-
-  return makeSvgNode(
-    `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${path}</svg>`,
-    'stat-rune-svg'
-  );
-}
-
-function createTalentRuneSvg(kind) {
-  let inner = '';
-  if (kind === 'droplet') {
-    inner = `
-      <path d="M12 2.5 C12 2.5 18.5 10.2 18.5 14.5 C18.5 18.1 15.6 21 12 21 C8.4 21 5.5 18.1 5.5 14.5 C5.5 10.2 12 2.5 12 2.5 Z" fill="#0284c7" stroke="#7dd3fc" stroke-width="1.5"/>
-      <path d="M9.2 14.8 C9.2 16.5 10.5 17.8 12.1 18" stroke="#e0f2fe" stroke-width="1.5" stroke-linecap="round"/>`;
-  } else if (kind === 'chalice') {
-    inner = `
-      <path d="M6.5 4.5 H17.5 L15.5 11.2 C15 13 13.7 14 12 14 C10.3 14 9 13 8.5 11.2 Z" fill="#0369a1" stroke="#7dd3fc" stroke-width="1.4"/>
-      <path d="M12 14 V19 M8.5 19.5 H15.5" stroke="#fde047" stroke-width="1.8" stroke-linecap="round"/>
-      <circle cx="12" cy="8.5" r="1.6" fill="#e0f2fe"/>`;
-  } else if (kind === 'boots') {
-    inner = `
-      <path d="M4 13 H14.5 C16.8 13 18.5 11.4 18.5 9.4 C18.5 7.6 17 6.2 15.2 6.2 C13.8 6.2 12.6 7 12.2 8.2" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"/>
-      <path d="M3 17 H17.5 C19.5 17 20.8 18.2 20.8 19.6" stroke="#bae6fd" stroke-width="1.8" stroke-linecap="round"/>
-      <path d="M7 9.5 H10.5" stroke="#fde047" stroke-width="1.6" stroke-linecap="round"/>`;
-  } else if (kind === 'shield') {
-    inner = `
-      <path d="M12 3 L19 6.2 V12.2 C19 16.6 15.9 19.8 12 21.3 C8.1 19.8 5 16.6 5 12.2 V6.2 L12 3 Z" fill="#1e3a8a" stroke="#60a5fa" stroke-width="1.5"/>
-      <circle cx="12" cy="11.5" r="3.2" stroke="#bae6fd" stroke-width="1.4" fill="rgba(56,189,248,0.28)"/>`;
-  } else if (kind === 'twin') {
-    inner = `
-      <circle cx="8.2" cy="13.5" r="4.2" fill="#0284c7" stroke="#bae6fd" stroke-width="1.4"/>
-      <circle cx="15.8" cy="10.2" r="4.2" fill="#0ea5e9" stroke="#e0f2fe" stroke-width="1.4"/>
-      <path d="M11 6.5 L12.5 5 L14 6.5" stroke="#fde047" stroke-width="1.5" stroke-linecap="round"/>`;
-  } else if (kind === 'crit') {
-    inner = `
-      <polygon points="12,2.5 14.8,9 21.5,9.5 16.2,14 17.8,20.8 12,17.2 6.2,20.8 7.8,14 2.5,9.5 9.2,9" fill="#9f1239" stroke="#fda4af" stroke-width="1.4"/>
-      <circle cx="12" cy="12" r="2.2" fill="#fde047"/>`;
-  } else if (kind === 'pistol') {
-    inner = `
-      <path d="M4.5 9.5 H17.5 V12.5 H11.5 L10 18.5 H6.8 L8.1 12.5 H4.5 Z" fill="#334155" stroke="#fde047" stroke-width="1.45" stroke-linejoin="round"/>
-      <path d="M17.5 10.3 H20 V11.7 H17.5" stroke="#fbbf24" stroke-width="1.4" stroke-linecap="round"/>
-      <circle cx="11.2" cy="13.8" r="1.1" fill="#fde047"/>`;
-  } else if (kind === 'smg') {
-    inner = `
-      <path d="M3 10.5 H17.5 V13 H14.5 V18 H12 V13 H9.5 L8.3 17.5 H5.8 L6.8 13 H3 Z" fill="#1e293b" stroke="#38bdf8" stroke-width="1.45" stroke-linejoin="round"/>
-      <path d="M17.5 11.2 H21.2" stroke="#bae6fd" stroke-width="1.8" stroke-linecap="round"/>
-      <path d="M7.5 8.2 H13.5" stroke="#fde047" stroke-width="1.3" stroke-linecap="round"/>`;
-  } else if (kind === 'rifle') {
-    inner = `
-      <path d="M2.2 12.2 L6 12.2 L8 10.4 H16.5 L17.5 11.5 H21.8" stroke="#f97316" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M8.4 12.2 H13.8 L15.2 17.2 L12.5 17.5 L11.4 13.4 H8.6 L6.2 16.5 H3.6 Z" fill="#7c2d12" stroke="#fdba74" stroke-width="1.3" stroke-linejoin="round"/>`;
-  } else if (kind === 'shotgun') {
-    inner = `
-      <path d="M2.5 13.2 H15.5 L17 11.2 H21.5" stroke="#fb7185" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M2.5 15.6 L6.8 15.6 L9 13.6 H16.5" stroke="#fda4af" stroke-width="1.6" stroke-linecap="round"/>
-      <circle cx="20.5" cy="9.2" r="1.2" fill="#fde047"/>
-      <circle cx="21.5" cy="13.8" r="1.1" fill="#f97316"/>`;
-  } else {
-    // crown / maelstrom_fury
-    inner = `
-      <path d="M4.5 17.5 L6.2 7.5 L10 11.8 L12 5.5 L14 11.8 L17.8 7.5 L19.5 17.5 Z" fill="#7c2d12" stroke="#fde047" stroke-width="1.5" stroke-linejoin="round"/>
-      <circle cx="12" cy="5" r="1.4" fill="#38bdf8"/>
-      <path d="M5.5 19.8 H18.5" stroke="#fbbf24" stroke-width="1.8" stroke-linecap="round"/>`;
-  }
-  return makeSvgNode(
-    `<svg viewBox="0 0 24 24" width="28" height="28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${inner}</svg>`,
-    'talent-rune-svg'
-  );
-}
-
-function createMandalaSvg() {
-  return makeSvgNode(
-    `<svg viewBox="0 0 220 220" width="220" height="220" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <circle cx="110" cy="110" r="102" stroke="rgba(229,184,92,0.34)" stroke-width="1.2" stroke-dasharray="6 5"/>
-      <circle cx="110" cy="110" r="84" stroke="rgba(253,224,147,0.26)" stroke-width="1.5"/>
-      <circle cx="110" cy="110" r="64" stroke="rgba(192,132,252,0.28)" stroke-width="1.1" stroke-dasharray="3 4"/>
-      <polygon points="110,16 132,88 204,110 132,132 110,204 88,132 16,110 88,88" stroke="rgba(229,184,92,0.3)" stroke-width="1.2" fill="rgba(229,184,92,0.03)"/>
-      <polygon points="44,44 126,94 176,176 94,126" stroke="rgba(229,184,92,0.22)" stroke-width="1"/>
-      <polygon points="176,44 126,126 44,176 94,94" stroke="rgba(229,184,92,0.22)" stroke-width="1"/>
-      <circle cx="110" cy="110" r="22" stroke="rgba(253,224,147,0.42)" stroke-width="1.4"/>
-    </svg>`,
-    'altar-mandala-svg'
-  );
-}
-
-function createRuneHaloSvg() {
-  return makeSvgNode(
-    `<svg viewBox="0 0 116 116" width="116" height="116" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <circle cx="58" cy="58" r="53" stroke="currentColor" stroke-opacity="0.48" stroke-width="1.2" stroke-dasharray="5 4"/>
-      <circle cx="58" cy="58" r="44" stroke="currentColor" stroke-opacity="0.28" stroke-width="1"/>
-      <polygon points="58,7 68,48 109,58 68,68 58,109 48,68 7,58 48,48" stroke="currentColor" stroke-opacity="0.32" stroke-width="1"/>
-    </svg>`,
-    'blessing-rune-halo'
-  );
-}
-
-export function createBlessingRelicSvg(choice, className = 'blessing-relic-svg') {
-  const id = String(choice?.id || 'wpn_power');
-  const isWpn = isWeaponHighlightChoice(choice);
-  const u = nextSvgUid('rel');
-
-  let defs = '';
-  let art = '';
-
-  if (isWpn) {
-    defs = `
-      <radialGradient id="${u}_rg" cx="50%" cy="50%" r="52%">
-        <stop offset="0%" stop-color="#fef9c3" stop-opacity="0.55"/>
-        <stop offset="65%" stop-color="#f59e0b" stop-opacity="0.22"/>
-        <stop offset="100%" stop-color="#78350f" stop-opacity="0"/>
-      </radialGradient>
-      <linearGradient id="${u}_lg" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stop-color="#fffbeb"/>
-        <stop offset="50%" stop-color="#fde047"/>
-        <stop offset="100%" stop-color="#b45309"/>
-      </linearGradient>`;
-    art = `
-      <circle cx="44" cy="44" r="38" fill="url(#${u}_rg)"/>
-      <circle cx="44" cy="44" r="33" stroke="#fde047" stroke-opacity="0.55" stroke-width="1.3" stroke-dasharray="4 3"/>
-      <polygon points="44,10 51,33 74,44 51,55 44,78 37,55 14,44 37,33" fill="rgba(251,191,36,0.16)" stroke="#fef08a" stroke-width="1.2"/>
-      <polygon points="64,20 59,34 33,60 25,60 25,52 51,26" fill="url(#${u}_lg)" stroke="#ffffff" stroke-width="1.3"/>
-      <line x1="58" y1="26" x2="31" y2="53" stroke="#92400e" stroke-width="2" stroke-linecap="round"/>
-      <path d="M19 46 L40 67 L36 70 L16 50 Z" fill="#f59e0b" stroke="#fef08a" stroke-width="1.1"/>
-      <path d="M25 58 L16 67 L19 70 L28 61 Z" fill="#78350f" stroke="#fde047" stroke-width="1"/>
-      <circle cx="16" cy="70" r="3.8" fill="#fef08a"/>
-      <polygon points="44,16 46.5,22 53,22.5 48,26.8 49.5,33 44,29.5 38.5,33 40,26.8 35,22.5 41.5,22" fill="#fffbeb"/>`;
-  } else {
-    switch (id) {
-      // ==================== MAGE EXCLUSIVE BLESSINGS ====================
-      case 'mage_arcane_surge': // Тайное Могущество — Radiant Violet Arcane Crystal Staff Head & Rune Ring
-        defs = `<radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#d8b4fe" stop-opacity="0.55"/><stop offset="100%" stop-color="#3b0764" stop-opacity="0"/></radialGradient>`;
-        art = `
-          <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
-          <circle cx="44" cy="36" r="22" stroke="#e9d5ff" stroke-width="1.5" stroke-dasharray="5 3"/>
-          <line x1="44" y1="48" x2="44" y2="76" stroke="#b45309" stroke-width="5" stroke-linecap="round"/>
-          <path d="M30 44 C30 28 38 18 44 14 C50 18 58 28 58 44" fill="none" stroke="#fde047" stroke-width="2.2"/>
-          <polygon points="44,16 54,34 44,50 34,34" fill="#a855f7" stroke="#faf5ff" stroke-width="1.6"/>
-          <polygon points="44,23 49,34 44,43 39,34" fill="#f3e8ff"/>`;
-        break;
-
-      case 'mage_twin_cast': // Раздвоение Кометы — Twin Diverging Cyan-Violet Shooting Comets
-        defs = `<radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#38bdf8" stop-opacity="0.5"/><stop offset="100%" stop-color="#082f49" stop-opacity="0"/></radialGradient>`;
-        art = `
-          <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
-          <path d="M18 68 Q32 52 30 24" fill="none" stroke="#67e8f9" stroke-width="4" stroke-linecap="round"/>
-          <path d="M22 70 Q42 54 64 28" fill="none" stroke="#c084fc" stroke-width="4" stroke-linecap="round"/>
-          <polygon points="30,13 36,24 30,31 24,24" fill="#ecfeff" stroke="#22d3ee" stroke-width="1.5"/>
-          <polygon points="67,18 72,29 63,34 59,24" fill="#faf5ff" stroke="#a855f7" stroke-width="1.5"/>
-          <circle cx="20" cy="69" r="5" fill="#fef08a"/>`;
-        break;
-
-      case 'mage_elem_catalyst': // Резонанс Стихии — 4-Elemental Spiral Vortex (Fire, Water, Lightning, Air)
-        defs = `<radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#ffffff" stop-opacity="0.45"/><stop offset="100%" stop-color="#1e1b4b" stop-opacity="0"/></radialGradient>`;
-        art = `
-          <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
-          <path d="M44 14 A30 30 0 0 1 74 44" fill="none" stroke="#ff5722" stroke-width="4.2" stroke-linecap="round"/>
-          <path d="M74 44 A30 30 0 0 1 44 74" fill="none" stroke="#38bdf8" stroke-width="4.2" stroke-linecap="round"/>
-          <path d="M44 74 A30 30 0 0 1 14 44" fill="none" stroke="#5eead4" stroke-width="4.2" stroke-linecap="round"/>
-          <path d="M14 44 A30 30 0 0 1 44 14" fill="none" stroke="#fde047" stroke-width="4.2" stroke-linecap="round"/>
-          <polygon points="44,26 52,38 62,44 52,50 44,62 36,50 26,44 36,38" fill="#e0f2fe" stroke="#ffffff" stroke-width="1.4"/>`;
-        break;
-
-      case 'mage_meteor_shower': // Звездопад Архонта — Blazing Diagonal Falling Meteor & Impact Crater
-        defs = `<radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#f97316" stop-opacity="0.55"/><stop offset="100%" stop-color="#431407" stop-opacity="0"/></radialGradient>`;
-        art = `
-          <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
-          <path d="M68 14 L38 46 M74 24 L46 54 M58 12 L32 38" stroke="#fb923c" stroke-width="3.5" stroke-linecap="round"/>
-          <circle cx="34" cy="52" r="14" fill="#ea580c" stroke="#fef08a" stroke-width="2"/>
-          <circle cx="31" cy="54" r="7" fill="#fffbeb"/>
-          <ellipse cx="34" cy="70" rx="22" ry="5" fill="none" stroke="#fde047" stroke-width="1.8"/>`;
-        break;
-
-      case 'mage_arcane_ward': // Сфера Отражения — Glowing Hexagonal Rune Barrier Dome
-        defs = `<radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#c084fc" stop-opacity="0.52"/><stop offset="100%" stop-color="#2e1065" stop-opacity="0"/></radialGradient>`;
-        art = `
-          <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
-          <circle cx="44" cy="44" r="27" fill="rgba(168,85,247,0.22)" stroke="#f3e8ff" stroke-width="2.2"/>
-          <polygon points="44,20 65,32 65,56 44,68 23,56 23,32" fill="none" stroke="#e879f9" stroke-width="1.6"/>
-          <path d="M16 28 L24 34 M72 28 L64 34" stroke="#fde047" stroke-width="2.4" stroke-linecap="round"/>
-          <circle cx="44" cy="44" r="7" fill="#faf5ff"/>`;
-        break;
-
-      case 'mage_mana_font': // Астральный Колодец — Levitating Sapphire Mana Tear & Expanding Ripples
-        defs = `<radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#38bdf8" stop-opacity="0.55"/><stop offset="100%" stop-color="#082f49" stop-opacity="0"/></radialGradient>`;
-        art = `
-          <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
-          <path d="M44 15 C44 15 60 33 60 44 C60 53 53 60 44 60 C35 60 28 53 28 44 C28 33 44 15 44 15 Z" fill="#0ea5e9" stroke="#e0f2fe" stroke-width="1.8"/>
-          <path d="M44 26 C44 26 52 37 52 44 C52 49 48.5 52 44 52" fill="#bae6fd"/>
-          <ellipse cx="44" cy="69" rx="24" ry="5.5" fill="none" stroke="#7dd3fc" stroke-width="1.8"/>`;
-        break;
-
-      // ==================== GUNSLINGER EXCLUSIVE BLESSINGS ====================
-      case 'gun_heavy_buckshot': // Вольфрамовая Картечь — Fanning Muzzle Blast & 7 Molten Pellets
-        defs = `<radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#fbbf24" stop-opacity="0.52"/><stop offset="100%" stop-color="#78350f" stop-opacity="0"/></radialGradient>`;
-        art = `
-          <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
-          <path d="M18 66 L38 20 M18 66 L54 24 M18 66 L68 38 M18 66 L70 56" stroke="#f59e0b" stroke-width="2.2" stroke-dasharray="4 3"/>
-          <circle cx="38" cy="19" r="4.2" fill="#fffbeb" stroke="#f97316" stroke-width="1.4"/>
-          <circle cx="55" cy="23" r="4.5" fill="#fffbeb" stroke="#f97316" stroke-width="1.4"/>
-          <circle cx="68" cy="37" r="4.2" fill="#fffbeb" stroke="#f97316" stroke-width="1.4"/>
-          <circle cx="70" cy="55" r="4" fill="#fffbeb" stroke="#f97316" stroke-width="1.4"/>
-          <circle cx="48" cy="41" r="3.8" fill="#fde047"/>
-          <polygon points="14,72 28,68 24,58 12,62" fill="#f97316" stroke="#fef08a" stroke-width="1.3"/>`;
-        break;
-
-      case 'gun_ricochet': // Рикошет Свинца — Sharp Zig-Zag Bullet Ricochet Sparking Off Steel
-        defs = `<radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#22d3ee" stop-opacity="0.5"/><stop offset="100%" stop-color="#083344" stop-opacity="0"/></radialGradient>`;
-        art = `
-          <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
-          <polyline points="16,66 42,24 68,54" fill="none" stroke="#fef08a" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
-          <polygon points="42,14 46,23 55,24 47,29 49,38 42,32 35,38 37,29 29,24 38,23" fill="#22d3ee" stroke="#ffffff" stroke-width="1.2"/>
-          <polygon points="73,59 63,56 69,48" fill="#ffffff"/>`;
-        break;
-
-      case 'gun_explosive_slugs': // Пороховая Детонация — Crimson Shell Exploding in Fiery Starburst
-        defs = `<radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#ef4444" stop-opacity="0.55"/><stop offset="100%" stop-color="#450a0a" stop-opacity="0"/></radialGradient>`;
-        art = `
-          <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
-          <polygon points="44,11 52,29 72,24 59,41 74,56 54,56 48,75 39,58 19,64 30,46 15,31 35,31" fill="#f97316" stroke="#fef08a" stroke-width="1.5"/>
-          <rect x="37" y="31" width="14" height="22" rx="2" fill="#dc2626" stroke="#fffbeb" stroke-width="1.4"/>
-          <rect x="36" y="52" width="16" height="9" rx="1.5" fill="#facc15" stroke="#ffffff" stroke-width="1.2"/>`;
-        break;
-
-      case 'gun_tactical_reload': // Пороховой Рывок — Revolving Cylinder + Emerald Wind Dash
-        defs = `<radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#34d399" stop-opacity="0.5"/><stop offset="100%" stop-color="#064e3b" stop-opacity="0"/></radialGradient>`;
-        art = `
-          <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
-          <path d="M12 34 H36 M8 46 H30 M14 58 H38" stroke="#6ee7b7" stroke-width="3" stroke-linecap="round"/>
-          <circle cx="50" cy="44" r="19" fill="#1e293b" stroke="#fde047" stroke-width="2"/>
-          <circle cx="50" cy="32" r="4" fill="#facc15"/><circle cx="60" cy="39" r="4" fill="#facc15"/>
-          <circle cx="57" cy="51" r="4" fill="#facc15"/><circle cx="43" cy="51" r="4" fill="#facc15"/>
-          <circle cx="40" cy="39" r="4" fill="#facc15"/>`;
-        break;
-
-      case 'ammo_pouch': // Последний Козырь — Golden Crowned Ace Shotgun Shell
-        defs = `<radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#facc15" stop-opacity="0.52"/><stop offset="100%" stop-color="#713f12" stop-opacity="0"/></radialGradient>`;
-        art = `
-          <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
-          <rect x="34" y="22" width="20" height="32" rx="3" fill="#dc2626" stroke="#fef08a" stroke-width="1.8"/>
-          <rect x="32" y="52" width="24" height="16" rx="2" fill="#eab308" stroke="#fffbeb" stroke-width="1.6"/>
-          <polygon points="35,19 38,11 44,16 50,11 53,19" fill="#fde047" stroke="#ffffff" stroke-width="1.1"/>`;
-        break;
-
-      case 'gun_shrapnel_mine': // Шрапнельный Капкан — Spiked Iron Powder Mine & Red Detonator Core
-        defs = `<radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#f87171" stop-opacity="0.5"/><stop offset="100%" stop-color="#450a0a" stop-opacity="0"/></radialGradient>`;
-        art = `
-          <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
-          <line x1="44" y1="14" x2="44" y2="74" stroke="#cbd5e1" stroke-width="4" stroke-linecap="round"/>
-          <line x1="14" y1="44" x2="74" y2="44" stroke="#cbd5e1" stroke-width="4" stroke-linecap="round"/>
-          <line x1="23" y1="23" x2="65" y2="65" stroke="#cbd5e1" stroke-width="4" stroke-linecap="round"/>
-          <line x1="65" y1="23" x2="23" y2="65" stroke="#cbd5e1" stroke-width="4" stroke-linecap="round"/>
-          <circle cx="44" cy="44" r="18" fill="#334155" stroke="#f1f5f9" stroke-width="2"/>
-          <circle cx="44" cy="44" r="7.5" fill="#ef4444" stroke="#fef08a" stroke-width="1.5"/>`;
-        break;
-
-      // ==================== WARRIOR EXCLUSIVE BLESSINGS ====================
-      case 'war_orbit_blades': // Клинки Предков — Three Golden Spectral Swords Orbiting in a Ring
-        defs = `<radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#fde047" stop-opacity="0.5"/><stop offset="100%" stop-color="#78350f" stop-opacity="0"/></radialGradient>`;
-        art = `
-          <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
-          <circle cx="44" cy="44" r="24" fill="none" stroke="#fde047" stroke-width="1.5" stroke-dasharray="5 4"/>
-          <polygon points="44,9 48,24 40,24" fill="#fffbeb" stroke="#f59e0b" stroke-width="1.3"/>
-          <polygon points="73,60 58,59 62,52" fill="#fffbeb" stroke="#f59e0b" stroke-width="1.3"/>
-          <polygon points="15,60 26,52 30,59" fill="#fffbeb" stroke="#f59e0b" stroke-width="1.3"/>
-          <circle cx="44" cy="44" r="7" fill="#f59e0b" stroke="#fffbeb" stroke-width="1.4"/>`;
-        break;
-
-      case 'war_seismic_slam': // Раскол Брусчатки — Greatsword Plunging Into Shattered Golden Fissure
-        defs = `<radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#f59e0b" stop-opacity="0.52"/><stop offset="100%" stop-color="#451a03" stop-opacity="0"/></radialGradient>`;
-        art = `
-          <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
-          <polygon points="40,14 48,14 47,54 44,61 41,54" fill="#f8fafc" stroke="#fbbf24" stroke-width="1.4"/>
-          <rect x="33" y="22" width="22" height="5" rx="2" fill="#eab308"/>
-          <polyline points="14,66 30,59 44,65 58,58 74,67" fill="none" stroke="#fde047" stroke-width="3" stroke-linecap="round"/>
-          <polyline points="24,73 44,65 63,74" fill="none" stroke="#f97316" stroke-width="2.2" stroke-linecap="round"/>`;
-        break;
-
-      case 'war_shield_thorns': // Шипованный Бастион — Steel Tower Shield Radiating Spikes
-        defs = `<radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#cbd5e1" stop-opacity="0.48"/><stop offset="100%" stop-color="#0f172a" stop-opacity="0"/></radialGradient>`;
-        art = `
-          <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
-          <path d="M12 34 L22 38 M12 52 L22 48 M76 34 L66 38 M76 52 L66 48" stroke="#fde047" stroke-width="3" stroke-linecap="round"/>
-          <path d="M44 15 L65 24 V44 C65 58 55 68 44 74 C33 68 23 58 23 44 V24 L44 15 Z" fill="#475569" stroke="#f8fafc" stroke-width="2"/>
-          <polygon points="44,32 50,44 44,56 38,44" fill="#fbbf24" stroke="#ffffff" stroke-width="1.3"/>`;
-        break;
-
-      case 'war_whirlwind': // Вихрь Жнеца — Crimson 360° Spinning Dual Crescent Blades
-        defs = `<radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#ef4444" stop-opacity="0.52"/><stop offset="100%" stop-color="#450a0a" stop-opacity="0"/></radialGradient>`;
-        art = `
-          <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
-          <path d="M44 14 A30 30 0 1 1 16 54" fill="none" stroke="#f87171" stroke-width="5" stroke-linecap="round"/>
-          <path d="M44 23 A21 21 0 1 0 64 36" fill="none" stroke="#fef08a" stroke-width="3.2" stroke-linecap="round"/>
-          <circle cx="44" cy="44" r="6" fill="#ffffff"/>`;
-        break;
-
-      case 'war_blood_cleave': // Казнь Кровопийцы — Heavy Crimson Executioner Axe & Blood Drop
-        defs = `<radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#dc2626" stop-opacity="0.54"/><stop offset="100%" stop-color="#450a0a" stop-opacity="0"/></radialGradient>`;
-        art = `
-          <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
-          <line x1="22" y1="70" x2="58" y2="20" stroke="#cbd5e1" stroke-width="4.5" stroke-linecap="round"/>
-          <path d="M46 18 L69 29 C67 44 56 53 41 53 L37 36 Z" fill="#dc2626" stroke="#fecaca" stroke-width="1.8"/>
-          <path d="M62 56 C62 56 69 65 69 69 C69 73 66 76 62 76 C58 76 55 73 55 69 C55 65 62 56 62 56 Z" fill="#ef4444" stroke="#fff1f2" stroke-width="1.2"/>`;
-        break;
-
-      case 'war_iron_banner': // Гнев Несокрушимого — Horned Berserker Helm Wreathed in Rage Flames
-        defs = `<radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#fb923c" stop-opacity="0.55"/><stop offset="100%" stop-color="#431407" stop-opacity="0"/></radialGradient>`;
-        art = `
-          <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
-          <path d="M29 36 C17 32 14 20 20 14 C23 22 28 26 33 28" fill="#fde047" stroke="#ffffff" stroke-width="1.4"/>
-          <path d="M59 36 C71 32 74 20 68 14 C65 22 60 26 55 28" fill="#fde047" stroke="#ffffff" stroke-width="1.4"/>
-          <path d="M29 34 C29 24 59 24 59 34 V58 L44 68 L29 58 Z" fill="#334155" stroke="#f8fafc" stroke-width="1.8"/>
-          <circle cx="38" cy="45" r="3.2" fill="#ef4444"/><circle cx="50" cy="45" r="3.2" fill="#ef4444"/>`;
-        break;
-
-      // ==================== SHARED RELICS ====================
-      case 'crit_fang': // Жнец Черепов — Blazing Reaper Skull & Crossed Scythes
-        defs = `<radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#ef4444" stop-opacity="0.5"/><stop offset="100%" stop-color="#450a0a" stop-opacity="0"/></radialGradient>`;
-        art = `
-          <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
-          <path d="M44 18 C31 18 24 27 24 39 C24 47 28 52 33 55 V65 H55 V55 C60 52 64 47 64 39 C64 27 57 18 44 18 Z" fill="#f1f5f9" stroke="#fca5a5" stroke-width="1.8"/>
-          <circle cx="36" cy="39" r="5" fill="#dc2626"/><circle cx="52" cy="39" r="5" fill="#dc2626"/>
-          <polygon points="44,45 41,51 47,51" fill="#1e293b"/>`;
-        break;
-
-      case 'greed_contract': // Печать Алчности — Golden Sovereign Coins & Crown Seal
-      default:
-        defs = `
-          <radialGradient id="${u}_rg" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stop-color="#fde047" stop-opacity="0.48"/>
-            <stop offset="100%" stop-color="#78350f" stop-opacity="0"/>
-          </radialGradient>
-          <linearGradient id="${u}_cn" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stop-color="#fffbeb"/>
-            <stop offset="48%" stop-color="#facc15"/>
-            <stop offset="100%" stop-color="#b45309"/>
-          </linearGradient>`;
-        art = `
-          <circle cx="44" cy="44" r="36" fill="url(#${u}_rg)"/>
-          <circle cx="32" cy="50" r="15" fill="#ca8a04" stroke="#fef08a" stroke-width="1.3"/>
-          <circle cx="56" cy="52" r="14" fill="#a16207" stroke="#fde047" stroke-width="1.2"/>
-          <circle cx="45" cy="39" r="19" fill="url(#${u}_cn)" stroke="#ffffff" stroke-width="1.6"/>
-          <circle cx="45" cy="39" r="14" fill="none" stroke="#92400e" stroke-width="1.2" stroke-dasharray="3 2"/>
-          <polygon points="36,44 38,32 42.5,37 45,30 47.5,37 52,32 54,44" fill="#92400e" stroke="#fffbeb" stroke-width="1"/>`;
-        break;
-    }
-  }
-
-  return makeSvgNode(
-    `<svg viewBox="0 0 88 88" width="88" height="88" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <defs>${defs}</defs>
-      ${art}
-    </svg>`,
-    className
-  );
-}
-
-// ============================================================================
-// UTILITY & PROGRESSION RESOLVERS
-// ============================================================================
-
-function formatTimeMMSS(seconds) {
-  const s = Math.max(0, Math.ceil(Number(seconds) || 0));
-  const mins = Math.floor(s / 60);
-  const secs = s % 60;
-  return `${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
-}
-
-function el(tag, className = '', text = '') {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text !== '' && text !== null && text !== undefined) node.textContent = text;
-  return node;
-}
-
-function hexNumToCss(hexNum, fallback = '#e5b85c') {
-  if (typeof hexNum !== 'number' || !Number.isFinite(hexNum)) return fallback;
-  return `#${Math.max(0, Math.floor(hexNum)).toString(16).padStart(6, '0')}`;
-}
-
-function resolveMaxWeaponShopLevel(storeRef) {
-  const fromStore = typeof storeRef?.getWeaponMaxShopLevel === 'function'
-    ? Number(storeRef.getWeaponMaxShopLevel())
-    : 0;
-  return Math.max(WEAPON_MAX_LEVEL || 12, fromStore || 0);
-}
-
-function resolveWeaponUnlocked(state, storeRef, wDef) {
-  if (!wDef) return false;
-  if (wDef.tier === 1 || wDef.unlockLevel <= 1) return true;
-  if (typeof storeRef?.isWeaponUnlocked === 'function') {
-    return Boolean(storeRef.isWeaponUnlocked(wDef.id));
-  }
-  if (!state) return false;
-  const u = state.unlockedWeapons;
-  if (Array.isArray(u)) return u.includes(wDef.id);
-  if (u instanceof Set) return u.has(wDef.id);
-  if (u && typeof u === 'object' && u[wDef.id]) return true;
-  if (state.weapons?.[wDef.id]?.unlocked) return true;
-  return false;
-}
-
-function resolveWeaponShopLevel(state, storeRef, wId, maxLvl = 12) {
-  if (typeof storeRef?.getWeaponShopLevel === 'function') {
-    const lvl = Number(storeRef.getWeaponShopLevel(wId));
-    if (Number.isFinite(lvl) && lvl >= 1) return Math.min(maxLvl, Math.floor(lvl));
-  }
-  const raw =
-    state?.weaponShopLevels?.[wId] ??
-    state?.weaponLevels?.[wId] ??
-    state?.shopWeaponLevels?.[wId] ??
-    state?.weapons?.[wId]?.shopLevel ??
-    state?.weapons?.[wId]?.level ??
-    1;
-  return Math.max(1, Math.min(maxLvl, Number(raw) || 1));
-}
-
-function resolveWeaponUpgradeCost(state, storeRef, callbacks, wDef, shopLevel, maxLvl = 12) {
-  if (shopLevel >= maxLvl) return null;
-  if (typeof storeRef?.getWeaponUpgradeCost === 'function') {
-    const c = storeRef.getWeaponUpgradeCost(wDef.id, shopLevel);
-    if (c === null || typeof c === 'number') return c;
-  }
-  if (typeof state?.getWeaponUpgradeCost === 'function') {
-    const c = state.getWeaponUpgradeCost(wDef.id, shopLevel);
-    if (c === null || typeof c === 'number') return c;
-  }
-  if (typeof callbacks?.getWeaponUpgradeCost === 'function') {
-    const c = callbacks.getWeaponUpgradeCost(wDef.id, shopLevel);
-    if (c === null || typeof c === 'number') return c;
-  }
-  const explicit =
-    state?.weaponUpgradeCosts?.[wDef.id] ??
-    state?.weapons?.[wDef.id]?.upgradeCost;
-  if (typeof explicit === 'number') return explicit;
-  return Math.round(wDef.upgradeBaseCost * Math.pow(1.36, shopLevel - 1));
-}
-
-function resolveMasteryList(state, storeRef, callbacks, classId, lang) {
-  const defsFromStore = typeof storeRef?.getHeroUpgradeDefs === 'function'
-    ? storeRef.getHeroUpgradeDefs()
-    : null;
-
-  const rawMap =
-    (state?.heroUpgradesByClass && state.heroUpgradesByClass[classId]) ||
-    (state?.classUpgrades && state.classUpgrades[classId]) ||
-    (state?.heroUpgrades && typeof state.heroUpgrades[classId] === 'object' && state.heroUpgrades[classId] !== null
-      ? state.heroUpgrades[classId]
-      : state?.heroUpgrades) ||
-    state?.statLevels ||
-    state?.mastery ||
-    {};
-
-  return DEFAULT_MASTERY_DEFS.filter((def) => !def.onlyClass || def.onlyClass === classId).map((def) => {
-    let matchedKey = def.defaultKey;
-    for (const candidate of def.keyCandidates) {
-      if (Object.prototype.hasOwnProperty.call(rawMap, candidate)) {
-        matchedKey = candidate;
-        break;
-      }
-    }
-
-    const storeDef = defsFromStore?.[matchedKey] || null;
-    const maxLevel = Number(storeDef?.maxLevel ?? def.maxLevel ?? 8);
-
-    let level = 0;
-    if (typeof storeRef?.getHeroUpgradeLevel === 'function') {
-      level = Number(storeRef.getHeroUpgradeLevel(matchedKey, classId)) || 0;
-    } else {
-      const rawVal = rawMap[matchedKey];
-      level = Number(typeof rawVal === 'object' && rawVal !== null ? rawVal.level : rawVal) || 0;
-    }
-    level = Math.max(0, Math.min(maxLevel, Math.floor(level)));
-
-    let cost = Math.round((storeDef?.baseCost ?? def.baseCost) * Math.pow(storeDef?.costScale ?? def.costScale ?? 1.4, level));
-    if (level >= maxLevel) {
-      cost = null;
-    } else if (typeof storeRef?.getHeroUpgradeCost === 'function') {
-      const c = storeRef.getHeroUpgradeCost(matchedKey, classId);
-      if (c === null || typeof c === 'number') cost = c;
-    } else if (typeof state?.getStatUpgradeCost === 'function') {
-      cost = state.getStatUpgradeCost(matchedKey, level, classId);
-    } else if (typeof callbacks?.getStatUpgradeCost === 'function') {
-      cost = callbacks.getStatUpgradeCost(matchedKey, level, classId);
-    }
-
-    return {
-      key: matchedKey,
-      runeType: def.runeType,
-      name: lang === 'en' ? (storeDef?.nameEn || def.nameEn) : (storeDef?.nameRu || def.nameRu),
-      bonus: lang === 'en' ? (storeDef?.descEn || def.bonusEn) : (storeDef?.descRu || def.bonusRu),
-      level,
-      maxLevel,
-      cost
-    };
-  });
-}
-
-function isWeaponHighlightChoice(choice) {
-  if (!choice) return false;
-  if (choice.isWeaponLevelUp === false) return false;
-  if (
-    choice.isWeaponUpgrade ||
-    choice.isWeaponLevelUp ||
-    choice.goldHighlight ||
-    choice.rarity === 'gold' ||
-    choice.rarity === 'legendary' ||
-    choice.type === 'weapon' ||
-    choice.type === 'weapon_level' ||
-    choice.category === 'weapon'
-  ) {
-    return true;
-  }
-  const id = String(choice.id || '').toLowerCase();
-  return id === 'weapon_level_up' || id === 'levelup_weapon' || id.includes('weapon_level');
-}
-
-function normalizeActivePerks(rawPerks) {
-  const entries = [];
-  if (!rawPerks) return entries;
-
-  if (Array.isArray(rawPerks)) {
-    const counts = new Map();
-    for (let i = 0; i < rawPerks.length; i++) {
-      const item = rawPerks[i];
-      if (!item) continue;
-      if (typeof item === 'string') {
-        counts.set(item, (counts.get(item) || 0) + 1);
-      } else if (typeof item === 'object' && item.id) {
-        const st = Math.max(1, Number(item.stacks ?? item.count ?? item.rank ?? item.level ?? 1) || 1);
-        counts.set(item.id, (counts.get(item.id) || 0) + st);
-      }
-    }
-    for (const [id, stacks] of counts.entries()) {
-      if (stacks > 0) entries.push([id, stacks]);
-    }
-  } else if (typeof rawPerks === 'object') {
-    for (const [id, val] of Object.entries(rawPerks)) {
-      const stacks = Number(val);
-      if (Number.isFinite(stacks) && stacks > 0) {
-        entries.push([id, Math.floor(stacks)]);
-      }
-    }
-  }
-  return entries;
-}
+import {
+  CLASS_ORDER,
+  CLASS_META,
+  ACT_DEFS,
+  TIER_ROMAN,
+  RANK_ROMAN,
+  formatTimeMMSS,
+  el,
+  hexNumToCss,
+  resolveMaxWeaponShopLevel,
+  resolveWeaponUnlocked,
+  resolveWeaponShopLevel,
+  resolveWeaponUpgradeCost,
+  resolveMasteryList,
+  normalizeActivePerks
+} from './ui/resolvers.js?v=20261120z35';
+import {
+  makeSvgNode,
+  createWeaponSvg,
+  createStatRuneSvg,
+  createTalentRuneSvg,
+  createBlessingRelicSvg
+} from './ui/svgIcons.js?v=20261120z35';
+import { createModalsController } from './ui/modals.js?v=20261120z35';
+
+// Backward-compatible facade re-exports (Wave 1/2 modularization)
+export { createWeaponSvg, createBlessingRelicSvg } from './ui/svgIcons.js?v=20261120z35';
 
 // ============================================================================
 // MAIN UI MANAGER FACTORY
@@ -1107,6 +151,16 @@ export function createUIManager(initialCallbacks = {}) {
   const hudWaveTimer = el('div', 'hud-wave-timer', '01:04');
   waveBox.append(hudLevelTitle, hudWaveTimer);
 
+  // Compact Gothic Endless Mode Wave & Survival Timer Badge (always visible in Endless even during bosses!)
+  const hudEndlessBadge = el('div', 'hud-endless-badge hidden');
+  const hudEndlessIcon = makeSvgNode(
+    `<svg viewBox="0 0 22 22" width="16" height="16" fill="none" xmlns="http://www.w3.org/2000/svg" class="hud-endless-svg" aria-hidden="true">
+      <path d="M6.8 14.5 C4.2 14.5 2.5 12.9 2.5 11 C2.5 9.1 4.2 7.5 6.8 7.5 C9.4 7.5 12.6 14.5 15.2 14.5 C17.8 14.5 19.5 12.9 19.5 11 C19.5 9.1 17.8 7.5 15.2 7.5 C12.6 7.5 9.4 14.5 6.8 14.5 Z" stroke="#fde093" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`
+  );
+  const hudEndlessText = el('span', 'hud-endless-text', 'Волна 1 • 00:00');
+  hudEndlessBadge.append(hudEndlessIcon, hudEndlessText);
+
   const bossBarBox = el('div', 'boss-bar-box hidden');
   const bossBarHeader = el('div', 'boss-bar-header');
   const bossBarName = el('span', 'boss-bar-name', 'КОСТЯНОЙ МЯСНИК');
@@ -1115,7 +169,15 @@ export function createUIManager(initialCallbacks = {}) {
   const bossBarFrame = el('div', 'boss-bar-frame');
   const bossBarFill = el('div', 'boss-bar-fill');
   bossBarFrame.appendChild(bossBarFill);
-  bossBarBox.append(bossBarHeader, bossBarFrame);
+  const bossStaggerWrap = el('div', 'boss-stagger-wrap hidden');
+  const bossStaggerRow = el('div', 'boss-stagger-row');
+  const bossStaggerTrack = el('div', 'boss-stagger-track');
+  const bossStaggerFill = el('div', 'boss-stagger-fill');
+  bossStaggerTrack.appendChild(bossStaggerFill);
+  const bossStaggerBadge = el('span', 'boss-stagger-badge', 'ОГЛУШЕНИЕ');
+  bossStaggerRow.append(bossStaggerTrack, bossStaggerBadge);
+  bossStaggerWrap.appendChild(bossStaggerRow);
+  bossBarBox.append(bossBarHeader, bossBarFrame, bossStaggerWrap);
 
   const relicHintPill = el('div', 'relic-hint-pill hidden');
   const relicCompass = el('span', 'relic-compass');
@@ -1125,7 +187,7 @@ export function createUIManager(initialCallbacks = {}) {
   const relicDistBadge = el('span', 'relic-dist-badge', '15м');
   relicHintPill.append(relicCompass, relicHintText, relicDistBadge);
 
-  hudTopCenter.append(waveBox, bossBarBox, relicHintPill);
+  hudTopCenter.append(hudEndlessBadge, waveBox, bossBarBox, relicHintPill);
 
   // Top-Right: Gold, Kills, Auto-Aim, Floating Joystick Toggle, Sound, Home
   const hudTopRight = el('div', 'hud-top-right');
@@ -1147,22 +209,39 @@ export function createUIManager(initialCallbacks = {}) {
   hudStatsPills.append(goldPill, killsPill);
 
   const hudActionsRow = el('div', 'hud-actions-row');
-  const autoAimBtn = el('button', 'hud-btn autoaim-btn is-on');
-  autoAimBtn.type = 'button';
-  autoAimBtn.textContent = 'Автоприцел: ВКЛ [Q]';
 
-  const attackToggleBtn = el('button', 'hud-btn autoaim-btn attack-toggle-btn is-on');
-  attackToggleBtn.type = 'button';
-  attackToggleBtn.textContent = 'Атака: ВКЛ [E]';
+  // Combat option toggles live cleanly inside the Pause modal (Q / E hotkeys remain active in combat!)
+  const makePauseToggleBtn = (svgMarkup, defaultLabel) => {
+    const btn = el('button', 'pause-toggle-row is-on');
+    btn.type = 'button';
+    const left = el('span', 'pause-toggle-left');
+    left.appendChild(makeSvgNode(svgMarkup, 'pause-toggle-svg'));
+    const labelEl = el('span', 'pause-toggle-label', defaultLabel);
+    left.appendChild(labelEl);
+    const pillEl = el('span', 'pause-toggle-pill', 'ВКЛ');
+    btn.append(left, pillEl);
+    return { btn, labelEl, pillEl };
+  };
 
-  const touchPreviewBtn = el('button', 'hud-btn icon-btn');
-  touchPreviewBtn.type = 'button';
-  touchPreviewBtn.title = 'Плавающий джойстик (Вкл/Выкл)';
-  touchPreviewBtn.appendChild(
-    makeSvgNode(
-      `<svg viewBox="0 0 20 20" width="17" height="17" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="10" cy="10" r="7.5" stroke="#fde093" stroke-width="1.4" stroke-dasharray="3 2"/><circle cx="10" cy="10" r="3.2" fill="#e5b85c"/></svg>`
-    )
+  const autoAimToggle = makePauseToggleBtn(
+    `<svg viewBox="0 0 20 20" width="16" height="16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="10" cy="10" r="6.8" stroke="#fde093" stroke-width="1.4"/><circle cx="10" cy="10" r="2.1" fill="#fde093"/><path d="M10 1.8 V5.2 M10 14.8 V18.2 M1.8 10 H5.2 M14.8 10 H18.2" stroke="#fde093" stroke-width="1.35" stroke-linecap="round"/></svg>`,
+    'Автоприцел [Q]'
   );
+  const autoAimBtn = autoAimToggle.btn;
+
+  const attackToggle = makePauseToggleBtn(
+    `<svg viewBox="0 0 20 20" width="16" height="16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M4.2 15.8 L14.6 4.4 L16.8 3.2 L15.6 5.4 L5.2 15.8 Z" fill="#e2e8f0" stroke="#f8fafc" stroke-width="0.9" stroke-linejoin="round"/><path d="M15.8 15.8 L5.4 4.4 L3.2 3.2 L4.4 5.4 L14.8 15.8 Z" fill="#cbd5e1" stroke="#f8fafc" stroke-width="0.9" stroke-linejoin="round"/><path d="M3.6 12.6 L7.4 16.4 M16.4 12.6 L12.6 16.4" stroke="#fde093" stroke-width="1.6" stroke-linecap="round"/></svg>`,
+    'Атака [E]'
+  );
+  const attackToggleBtn = attackToggle.btn;
+
+  const touchPreviewToggle = makePauseToggleBtn(
+    `<svg viewBox="0 0 20 20" width="16" height="16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="10" cy="10" r="7.2" stroke="#fde093" stroke-width="1.4" stroke-dasharray="3 2"/><circle cx="10" cy="10" r="3.1" fill="#e5b85c"/></svg>`,
+    'Плавающий джойстик'
+  );
+  const touchPreviewBtn = touchPreviewToggle.btn;
+  touchPreviewBtn.classList.remove('is-on');
+  touchPreviewBtn.title = 'Плавающий джойстик и кнопка рывка (Вкл/Выкл)';
 
   const hudMuteBtn = el('button', 'hud-btn icon-btn sound-trigger-btn', '🔊');
   hudMuteBtn.type = 'button';
@@ -1177,7 +256,7 @@ export function createUIManager(initialCallbacks = {}) {
     )
   );
 
-  hudActionsRow.append(autoAimBtn, attackToggleBtn, touchPreviewBtn, hudMuteBtn, hudHomeBtn);
+  hudActionsRow.append(hudMuteBtn, hudHomeBtn);
   hudTopRight.append(hudStatsPills, hudActionsRow);
 
   hudTopRow.append(hudTopLeft, hudTopCenter, hudTopRight);
@@ -1205,8 +284,53 @@ export function createUIManager(initialCallbacks = {}) {
   const leftKnob = el('div', 'joystick-knob');
   const leftCap = el('span', 'joystick-caption', 'ДВИЖЕНИЕ');
   leftBase.append(leftRingSvg, leftKnob, leftCap);
-  leftZone.appendChild(leftBase);
-  touchLayer.appendChild(leftZone);
+
+  // Right-Thumb Gothic Touch Dash Button (shown alongside floating joystick on touch devices / preview)
+  const TOUCH_DASH_RING_CIRC = 207.35; // 2 * PI * 33
+  const touchDashBtn = el('button', 'touch-dash-btn is-ready');
+  touchDashBtn.type = 'button';
+  touchDashBtn.setAttribute('aria-label', 'Рывок');
+  const touchDashRingSvg = makeSvgNode(
+    `<svg viewBox="0 0 76 76" width="76" height="76" fill="none" xmlns="http://www.w3.org/2000/svg" class="touch-dash-ring-svg" aria-hidden="true">
+      <circle cx="38" cy="38" r="33" class="touch-dash-ring-track"/>
+      <circle cx="38" cy="38" r="33" class="touch-dash-ring-fill" stroke-dasharray="${TOUCH_DASH_RING_CIRC}" stroke-dashoffset="0"/>
+    </svg>`
+  );
+  const touchDashRingFill = touchDashRingSvg.querySelector('.touch-dash-ring-fill');
+  const touchDashIcon = makeSvgNode(
+    `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" xmlns="http://www.w3.org/2000/svg" class="touch-dash-svg" aria-hidden="true">
+      <path d="M3.5 9.2 H11.5 M2.2 13 H9.5 M4.8 16.8 H10.8" stroke="#99f6e4" stroke-width="1.8" stroke-linecap="round"/>
+      <path d="M10.5 5.2 L20.8 12 L10.5 18.8 L13.4 12 Z" fill="#fde093" stroke="#fffbeb" stroke-width="1.25" stroke-linejoin="round"/>
+    </svg>`
+  );
+  const touchDashLabel = el('span', 'touch-dash-label', 'РЫВОК');
+  touchDashBtn.append(touchDashRingSvg, touchDashIcon, touchDashLabel);
+
+  // Right-Thumb Round Gothic Touch Ult Button (Ярость Зверя [F])
+  const TOUCH_ULT_RING_CIRC = 194.78; // 2 * PI * 31
+  const touchUltBtn = el('button', 'touch-ult-btn is-charging');
+  touchUltBtn.type = 'button';
+  touchUltBtn.setAttribute('aria-label', 'Ярость Зверя');
+  const touchUltRingSvg = makeSvgNode(
+    `<svg viewBox="0 0 72 72" width="72" height="72" fill="none" xmlns="http://www.w3.org/2000/svg" class="touch-ult-ring-svg" aria-hidden="true">
+      <circle cx="36" cy="36" r="31" class="touch-ult-ring-track"/>
+      <circle cx="36" cy="36" r="31" class="touch-ult-ring-fill" stroke-dasharray="${TOUCH_ULT_RING_CIRC}" stroke-dashoffset="${TOUCH_ULT_RING_CIRC}"/>
+    </svg>`
+  );
+  const touchUltRingFill = touchUltRingSvg.querySelector('.touch-ult-ring-fill');
+  const touchUltIcon = makeSvgNode(
+    `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" xmlns="http://www.w3.org/2000/svg" class="touch-ult-svg" aria-hidden="true">
+      <path d="M5.5 11 C2.6 8.2 3 4.2 6.2 2.8 C5.6 5.8 7 7.8 9.6 8.8 Z" fill="#f59e0b" stroke="#fde093" stroke-width="0.9"/>
+      <path d="M18.5 11 C21.4 8.2 21 4.2 17.8 2.8 C18.4 5.8 17 7.8 14.4 8.8 Z" fill="#f59e0b" stroke="#fde093" stroke-width="0.9"/>
+      <path d="M12 5.2 C8.2 5.2 6 8.2 6 12 C6 14.8 7.5 16.8 9 18 L10 21 H14 L15 18 C16.5 16.8 18 14.8 18 12 C18 8.2 15.8 5.2 12 5.2 Z" fill="#b91c1c" stroke="#fde093" stroke-width="1.35" stroke-linejoin="round"/>
+      <polygon points="8.6,12.2 11.1,13 10.4,14.6 8.8,14" fill="#fef08a"/>
+      <polygon points="15.4,12.2 12.9,13 13.6,14.6 15.2,14" fill="#fef08a"/>
+    </svg>`
+  );
+  const touchUltLabel = el('span', 'touch-ult-label', '0/5');
+  touchUltBtn.append(touchUltRingSvg, touchUltIcon, touchUltLabel);
+
+  touchLayer.append(leftZone, leftBase, touchUltBtn, touchDashBtn);
 
   // =========================================================================
   // 4. BOTTOM COMBAT HUD DOCK (Blessing Mini-Badges, Weapon/Shells/Reload, XP)
@@ -1285,7 +409,85 @@ export function createUIManager(initialCallbacks = {}) {
   const hudReloadKeyTag = el('span', 'hud-reload-key', '[R]');
   hudReloadBtn.append(hudReloadSvg, hudReloadKeyTag);
 
-  hudWeaponRow.append(weaponHudBadge, hudReloadBtn);
+  // Compact Gothic Dash [Space] Cooldown Indicator & Button right next to Weapon Bar
+  const HUD_DASH_RING_CIRC = 87.96; // 2 * PI * 14
+  const hudDashBtn = el('button', 'hud-dash-btn is-ready');
+  hudDashBtn.type = 'button';
+  hudDashBtn.title = 'Рывок с неуязвимостью [Space]';
+  const hudDashRingWrap = el('span', 'hud-dash-ring-wrap');
+  const hudDashRingSvg = makeSvgNode(
+    `<svg viewBox="0 0 34 34" width="32" height="32" fill="none" xmlns="http://www.w3.org/2000/svg" class="hud-dash-ring-svg" aria-hidden="true">
+      <circle cx="17" cy="17" r="14" class="hud-dash-ring-track"/>
+      <circle cx="17" cy="17" r="14" class="hud-dash-ring-fill" stroke-dasharray="${HUD_DASH_RING_CIRC}" stroke-dashoffset="0"/>
+    </svg>`
+  );
+  const hudDashRingFill = hudDashRingSvg.querySelector('.hud-dash-ring-fill');
+  const hudDashIcon = makeSvgNode(
+    `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" xmlns="http://www.w3.org/2000/svg" class="hud-dash-icon-svg" aria-hidden="true">
+      <path d="M3.5 9.2 H11.2 M2.4 13 H9.4 M5 16.8 H10.6" stroke="#99f6e4" stroke-width="1.8" stroke-linecap="round"/>
+      <path d="M10.4 5.2 L20.6 12 L10.4 18.8 L13.3 12 Z" fill="#fde093" stroke="#fffbeb" stroke-width="1.2" stroke-linejoin="round"/>
+    </svg>`
+  );
+  hudDashRingWrap.append(hudDashRingSvg, hudDashIcon);
+  const hudDashMeta = el('span', 'hud-dash-meta');
+  const hudDashStateText = el('span', 'hud-dash-state', 'РЫВОК');
+  const hudDashKeyTag = el('span', 'hud-dash-key', '[Space]');
+  hudDashMeta.append(hudDashStateText, hudDashKeyTag);
+  const hudDashBarTrack = el('span', 'hud-dash-bar-track');
+  const hudDashBarFill = el('span', 'hud-dash-bar-fill');
+  hudDashBarTrack.appendChild(hudDashBarFill);
+  hudDashBtn.append(hudDashRingWrap, hudDashMeta, hudDashBarTrack);
+
+  // Compact Gothic Beast Rage Ult [F] Indicator & Button right next to Dash
+  const HUD_ULT_RING_CIRC = 87.96; // 2 * PI * 14
+  const hudUltBtn = el('button', 'hud-ult-btn is-charging');
+  hudUltBtn.type = 'button';
+  hudUltBtn.title = 'Ярость Зверя [F] — активируется при 5/5 печатях';
+  const hudUltRingWrap = el('span', 'hud-ult-ring-wrap');
+  const hudUltRingSvg = makeSvgNode(
+    `<svg viewBox="0 0 34 34" width="32" height="32" fill="none" xmlns="http://www.w3.org/2000/svg" class="hud-ult-ring-svg" aria-hidden="true">
+      <circle cx="17" cy="17" r="14" class="hud-ult-ring-track"/>
+      <circle cx="17" cy="17" r="14" class="hud-ult-ring-fill" stroke-dasharray="${HUD_ULT_RING_CIRC}" stroke-dashoffset="${HUD_ULT_RING_CIRC}"/>
+    </svg>`
+  );
+  const hudUltRingFill = hudUltRingSvg.querySelector('.hud-ult-ring-fill');
+  const hudUltIcon = makeSvgNode(
+    `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" xmlns="http://www.w3.org/2000/svg" class="hud-ult-icon-svg" aria-hidden="true">
+      <path d="M5.5 11 C2.6 8.2 3 4.2 6.2 2.8 C5.6 5.8 7 7.8 9.6 8.8 Z" fill="#f59e0b" stroke="#fde093" stroke-width="0.9"/>
+      <path d="M18.5 11 C21.4 8.2 21 4.2 17.8 2.8 C18.4 5.8 17 7.8 14.4 8.8 Z" fill="#f59e0b" stroke="#fde093" stroke-width="0.9"/>
+      <path d="M12 5.2 C8.2 5.2 6 8.2 6 12 C6 14.8 7.5 16.8 9 18 L10 21 H14 L15 18 C16.5 16.8 18 14.8 18 12 C18 8.2 15.8 5.2 12 5.2 Z" fill="#b91c1c" stroke="#fde093" stroke-width="1.35" stroke-linejoin="round"/>
+      <polygon points="8.6,12.2 11.1,13 10.4,14.6 8.8,14" fill="#fef08a"/>
+      <polygon points="15.4,12.2 12.9,13 13.6,14.6 15.2,14" fill="#fef08a"/>
+    </svg>`
+  );
+  hudUltRingWrap.append(hudUltRingSvg, hudUltIcon);
+  const hudUltMeta = el('span', 'hud-ult-meta');
+  const hudUltStateText = el('span', 'hud-ult-state', 'ЗВЕРЬ 0/5');
+  const hudUltKeyTag = el('span', 'hud-ult-key', '[F]');
+  hudUltMeta.append(hudUltStateText, hudUltKeyTag);
+  const hudUltBarTrack = el('span', 'hud-ult-bar-track');
+  const hudUltBarFill = el('span', 'hud-ult-bar-fill');
+  hudUltBarFill.style.transform = 'scaleX(0)';
+  hudUltBarTrack.appendChild(hudUltBarFill);
+  hudUltBtn.append(hudUltRingWrap, hudUltMeta, hudUltBarTrack);
+
+  // Warrior 3-Hit Melee Combo Pop-Up Badge (shown on comboStep >= 2)
+  const hudComboBadge = el('div', 'hud-combo-badge hidden');
+  const hudComboHead = el('div', 'hud-combo-head');
+  const hudComboIcon = makeSvgNode(
+    `<svg viewBox="0 0 20 20" width="16" height="16" fill="none" xmlns="http://www.w3.org/2000/svg" class="hud-combo-svg" aria-hidden="true">
+      <path d="M10 1.8 L12.2 7.8 L18.2 10 L12.2 12.2 L10 18.2 L7.8 12.2 L1.8 10 L7.8 7.8 Z" fill="#f59e0b" stroke="#fef9c3" stroke-width="1.15" stroke-linejoin="round"/>
+      <circle cx="10" cy="10" r="2.1" fill="#fffbeb"/>
+    </svg>`
+  );
+  const hudComboText = el('span', 'hud-combo-text', 'КОМБО ×2');
+  hudComboHead.append(hudComboIcon, hudComboText);
+  const hudComboBarTrack = el('span', 'hud-combo-bar-track');
+  const hudComboBarFill = el('span', 'hud-combo-bar-fill');
+  hudComboBarTrack.appendChild(hudComboBarFill);
+  hudComboBadge.append(hudComboHead, hudComboBarTrack);
+
+  hudWeaponRow.append(weaponHudBadge, hudReloadBtn, hudDashBtn, hudUltBtn, hudComboBadge);
 
   // Soul XP Bar
   const soulXpWrap = el('div', 'soul-xp-wrap');
@@ -1300,7 +502,25 @@ export function createUIManager(initialCallbacks = {}) {
   soulXpWrap.append(soulXpMeta, soulXpTrack);
 
   hudBottomDock.append(hudPerksRow, hudWeaponRow);
-  hudScreen.append(hudTopRow, touchLayer, hudBottomDock);
+  // 3b. Chapter-1 Non-Blocking 20s Onboarding Pill (auto-advances on player actions + Skip)
+  const onboardingBar = el('div', 'hud-onboarding-bar hidden');
+  const onboardingRow = el('div', 'hud-onboarding-row');
+  const onboardingDotsWrap = el('div', 'hud-onboarding-dots');
+  const onboardingDots = [0, 1, 2].map(() => {
+    const d = el('span', 'hud-onboarding-dot');
+    onboardingDotsWrap.appendChild(d);
+    return d;
+  });
+  const onboardingText = el('span', 'hud-onboarding-text', '');
+  const onboardingSkipBtn = el('button', 'hud-onboarding-skip', 'Пропустить');
+  onboardingSkipBtn.type = 'button';
+  onboardingRow.append(onboardingDotsWrap, onboardingText, onboardingSkipBtn);
+  const onboardingTimerTrack = el('div', 'hud-onboarding-timer-track');
+  const onboardingTimerFill = el('div', 'hud-onboarding-timer-fill');
+  onboardingTimerTrack.appendChild(onboardingTimerFill);
+  onboardingBar.append(onboardingRow, onboardingTimerTrack);
+
+  hudScreen.append(hudTopRow, touchLayer, onboardingBar, hudBottomDock);
   root.appendChild(hudScreen);
 
   // =========================================================================
@@ -1313,7 +533,9 @@ export function createUIManager(initialCallbacks = {}) {
     aimZ: 0,
     active: false,
     moveActive: false,
-    aimActive: false
+    aimActive: false,
+    dash: false,
+    ult: false
   };
 
   const MAX_STICK_RADIUS = 46;
@@ -1332,16 +554,33 @@ export function createUIManager(initialCallbacks = {}) {
     let activeTouchId = null;
     let originX = 0;
     let originY = 0;
+    let returnTimer = null;
 
     const mapPt = (cx, cy) =>
       window.__toGameCoords ? window.__toGameCoords(cx, cy) : { x: cx, y: cy };
 
+    const getVpSize = () => {
+      const vp = window.__getGameViewportSize?.();
+      return {
+        w: vp?.width || window.innerWidth || 960,
+        h: vp?.height || window.innerHeight || 540
+      };
+    };
+
     const placeBaseAtFinger = (rawClientX, rawClientY) => {
+      if (returnTimer) {
+        clearTimeout(returnTimer);
+        returnTimer = null;
+      }
+      baseEl.classList.remove('is-returning');
       const pt = mapPt(rawClientX, rawClientY);
-      originX = pt.x;
-      originY = pt.y;
-      baseEl.style.left = `${Math.round(pt.x)}px`;
-      baseEl.style.top = `${Math.round(pt.y)}px`;
+      const { w, h } = getVpSize();
+      const clampedX = Math.max(58, Math.min(w * 0.50, pt.x));
+      const clampedY = Math.max(80, Math.min(h - 58, pt.y));
+      originX = clampedX;
+      originY = clampedY;
+      baseEl.style.left = `${Math.round(clampedX)}px`;
+      baseEl.style.top = `${Math.round(clampedY)}px`;
       baseEl.style.bottom = 'auto';
       baseEl.style.transform = 'translate3d(-50%, -50%, 0)';
       baseEl.classList.add('is-active');
@@ -1364,19 +603,50 @@ export function createUIManager(initialCallbacks = {}) {
       touchState.moveZ = norm < DEADZONE ? 0 : ky / MAX_STICK_RADIUS;
     };
 
-    const releaseStick = () => {
+    const releaseStick = (instant = false) => {
+      const wasEngaged = activePointerId !== null || activeTouchId !== null || baseEl.classList.contains('is-active');
       activePointerId = null;
       activeTouchId = null;
-      baseEl.classList.remove('is-active');
-      baseEl.style.left = '';
-      baseEl.style.top = '';
-      baseEl.style.bottom = '';
-      baseEl.style.transform = '';
       knobEl.style.transform = 'translate3d(0, 0, 0)';
       touchState.moveX = 0;
       touchState.moveZ = 0;
       touchState.moveActive = false;
       touchState.active = false;
+      baseEl.classList.remove('is-active');
+
+      if (returnTimer) {
+        clearTimeout(returnTimer);
+        returnTimer = null;
+      }
+
+      if (instant || !wasEngaged) {
+        baseEl.classList.remove('is-returning');
+        baseEl.style.left = '';
+        baseEl.style.top = '';
+        baseEl.style.bottom = '';
+        baseEl.style.transform = '';
+        return;
+      }
+
+      // Smoothly glide floating stick base back to resting bottom-left home position
+      const { h } = getVpSize();
+      const homeLeft = 88;
+      const homeTop = Math.max(88, h - 152);
+      baseEl.classList.add('is-returning');
+      baseEl.style.left = `${Math.round(homeLeft)}px`;
+      baseEl.style.top = `${Math.round(homeTop)}px`;
+      baseEl.style.bottom = 'auto';
+      baseEl.style.transform = 'translate3d(-50%, -50%, 0)';
+      returnTimer = setTimeout(() => {
+        returnTimer = null;
+        if (activePointerId === null && activeTouchId === null) {
+          baseEl.classList.remove('is-returning');
+          baseEl.style.left = '';
+          baseEl.style.top = '';
+          baseEl.style.bottom = '';
+          baseEl.style.transform = '';
+        }
+      }, 210);
     };
 
     // Prevent iOS Safari scrolling / callouts inside touch zone
@@ -1426,7 +696,7 @@ export function createUIManager(initialCallbacks = {}) {
       if (!window.PointerEvent && activeTouchId !== null) {
         for (let i = 0; i < e.changedTouches.length; i++) {
           if (e.changedTouches[i].identifier === activeTouchId) {
-            releaseStick();
+            releaseStick(false);
             break;
           }
         }
@@ -1437,6 +707,7 @@ export function createUIManager(initialCallbacks = {}) {
 
     // Primary PointerEvents handler (iOS 13+ Safari, Android Chrome, Desktop Preview)
     zoneEl.addEventListener('pointerdown', (e) => {
+      if (hudScreen.classList.contains('hidden')) return;
       if (activePointerId !== null) return;
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       if (e.pointerType === 'touch' && touchLayer.classList.contains('hidden')) {
@@ -1464,16 +735,38 @@ export function createUIManager(initialCallbacks = {}) {
 
     const onPointerEnd = (e) => {
       if (e.pointerId !== activePointerId) return;
-      releaseStick();
+      try {
+        if (zoneEl.hasPointerCapture?.(e.pointerId)) {
+          zoneEl.releasePointerCapture(e.pointerId);
+        }
+      } catch {
+        // Ignore
+      }
+      releaseStick(false);
     };
 
     zoneEl.addEventListener('pointerup', onPointerEnd);
     zoneEl.addEventListener('pointercancel', onPointerEnd);
     zoneEl.addEventListener('lostpointercapture', () => {
-      if (activePointerId !== null) releaseStick();
+      if (activePointerId !== null) releaseStick(false);
     });
 
-    return releaseStick;
+    window.addEventListener('blur', () => {
+      if (activePointerId !== null || activeTouchId !== null) {
+        releaseStick(true);
+      }
+      touchState.dash = false;
+      touchState.ult = false;
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && (activePointerId !== null || activeTouchId !== null)) {
+        releaseStick(true);
+        touchState.dash = false;
+        touchState.ult = false;
+      }
+    });
+
+    return () => releaseStick(true);
   }
 
   const releaseLeftStick = setupFloatingLeftStick(leftZone, leftBase, leftKnob);
@@ -1490,15 +783,68 @@ export function createUIManager(initialCallbacks = {}) {
   );
 
   touchPreviewBtn.addEventListener('click', () => {
-    touchPreviewEnabled = !touchPreviewEnabled;
-    touchPreviewBtn.classList.toggle('is-on', touchPreviewEnabled);
-    if (touchPreviewEnabled) {
+    const next = touchLayer.classList.contains('hidden');
+    touchPreviewEnabled = next;
+    if (next) {
       touchLayer.classList.remove('hidden');
       ensureAutoAimForTouch();
-    } else if (!isTouchCapable) {
+    } else {
       touchLayer.classList.add('hidden');
       releaseLeftStick();
+      touchState.dash = false;
+      touchState.ult = false;
     }
+    syncTouchPreviewButton();
+  });
+
+  const triggerDashInput = (e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    if (hudScreen.classList.contains('hidden')) return;
+    touchState.dash = true;
+    touchDashBtn.classList.add('is-pressed');
+    setTimeout(() => touchDashBtn.classList.remove('is-pressed'), 130);
+  };
+  touchDashBtn.addEventListener('pointerdown', triggerDashInput);
+  touchDashBtn.addEventListener(
+    'touchstart',
+    (e) => {
+      if (!window.PointerEvent) triggerDashInput(e);
+      else e.stopPropagation();
+    },
+    { passive: false }
+  );
+  hudDashBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (hudScreen.classList.contains('hidden')) return;
+    touchState.dash = true;
+  });
+
+  const triggerUltInput = (e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    if (hudScreen.classList.contains('hidden')) return;
+    touchState.ult = true;
+    touchUltBtn.classList.add('is-pressed');
+    setTimeout(() => touchUltBtn.classList.remove('is-pressed'), 140);
+  };
+  touchUltBtn.addEventListener('pointerdown', triggerUltInput);
+  touchUltBtn.addEventListener(
+    'touchstart',
+    (e) => {
+      if (!window.PointerEvent) triggerUltInput(e);
+      else e.stopPropagation();
+    },
+    { passive: false }
+  );
+  hudUltBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (hudScreen.classList.contains('hidden')) return;
+    touchState.ult = true;
   });
 
   hudReloadBtn.addEventListener('click', (e) => {
@@ -1566,6 +912,20 @@ export function createUIManager(initialCallbacks = {}) {
   hubResetBtn.type = 'button';
   hubResetBtn.title = 'Сбросить весь прогресс до нуля';
 
+  const hubQuestsBtn = el('button', 'hub-quests-btn');
+  hubQuestsBtn.type = 'button';
+  hubQuestsBtn.title = 'Ежедневные задания';
+  hubQuestsBtn.setAttribute('aria-label', 'Ежедневные задания');
+  const hubQuestsIcon = makeSvgNode(
+    `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" xmlns="http://www.w3.org/2000/svg" class="hub-quests-svg" aria-hidden="true">
+      <path d="M6.2 3.8 H18.2 C19.3 3.8 20.1 4.6 20.1 5.6 V7.2 H18 V17.2 C18 18.8 16.8 20 15.2 20 H5.4 C4.3 20 3.6 19.2 3.6 18.2 V16.4 H5.8 V6.4 C5.8 5 5.9 3.8 6.2 3.8 Z" fill="#2d1d46" stroke="#fde093" stroke-width="1.45" stroke-linejoin="round"/>
+      <path d="M8.4 9.5 H15.4 M8.4 12.6 H14.2 M8.4 15.7 H12.6" stroke="#f5d996" stroke-width="1.35" stroke-linecap="round"/>
+    </svg>`
+  );
+  const hubQuestsLabel = el('span', 'hub-quests-btn-label', 'Задания');
+  const hubQuestsDot = el('span', 'hub-quests-dot hidden');
+  hubQuestsBtn.append(hubQuestsIcon, hubQuestsLabel, hubQuestsDot);
+
   const hubMuteBtn = el('button', 'hub-gear-btn sound-trigger-btn');
   hubMuteBtn.type = 'button';
   hubMuteBtn.title = 'Настройки звука и игры';
@@ -1578,15 +938,8 @@ export function createUIManager(initialCallbacks = {}) {
       </svg>`
     )
   );
-  const hubHeaderFiligree = el('div', 'hub-header-filigree');
-  const hubFiligreeImg = document.createElement('img');
-  hubFiligreeImg.src = './assets/ui/hub_top_filigree.png?v=20261117z25';
-  hubFiligreeImg.className = 'hub-filigree-img';
-  hubFiligreeImg.alt = '';
-  hubFiligreeImg.draggable = false;
-  hubHeaderFiligree.appendChild(hubFiligreeImg);
-  hubTreasury.append(treasuryGoldPill, hubMuteBtn);
-  hubHeader.append(hubProfilePlaque, hubHeaderFiligree, hubTreasury);
+  hubTreasury.append(hubQuestsBtn, treasuryGoldPill, hubMuteBtn);
+  hubHeader.append(hubProfilePlaque, hubTreasury);
 
   // --- Hub Body Container ---
   const hubBody = el('div', 'hub-body');
@@ -1606,7 +959,23 @@ export function createUIManager(initialCallbacks = {}) {
   const homeJourneyLabel = el('span', 'home-journey-label', 'В ПУТЬ!');
   homeJourneyBtn.appendChild(homeJourneyLabel);
 
-  homeCtaStack.append(homeWeaponWarn, homeJourneyBtn);
+  // Endless Horde Survival CTA Button right below Campaign Launch with Personal Record
+  const homeEndlessBtn = el('button', 'home-endless-btn');
+  homeEndlessBtn.type = 'button';
+  const homeEndlessTop = el('span', 'home-endless-top');
+  homeEndlessTop.appendChild(
+    makeSvgNode(
+      `<svg viewBox="0 0 22 22" width="17" height="17" fill="none" xmlns="http://www.w3.org/2000/svg" class="home-endless-svg" aria-hidden="true">
+        <path d="M6.8 14.5 C4.2 14.5 2.5 12.9 2.5 11 C2.5 9.1 4.2 7.5 6.8 7.5 C9.4 7.5 12.6 14.5 15.2 14.5 C17.8 14.5 19.5 12.9 19.5 11 C19.5 9.1 17.8 7.5 15.2 7.5 C12.6 7.5 9.4 14.5 6.8 14.5 Z" stroke="#fde093" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>`
+    )
+  );
+  const homeEndlessLabel = el('span', 'home-endless-label', 'БЕСКОНЕЧНАЯ ОРДА');
+  homeEndlessTop.appendChild(homeEndlessLabel);
+  const homeEndlessRecord = el('span', 'home-endless-record', 'Выживание • Таблица лидеров');
+  homeEndlessBtn.append(homeEndlessTop, homeEndlessRecord);
+
+  homeCtaStack.append(homeWeaponWarn, homeJourneyBtn, homeEndlessBtn);
   homePanel.append(homeCtaStack);
 
   // =========================================================================
@@ -2163,6 +1532,7 @@ export function createUIManager(initialCallbacks = {}) {
   let selectedMageTalentId = selectedTalentByClass.mage;
 
   const talentCamState = { x: 0, y: 0, zoom: 1, key: '' };
+  let activeHoldCancel = null;
 
   const shopFooterRow = el('div', 'subpanel-footer-row hidden');
   const shopBackBtn = el('button', 'subpanel-back-btn', '← К герою');
@@ -2337,89 +1707,7 @@ export function createUIManager(initialCallbacks = {}) {
   root.appendChild(hubScreen);
 
   // =========================================================================
-  // SOUND & GAME SETTINGS POPOVER (Anchored to Top-Right Gear / Combat Sound)
-  // =========================================================================
-  const soundPopover = el('div', 'sound-popover hidden');
-  const musicPopHead = el('div', 'sound-pop-head');
-  const musicPopTitle = el('span', 'sound-pop-title', '🎵 Музыка');
-  const musicPopVal = el('span', 'sound-pop-val', '38%');
-  musicPopHead.append(musicPopTitle, musicPopVal);
-
-  const musicSliderWrap = el('div', 'sound-slider-wrap');
-  const musicSlider = document.createElement('input');
-  musicSlider.type = 'range';
-  musicSlider.className = 'sound-volume-slider';
-  musicSlider.min = '0';
-  musicSlider.max = '100';
-  musicSlider.step = '1';
-  musicSlider.value = '38';
-  musicSlider.setAttribute('aria-label', 'Громкость музыки');
-  musicSliderWrap.appendChild(musicSlider);
-
-  const soundPopHead = el('div', 'sound-pop-head');
-  const soundPopTitle = el('span', 'sound-pop-title', '🔫 Выстрелы и эффекты');
-  const soundPopVal = el('span', 'sound-pop-val', '75%');
-  soundPopHead.append(soundPopTitle, soundPopVal);
-
-  const soundSliderWrap = el('div', 'sound-slider-wrap');
-  const soundSlider = document.createElement('input');
-  soundSlider.type = 'range';
-  soundSlider.className = 'sound-volume-slider';
-  soundSlider.min = '0';
-  soundSlider.max = '100';
-  soundSlider.step = '1';
-  soundSlider.value = '75';
-  soundSlider.setAttribute('aria-label', 'Громкость выстрелов и эффектов');
-  soundSliderWrap.appendChild(soundSlider);
-
-  const soundMuteToggleBtn = el('button', 'sound-mute-toggle-btn', 'Выключить звук');
-  soundMuteToggleBtn.type = 'button';
-
-  soundPopover.append(
-    musicPopHead,
-    musicSliderWrap,
-    soundPopHead,
-    soundSliderWrap,
-    soundMuteToggleBtn,
-    hubResetBtn
-  );
-  root.appendChild(soundPopover);
-
-  let soundAnchorBtn = null;
-
-  function positionSoundPopover(anchor) {
-    if (!anchor) return;
-    const rect = anchor.getBoundingClientRect();
-    const popWidth = 248;
-    const left = Math.max(10, Math.min(window.innerWidth - popWidth - 10, rect.right - popWidth));
-    const top = Math.max(10, Math.min(window.innerHeight - 250, rect.bottom + 8));
-    soundPopover.style.left = `${Math.round(left)}px`;
-    soundPopover.style.top = `${Math.round(top)}px`;
-  }
-
-  function closeSoundPopover() {
-    if (soundPopover.classList.contains('hidden')) return;
-    soundPopover.classList.add('hidden');
-    hubMuteBtn.classList.remove('is-open');
-    hudMuteBtn.classList.remove('is-open');
-    soundAnchorBtn = null;
-  }
-
-  function toggleSoundPopover(anchorBtn) {
-    if (!soundPopover.classList.contains('hidden') && soundAnchorBtn === anchorBtn) {
-      closeSoundPopover();
-      return;
-    }
-    soundAnchorBtn = anchorBtn;
-    hubResetBtn.classList.toggle('hidden', anchorBtn !== hubMuteBtn);
-    hubMuteBtn.classList.toggle('is-open', anchorBtn === hubMuteBtn);
-    hudMuteBtn.classList.toggle('is-open', anchorBtn === hudMuteBtn);
-    soundPopover.classList.remove('hidden');
-    positionSoundPopover(anchorBtn);
-  }
-
-  // =========================================================================
-  // 6. BANNERS, RELIC TAROT LEVEL-UP ALTAR & RESULT MODAL
+  // 6. BANNERS, DAILY QUESTS DRAWER & MODALS CONTROLLER (js/ui/modals.js)
   // =========================================================================
   const weaponUnlockBanner = el('div', 'weapon-unlock-banner hidden');
   root.appendChild(weaponUnlockBanner);
@@ -2429,314 +1717,342 @@ export function createUIManager(initialCallbacks = {}) {
   root.appendChild(generalToast);
   let generalToastTimer = null;
 
-  // Spectacular "БЛАГОСЛОВЕНИЕ ДУШ" Tarot / Relic Altar Modal (ZERO Windows emojis!)
-  const levelUpModal = el('div', 'modal-backdrop levelup-backdrop hidden');
-  const levelUpPanel = el('div', 'modal-panel levelup-panel');
+  // Hub Daily Quests Gothic Drawer
+  const hubQuestsDrawer = el('div', 'hub-quests-drawer hidden');
+  const hubQuestsHeader = el('div', 'hub-quests-header');
+  const hubQuestsTitle = el('span', 'hub-quests-title', 'Ежедневные задания');
+  const hubQuestsCloseBtn = el('button', 'hub-quests-close', '✕');
+  hubQuestsCloseBtn.type = 'button';
+  hubQuestsCloseBtn.setAttribute('aria-label', 'Закрыть');
+  hubQuestsHeader.append(hubQuestsTitle, hubQuestsCloseBtn);
+  const hubQuestsList = el('div', 'hub-quests-list');
+  hubQuestsDrawer.append(hubQuestsHeader, hubQuestsList);
+  root.appendChild(hubQuestsDrawer);
 
-  const altarHeader = el('div', 'altar-header');
-  const altarMandalaWrap = el('div', 'altar-mandala-wrap');
-  altarMandalaWrap.appendChild(createMandalaSvg());
-
-  const altarSoulPill = el('div', 'altar-soul-pill');
-  const altarSoulGemSvg = makeSvgNode(
-    `<svg viewBox="0 0 18 18" width="14" height="14" fill="none" xmlns="http://www.w3.org/2000/svg"><polygon points="9,1.5 15.5,9 9,16.5 2.5,9" fill="#c084fc" stroke="#faf5ff" stroke-width="1.2"/></svg>`
-  );
-  const altarSoulLevelText = el('span', '', 'УРОВЕНЬ ДУШ II');
-  altarSoulPill.append(altarSoulGemSvg, altarSoulLevelText);
-
-  const levelUpTitle = el('h2', 'modal-title altar-title', 'БЛАГОСЛОВЕНИЕ ДУШ');
-  const levelUpSub = el('p', 'modal-subtitle altar-subtitle', 'Выберите древний дар для текущего похода');
-  altarHeader.append(altarMandalaWrap, altarSoulPill, levelUpTitle, levelUpSub);
-
-  const blessingCardsGrid = el('div', 'blessing-cards-grid');
-  levelUpPanel.append(altarHeader, blessingCardsGrid);
-  levelUpModal.appendChild(levelUpPanel);
-  root.appendChild(levelUpModal);
-
-  let activeLevelUpHandler = null;
-
-  // Result Modal (Ornate Gothic Victory / Defeat Plaque matching media_1794831700387_b993e413.jpg)
-  const resultModal = el('div', 'modal-backdrop result-modal-backdrop hidden');
-  const resultPanel = el('div', 'modal-panel result-panel');
-  for (const pos of ['tl', 'tr', 'bl', 'br']) {
-    resultPanel.appendChild(el('span', `gothic-card-clasp ${pos}`));
-  }
-  const resultCrest = el('div', 'result-crest');
-  const resultTitle = el('h2', 'modal-title result-main-title', 'Победа! Глава очищена!');
-
-  const resultRibbonWrap = el('div', 'result-chapter-ribbon');
-  const resultLevelName = el('span', 'result-chapter-ribbon-text', '');
-  resultRibbonWrap.appendChild(resultLevelName);
-
-  const resultStatsGrid = el('div', 'result-stats-grid');
-
-  const resGoldBox = el('div', 'result-stat-box');
-  const resGoldIcon = makeSvgNode(
-    `<svg viewBox="0 0 38 38" width="34" height="34" fill="none" class="result-stat-svg" xmlns="http://www.w3.org/2000/svg">
-      <ellipse cx="14" cy="28" rx="9" ry="4" fill="#d97706" stroke="#fde047" stroke-width="1.2"/>
-      <ellipse cx="14" cy="24" rx="9" ry="4" fill="#f59e0b" stroke="#fef08a" stroke-width="1.2"/>
-      <ellipse cx="14" cy="20" rx="9" ry="4" fill="#facc15" stroke="#fffbeb" stroke-width="1.2"/>
-      <ellipse cx="25" cy="29" rx="8.5" ry="3.8" fill="#b45309" stroke="#fde047" stroke-width="1.2"/>
-      <ellipse cx="25" cy="25.2" rx="8.5" ry="3.8" fill="#eab308" stroke="#fef08a" stroke-width="1.2"/>
-      <ellipse cx="19" cy="14" rx="8" ry="3.6" fill="#fde047" stroke="#ffffff" stroke-width="1.2"/>
-    </svg>`
-  );
-  const resGoldTextCol = el('div', 'result-stat-col');
-  const resGoldLabel = el('div', 'result-stat-label', 'Добыто золота');
-  const resGoldVal = el('div', 'result-stat-val', '+0');
-  resGoldTextCol.append(resGoldLabel, resGoldVal);
-  resGoldBox.append(resGoldIcon, resGoldTextCol);
-
-  const resKillsBox = el('div', 'result-stat-box');
-  const resKillsIcon = makeSvgNode(
-    `<svg viewBox="0 0 38 38" width="34" height="34" fill="none" class="result-stat-svg" xmlns="http://www.w3.org/2000/svg">
-      <path d="M19 6 C11.5 6 7 11.5 7 18.2 C7 22.8 9.2 25.8 12.2 27.6 V32 H25.8 V27.6 C28.8 25.8 31 22.8 31 18.2 C31 11.5 26.5 6 19 6 Z" fill="#e2e8f0" stroke="#94a3b8" stroke-width="1.4"/>
-      <circle cx="14.5" cy="18.8" r="3.1" fill="#3b0764"/>
-      <circle cx="23.5" cy="18.8" r="3.1" fill="#3b0764"/>
-      <polygon points="19,21.5 17.3,25 20.7,25" fill="#1e1b4b"/>
-      <line x1="15.5" y1="28" x2="15.5" y2="31.5" stroke="#475569" stroke-width="1.3"/>
-      <line x1="19" y1="28" x2="19" y2="31.5" stroke="#475569" stroke-width="1.3"/>
-      <line x1="22.5" y1="28" x2="22.5" y2="31.5" stroke="#475569" stroke-width="1.3"/>
-    </svg>`
-  );
-  const resKillsTextCol = el('div', 'result-stat-col');
-  const resKillsLabel = el('div', 'result-stat-label', 'Истреблено нежити');
-  const resKillsVal = el('div', 'result-stat-val', '0');
-  resKillsTextCol.append(resKillsLabel, resKillsVal);
-  resKillsBox.append(resKillsIcon, resKillsTextCol);
-
-  resultStatsGrid.append(resGoldBox, resKillsBox);
-  const resultUnlockedBox = el('div', 'result-unlocked-box hidden');
-  const resultActionsCol = el('div', 'result-actions-col');
-
-  const resultBottomSkull = el('div', 'result-bottom-skull');
-  resultBottomSkull.appendChild(
-    makeSvgNode(
-      `<svg viewBox="0 0 40 32" width="32" height="26" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M9 14 C3 10 3 4 7 2 C6 7 8 10 13 12 Z" fill="#d97706"/>
-        <path d="M31 14 C37 10 37 4 33 2 C34 7 32 10 27 12 Z" fill="#d97706"/>
-        <path d="M20 6 C14.5 6 11.5 10.2 11.5 15.5 C11.5 19.2 13.5 21.8 15.5 23.2 L17 29 H23 L24.5 23.2 C26.5 21.8 28.5 19.2 28.5 15.5 C28.5 10.2 25.5 6 20 6 Z" fill="#e5b85c" stroke="#fef08a" stroke-width="1.1"/>
-        <circle cx="16.8" cy="16" r="2.2" fill="#1c1917"/>
-        <circle cx="23.2" cy="16" r="2.2" fill="#1c1917"/>
-      </svg>`
-    )
-  );
-
-  resultPanel.append(
-    resultCrest,
-    resultTitle,
-    resultRibbonWrap,
-    resultStatsGrid,
-    resultUnlockedBox,
-    resultActionsCol,
-    resultBottomSkull
-  );
-  resultModal.appendChild(resultPanel);
-  root.appendChild(resultModal);
-
-  // =========================================================================
-  // MAGE STARTER ELEMENT MODAL & FULL PROGRESS RESET CONFIRMATION MODAL
-  // =========================================================================
-  const mageStarterModal = el('div', 'modal-backdrop mage-elem-backdrop hidden');
-  const mageStarterPanel = el('div', 'modal-panel mage-elem-modal-panel');
-  const mageStarterTopBar = el('div', 'mage-elem-modal-topbar');
-  const mageStarterPill = el('span', 'altar-soul-pill', '✦ ШКОЛА СТИХИЙ МАГА ✦');
-  const mageStarterCloseBtn = el('button', 'mage-elem-later-btn', '✕ Позже');
-  mageStarterCloseBtn.type = 'button';
-  mageStarterTopBar.append(mageStarterPill, mageStarterCloseBtn);
-
-  const mageStarterTitle = el('h2', 'modal-title mage-elem-modal-title', 'ВЫБЕРИ ПЕРВУЮ СТИХИЮ');
-  const mageStarterSub = el(
-    'p',
-    'modal-subtitle mage-elem-modal-sub',
-    'Первая стихия открывается бесплатно! Остальные 3 стихии можно будет изучить за золото и переключать в любой момент.'
-  );
-  const mageStarterGrid = el('div', 'mage-starter-grid');
-  mageStarterPanel.append(mageStarterTopBar, mageStarterTitle, mageStarterSub, mageStarterGrid);
-  mageStarterModal.appendChild(mageStarterPanel);
-  root.appendChild(mageStarterModal);
-
-  let pendingStartAfterStarterChoice = null;
-
-  function hideMageStarterModal() {
-    mageStarterModal.classList.add('hidden');
+  function closeQuestsDrawer() {
+    if (hubQuestsDrawer.classList.contains('hidden')) return;
+    hubQuestsDrawer.classList.add('hidden');
+    hubQuestsBtn.classList.remove('is-open');
   }
 
-  mageStarterCloseBtn.addEventListener('click', () => {
-    pendingStartAfterStarterChoice = null;
-    hideMageStarterModal();
+  function positionQuestsDrawer() {
+    const rect = hubQuestsBtn.getBoundingClientRect();
+    const w = Math.min(320, Math.max(256, window.innerWidth - 20));
+    const left = Math.max(10, Math.min(window.innerWidth - w - 10, rect.right - w));
+    const top = Math.max(10, Math.min(window.innerHeight - 280, rect.bottom + 8));
+    hubQuestsDrawer.style.left = `${Math.round(left)}px`;
+    hubQuestsDrawer.style.top = `${Math.round(top)}px`;
+  }
+
+  function toggleQuestsDrawer() {
+    if (!hubQuestsDrawer.classList.contains('hidden')) {
+      closeQuestsDrawer();
+      return;
+    }
+    closeSoundPopover();
+    hubQuestsDrawer.classList.remove('hidden');
+    hubQuestsBtn.classList.add('is-open');
+    positionQuestsDrawer();
+  }
+
+  hubQuestsBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleQuestsDrawer();
+  });
+  hubQuestsCloseBtn.addEventListener('click', closeQuestsDrawer);
+  window.addEventListener('pointerdown', (e) => {
+    if (hubQuestsDrawer.classList.contains('hidden')) return;
+    const t = e.target;
+    if (hubQuestsDrawer.contains(t) || hubQuestsBtn.contains(t)) return;
+    closeQuestsDrawer();
+  });
+  window.addEventListener('resize', () => {
+    if (!hubQuestsDrawer.classList.contains('hidden')) positionQuestsDrawer();
   });
 
-  function openMageStarterModal(autoStartLevel = null) {
-    closeSoundPopover();
-    pendingStartAfterStarterChoice = autoStartLevel;
-    mageStarterGrid.innerHTML = '';
+  function renderDailyQuests(questsRaw) {
+    const isEn = lang === 'en';
+    hubQuestsTitle.textContent = isEn ? 'Daily Quests' : 'Ежедневные задания';
+    hubQuestsLabel.textContent = isEn ? 'Quests' : 'Задания';
+    const list = Array.isArray(questsRaw) ? questsRaw : [];
+    hubQuestsList.innerHTML = '';
+    let hasClaimable = false;
+    if (list.length === 0) {
+      hubQuestsList.appendChild(el('div', 'hub-quests-empty', isEn ? 'New contracts arrive daily.' : 'Новые контракты обновляются каждый день.'));
+      hubQuestsDot.classList.add('hidden');
+      return;
+    }
+    for (let i = 0; i < list.length; i++) {
+      const q = list[i];
+      if (!q) continue;
+      const target = Math.max(1, Math.floor(Number(q.target) || 1));
+      const prog = Math.max(0, Math.min(target, Math.floor(Number(q.progress) || 0)));
+      const reward = Math.max(0, Math.floor(Number(q.rewardGold) || 0));
+      const claimed = Boolean(q.claimed);
+      const canClaim = !claimed && prog >= target;
+      if (canClaim) hasClaimable = true;
 
-    for (const elKey of MAGE_ELEMENT_ORDER) {
-      const eDef = MAGE_ELEMENTS[elKey];
-      if (!eDef) continue;
-      const card = el('button', `mage-starter-card elem-theme-${elKey}`);
-      card.type = 'button';
-      card.style.setProperty('--elem-color', hexNumToCss(eDef.color, '#c084fc'));
+      const item = el('div', `hub-quest-item${claimed ? ' is-claimed' : canClaim ? ' is-ready' : ''}`);
+      const topRow = el('div', 'hub-quest-top');
+      const titleEl = el('span', 'hub-quest-name', (isEn ? q.titleEn : q.titleRu) || q.titleRu || q.id || 'Задание');
+      const fracEl = el('span', 'hub-quest-frac', `${prog} / ${target}`);
+      topRow.append(titleEl, fracEl);
 
-      const head = el('div', 'mage-starter-card-head');
-      const iconSpan = el('span', 'mage-starter-icon', eDef.icon);
-      const freeBadge = el('span', 'mage-starter-free-tag', 'БЕСПЛАТНО');
-      head.append(iconSpan, freeBadge);
+      const barTrack = el('div', 'hub-quest-bar-track');
+      const barFill = el('div', 'hub-quest-bar-fill');
+      barFill.style.transform = `scaleX(${(prog / target).toFixed(3)})`;
+      barTrack.appendChild(barFill);
 
-      const nameEl = el('h3', 'mage-starter-name', eDef.nameRu);
-      const descEl = el('p', 'mage-starter-desc', eDef.descRu);
-      const ctaEl = el('div', 'mage-starter-cta', `Выбрать: ${eDef.shortRu}`);
+      const footRow = el('div', 'hub-quest-foot');
+      if (claimed) {
+        footRow.appendChild(el('span', 'hub-quest-claimed-tag', isEn ? 'Claimed ✓' : 'Получено ✓'));
+      } else if (canClaim) {
+        const claimBtn = el('button', 'hub-quest-claim-btn', isEn ? `Claim +${reward}g` : `Забрать +${reward} зол.`);
+        claimBtn.type = 'button';
+        claimBtn.addEventListener('click', () => {
+          claimBtn.disabled = true;
+          callbacks.onClaimDailyQuest?.(q.id);
+        });
+        footRow.appendChild(claimBtn);
+      } else {
+        footRow.appendChild(el('span', 'hub-quest-reward-tag', isEn ? `Reward: +${reward}g` : `Награда: +${reward} зол.`));
+      }
+      item.append(topRow, barTrack, footRow);
+      hubQuestsList.appendChild(item);
+    }
+    hubQuestsDot.classList.toggle('hidden', !hasClaimable);
+  }
 
-      card.append(head, nameEl, descEl, ctaEl);
-      card.addEventListener('click', () => {
-        const launchLvl = pendingStartAfterStarterChoice;
-        pendingStartAfterStarterChoice = null;
-        hideMageStarterModal();
-        callbacks.onSelectMageElement?.(elKey);
-        if (launchLvl !== null) {
-          (callbacks.onStartRun || callbacks.onStartGame || callbacks.onPlay)?.({
-            classId: 'mage',
-            weaponId: currentEquippedWeaponId,
-            level: launchLvl
-          });
-        }
-      });
-      mageStarterGrid.appendChild(card);
+  const modals = createModalsController({
+    root,
+    hubMuteBtn,
+    hudMuteBtn,
+    hubResetBtn,
+    autoAimBtn,
+    attackToggleBtn,
+    touchPreviewBtn,
+    getLang: () => lang,
+    getCallbacks: () => callbacks,
+    getHudSoulLevel: () => hudCache.soulLevel,
+    getCurrentEquippedWeaponId: () => currentEquippedWeaponId,
+    getAudioState: () => ({ muted, volume, lastNonZeroVolume, musicVolume }),
+    setAudioState: (patch) => {
+      if (patch.muted !== undefined) muted = Boolean(patch.muted);
+      if (patch.volume !== undefined) volume = patch.volume;
+      if (patch.lastNonZeroVolume !== undefined) lastNonZeroVolume = patch.lastNonZeroVolume;
+      if (patch.musicVolume !== undefined) musicVolume = patch.musicVolume;
+    },
+    syncPauseToggles: () => {
+      syncAutoAimButton();
+      syncAttackToggleButton();
+      syncTouchPreviewButton();
+    },
+    setActiveTab: (tab) => setActiveTab(tab),
+    resetLocalSelection: () => resetLocalSelection(),
+    onCloseOtherPopovers: closeQuestsDrawer
+  });
+  const {
+    closeSoundPopover,
+    syncMuteButtons,
+    showLevelUpModal,
+    hideLevelUpModal,
+    showResultModal,
+    hideResultModal,
+    openMageStarterModal,
+    hidePauseModal,
+    showPauseModal,
+    isPauseModalOpen
+  } = modals;
+
+  // =========================================================================
+  // 6b. CHAPTER-1 20-SECOND NON-BLOCKING ONBOARDING CONTROLLER
+  // =========================================================================
+  const ONBOARDING_DURATION_MS = 20000;
+  let onboardingDone = false;
+  let onboardingActive = false;
+  let onboardingSessionDismissed = false;
+  let onboardingStep = 0; // 0: move, 1: dash, 2: attack/ult
+  let onboardingElapsedMs = 0;
+  let onboardingLastTickMs = 0;
+  let onboardingOriginPos = null;
+  let onboardingStartKills = 0;
+  let onboardingStep3DoneAt = 0;
+  let onboardingActionFlags = { move: false, dash: false, combat: false };
+
+  function renderOnboardingStep() {
+    const isEn = lang === 'en';
+    const isTouch = !touchLayer.classList.contains('hidden') || isTouchCapable;
+    onboardingSkipBtn.textContent = isEn ? 'Skip' : 'Пропустить';
+    for (let i = 0; i < onboardingDots.length; i++) {
+      onboardingDots[i].classList.toggle('is-done', i < onboardingStep || onboardingStep3DoneAt > 0);
+      onboardingDots[i].classList.toggle('is-current', i === onboardingStep && onboardingStep3DoneAt === 0);
+    }
+    if (onboardingStep3DoneAt > 0) {
+      onboardingText.textContent = isEn ? 'Ready for the hunt!' : 'Готов к охоте!';
+      return;
+    }
+    if (onboardingStep === 0) {
+      onboardingText.textContent = isTouch
+        ? (isEn ? '1/3 Move: drag left half of screen' : '1/3 Движение: левый стик на экране')
+        : (isEn ? '1/3 Move: WASD or Arrow keys' : '1/3 Движение: клавиши WASD');
+    } else if (onboardingStep === 1) {
+      onboardingText.textContent = isTouch
+        ? (isEn ? '2/3 Dash: tap DASH to dodge red zones' : '2/3 Рывок: жми «РЫВОК» — уходи от красных зон')
+        : (isEn ? '2/3 Dash: press [Space] to dodge red zones' : '2/3 Рывок: [Space] — уходи от красных зон');
+    } else {
+      onboardingText.textContent = isTouch
+        ? (isEn ? '3/3 Combat: auto-attack + tap ULT at 5 seals' : '3/3 Бой: автоатака + «УЛЬТА» при 5 печатях')
+        : (isEn ? '3/3 Combat: [LMB] strike • [F] Ult at 5 seals' : '3/3 Удар [ЛКМ] • Ульта [F] при 5 печатях');
+    }
+  }
+
+  function hideOnboardingBar() {
+    onboardingActive = false;
+    onboardingBar.classList.add('hidden');
+    onboardingBar.classList.remove('is-complete');
+  }
+
+  function finishOnboarding() {
+    if (!onboardingDone) {
+      onboardingDone = true;
+      callbacks.onCompleteOnboarding?.();
+    }
+    onboardingSessionDismissed = true;
+    hideOnboardingBar();
+  }
+
+  function setOnboardingDone(done) {
+    onboardingDone = Boolean(done);
+    if (onboardingDone) {
+      onboardingSessionDismissed = true;
+      hideOnboardingBar();
+    }
+  }
+
+  function startOnboarding(levelNumber = 1, isEndlessRun = false) {
+    if (onboardingDone || isEndlessRun || Number(levelNumber) !== 1) {
+      hideOnboardingBar();
+      return;
+    }
+    onboardingSessionDismissed = false;
+    onboardingActive = true;
+    onboardingStep = 0;
+    onboardingElapsedMs = 0;
+    onboardingLastTickMs = performance.now();
+    onboardingOriginPos = null;
+    onboardingStartKills = 0;
+    onboardingStep3DoneAt = 0;
+    onboardingActionFlags = { move: false, dash: false, combat: false };
+    onboardingTimerFill.style.transform = 'scaleX(1)';
+    onboardingBar.classList.remove('hidden', 'is-complete');
+    renderOnboardingStep();
+  }
+
+  onboardingSkipBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    finishOnboarding();
+  });
+
+  window.addEventListener('keydown', (e) => {
+    if (!onboardingActive || hudScreen.classList.contains('hidden')) return;
+    if (e.code === 'KeyW' || e.code === 'KeyA' || e.code === 'KeyS' || e.code === 'KeyD' || e.code.startsWith('Arrow')) {
+      onboardingActionFlags.move = true;
+    } else if (e.code === 'Space') {
+      onboardingActionFlags.dash = true;
+    } else if (e.code === 'KeyF') {
+      onboardingActionFlags.combat = true;
+    }
+  });
+
+  window.addEventListener('pointerdown', (e) => {
+    if (!onboardingActive || hudScreen.classList.contains('hidden')) return;
+    if (e.pointerType !== 'touch' && e.button === 0 && onboardingStep === 2) {
+      if (!e.target?.closest?.('.hud-onboarding-bar, button, .modal-backdrop:not(.hidden)')) {
+        onboardingActionFlags.combat = true;
+      }
+    }
+  });
+
+  function updateOnboarding(snapshot) {
+    if (snapshot?.onboardingDone) {
+      onboardingDone = true;
+    }
+    const lvlNum = Number(snapshot?.levelNumber ?? snapshot?.level ?? 1);
+    const isEnd = Boolean(snapshot?.isEndless);
+    if (onboardingDone || isEnd || lvlNum !== 1) {
+      if (onboardingActive) hideOnboardingBar();
+      return;
+    }
+    if (!onboardingActive) {
+      if (!onboardingSessionDismissed) {
+        startOnboarding(lvlNum, isEnd);
+      } else {
+        return;
+      }
     }
 
-    mageStarterModal.classList.remove('hidden');
-  }
+    const now = performance.now();
+    if (modals.isPauseModalOpen() || modals.isRunModalOpen()) {
+      onboardingLastTickMs = now;
+      return;
+    }
+    const deltaMs = Math.max(0, Math.min(250, now - (onboardingLastTickMs || now)));
+    onboardingLastTickMs = now;
+    onboardingElapsedMs += deltaMs;
 
-  // Full Reset Progress Confirmation Modal (Mobile & Desktop)
-  const resetConfirmModal = el('div', 'modal-backdrop reset-confirm-backdrop hidden');
-  const resetConfirmPanel = el('div', 'modal-panel reset-confirm-panel');
-  const resetConfirmIcon = el('div', 'reset-confirm-icon', '🔄');
-  const resetConfirmTitle = el('h2', 'modal-title reset-confirm-title', 'Сбросить весь прогресс?');
-  const resetConfirmSub = el(
-    'p',
-    'modal-subtitle reset-confirm-sub',
-    'Все пройденные главы, золото, открытое оружие, таланты и выбранные стихии мага вернутся к начальному состоянию (Глава I, 0 золота), как при первом заходе в игру.'
-  );
-  const resetConfirmActions = el('div', 'reset-confirm-actions');
-  const resetConfirmYesBtn = el('button', 'result-btn btn-confirm-reset', '🔥 Сбросить всё до нуля');
-  resetConfirmYesBtn.type = 'button';
-  const resetConfirmNoBtn = el('button', 'result-btn btn-retry', 'Отмена');
-  resetConfirmNoBtn.type = 'button';
-  resetConfirmActions.append(resetConfirmYesBtn, resetConfirmNoBtn);
-  resetConfirmPanel.append(resetConfirmIcon, resetConfirmTitle, resetConfirmSub, resetConfirmActions);
-  resetConfirmModal.appendChild(resetConfirmPanel);
-  root.appendChild(resetConfirmModal);
+    const remRatio = Math.max(0, Math.min(1, 1 - onboardingElapsedMs / ONBOARDING_DURATION_MS));
+    onboardingTimerFill.style.transform = `scaleX(${remRatio.toFixed(3)})`;
 
-  function hideResetConfirmModal() {
-    resetConfirmModal.classList.add('hidden');
-  }
+    if (onboardingElapsedMs >= ONBOARDING_DURATION_MS) {
+      finishOnboarding();
+      return;
+    }
 
-  hubResetBtn.addEventListener('click', () => {
-    closeSoundPopover();
-    resetConfirmModal.classList.remove('hidden');
-  });
+    const pPos = snapshot?.playerPos ?? snapshot?.player?.pos ?? null;
+    if (!onboardingOriginPos && pPos && typeof pPos.x === 'number' && typeof pPos.z === 'number') {
+      onboardingOriginPos = { x: pPos.x, z: pPos.z };
+      onboardingStartKills = Math.floor(Number(snapshot?.kills || 0));
+    }
 
-  resetConfirmNoBtn.addEventListener('click', () => {
-    hideResetConfirmModal();
-  });
-
-  resetConfirmModal.addEventListener('click', (e) => {
-    if (e.target === resetConfirmModal) hideResetConfirmModal();
-  });
-
-  // In-Game Pause Modal (⏸ Button or Escape Key)
-  const pauseModal = el('div', 'modal-backdrop pause-modal-backdrop hidden');
-  const pausePanel = el('div', 'modal-panel pause-modal-panel');
-  const pauseTitle = el('h2', 'modal-title pause-modal-title', '⏸ ПАУЗА');
-  const pauseSub = el('p', 'modal-subtitle pause-modal-sub', 'Охота приостановлена');
-  const pauseActions = el('div', 'result-actions-col pause-actions-col');
-
-  const pauseResumeBtn = el('button', 'result-btn btn-arsenal-primary', '▶ Продолжить бой');
-  pauseResumeBtn.type = 'button';
-  const pauseRestartBtn = el('button', 'result-btn btn-retry', '🔄 Начать главу заново');
-  pauseRestartBtn.type = 'button';
-  const pauseExitBtn = el('button', 'result-btn btn-confirm-reset', '🏕️ Выйти в главное меню');
-  pauseExitBtn.type = 'button';
-
-  pauseActions.append(pauseResumeBtn, pauseRestartBtn, pauseExitBtn);
-  pausePanel.append(pauseTitle, pauseSub, pauseActions);
-  pauseModal.appendChild(pausePanel);
-  root.appendChild(pauseModal);
-
-  let activePauseHandlers = {};
-
-  function hidePauseModal() {
-    pauseModal.classList.add('hidden');
-    activePauseHandlers = {};
-  }
-
-  function showPauseModal(info = {}, handlers = {}) {
-    closeSoundPopover();
-    activePauseHandlers = handlers || {};
-    const chName = info.levelNameRu || `Глава ${info.level || 1}`;
-    const phaseStr = info.phaseText || '';
-    const goldEarned = Math.floor(Number(info.goldRun) || 0);
-    pauseSub.textContent = `${chName}${phaseStr ? ` • ${phaseStr}` : ''} • Добыто: +${goldEarned} зол.`;
-    pauseModal.classList.remove('hidden');
-  }
-
-  pauseResumeBtn.addEventListener('click', () => {
-    const fn = activePauseHandlers.onResume;
-    hidePauseModal();
-    fn?.();
-  });
-
-  pauseRestartBtn.addEventListener('click', () => {
-    const fn = activePauseHandlers.onRestart;
-    hidePauseModal();
-    fn?.();
-  });
-
-  pauseExitBtn.addEventListener('click', () => {
-    const fn = activePauseHandlers.onExit;
-    hidePauseModal();
-    setActiveTab('home');
-    fn?.();
-  });
-
-  // =========================================================================
-  // INTERACTIVE SOUND, HUD & HUB TAB HANDLERS
-  // =========================================================================
-  function syncMuteButtons() {
-    const effectiveVol = muted ? 0 : volume;
-    const effectiveMusic = muted ? 0 : musicVolume;
-    const anyAudio = effectiveVol > 0.001 || effectiveMusic > 0.001;
-    const icon = !anyAudio ? '🔇' : effectiveVol < 0.45 ? '🔉' : '🔊';
-    hudMuteBtn.textContent = icon;
-    hubMuteBtn.classList.toggle('is-muted-gear', !anyAudio);
-
-    const mPct = Math.round(effectiveMusic * 100);
-    musicPopTitle.textContent = lang === 'en' ? '🎵 Music' : '🎵 Музыка';
-    musicPopVal.textContent = muted ? (lang === 'en' ? 'Muted' : 'Выкл') : `${mPct}%`;
-    musicSlider.value = String(mPct);
-    musicSlider.style.setProperty('--vol-pct', `${mPct}%`);
-
-    const pct = Math.round(effectiveVol * 100);
-    soundPopTitle.textContent = lang === 'en' ? '🔫 Shots & SFX' : '🔫 Выстрелы и эффекты';
-    soundPopVal.textContent = muted ? (lang === 'en' ? 'Muted' : 'Выкл') : `${pct}%`;
-    soundSlider.value = String(pct);
-    soundSlider.style.setProperty('--vol-pct', `${pct}%`);
-
-    soundMuteToggleBtn.classList.toggle('is-muted', muted || !anyAudio);
-    if (muted || !anyAudio) {
-      soundMuteToggleBtn.textContent = lang === 'en' ? '🔊 Unmute Audio' : '🔊 Включить звук';
-    } else {
-      soundMuteToggleBtn.textContent = lang === 'en' ? '🔇 Mute Audio' : '🔇 Выключить звук';
+    if (onboardingStep === 0) {
+      const movedDist =
+        onboardingOriginPos && pPos
+          ? Math.hypot((pPos.x || 0) - onboardingOriginPos.x, (pPos.z || 0) - onboardingOriginPos.z)
+          : 0;
+      if (movedDist > 1.15 || touchState.moveActive || onboardingActionFlags.move) {
+        onboardingStep = 1;
+        renderOnboardingStep();
+      }
+    } else if (onboardingStep === 1) {
+      if (Number(snapshot?.dashCooldown || 0) > 0.05 || touchState.dash || onboardingActionFlags.dash) {
+        onboardingStep = 2;
+        onboardingStartKills = Math.floor(Number(snapshot?.kills || 0));
+        renderOnboardingStep();
+      }
+    } else if (onboardingStep === 2) {
+      if (onboardingStep3DoneAt === 0) {
+        const curKills = Math.floor(Number(snapshot?.kills || 0));
+        const beastUsed = Boolean(snapshot?.beastActive || Number(snapshot?.beastTimeLeft || 0) > 0);
+        if (curKills > onboardingStartKills || beastUsed || touchState.ult || onboardingActionFlags.combat) {
+          onboardingStep3DoneAt = now;
+          onboardingBar.classList.add('is-complete');
+          renderOnboardingStep();
+        }
+      } else if (now - onboardingStep3DoneAt >= 900) {
+        finishOnboarding();
+      }
     }
   }
 
   function syncAutoAimButton() {
     autoAimBtn.classList.toggle('is-on', autoAim);
+    autoAimBtn.classList.toggle('is-off', !autoAim);
     if (lang === 'en') {
-      autoAimBtn.textContent = `Auto-Aim: ${autoAim ? 'ON' : 'OFF'} [Q]`;
+      autoAimToggle.labelEl.textContent = 'Auto-Aim [Q]';
+      autoAimToggle.pillEl.textContent = autoAim ? 'ON' : 'OFF';
     } else {
-      autoAimBtn.textContent = `Автоприцел: ${autoAim ? 'ВКЛ' : 'ВЫКЛ'} [Q]`;
+      autoAimToggle.labelEl.textContent = 'Автоприцел [Q]';
+      autoAimToggle.pillEl.textContent = autoAim ? 'ВКЛ' : 'ВЫКЛ';
     }
   }
 
@@ -2744,9 +2060,24 @@ export function createUIManager(initialCallbacks = {}) {
     attackToggleBtn.classList.toggle('is-on', attackEnabled);
     attackToggleBtn.classList.toggle('is-off', !attackEnabled);
     if (lang === 'en') {
-      attackToggleBtn.textContent = `Attack: ${attackEnabled ? 'ON' : 'OFF'} [E]`;
+      attackToggle.labelEl.textContent = 'Attack [E]';
+      attackToggle.pillEl.textContent = attackEnabled ? 'ON' : 'OFF';
     } else {
-      attackToggleBtn.textContent = `Атака: ${attackEnabled ? 'ВКЛ' : 'ВЫКЛ'} [E]`;
+      attackToggle.labelEl.textContent = 'Атака [E]';
+      attackToggle.pillEl.textContent = attackEnabled ? 'ВКЛ' : 'ВЫКЛ';
+    }
+  }
+
+  function syncTouchPreviewButton() {
+    const touchOn = !touchLayer.classList.contains('hidden');
+    touchPreviewBtn.classList.toggle('is-on', touchOn);
+    touchPreviewBtn.classList.toggle('is-off', !touchOn);
+    if (lang === 'en') {
+      touchPreviewToggle.labelEl.textContent = 'Touch Controls';
+      touchPreviewToggle.pillEl.textContent = touchOn ? 'ON' : 'OFF';
+    } else {
+      touchPreviewToggle.labelEl.textContent = 'Плавающий джойстик';
+      touchPreviewToggle.pillEl.textContent = touchOn ? 'ВКЛ' : 'ВЫКЛ';
     }
   }
 
@@ -2755,6 +2086,7 @@ export function createUIManager(initialCallbacks = {}) {
     hubTitle.textContent = isEn ? 'Level' : 'Уровень';
     hubGoldLabel.textContent = isEn ? 'Gold' : 'Золото';
     homeJourneyLabel.textContent = isEn ? 'EMBARK!' : 'В ПУТЬ!';
+    homeEndlessLabel.textContent = isEn ? 'ENDLESS HORDE' : 'БЕСКОНЕЧНАЯ ОРДА';
     homeRotateHint.textContent = isEn ? 'RMB — rotate hero' : 'ПКМ — повернуть героя';
 
     tabStoreLabel.textContent = isEn ? 'Shop' : 'Магазин';
@@ -2781,82 +2113,16 @@ export function createUIManager(initialCallbacks = {}) {
     rewardGoldBtn.textContent = isEn ? '🎁 +80 Gold (Video)' : '🎁 +80 золота (Видео)';
     hubResetBtn.textContent = isEn ? '🔄 Reset All Progress' : '🔄 Сбросить весь прогресс';
     leftCap.textContent = isEn ? 'MOVE' : 'ДВИЖЕНИЕ';
+    if (hudCache.dashReady) {
+      hudDashStateText.textContent = isEn ? 'DASH' : 'РЫВОК';
+      touchDashLabel.textContent = isEn ? 'DASH' : 'РЫВОК';
+    }
     syncMuteButtons();
     syncAutoAimButton();
     syncAttackToggleButton();
+    syncTouchPreviewButton();
   }
 
-  const handleToggleMute = () => {
-    const nextMuted = !(muted || volume <= 0.001);
-    if (!nextMuted && volume <= 0.001) {
-      volume = lastNonZeroVolume > 0.05 ? lastNonZeroVolume : 0.8;
-      callbacks.onVolumeChange?.(volume);
-    }
-    const res = callbacks.onToggleMute?.(nextMuted);
-    muted = typeof res === 'boolean' ? res : nextMuted;
-    syncMuteButtons();
-  };
-
-  hudMuteBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    toggleSoundPopover(hudMuteBtn);
-  });
-
-  hubMuteBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    toggleSoundPopover(hubMuteBtn);
-  });
-
-  hudMuteBtn.addEventListener('contextmenu', (e) => {
-    e.preventDefault();
-    handleToggleMute();
-  });
-  hubMuteBtn.addEventListener('contextmenu', (e) => {
-    e.preventDefault();
-    handleToggleMute();
-  });
-
-  soundMuteToggleBtn.addEventListener('click', handleToggleMute);
-
-  musicSlider.addEventListener('input', () => {
-    const pct = Math.max(0, Math.min(100, Number(musicSlider.value) || 0));
-    musicVolume = pct / 100;
-    if (musicVolume > 0.01 && muted) {
-      muted = false;
-      const mRes = callbacks.onToggleMute?.(false);
-      if (typeof mRes === 'boolean') muted = mRes;
-    }
-    callbacks.onMusicVolumeChange?.(musicVolume);
-    syncMuteButtons();
-  });
-
-  soundSlider.addEventListener('input', () => {
-    const pct = Math.max(0, Math.min(100, Number(soundSlider.value) || 0));
-    volume = pct / 100;
-    if (volume > 0.01) {
-      lastNonZeroVolume = volume;
-      if (muted) {
-        muted = false;
-        const mRes = callbacks.onToggleMute?.(false);
-        if (typeof mRes === 'boolean') muted = mRes;
-      }
-    }
-    callbacks.onVolumeChange?.(volume);
-    syncMuteButtons();
-  });
-
-  window.addEventListener('pointerdown', (e) => {
-    if (soundPopover.classList.contains('hidden')) return;
-    const t = e.target;
-    if (soundPopover.contains(t) || hubMuteBtn.contains(t) || hudMuteBtn.contains(t)) return;
-    closeSoundPopover();
-  });
-
-  window.addEventListener('resize', () => {
-    if (!soundPopover.classList.contains('hidden') && soundAnchorBtn) {
-      positionSoundPopover(soundAnchorBtn);
-    }
-  });
 
   function normalizeTabId(tabId) {
     if (tabId === 'home' || tabId === 'main') return 'home';
@@ -2871,6 +2137,7 @@ export function createUIManager(initialCallbacks = {}) {
 
   function setActiveTab(tabId) {
     closeSoundPopover();
+    closeQuestsDrawer();
     const norm = normalizeTabId(tabId);
     const isCampaign = norm === 'campaign_world' || norm === 'campaign_forest';
     if (norm === 'campaign_forest') {
@@ -2899,6 +2166,10 @@ export function createUIManager(initialCallbacks = {}) {
     hubScreen.classList.toggle('is-campaign-map', valid === 'campaign');
     hubScreen.classList.toggle('is-talent-fullscreen', valid === 'shop');
     hubScreen.scrollTop = 0;
+
+    if (valid !== 'shop') {
+      activeHoldCancel?.();
+    }
 
     if (valid === 'campaign') {
       campaignWorldView.classList.toggle('hidden', campaignSubView !== 'world');
@@ -3075,12 +2346,6 @@ export function createUIManager(initialCallbacks = {}) {
     setActiveTab('home');
   }
 
-  resetConfirmYesBtn.addEventListener('click', () => {
-    hideResetConfirmModal();
-    resetLocalSelection();
-    callbacks.onResetProgress?.();
-  });
-
   function selectHeroClass(nextClassId) {
     if (!CLASSES[nextClassId] || nextClassId === localSelectedClass) return;
     localSelectedClass = nextClassId;
@@ -3132,6 +2397,7 @@ export function createUIManager(initialCallbacks = {}) {
 
   function triggerStartRun(explicitLevel = null) {
     closeSoundPopover();
+    closeQuestsDrawer();
     const chosenLvl = explicitLevel || localSelectedLevel;
     if (localSelectedClass === 'mage' && !isMageStarterChosen()) {
       openMageStarterModal(chosenLvl);
@@ -3144,7 +2410,21 @@ export function createUIManager(initialCallbacks = {}) {
     });
   }
 
+  function triggerStartEndless() {
+    closeSoundPopover();
+    closeQuestsDrawer();
+    if (localSelectedClass === 'mage' && !isMageStarterChosen()) {
+      openMageStarterModal('__endless__');
+      return;
+    }
+    callbacks.onStartEndless?.({
+      classId: localSelectedClass,
+      weaponId: currentEquippedWeaponId
+    });
+  }
+
   homeJourneyBtn.addEventListener('click', () => setActiveTab('campaign_world'));
+  homeEndlessBtn.addEventListener('click', () => triggerStartEndless());
   launchBattleBtn.addEventListener('click', () => triggerStartRun(localSelectedLevel));
   arsenalQuickPlayBtn.addEventListener('click', () => triggerStartRun(localSelectedLevel));
   shopQuickPlayBtn.addEventListener('click', () => triggerStartRun(localSelectedLevel));
@@ -3162,49 +2442,20 @@ export function createUIManager(initialCallbacks = {}) {
     setActiveTab('arsenal');
   });
 
-  // Keyboard shortcuts: Level-Up [1/2/3], Hub Heroes/Campaign [ArrowLeft/ArrowRight], Sound [Escape]
+  // Keyboard shortcuts: Level-Up [1/2/3], Hub Heroes/Campaign [ArrowLeft/ArrowRight], Popovers/Modals [Escape]
   window.addEventListener('keydown', (e) => {
-    if (!soundPopover.classList.contains('hidden') && e.code === 'Escape') {
-      closeSoundPopover();
+    if (!hubQuestsDrawer.classList.contains('hidden') && e.code === 'Escape') {
+      closeQuestsDrawer();
       return;
     }
-
-    if (activeLevelUpHandler && !levelUpModal.classList.contains('hidden')) {
-      if (e.code === 'Digit1' || e.code === 'Numpad1' || e.key === '1') {
-        e.preventDefault();
-        activeLevelUpHandler(0);
-      } else if (e.code === 'Digit2' || e.code === 'Numpad2' || e.key === '2') {
-        e.preventDefault();
-        activeLevelUpHandler(1);
-      } else if (e.code === 'Digit3' || e.code === 'Numpad3' || e.key === '3') {
-        e.preventDefault();
-        activeLevelUpHandler(2);
-      }
-      return;
-    }
-
-    if (!mageStarterModal.classList.contains('hidden')) {
-      if (e.code === 'Escape') {
-        e.preventDefault();
-        pendingStartAfterStarterChoice = null;
-        hideMageStarterModal();
-      }
-      return;
-    }
-
-    if (!resetConfirmModal.classList.contains('hidden')) {
-      if (e.code === 'Escape') {
-        e.preventDefault();
-        hideResetConfirmModal();
-      }
+    if (modals.handleKeydown(e)) {
       return;
     }
 
     if (
       !e.repeat &&
       !hubScreen.classList.contains('hidden') &&
-      levelUpModal.classList.contains('hidden') &&
-      resultModal.classList.contains('hidden')
+      !modals.isRunModalOpen()
     ) {
       if (activeHubTab === 'home' || activeHubTab === 'heroes') {
         if (e.code === 'ArrowLeft') {
@@ -3286,6 +2537,23 @@ export function createUIManager(initialCallbacks = {}) {
     hubAvatarLvlBadge.textContent = String(heroLvl);
     const lvlFillPct = Math.max(8, Math.min(100, Math.round((heroXp / heroXpNext) * 100)));
     hubLevelFill.style.width = `${lvlFillPct}%`;
+
+    const bestEndKills = Math.max(0, Math.floor(Number(state.bestEndlessKills || 0)));
+    const bestEndSec = Math.max(0, Math.floor(Number(state.bestEndlessTimeSec || 0)));
+    if (bestEndKills > 0 || bestEndSec > 0) {
+      homeEndlessRecord.textContent = isEn
+        ? `Best: ${bestEndKills} kills • ${formatTimeMMSS(bestEndSec)}`
+        : `Рекорд: ${bestEndKills} уб. • ${formatTimeMMSS(bestEndSec)}`;
+    } else {
+      homeEndlessRecord.textContent = isEn
+        ? 'Survival • Leaderboard'
+        : 'Выживание • Таблица лидеров';
+    }
+
+    if (typeof state.onboardingDone === 'boolean') {
+      setOnboardingDone(state.onboardingDone);
+    }
+    renderDailyQuests(state.dailyQuests);
 
     const explicitLevelLock =
       state.maxUnlockedLevel !== undefined ||
@@ -3787,6 +3055,7 @@ export function createUIManager(initialCallbacks = {}) {
       talentCamState.zoom = 0.72;
     }
 
+    activeHoldCancel?.();
     masteryGrid.innerHTML = '';
     masteryGrid.className = 'mastery-grid talent-fs-body talent-tree-shell';
 
@@ -3994,7 +3263,6 @@ export function createUIManager(initialCallbacks = {}) {
 
       // Build Beveled Gothic Medallion Nodes + LMB Hold Progress Rings
       const HOLD_DURATION_MS = 500;
-      let activeHoldCancel = null;
 
       for (const node of classTree) {
         const pos = getPos(node);
@@ -4047,7 +3315,10 @@ export function createUIManager(initialCallbacks = {}) {
           nodeBtn.classList.add('is-charging');
 
           const cleanupHold = () => {
-            if (rafId) cancelAnimationFrame(rafId);
+            if (rafId) {
+              cancelAnimationFrame(rafId);
+              rafId = 0;
+            }
             nodeBtn.classList.remove('is-charging');
             if (ringFill) ringFill.setAttribute('stroke-dashoffset', String(RING_CIRC));
             window.removeEventListener('pointerup', onAbort);
@@ -4170,6 +3441,10 @@ export function createUIManager(initialCallbacks = {}) {
     bossName: '',
     bossNums: '',
     bossScale: -1,
+    bossStaggerVisible: false,
+    bossStaggered: false,
+    bossStaggerScale: -1,
+    bossStaggerLabel: '',
     levelTitle: '',
     timerStr: '',
     relicVisible: false,
@@ -4191,7 +3466,19 @@ export function createUIManager(initialCallbacks = {}) {
     perkSig: '',
     soulLevel: -1,
     xpNums: '',
-    xpScale: -1
+    xpScale: -1,
+    dashReady: true,
+    dashQuant: 1000,
+    dashText: '',
+    ultState: '',
+    ultQuant: -1,
+    ultText: '',
+    ultTouchText: '',
+    isEndless: false,
+    endlessText: '',
+    comboStep: 0,
+    comboVisible: false,
+    comboQuant: -1
   };
 
   function updateHud(snapshot) {
@@ -4222,9 +3509,13 @@ export function createUIManager(initialCallbacks = {}) {
       armorPill.textContent = `Блок ${blockPct}%`;
     }
 
-    // 2. Beast Seals vs Active Beast Mode Bar
+    // 2. Beast Seals vs Manual Beast Rage Ult [F] vs Active Beast Mode Bar
     const beastTimer = Number(snapshot.beastTimer ?? snapshot.beastTimeLeft ?? 0);
     const isBeast = Boolean(snapshot.beastActive || snapshot.isBeastMode || beastTimer > 0);
+    const bMax = Math.max(0.1, Number(snapshot.beastDuration ?? snapshot.beastMaxTimer ?? 10));
+    const bRatio = isBeast ? Math.max(0, Math.min(1, beastTimer / bMax)) : 0;
+    const seals = Math.max(0, Math.min(5, Number(snapshot.beastSeals ?? snapshot.seals ?? snapshot.clovers ?? 0)));
+    const beastReady = Boolean(snapshot.beastReady ?? (!isBeast && seals >= 5));
 
     if (isBeast !== hudCache.beastActive) {
       hudCache.beastActive = isBeast;
@@ -4233,8 +3524,6 @@ export function createUIManager(initialCallbacks = {}) {
     }
 
     if (isBeast) {
-      const bMax = Math.max(0.1, Number(snapshot.beastDuration ?? snapshot.beastMaxTimer ?? 10));
-      const bRatio = Math.max(0, Math.min(1, beastTimer / bMax));
       const bQuant = Math.round(bRatio * 500);
       if (bQuant !== hudCache.beastScale) {
         hudCache.beastScale = bQuant;
@@ -4246,13 +3535,54 @@ export function createUIManager(initialCallbacks = {}) {
         beastBarTimer.textContent = bTimeStr;
       }
     } else {
-      const seals = Math.max(0, Math.min(5, Number(snapshot.beastSeals ?? snapshot.seals ?? snapshot.clovers ?? 0)));
       if (seals !== hudCache.sealsCount) {
         hudCache.sealsCount = seals;
         for (let i = 0; i < 5; i++) {
           sealSlotNodes[i].classList.toggle('filled', i < seals);
         }
       }
+    }
+
+    // Sync Bottom HUD Ult [F] & Right-Thumb Touch Ult Button
+    const ultStateKey = isBeast ? 'active' : beastReady ? 'ready' : 'charging';
+    const ultRatio = isBeast ? bRatio : (beastReady ? 1 : seals / 5);
+    const ultQuant = Math.round(ultRatio * 500);
+    if (ultStateKey !== hudCache.ultState) {
+      hudCache.ultState = ultStateKey;
+      hudUltBtn.classList.toggle('is-active', isBeast);
+      hudUltBtn.classList.toggle('is-ready', !isBeast && beastReady);
+      hudUltBtn.classList.toggle('is-charging', !isBeast && !beastReady);
+      touchUltBtn.classList.toggle('is-active', isBeast);
+      touchUltBtn.classList.toggle('is-ready', !isBeast && beastReady);
+      touchUltBtn.classList.toggle('is-charging', !isBeast && !beastReady);
+    }
+    if (ultQuant !== hudCache.ultQuant) {
+      hudCache.ultQuant = ultQuant;
+      if (hudUltRingFill) {
+        hudUltRingFill.setAttribute('stroke-dashoffset', (HUD_ULT_RING_CIRC * (1 - ultRatio)).toFixed(2));
+      }
+      if (touchUltRingFill) {
+        touchUltRingFill.setAttribute('stroke-dashoffset', (TOUCH_ULT_RING_CIRC * (1 - ultRatio)).toFixed(2));
+      }
+      hudUltBarFill.style.transform = `scaleX(${ultRatio.toFixed(3)})`;
+    }
+    const ultDesktopStr = isBeast
+      ? `${Math.max(0, beastTimer).toFixed(1)}${lang === 'en' ? 's' : 'с'}`
+      : beastReady
+        ? (lang === 'en' ? 'RAGE!' : 'ЯРОСТЬ!')
+        : `${lang === 'en' ? 'BEAST' : 'ЗВЕРЬ'} ${seals}/5`;
+    if (ultDesktopStr !== hudCache.ultText) {
+      hudCache.ultText = ultDesktopStr;
+      hudUltStateText.textContent = ultDesktopStr;
+    }
+    const ultTouchStr = isBeast
+      ? `${Math.max(0, beastTimer).toFixed(1)}${lang === 'en' ? 's' : 'с'}`
+      : beastReady
+        ? (lang === 'en' ? 'ULT!' : 'УЛЬТА')
+        : `${seals}/5`;
+    if (ultTouchStr !== hudCache.ultTouchText) {
+      hudCache.ultTouchText = ultTouchStr;
+      touchUltLabel.textContent = ultTouchStr;
     }
 
     // 3. Companion Active Badge
@@ -4270,15 +3600,31 @@ export function createUIManager(initialCallbacks = {}) {
       }
     }
 
-    // 4. Boss Bar vs Wave Countdown Timer
+    // 4. Boss Bar vs Wave Countdown Timer / Endless Survival Wave Badge
+    const isEndlessHud = Boolean(snapshot.isEndless);
     const boss = snapshot.boss;
     const bossHp = Number(boss?.hp ?? snapshot.bossHp ?? 0);
     const isBossActive = Boolean((boss && boss.active !== false && bossHp > 0) || snapshot.bossActive);
 
+    if (isEndlessHud !== hudCache.isEndless) {
+      hudCache.isEndless = isEndlessHud;
+      hudEndlessBadge.classList.toggle('hidden', !isEndlessHud);
+      waveBox.classList.toggle('hidden', isEndlessHud || isBossActive);
+    }
+    if (isEndlessHud) {
+      const endWave = Math.max(1, Math.floor(Number(snapshot.endlessWave ?? 1)));
+      const endSec = Math.max(0, Math.floor(Number(snapshot.elapsedSec ?? snapshot.elapsedTime ?? 0)));
+      const endStr = `${lang === 'en' ? 'Wave' : 'Волна'} ${endWave} • ${formatTimeMMSS(endSec)}`;
+      if (endStr !== hudCache.endlessText) {
+        hudCache.endlessText = endStr;
+        hudEndlessText.textContent = endStr;
+      }
+    }
+
     if (isBossActive !== hudCache.bossActive) {
       hudCache.bossActive = isBossActive;
       bossBarBox.classList.toggle('hidden', !isBossActive);
-      waveBox.classList.toggle('hidden', isBossActive);
+      waveBox.classList.toggle('hidden', isEndlessHud || isBossActive);
     }
 
     if (isBossActive) {
@@ -4300,7 +3646,48 @@ export function createUIManager(initialCallbacks = {}) {
         hudCache.bossScale = bQuant;
         bossBarFill.style.transform = `scaleX(${bScale.toFixed(3)})`;
       }
+
+      const staggerMax = Number(boss?.staggerMax ?? snapshot.bossStaggerMax ?? 0);
+      const hasStagger = Number.isFinite(staggerMax) && staggerMax > 0;
+      const isStaggered = hasStagger && Boolean(boss?.staggered ?? snapshot.bossStaggered);
+      if (hasStagger !== hudCache.bossStaggerVisible) {
+        hudCache.bossStaggerVisible = hasStagger;
+        bossStaggerWrap.classList.toggle('hidden', !hasStagger);
+      }
+      if (isStaggered !== hudCache.bossStaggered) {
+        hudCache.bossStaggered = isStaggered;
+        bossStaggerWrap.classList.toggle('is-staggered', isStaggered);
+        bossBarBox.classList.toggle('is-staggered', isStaggered);
+      }
+      if (hasStagger) {
+        const rawStagger = Math.max(0, Number(boss?.stagger ?? snapshot.bossStagger ?? 0));
+        const sRatio =
+          isStaggered && rawStagger <= 0.001
+            ? 1
+            : Math.max(0, Math.min(1, rawStagger / staggerMax));
+        const sQuant = Math.round(sRatio * 500);
+        if (sQuant !== hudCache.bossStaggerScale) {
+          hudCache.bossStaggerScale = sQuant;
+          bossStaggerFill.style.transform = `scaleX(${sRatio.toFixed(3)})`;
+        }
+        const sLabel = isStaggered
+          ? (lang === 'en' ? 'STAGGERED (+35% DMG)' : 'ОГЛУШЁН (+35% УРОНА)')
+          : (lang === 'en' ? 'STAGGER' : 'ОГЛУШЕНИЕ');
+        if (sLabel !== hudCache.bossStaggerLabel) {
+          hudCache.bossStaggerLabel = sLabel;
+          bossStaggerBadge.textContent = sLabel;
+        }
+      }
     } else {
+      if (hudCache.bossStaggerVisible) {
+        hudCache.bossStaggerVisible = false;
+        bossStaggerWrap.classList.add('hidden');
+      }
+      if (hudCache.bossStaggered) {
+        hudCache.bossStaggered = false;
+        bossStaggerWrap.classList.remove('is-staggered');
+        bossBarBox.classList.remove('is-staggered');
+      }
       const lvlNum = Number(snapshot.level ?? snapshot.levelNumber ?? 1);
       const lTitle =
         snapshot.levelNameRu ||
@@ -4519,6 +3906,68 @@ export function createUIManager(initialCallbacks = {}) {
       }
     }
 
+    // 7b. Active Dash [Space] Cooldown Indicator (Desktop HUD + Touch Right-Thumb Button)
+    const dashCdMax = Math.max(0.1, Number(snapshot.dashCooldownMax ?? 2.4));
+    const dashCd = Math.max(0, Number(snapshot.dashCooldown ?? 0));
+    const dashReady = dashCd <= 0.02;
+    const dashRatio = dashReady ? 1 : Math.max(0, Math.min(1, 1 - dashCd / dashCdMax));
+    const dashQuant = Math.round(dashRatio * 500);
+    if (dashReady !== hudCache.dashReady) {
+      hudCache.dashReady = dashReady;
+      hudDashBtn.classList.toggle('is-ready', dashReady);
+      hudDashBtn.classList.toggle('is-cooling', !dashReady);
+      touchDashBtn.classList.toggle('is-ready', dashReady);
+      touchDashBtn.classList.toggle('is-cooling', !dashReady);
+    }
+    if (dashQuant !== hudCache.dashQuant) {
+      hudCache.dashQuant = dashQuant;
+      if (hudDashRingFill) {
+        hudDashRingFill.setAttribute('stroke-dashoffset', (HUD_DASH_RING_CIRC * (1 - dashRatio)).toFixed(2));
+      }
+      if (touchDashRingFill) {
+        touchDashRingFill.setAttribute('stroke-dashoffset', (TOUCH_DASH_RING_CIRC * (1 - dashRatio)).toFixed(2));
+      }
+      hudDashBarFill.style.transform = `scaleX(${dashRatio.toFixed(3)})`;
+    }
+    const dashLabelStr = dashReady
+      ? (lang === 'en' ? 'DASH' : 'РЫВОК')
+      : `${dashCd.toFixed(1)}${lang === 'en' ? 's' : 'с'}`;
+    if (dashLabelStr !== hudCache.dashText) {
+      hudCache.dashText = dashLabelStr;
+      hudDashStateText.textContent = dashLabelStr;
+      touchDashLabel.textContent = dashLabelStr;
+    }
+
+    // 7c. Warrior 3-Hit Combo Indicator (×2 / ×3)
+    const comboStep = Math.max(0, Math.floor(Number(snapshot.comboStep ?? 0)));
+    const comboTimer = Math.max(0, Number(snapshot.comboTimer ?? 0));
+    const comboVisible = comboStep >= 2 && (snapshot.comboTimer === undefined || comboTimer > 0.01);
+    if (comboVisible !== hudCache.comboVisible) {
+      hudCache.comboVisible = comboVisible;
+      hudComboBadge.classList.toggle('hidden', !comboVisible);
+    }
+    if (comboVisible) {
+      if (comboStep !== hudCache.comboStep) {
+        hudCache.comboStep = comboStep;
+        const isFinisher = comboStep >= 3;
+        hudComboBadge.classList.toggle('is-finisher', isFinisher);
+        hudComboText.textContent = isFinisher
+          ? (lang === 'en' ? 'COMBO ×3' : 'КОМБО ×3')
+          : (lang === 'en' ? 'COMBO ×2' : 'КОМБО ×2');
+        hudComboBadge.classList.remove('is-pop');
+        void hudComboBadge.offsetWidth;
+        hudComboBadge.classList.add('is-pop');
+      }
+      const cRatio = snapshot.comboTimer === undefined ? 1 : Math.max(0, Math.min(1, comboTimer / 1.35));
+      const cQuant = Math.round(cRatio * 200);
+      if (cQuant !== hudCache.comboQuant) {
+        hudCache.comboQuant = cQuant;
+        hudComboBarFill.style.transform = `scaleX(${cRatio.toFixed(3)})`;
+      }
+    } else if (hudCache.comboStep !== 0) {
+      hudCache.comboStep = 0;
+    }
+
     // 8. Collected Blessing Mini-Badges above XP Bar
     const perkEntries = normalizeActivePerks(snapshot.activePerks ?? snapshot.perks);
     const perkSig = perkEntries.map(([id, st]) => `${id}:${st}`).join('|');
@@ -4542,15 +3991,38 @@ export function createUIManager(initialCallbacks = {}) {
       }
     }
 
-    // 9. Soul XP Bar
-    const soulLvl = Math.max(1, Number(snapshot.soulLevel ?? snapshot.xpLevel ?? snapshot.runLevel ?? snapshot.playerLevel ?? 1));
+    // 9. Soul XP Bar (prefer in-run roguelike perk XP when present so bar matches 3-card blessing level-ups)
+    const hasRunXp = typeof snapshot.runXpNext === 'number' && snapshot.runXpNext > 0;
+    const soulLvl = Math.max(
+      1,
+      Number(
+        (hasRunXp ? snapshot.runPerkLevel : null) ??
+          snapshot.soulLevel ??
+          snapshot.xpLevel ??
+          snapshot.runLevel ??
+          snapshot.playerLevel ??
+          1
+      )
+    );
     if (soulLvl !== hudCache.soulLevel) {
       hudCache.soulLevel = soulLvl;
-      soulXpTitle.textContent = `Уровень душ ${soulLvl}`;
+      soulXpTitle.textContent = lang === 'en' ? `Soul Level ${soulLvl}` : `Уровень душ ${soulLvl}`;
     }
 
-    const xp = Math.floor(Number(snapshot.xp ?? snapshot.souls ?? 0));
-    const xpNext = Math.max(1, Math.floor(Number(snapshot.xpNext ?? snapshot.xpToNext ?? snapshot.maxXp ?? snapshot.nextLevelXp ?? 45)));
+    const xp = Math.floor(Number((hasRunXp ? snapshot.runXp : null) ?? snapshot.xp ?? snapshot.souls ?? 0));
+    const xpNext = Math.max(
+      1,
+      Math.floor(
+        Number(
+          (hasRunXp ? snapshot.runXpNext : null) ??
+            snapshot.xpNext ??
+            snapshot.xpToNext ??
+            snapshot.maxXp ??
+            snapshot.nextLevelXp ??
+            45
+        )
+      )
+    );
     const xpNumsStr = `${xp} / ${xpNext}`;
     if (xpNumsStr !== hudCache.xpNums) {
       hudCache.xpNums = xpNumsStr;
@@ -4558,7 +4030,7 @@ export function createUIManager(initialCallbacks = {}) {
     }
 
     const xpRatio =
-      typeof snapshot.xpRatio === 'number'
+      !hasRunXp && typeof snapshot.xpRatio === 'number'
         ? Math.max(0, Math.min(1, snapshot.xpRatio))
         : Math.max(0, Math.min(1, xp / xpNext));
     const xpQuant = Math.round(xpRatio * 1000);
@@ -4566,120 +4038,9 @@ export function createUIManager(initialCallbacks = {}) {
       hudCache.xpScale = xpQuant;
       soulXpFill.style.transform = `scaleX(${xpRatio.toFixed(3)})`;
     }
-  }
 
-  // =========================================================================
-  // ANIMATED TAROT / RELIC ALTAR ("БЛАГОСЛОВЕНИЕ ДУШ") & RESULT MODAL
-  // =========================================================================
-  function hideLevelUpModal() {
-    levelUpModal.classList.add('hidden');
-    activeLevelUpHandler = null;
-  }
-
-  function showLevelUpModal(_choices = [], _onSelect) {
-    // "Благословение душ" combat modal permanently removed per user design.
-    hideLevelUpModal();
-  }
-
-  function _unusedLegacyShowLevelUpModal(choices = [], onSelect) {
-    closeSoundPopover();
-    const list = (Array.isArray(choices) && choices.length > 0 ? choices : RUN_UPGRADES.slice(0, 3)).slice(0, 3);
-    blessingCardsGrid.innerHTML = '';
-
-    const soulLvl = Number(list[0]?.soulLevel || hudCache.soulLevel || 2);
-    const romanSoul = RANK_ROMAN[soulLvl] || String(soulLvl);
-    altarSoulLevelText.textContent = lang === 'en' ? `SOUL LEVEL ${romanSoul}` : `УРОВЕНЬ ДУШ ${romanSoul}`;
-    levelUpTitle.textContent = lang === 'en' ? 'BLESSING OF SOULS' : 'БЛАГОСЛОВЕНИЕ ДУШ';
-    levelUpSub.textContent =
-      lang === 'en'
-        ? 'Choose one sacred relic to empower this hunt (Keys 1, 2, 3)'
-        : 'Выберите реликвию алтаря для текущего похода (клавиши 1, 2, 3)';
-
-    let picked = false;
-    const chooseIndex = (idx) => {
-      if (picked || idx < 0 || idx >= list.length) return;
-      picked = true;
-      const chosen = list[idx];
-      hideLevelUpModal();
-      onSelect?.(chosen, idx);
-    };
-
-    activeLevelUpHandler = chooseIndex;
-
-    list.forEach((choice, idx) => {
-      const isGoldWeapon = isWeaponHighlightChoice(choice);
-      const baseUpg = RUN_UPGRADES.find((u) => u.id === choice?.id);
-      const theme = isGoldWeapon ? 'gold' : choice?.theme || baseUpg?.theme || 'violet';
-
-      const nextRank = Math.max(1, Number(choice?.nextRank ?? choice?.rank ?? 1));
-      const maxStacks = Number(choice?.maxStacks ?? baseUpg?.maxStacks ?? 3);
-      const rankRoman = RANK_ROMAN[nextRank] || String(nextRank);
-      const maxRoman = RANK_ROMAN[maxStacks] || String(maxStacks);
-
-      const categoryStr = isGoldWeapon
-        ? choice?.categoryRu || 'МАСТЕРСТВО ОРУЖИЯ'
-        : choice?.categoryRu || baseUpg?.categoryRu || 'РЕЛИКВИЯ ДУШ';
-
-      const rankStr = isGoldWeapon ? `РАНГ ${rankRoman}` : `РАНГ ${rankRoman}/${maxRoman}`;
-
-      const statBadgeStr =
-        choice?.statBadgeRu ||
-        baseUpg?.statBadgeRu ||
-        (isGoldWeapon ? '+20% УРОН • +8% ОБЛАСТЬ' : 'УСИЛЕНИЕ ОХОТНИКА');
-
-      const card = el('button', `blessing-card tarot-relic-card${isGoldWeapon ? ' is-weapon-gold' : ''}`);
-      card.type = 'button';
-      card.dataset.theme = theme;
-      card.style.setProperty('--card-idx', String(idx));
-
-      for (const cPos of ['tl', 'tr', 'bl', 'br']) {
-        card.appendChild(el('span', `tarot-corner ${cPos}`));
-      }
-
-      const foilShimmer = el('span', 'blessing-foil-shimmer');
-      const topRibbon = el('div', 'blessing-top-ribbon');
-      const catSpan = el('span', 'blessing-cat-label', categoryStr);
-      const rankSpan = el('span', 'blessing-rank-label', rankStr);
-      topRibbon.append(catSpan, rankSpan);
-
-      const emblemStage = el('div', 'blessing-emblem-stage');
-      emblemStage.appendChild(createRuneHaloSvg());
-      // Subtle craggy dark-stone altar rocks flanking the base of the relic art (matches reference)
-      emblemStage.appendChild(
-        makeSvgNode(
-          `<svg viewBox="0 0 120 34" class="blessing-altar-rocks" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <polygon points="4,32 14,17 26,23 32,32" fill="rgba(18,14,28,0.88)" stroke="rgba(255,255,255,0.12)" stroke-width="0.8"/>
-            <polygon points="88,32 96,19 108,15 116,32" fill="rgba(18,14,28,0.88)" stroke="rgba(255,255,255,0.12)" stroke-width="0.8"/>
-            <ellipse cx="60" cy="31" rx="44" ry="3" fill="rgba(0,0,0,0.48)"/>
-          </svg>`
-        )
-      );
-      emblemStage.appendChild(createBlessingRelicSvg(choice, 'blessing-relic-svg'));
-
-      const nameEl = el('h3', 'blessing-name', choice?.nameRu || baseUpg?.nameRu || 'Дар Душ');
-
-      // Ornate pointed hexagonal stat plaque with left/right diamond rivets (matches reference!)
-      const statPill = el('div', 'blessing-stat-pill');
-      statPill.append(
-        el('span', 'stat-plaque-rivet left', '◆'),
-        el('span', 'stat-plaque-text', statBadgeStr),
-        el('span', 'stat-plaque-rivet right', '◆')
-      );
-
-      const descEl = el('p', 'blessing-desc', choice?.descRu || baseUpg?.descRu || '');
-
-      const ctaBar = el(
-        'div',
-        'blessing-cta-bar',
-        lang === 'en' ? `CLAIM RELIC [${idx + 1}]` : `ВЫБРАТЬ ДАР [${idx + 1}]`
-      );
-
-      card.append(foilShimmer, topRibbon, emblemStage, nameEl, statPill, descEl, ctaBar);
-      card.addEventListener('click', () => chooseIndex(idx));
-      blessingCardsGrid.appendChild(card);
-    });
-
-    levelUpModal.classList.remove('hidden');
+    // 10. Chapter-1 Non-Blocking 20s Onboarding Auto-Advance
+    updateOnboarding(snapshot);
   }
 
   function showWeaponUnlockBanner(weaponDefOrId) {
@@ -4713,165 +4074,6 @@ export function createUIManager(initialCallbacks = {}) {
     }, durationMs);
   }
 
-  function hideResultModal() {
-    resultModal.classList.add('hidden');
-  }
-
-  function showResultModal(
-    { victory = false, level = 1, goldEarned = 0, kills = 0, unlockedWeapon = null, canRevive = false, stars = 0, elapsedSec = 0 } = {},
-    actions = {}
-  ) {
-    closeSoundPopover();
-    resultPanel.classList.toggle('is-victory', Boolean(victory));
-    resultPanel.classList.toggle('is-defeat', !victory);
-
-    const lvlDef = LEVELS[(Number(level) || 1) - 1];
-    resultCrest.innerHTML = '';
-    if (victory) {
-      // Ornate Golden Crown + Laurel Wreath + Crimson Ribbon + Sunburst Crest (matches media_1794831700387_b993e413.jpg)
-      resultCrest.appendChild(
-        makeSvgNode(
-          `<svg viewBox="0 0 140 76" width="132" height="70" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <radialGradient id="vicSunGlow" cx="50%" cy="52%" r="50%">
-                <stop offset="0%" stop-color="#fef08a" stop-opacity="0.72"/>
-                <stop offset="55%" stop-color="#f59e0b" stop-opacity="0.28"/>
-                <stop offset="100%" stop-color="#f59e0b" stop-opacity="0"/>
-              </radialGradient>
-            </defs>
-            <circle cx="70" cy="40" r="36" fill="url(#vicSunGlow)"/>
-            <!-- Crimson Heraldic Ribbons -->
-            <path d="M18 56 L38 44 L48 60 L26 64 L24 58 Z" fill="#991b1b" stroke="#fca5a5" stroke-width="0.9"/>
-            <path d="M122 56 L102 44 L92 60 L114 64 L116 58 Z" fill="#991b1b" stroke="#fca5a5" stroke-width="0.9"/>
-            <!-- Golden Laurel Branches -->
-            <path d="M44 58 C33 50 30 34 38 22 C37 32 41 44 50 52 Z" fill="#eab308" stroke="#fef08a" stroke-width="1"/>
-            <path d="M96 58 C107 50 110 34 102 22 C103 32 99 44 90 52 Z" fill="#eab308" stroke="#fef08a" stroke-width="1"/>
-            <!-- Beveled Medallion Shield -->
-            <circle cx="70" cy="41" r="24" fill="#271838" stroke="#facc15" stroke-width="2.6"/>
-            <circle cx="70" cy="41" r="19.5" fill="rgba(234,179,8,0.16)" stroke="#fde047" stroke-width="1"/>
-            <!-- Royal Crown -->
-            <polygon points="54,48 57,30 64,37 70,24 76,37 83,30 86,48" fill="#facc15" stroke="#fffbeb" stroke-width="1.5" stroke-linejoin="round"/>
-            <rect x="55" y="50" width="30" height="4.2" rx="1.6" fill="#eab308"/>
-          </svg>`
-        )
-      );
-    } else {
-      resultCrest.appendChild(
-        makeSvgNode(
-          `<svg viewBox="0 0 120 72" width="114" height="66" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="60" cy="38" r="26" fill="#28111c" stroke="#ef4444" stroke-width="2.4"/>
-            <path d="M60 19 C50.5 19 45 25.5 45 33.5 C45 38.8 47.8 42.5 51.5 44.5 V50 H68.5 V44.5 C72.2 42.5 75 38.8 75 33.5 C75 25.5 69.5 19 60 19 Z" fill="#e2e8f0" stroke="#fca5a5" stroke-width="1.4"/>
-            <circle cx="54.5" cy="34" r="3.4" fill="#991b1b"/>
-            <circle cx="65.5" cy="34" r="3.4" fill="#991b1b"/>
-          </svg>`
-        )
-      );
-    }
-
-    const earnedStarsCount = victory ? Math.max(1, Math.min(3, Number(stars) || 1)) : 0;
-    const starDisplay = victory ? ` • ${'★'.repeat(earnedStarsCount)}${'☆'.repeat(3 - earnedStarsCount)}` : '';
-    resultTitle.textContent = victory ? `Победа! Глава очищена!${starDisplay}` : 'Охотник пал в бою';
-    resultLevelName.textContent = (lvlDef ? lvlDef.nameRu : `Глава ${level}`) + (elapsedSec > 0 ? ` • ${elapsedSec}с` : '');
-
-    let displayedGold = Math.max(0, Math.floor(Number(goldEarned) || 0));
-    resGoldVal.textContent = `+${displayedGold}`;
-    resKillsVal.textContent = `${Math.max(0, Math.floor(Number(kills) || 0))}`;
-
-    const wDef = typeof unlockedWeapon === 'string' ? WEAPONS[unlockedWeapon] : unlockedWeapon;
-    if (wDef && (wDef.nameRu || wDef.name)) {
-      resultUnlockedBox.innerHTML = '';
-      if (wDef.id) {
-        resultUnlockedBox.appendChild(createWeaponSvg(wDef.id, 'result-wpn-svg'));
-      }
-      resultUnlockedBox.appendChild(
-        el('span', '', `Открыто оружие: ${wDef.nameRu || wDef.name} (в Арсенале!)`)
-      );
-      resultUnlockedBox.classList.remove('hidden');
-    } else {
-      resultUnlockedBox.classList.add('hidden');
-    }
-
-    resultActionsCol.innerHTML = '';
-
-    if (!victory) {
-      if (canRevive) {
-        const reviveBtn = el('button', 'result-btn btn-revive', '🎬 Воскреснуть с полным HP (Видео)');
-        reviveBtn.type = 'button';
-        reviveBtn.addEventListener('click', async () => {
-          reviveBtn.disabled = true;
-          const ok = await (actions.onRevive || callbacks.onRevive)?.();
-          if (ok !== false) {
-            hideResultModal();
-          } else {
-            reviveBtn.disabled = false;
-          }
-        });
-        resultActionsCol.appendChild(reviveBtn);
-      }
-
-      const arsenalBtn = el('button', 'result-btn btn-arsenal-primary', '⚔️ В Лагерь • Арсенал');
-      arsenalBtn.type = 'button';
-      arsenalBtn.addEventListener('click', () => {
-        hideResultModal();
-        setActiveTab('arsenal');
-        (actions.onArsenal || actions.onGoToArsenal || actions.onHub || callbacks.onExitToHub)?.();
-      });
-      resultActionsCol.appendChild(arsenalBtn);
-
-      const retryBtn = el('button', 'result-btn btn-retry', '↻ Повторить главу');
-      retryBtn.type = 'button';
-      retryBtn.addEventListener('click', () => {
-        hideResultModal();
-        (actions.onRetry || actions.onRestart || callbacks.onRetry)?.();
-      });
-      resultActionsCol.appendChild(retryBtn);
-    } else {
-      if (displayedGold > 0) {
-        const doubleBtn = el('button', 'result-btn btn-double-gold', '🎬 Удвоить добычу ×2 (Видео)');
-        doubleBtn.type = 'button';
-        doubleBtn.addEventListener('click', async () => {
-          doubleBtn.disabled = true;
-          const res = await (actions.onDoubleGold || callbacks.onDoubleGold)?.();
-          if (res !== false) {
-            displayedGold *= 2;
-            resGoldVal.textContent = `+${displayedGold} (×2!)`;
-            doubleBtn.textContent = '✨ Добыча удвоена!';
-          } else {
-            doubleBtn.disabled = false;
-          }
-        });
-        resultActionsCol.appendChild(doubleBtn);
-      }
-
-      const nextArsenalBtn = el('button', 'result-btn btn-arsenal-primary', '🗺️ На карту похода • Далее');
-      nextArsenalBtn.type = 'button';
-      nextArsenalBtn.addEventListener('click', () => {
-        hideResultModal();
-        setActiveTab('campaign_forest');
-        (
-          actions.onNext ||
-          actions.onNextLevel ||
-          actions.onArsenal ||
-          actions.onGoToArsenal ||
-          actions.onHub ||
-          callbacks.onExitToHub
-        )?.();
-      });
-      resultActionsCol.appendChild(nextArsenalBtn);
-
-      if (actions.onRetry || actions.onRestart) {
-        const replayBtn = el('button', 'result-btn btn-retry', '↻ Повторить главу');
-        replayBtn.type = 'button';
-        replayBtn.addEventListener('click', () => {
-          hideResultModal();
-          (actions.onRetry || actions.onRestart)?.();
-        });
-        resultActionsCol.appendChild(replayBtn);
-      }
-    }
-
-    resultModal.classList.remove('hidden');
-  }
 
   lockedRosterSlot.addEventListener('click', () => {
     showToast('🔒 Тайный охотник пробудится в следующем обновлении!', 2200);
@@ -4934,15 +4136,15 @@ export function createUIManager(initialCallbacks = {}) {
     isHeroStageVisible() {
       return (
         !hubScreen.classList.contains('hidden') &&
-        (activeHubTab === 'home' || activeHubTab === 'heroes' || activeHubTab === 'arsenal') &&
-        mageStarterModal.classList.contains('hidden') &&
-        resetConfirmModal.classList.contains('hidden')
+        (activeHubTab === 'home' || activeHubTab === 'heroes' || activeHubTab === 'arsenal' || activeHubTab === 'store') &&
+        !modals.isStageBlockedByModal()
       );
     },
 
     setLang(nextLang) {
       lang = nextLang === 'en' ? 'en' : 'ru';
       syncStaticLabels();
+      if (onboardingActive) renderOnboardingStep();
       if (lastHubState) renderHub(lastHubState);
     },
 
@@ -4960,9 +4162,26 @@ export function createUIManager(initialCallbacks = {}) {
 
     showHub(visible = true) {
       closeSoundPopover();
+      closeQuestsDrawer();
       hubScreen.classList.toggle('hidden', !visible);
       if (visible) {
+        hideOnboardingBar();
         releaseLeftStick();
+        touchState.dash = false;
+        touchState.ult = false;
+        if (activeHubTab === 'campaign') {
+          if (campaignSubView === 'world') {
+            forestMapVideoLoop?.pause();
+            worldMapVideoLoop?.play();
+          } else {
+            worldMapVideoLoop?.pause();
+            forestMapVideoLoop?.play();
+          }
+        }
+      } else {
+        activeHoldCancel?.();
+        worldMapVideoLoop?.pause();
+        forestMapVideoLoop?.pause();
       }
     },
 
@@ -4970,14 +4189,21 @@ export function createUIManager(initialCallbacks = {}) {
 
     showHud(visible = true) {
       closeSoundPopover();
+      closeQuestsDrawer();
       hudScreen.classList.toggle('hidden', !visible);
       if (!visible) {
+        hideOnboardingBar();
         releaseLeftStick();
+        touchState.dash = false;
+        touchState.ult = false;
       } else if (isTouchCapable) {
         touchLayer.classList.remove('hidden');
         ensureAutoAimForTouch();
       }
     },
+
+    setOnboardingDone,
+    startOnboarding,
 
     setMutedState(isMuted) {
       muted = Boolean(isMuted);
@@ -5044,20 +4270,14 @@ export function createUIManager(initialCallbacks = {}) {
 
     showPauseModal,
     hidePauseModal,
-    isPauseModalOpen() {
-      return !pauseModal.classList.contains('hidden');
-    },
+    isPauseModalOpen,
 
     openMageStarterModal,
     resetLocalSelection,
 
     hideAllModals() {
-      closeSoundPopover();
-      hideLevelUpModal();
-      hideResultModal();
-      hidePauseModal();
-      hideMageStarterModal();
-      hideResetConfirmModal();
+      closeQuestsDrawer();
+      modals.hideAllModals();
     }
   };
 }

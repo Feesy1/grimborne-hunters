@@ -2,21 +2,15 @@
 // Arsenal Progression, Procedural Web Audio, Gothic UI, and Yandex Games SDK v2.
 
 import * as THREE from '../vendor/three.module.js';
-import { LEVELS, MAGE_ELEMENTS, WEAPONS } from './config.js?v=20261117z25';
-import { createArenaWorld } from './world.js?v=20261117z25';
-import * as models from './models.js?v=20261117z25';
-import { createProgressionStore } from './progression.js?v=20261117z25';
-import { createCombatController } from './combat.js?v=20261117z25';
-import { createAudioEngine } from './audio.js?v=20261117z25';
-import { initYandexSdk } from './yandexSdk.js?v=20261117z25';
-import { createUIManager } from './ui.js?v=20261117z25';
+import { LEVELS, MAGE_ELEMENTS, WEAPONS } from './config.js?v=20261120z35';
+import { createArenaWorld } from './world.js?v=20261120z35';
+import * as models from './models.js?v=20261120z40';
+import { createProgressionStore, mergeCloudState } from './progression.js?v=20261120z35';
+import { createCombatController } from './combat.js?v=20261120z38';
+import { createAudioEngine } from './audio.js?v=20261120z35';
+import { initYandexSdk } from './yandexSdk.js?v=20261120z35';
+import { createUIManager } from './ui.js?v=20261120z35';
 import { attachSeamlessLoop } from './ambientVideo.js?v=20261117z25';
-
-// Per-biome fixed viewpoints. Expand this map when new locations are added:
-// { yaw: radians around Y, pitch: radians above horizon, dist: camera distance }
-const LEVEL_CAMERA_PRESETS = {
-  misty_forest: { yaw: 0, pitch: 0.95, dist: 11 }
-};
 
 async function bootstrap() {
   const canvas = document.getElementById('game-canvas');
@@ -25,6 +19,7 @@ async function bootstrap() {
   let gameMode = 'hub'; // 'hub' | 'playing' | 'levelup' | 'result'
   let externalPaused = false;
   let activeRunLevel = 1;
+  let activeRunEndless = false;
   let usedReviveThisRun = false;
   let usedDoubleGoldThisRun = false;
 
@@ -42,12 +37,24 @@ async function bootstrap() {
     }
   });
 
-  // Load saved progression (or initialize clean state)
+  // Load local progression immediately, then non-destructively merge Yandex Cloud save
   const progression = createProgressionStore();
-  const savedData = await sdk.loadData(progression.getState());
-  if (savedData) {
-    progression.loadState(savedData);
+  const localSavedData = sdk.loadLocalData?.();
+  if (localSavedData) {
+    progression.loadState(localSavedData);
   }
+  const cloudSavedData = await sdk.loadCloudData?.();
+  if (cloudSavedData && typeof cloudSavedData === 'object' && Object.keys(cloudSavedData).length > 0) {
+    const mergedState = mergeCloudState(progression.getState(), cloudSavedData);
+    progression.loadState(mergedState);
+    sdk.saveData(progression.getState(), false);
+  } else if (localSavedData) {
+    sdk.saveCloudData?.(progression.getState(), false);
+  } else {
+    const legacyLoaded = await sdk.loadData(progression.getState());
+    if (legacyLoaded) progression.loadState(legacyLoaded);
+  }
+  progression.ensureDailyQuests?.();
   activeRunLevel = Math.min(LEVELS.length, Math.max(1, progression.getState().maxUnlockedLevel || 1));
 
   let lastSavedGold = progression.getState().gold;
@@ -109,13 +116,17 @@ async function bootstrap() {
 
   // 3D Hero & 3D Arsenal Weapon Preview in Hub Diorama + Interactive Right-Mouse-Button 360° Turntable
   const hubBgPlateEl = document.getElementById('hub-bg-plate');
+  if (hubBgPlateEl) {
+    hubBgPlateEl.style.transform = 'translate3d(0, 0, 0) scale(1.03)';
+  }
   const hubBgVideoEl = document.getElementById('hub-bg-video');
   const hubBgVideoLoop = attachSeamlessLoop(hubBgVideoEl, { fadeSec: 1.2 });
   if (hubBgVideoEl) {
     hubBgVideoEl.muted = true;
     hubBgVideoLoop?.play();
     document.addEventListener('pointerdown', () => {
-      if (gameMode === 'hub' && hubBgVideoEl.paused) {
+      const activeVideo = hubBgVideoLoop?.active || hubBgVideoEl;
+      if (gameMode === 'hub' && activeVideo?.paused) {
         hubBgVideoLoop?.play();
       }
     }, { passive: true });
@@ -245,6 +256,147 @@ async function bootstrap() {
   ui.setLang(sdk.getLang());
 
   // Initialize 3-Class Combat Controller
+  const handleLevelUpReady = (choices = []) => {
+    if (!Array.isArray(choices) || choices.length === 0) return;
+    if (gameMode !== 'playing' && gameMode !== 'levelup') return;
+    gameMode = 'levelup';
+    keysDown.clear();
+    pointerFiring = false;
+    pointerClickQueued = false;
+    dashRequested = false;
+    ultRequested = false;
+    sdk.GameplayAPI.stop();
+    ui.showLevelUpModal(choices, (perkOrId) => {
+      const perkId = typeof perkOrId === 'string' ? perkOrId : perkOrId?.id;
+      gameMode = 'playing';
+      audio.playLevelUp?.();
+      combat.applyLevelUpChoice?.(perkId);
+      if (gameMode === 'playing') {
+        ui.updateHud(combat.getHudSnapshot());
+        sdk.GameplayAPI.start();
+      }
+    });
+  };
+
+  const handleRunEnd = ({
+    victory,
+    level,
+    goldEarned,
+    kills,
+    unlockedWeapon,
+    hpRatio,
+    elapsedSec,
+    elapsedTime,
+    stars,
+    starDetails,
+    difficulty,
+    isEndless,
+    endlessWave
+  } = {}) => {
+    if (gameMode === 'result') return;
+    gameMode = 'result';
+    sdk.GameplayAPI.stop();
+    const endlessRun = Boolean(isEndless || activeRunEndless);
+    const runSec = Math.max(0, Math.round(Number(elapsedSec ?? elapsedTime ?? 0)));
+    if (endlessRun) {
+      const endlessScore = Math.max(0, Math.floor(Number(kills) || 0));
+      progression.recordEndlessRun?.(endlessScore, runSec);
+      if (typeof sdk.setLeaderboardScore === 'function') {
+        sdk.setLeaderboardScore('endless_kills', endlessScore);
+      } else if (endlessScore > 0 && typeof sdk.ysdk?.getLeaderboards === 'function') {
+        sdk.ysdk
+          .getLeaderboards()
+          .then((lb) => lb?.setLeaderboardScore?.('endless_kills', endlessScore))
+          .catch(() => {});
+      }
+    } else if (victory) {
+      progression.unlockNextLevel(level);
+      if (typeof stars === 'number') {
+        progression.recordLevelStars?.(level, stars);
+      }
+    }
+    persistSave(true);
+
+    const bestEndlessState = progression.getState();
+    let currentGoldEarned = goldEarned || 0;
+    const openResult = () => {
+      ui.showResultModal(
+        {
+          victory: endlessRun ? false : victory,
+          level,
+          goldEarned: currentGoldEarned,
+          kills,
+          unlockedWeapon,
+          hpRatio,
+          elapsedSec: runSec,
+          stars: !endlessRun && victory ? (stars ?? 1) : 0,
+          starDetails,
+          difficulty,
+          isEndless: endlessRun,
+          endlessWave: Math.max(1, Number(endlessWave) || 1),
+          bestEndlessKills: bestEndlessState.bestEndlessKills || 0,
+          bestEndlessTimeSec: bestEndlessState.bestEndlessTimeSec || 0,
+          canRevive: (!victory || endlessRun) && !usedReviveThisRun,
+          canDoubleGold: currentGoldEarned > 0 && !usedDoubleGoldThisRun
+        },
+        {
+          onRevive: async () => {
+            if (usedReviveThisRun) return false;
+            const rewarded = await sdk.showRewarded('revive_hunter');
+            if (rewarded) {
+              usedReviveThisRun = true;
+              ui.hideResultModal();
+              combat.revivePlayer();
+              gameMode = 'playing';
+              sdk.GameplayAPI.start();
+            }
+            return Boolean(rewarded);
+          },
+          onDoubleGold: async () => {
+            if (usedDoubleGoldThisRun || currentGoldEarned <= 0) return false;
+            const rewarded = await sdk.showRewarded('double_gold');
+            if (rewarded) {
+              usedDoubleGoldThisRun = true;
+              progression.addGold(currentGoldEarned);
+              currentGoldEarned *= 2;
+              persistSave();
+              ui.showToast(`Добыча удвоена! Итого: +${currentGoldEarned} золота`);
+              openResult();
+            }
+            return Boolean(rewarded);
+          },
+          onNext: async () => {
+            ui.hideResultModal();
+            await sdk.showInterstitial();
+            if (!endlessRun && victory) {
+              activeRunLevel = Math.min(LEVELS.length, (level || 1) + 1);
+            }
+            enterHub(endlessRun ? 'home' : 'campaign_forest');
+          },
+          onArsenal: async () => {
+            ui.hideResultModal();
+            await sdk.showInterstitial();
+            if (!endlessRun && victory) {
+              activeRunLevel = Math.min(LEVELS.length, (level || 1) + 1);
+            }
+            enterHub('arsenal');
+          },
+          onRetry: async () => {
+            ui.hideResultModal();
+            await sdk.showInterstitial();
+            if (endlessRun) {
+              startEndlessBattle(progression.getState().selectedClass);
+            } else {
+              startBattle(progression.getState().selectedClass, activeRunLevel);
+            }
+          }
+        }
+      );
+    };
+
+    openResult();
+  };
+
   const combat = createCombatController({
     world,
     models,
@@ -257,6 +409,9 @@ async function bootstrap() {
           ui.spawnFloatingText(text, pt.x, pt.y, color);
         }
       },
+      onToast: (msg, dur) => {
+        if (msg) ui.showToast(msg, dur);
+      },
       onWeaponUnlocked: (weaponDef) => {
         persistSave();
         if (weaponDef) {
@@ -266,89 +421,16 @@ async function bootstrap() {
       onHeroLevelUp: () => {
         persistSave();
       },
-      onRunEnd: ({ victory, level, goldEarned, kills, unlockedWeapon, hpRatio, elapsedSec, stars, starDetails, difficulty }) => {
-        gameMode = 'result';
-        sdk.GameplayAPI.stop();
-        if (victory) {
-          progression.unlockNextLevel(level);
-          if (typeof stars === 'number') {
-            progression.recordLevelStars?.(level, stars);
-          }
-        }
-        persistSave();
-
-        let currentGoldEarned = goldEarned || 0;
-        const openResult = () => {
-          ui.showResultModal(
-            {
-              victory,
-              level,
-              goldEarned: currentGoldEarned,
-              kills,
-              unlockedWeapon,
-              hpRatio,
-              elapsedSec,
-              stars: victory ? (stars ?? 1) : 0,
-              starDetails,
-              difficulty,
-              canRevive: !victory && !usedReviveThisRun,
-              canDoubleGold: currentGoldEarned > 0 && !usedDoubleGoldThisRun
-            },
-            {
-              onRevive: async () => {
-                if (usedReviveThisRun) return;
-                const rewarded = await sdk.showRewarded('revive_hunter');
-                if (rewarded) {
-                  usedReviveThisRun = true;
-                  ui.hideResultModal();
-                  combat.revivePlayer();
-                  gameMode = 'playing';
-                  sdk.GameplayAPI.start();
-                }
-              },
-              onDoubleGold: async () => {
-                if (usedDoubleGoldThisRun || currentGoldEarned <= 0) return;
-                const rewarded = await sdk.showRewarded('double_gold');
-                if (rewarded) {
-                  usedDoubleGoldThisRun = true;
-                  progression.addGold(currentGoldEarned);
-                  currentGoldEarned *= 2;
-                  persistSave();
-                  ui.showToast(`Добыча удвоена! Итого: +${currentGoldEarned} золота`);
-                  openResult();
-                }
-              },
-              onNext: async () => {
-                ui.hideResultModal();
-                await sdk.showInterstitial();
-                if (victory) {
-                  activeRunLevel = Math.min(LEVELS.length, (level || 1) + 1);
-                }
-                enterHub('campaign_forest');
-              },
-              onArsenal: async () => {
-                ui.hideResultModal();
-                await sdk.showInterstitial();
-                if (victory) {
-                  activeRunLevel = Math.min(LEVELS.length, (level || 1) + 1);
-                }
-                enterHub('campaign_forest');
-              },
-              onRetry: async () => {
-                ui.hideResultModal();
-                await sdk.showInterstitial();
-                startBattle(progression.getState().selectedClass, activeRunLevel);
-              }
-            }
-          );
-        };
-
-        openResult();
-      }
+      onLevelUpReady: handleLevelUpReady,
+      onLevelUp: handleLevelUpReady,
+      onRunEnd: handleRunEnd,
+      onBattleEnd: handleRunEnd
     }
   });
 
   let reloadRequested = false;
+  let dashRequested = false;
+  let ultRequested = false;
   let lastSyncedMusicMode = '';
   function syncMusicMode(nextMode) {
     if (nextMode !== lastSyncedMusicMode) {
@@ -359,8 +441,17 @@ async function bootstrap() {
 
   function enterHub(targetTab = null) {
     reloadRequested = false;
+    dashRequested = false;
+    ultRequested = false;
+    activeRunEndless = false;
+    pointerFiring = false;
+    pointerClickQueued = false;
+    rmbOrbitingCamera = false;
     combat.disposeRun();
-    if (hubBgPlateEl) hubBgPlateEl.classList.remove('hidden');
+    if (hubBgPlateEl) {
+      hubBgPlateEl.classList.remove('hidden');
+      hubBgPlateEl.style.transform = 'translate3d(0, 0, 0) scale(1.03)';
+    }
     if (hubBgVideoEl) {
       hubBgVideoEl.muted = true;
       hubBgVideoLoop?.play();
@@ -376,6 +467,8 @@ async function bootstrap() {
     if (targetTab) {
       ui.setActiveTab?.(targetTab);
     }
+    progression.ensureDailyQuests?.();
+    ui.setOnboardingDone?.(Boolean(progression.getState().onboardingDone));
     ui.renderHub(progression);
     ui.showHub(true);
     refreshHubDiorama();
@@ -386,6 +479,9 @@ async function bootstrap() {
       gameMode = 'paused';
       keysDown.clear();
       pointerFiring = false;
+      pointerClickQueued = false;
+      dashRequested = false;
+      ultRequested = false;
       syncMusicMode('hub');
       sdk.GameplayAPI.stop();
       const snap = combat.getHudSnapshot?.() || {};
@@ -399,7 +495,11 @@ async function bootstrap() {
         },
         onRestart: () => {
           persistSave();
-          startBattle(progression.getState().selectedClass, activeRunLevel);
+          if (activeRunEndless) {
+            startEndlessBattle(progression.getState().selectedClass);
+          } else {
+            startBattle(progression.getState().selectedClass, activeRunLevel);
+          }
         },
         onExit: () => {
           persistSave();
@@ -433,9 +533,15 @@ async function bootstrap() {
       }
     }
     activeRunLevel = chosenLevel;
+    activeRunEndless = false;
     usedReviveThisRun = false;
     usedDoubleGoldThisRun = false;
     reloadRequested = false;
+    dashRequested = false;
+    ultRequested = false;
+    pointerFiring = false;
+    pointerClickQueued = false;
+    rmbOrbitingCamera = false;
 
     clearHubDiorama();
     if (hubBgPlateEl) hubBgPlateEl.classList.add('hidden');
@@ -448,19 +554,75 @@ async function bootstrap() {
     ui.setAutoAimState(combat.getAutoAim());
     ui.setAttackEnabledState?.(true);
 
-    world.setArenaBiome?.(chosenLevel >= 6 ? 'misty_forest' : 'courtyard');
-    // Each chapter can define its own fixed camera angle. The Misty Forest
-    // uses the reference-art viewpoint and locks orbit/zoom so the ground
-    // image never distorts during normal play.
-    if (chosenLevel >= 6) {
-      world.setCameraPreset?.(LEVEL_CAMERA_PRESETS.misty_forest);
-      world.setCameraLock?.(true);
-    } else {
-      world.setCameraLock?.(false);
-    }
+    const battleBiome =
+      chosenLevel >= 21
+        ? 'ash_citadel'
+        : chosenLevel >= 16
+          ? 'frost_ruins'
+          : chosenLevel >= 6
+            ? 'misty_forest'
+            : 'courtyard';
+    world.setArenaBiome?.(battleBiome, chosenLevel);
+    // Standard free combat camera (RMB orbit + mouse-wheel zoom) across all chapters,
+    // including Misty Forest (chapter 6+).
+    world.setCameraLock?.(false);
     syncMusicMode('combat');
-    const difficultyMode = progression.getState().difficultyMode || 'normal';
+    const stBeforeRun = progression.getState();
+    const difficultyMode = stBeforeRun.difficultyMode || 'normal';
+    ui.setOnboardingDone?.(Boolean(stBeforeRun.onboardingDone));
     combat.startRun({ classId: chosenClass, levelNumber: chosenLevel, difficultyMode });
+    ui.updateHud(combat.getHudSnapshot());
+    if (chosenLevel === 1 && !stBeforeRun.onboardingDone) {
+      ui.startOnboarding?.(chosenLevel, false);
+    }
+    gameMode = 'playing';
+    sdk.GameplayAPI.start();
+  }
+
+  async function startEndlessBattle(classId) {
+    if (battleLaunchLock) return;
+    audio.unlock();
+    const chosenClass = classId || progression.getState().selectedClass || 'warrior';
+    const eqWpnId = progression.getEquippedWeaponId(chosenClass);
+    const endlessStageDef = LEVELS[LEVELS.length - 1] || LEVELS[0];
+    const missingKeys = models.getMissingStageModelKeys(chosenClass, eqWpnId, endlessStageDef);
+    if (missingKeys.length > 0) {
+      battleLaunchLock = true;
+      ui.showToast('⏳ Загружаем 3D-модели Бесконечной Орды…');
+      try {
+        await models.ensureModelKeysLoaded(missingKeys);
+      } finally {
+        battleLaunchLock = false;
+      }
+    }
+    activeRunEndless = true;
+    usedReviveThisRun = false;
+    usedDoubleGoldThisRun = false;
+    reloadRequested = false;
+    dashRequested = false;
+    ultRequested = false;
+    pointerFiring = false;
+    pointerClickQueued = false;
+    rmbOrbitingCamera = false;
+
+    clearHubDiorama();
+    if (hubBgPlateEl) hubBgPlateEl.classList.add('hidden');
+    hubBgVideoLoop?.pause();
+    world.setCameraMode?.('combat');
+    ui.hideAllModals();
+    ui.showHub(false);
+    ui.showHud(true);
+    combat.setAttackEnabled?.(true);
+    ui.setAutoAimState(combat.getAutoAim());
+    ui.setAttackEnabledState?.(true);
+
+    world.setArenaBiome?.('courtyard');
+    world.setCameraLock?.(false);
+    syncMusicMode('combat');
+    const stBeforeEndless = progression.getState();
+    const difficultyMode = stBeforeEndless.difficultyMode || 'normal';
+    ui.setOnboardingDone?.(Boolean(stBeforeEndless.onboardingDone));
+    combat.startRun({ classId: chosenClass, levelNumber: 1, difficultyMode, endless: true });
     ui.updateHud(combat.getHudSnapshot());
     gameMode = 'playing';
     sdk.GameplayAPI.start();
@@ -517,6 +679,7 @@ async function bootstrap() {
       activeRunLevel = 1;
       usedReviveThisRun = false;
       usedDoubleGoldThisRun = false;
+      ui.setOnboardingDone?.(false);
       ui.resetLocalSelection?.();
       enterHub();
       audio.playLevelUp();
@@ -615,6 +778,25 @@ async function bootstrap() {
         ui.showToast('+80 золота получено из сундука снабжения!');
       }
     },
+    onClaimDailyQuest: (questId) => {
+      audio.unlock();
+      const res = progression.claimDailyQuest?.(questId);
+      if (res?.ok) {
+        audio.playWeaponUnlock?.();
+        persistSave(true);
+        ui.renderHub(progression);
+        ui.showToast(`📜 Награда получена: +${res.rewardGold} золота!`);
+      } else if (res?.reason === 'already_claimed') {
+        ui.showToast('Награда за это задание уже получена!');
+      } else if (res?.reason === 'incomplete') {
+        ui.showToast('Задание ещё не выполнено');
+      }
+    },
+    onCompleteOnboarding: () => {
+      progression.completeOnboarding?.();
+      ui.setOnboardingDone?.(true);
+      persistSave(true);
+    },
     onSelectLevel: (levelNum) => {
       audio.unlock();
       const maxLvl = progression.getState().maxUnlockedLevel || 1;
@@ -630,6 +812,9 @@ async function bootstrap() {
     },
     onStartRun: ({ classId, level } = {}) => {
       startBattle(classId, level || activeRunLevel);
+    },
+    onStartEndless: ({ classId } = {}) => {
+      startEndlessBattle(classId);
     },
     onReload: () => {
       audio.unlock();
@@ -713,11 +898,24 @@ async function bootstrap() {
   let pointerClientX = window.innerWidth * 0.5;
   let pointerClientY = window.innerHeight * 0.5;
   let pointerFiring = false;
+  let pointerClickQueued = false;
   let pointerMovedRecently = 0;
+
+  const isDevEditorEnabled = () => {
+    try {
+      return window.location.search.includes('dev=1') || localStorage.getItem('grimborne_dev') === '1';
+    } catch {
+      return window.location.search.includes('dev=1');
+    }
+  };
 
   window.addEventListener('keydown', (e) => {
     if (e.code === 'KeyK' && !e.repeat) {
+      if (!isDevEditorEnabled() && !world.isWeaponEditMode?.()) return;
       world.setWeaponEditMode?.(!world.isWeaponEditMode?.());
+      return;
+    }
+    if (e.code === 'KeyG' && !isDevEditorEnabled()) {
       return;
     }
     if (world.isWeaponEditMode?.()) return;
@@ -727,6 +925,16 @@ async function bootstrap() {
       if (!moveKeys.includes(e.code)) return;
     }
     keysDown.add(e.code);
+    if (e.code === 'Space' && gameMode === 'playing' && !e.repeat) {
+      e.preventDefault();
+      audio.unlock();
+      dashRequested = true;
+    }
+    if (e.code === 'KeyF' && gameMode === 'playing' && !e.repeat) {
+      e.preventDefault();
+      audio.unlock();
+      ultRequested = true;
+    }
     if (e.code === 'KeyR' && gameMode === 'playing' && !e.repeat) {
       audio.unlock();
       combat.triggerReload?.();
@@ -757,7 +965,11 @@ async function bootstrap() {
   window.addEventListener('blur', () => {
     keysDown.clear();
     pointerFiring = false;
+    pointerClickQueued = false;
     reloadRequested = false;
+    dashRequested = false;
+    ultRequested = false;
+    rmbOrbitingCamera = false;
     rmbRotatingHero = false;
     touchRotatingHero = false;
     activeHeroTouchId = null;
@@ -900,31 +1112,48 @@ async function bootstrap() {
       lastCombatOrbitY = mapped.y;
       return;
     }
-    if (e.button === 0 && !world.isArenaEditMode?.()) {
+    if (e.button === 0 && gameMode === 'playing' && !world.isArenaEditMode?.() && !world.isWeaponEditMode?.()) {
       pointerClientX = e.clientX;
       pointerClientY = e.clientY;
       pointerFiring = true;
+      pointerClickQueued = true;
     }
   });
 
-  window.addEventListener('pointerup', (e) => {
+  const endCombatPointer = (e) => {
     if (e.pointerType === 'touch') return;
+    if (e.type === 'pointercancel') {
+      rmbOrbitingCamera = false;
+      pointerFiring = false;
+      return;
+    }
     if (e.button === 2) {
       rmbOrbitingCamera = false;
     }
     if (e.button === 0) {
       pointerFiring = false;
     }
-  });
+  };
+  window.addEventListener('pointerup', endCombatPointer);
+  window.addEventListener('pointercancel', endCombatPointer);
 
   function gatherInput(dt) {
+    const touch = ui.getTouchInput();
     if (world.isWeaponEditMode?.()) {
-      return { moveX: 0, moveZ: 0, aimWorldX: 0, aimWorldZ: 0, hasManualAim: false, firing: false, reload: false };
+      dashRequested = false;
+      ultRequested = false;
+      if (touch && touch.dash) touch.dash = false;
+      if (touch && touch.ult) touch.ult = false;
+      return { moveX: 0, moveZ: 0, aimWorldX: 0, aimWorldZ: 0, hasManualAim: false, firing: false, reload: false, dash: false, ult: false };
     }
     // While the arena editor is open, firing stays off. Hero movement (WASD)
     // can be enabled from the editor panel so you can reposition while building.
     if (world.isArenaEditMode?.() && !world.isArenaEditorHeroMovement?.()) {
-      return { moveX: 0, moveZ: 0, aimWorldX: 0, aimWorldZ: 0, hasManualAim: false, firing: false, reload: false };
+      dashRequested = false;
+      ultRequested = false;
+      if (touch && touch.dash) touch.dash = false;
+      if (touch && touch.ult) touch.ult = false;
+      return { moveX: 0, moveZ: 0, aimWorldX: 0, aimWorldZ: 0, hasManualAim: false, firing: false, reload: false, dash: false, ult: false };
     }
     let moveX = 0;
     let moveZ = 0;
@@ -934,7 +1163,6 @@ async function bootstrap() {
     if (keysDown.has('KeyA') || keysDown.has('ArrowLeft')) moveX -= 1;
     if (keysDown.has('KeyD') || keysDown.has('ArrowRight')) moveX += 1;
 
-    const touch = ui.getTouchInput();
     if (touch?.moveActive) {
       moveX = touch.moveX;
       moveZ = touch.moveZ;
@@ -948,15 +1176,15 @@ async function bootstrap() {
         moveX /= len;
         moveZ /= len;
       }
-      const camYaw = world.getCombatOrbitYaw?.() || 0;
-      if (Math.abs(camYaw) > 0.0001 && (moveX !== 0 || moveZ !== 0)) {
-        const cosY = Math.cos(camYaw);
-        const sinY = Math.sin(camYaw);
-        const rx = moveX * cosY + moveZ * sinY;
-        const rz = -moveX * sinY + moveZ * cosY;
-        moveX = rx;
-        moveZ = rz;
-      }
+    }
+    const camYaw = world.getCombatOrbitYaw?.() || 0;
+    if (Math.abs(camYaw) > 0.0001 && (moveX !== 0 || moveZ !== 0)) {
+      const cosY = Math.cos(camYaw);
+      const sinY = Math.sin(camYaw);
+      const rx = moveX * cosY + moveZ * sinY;
+      const rz = -moveX * sinY + moveZ * cosY;
+      moveX = rx;
+      moveZ = rz;
     }
 
     if (pointerMovedRecently > 0) {
@@ -967,19 +1195,30 @@ async function bootstrap() {
     let aimWorldZ = 0;
     let hasManualAim = false;
     let firing = false;
+    const explicitLmb = !touch?.moveActive && (pointerFiring || pointerClickQueued);
+    pointerClickQueued = false;
 
-    if (!touch?.moveActive && (pointerFiring || (!combat.getAutoAim() && pointerMovedRecently > 0))) {
+    if (!touch?.moveActive && (explicitLmb || (!combat.getAutoAim() && pointerMovedRecently > 0))) {
       const groundPt = world.getAimPointOnGround(pointerClientX, pointerClientY);
       if (groundPt) {
         aimWorldX = groundPt.x;
         aimWorldZ = groundPt.z;
         hasManualAim = true;
       }
-      firing = pointerFiring || !combat.getAutoAim();
+      firing = explicitLmb || !combat.getAutoAim();
     }
 
     const reload = reloadRequested;
     reloadRequested = false;
+    const touchDash = Boolean(touch?.dash);
+    if (touch && touch.dash) touch.dash = false;
+    const dash = dashRequested || touchDash;
+    dashRequested = false;
+    const touchUlt = Boolean(touch?.ult);
+    if (touch && touch.ult) touch.ult = false;
+    const ult = ultRequested || touchUlt;
+    ultRequested = false;
+    const sprint = keysDown.has('ShiftLeft') || keysDown.has('ShiftRight');
 
     return {
       moveX,
@@ -988,7 +1227,11 @@ async function bootstrap() {
       aimWorldZ,
       hasManualAim,
       firing,
-      reload
+      manualTrigger: explicitLmb,
+      sprint,
+      reload,
+      dash,
+      ult
     };
   }
 
@@ -1012,6 +1255,7 @@ async function bootstrap() {
     ui,
     enterHub,
     startBattle,
+    startEndlessBattle,
     // Walk the new arena with no enemies and no damage (layout testing).
     startFreeRoam: async (level = 6, classId = null) => {
       combat.setFreeRoam(true);
@@ -1028,13 +1272,34 @@ async function bootstrap() {
     }
   };
 
+  // Optional URL param for peaceful map walk-around without mobs: ?freeroam=6&class=warrior
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const frRaw = params.get('freeroam') ?? params.get('nomobs');
+    if (frRaw !== null && frRaw !== '0' && frRaw !== 'false') {
+      combat.setFreeRoam(true);
+      const parsedNum = Number(frRaw);
+      const levelParam = Number(params.get('level') || (parsedNum >= 1 && parsedNum <= 25 ? parsedNum : 6));
+      const targetLevel = Math.min(25, Math.max(1, Number.isFinite(levelParam) ? levelParam : 6));
+      const rawClass = (params.get('class') || '').trim().toLowerCase();
+      const targetClass = (rawClass === 'warrior' || rawClass === 'gunslinger' || rawClass === 'mage') ? rawClass : null;
+      if (targetClass) progression.selectClass?.(targetClass);
+      if (params.get('hub') !== '1') {
+        void window.__grimborne.startFreeRoam(targetLevel, targetClass);
+      }
+    }
+  } catch {}
+
   let lowFpsStreak = 0;
   let thermalLowSpecApplied = false;
 
   // === High-Refresh Render & Simulation Loop (Up to 120 FPS ProMotion / Desktop) ===
   const fpsBadgeEl = document.getElementById('fps-badge');
-  let hubParallaxX = 0;
-  let hubParallaxY = 0;
+  const showDevFps = isDevEditorEnabled();
+  if (fpsBadgeEl) {
+    fpsBadgeEl.classList.toggle('is-dev-visible', showDevFps);
+    fpsBadgeEl.classList.toggle('hidden', !showDevFps);
+  }
   let lastNow = performance.now();
   let elapsedTime = 0;
   let fpsAccumTime = 0;
@@ -1054,7 +1319,7 @@ async function bootstrap() {
       if (fpsAccumTime >= 0.25) {
         const instFps = fpsFrameCount / fpsAccumTime;
         smoothedFps = smoothedFps * 0.35 + instFps * 0.65;
-        if (fpsBadgeEl) {
+        if (fpsBadgeEl && showDevFps) {
           const shownFps = Math.min(120, Math.max(1, Math.round(smoothedFps)));
           fpsBadgeEl.textContent = `${shownFps} FPS`;
         }
@@ -1089,11 +1354,11 @@ async function bootstrap() {
       const input = gatherInput(dt);
       combat.update(dt, input, elapsedTime);
       hudSyncAccum = (hudSyncAccum || 0) + dt;
-      if (hudSyncAccum >= 0.05 || input.reload) {
+      if (hudSyncAccum >= 0.05 || input.reload || input.dash || input.ult) {
         hudSyncAccum = 0;
         const snap = combat.getHudSnapshot();
         ui.updateHud(snap);
-        syncMusicMode(snap?.finaleStarted ? 'boss' : 'combat');
+        syncMusicMode(snap?.finaleStarted || (snap?.isEndless && snap?.boss) ? 'boss' : 'combat');
       }
       autoSaveAccum += dt;
       if (autoSaveAccum >= 3.0) {
@@ -1124,19 +1389,6 @@ async function bootstrap() {
         }
         hubArsenalWeapon.root.rotation.y = hubHeroRotY;
         hubArsenalWeapon.update?.(dt, elapsedTime);
-      }
-      if (hubBgPlateEl) {
-        const vp = window.__getGameViewportSize?.();
-        const vw = Math.max(vp?.w || window.innerWidth, 1);
-        const vh = Math.max(vp?.h || window.innerHeight, 1);
-        const nx = Number.isFinite(pointerClientX) ? (pointerClientX / vw - 0.5) : 0;
-        const ny = Number.isFinite(pointerClientY) ? (pointerClientY / vh - 0.5) : 0;
-        const targetPx = -nx * 11.0 + Math.sin(elapsedTime * 0.45) * 2.2;
-        const targetPy = -ny * 6.5 + Math.cos(elapsedTime * 0.38) * 1.4;
-        const pLerp = 1 - Math.exp(-6.5 * dt);
-        hubParallaxX += (targetPx - hubParallaxX) * pLerp;
-        hubParallaxY += (targetPy - hubParallaxY) * pLerp;
-        hubBgPlateEl.style.transform = `translate3d(${hubParallaxX.toFixed(2)}px, ${hubParallaxY.toFixed(2)}px, 0) scale(1.035)`;
       }
       world.update(dt, elapsedTime);
     } else {

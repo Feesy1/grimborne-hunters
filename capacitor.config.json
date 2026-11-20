@@ -1,0 +1,30 @@
+{
+  "appId": "com.grimbornehunters.game",
+  "appName": "Grimborne Hunters",
+  "webDir": "www",
+  "backgroundColor": "#0b0a10",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "backgroundColor": "#0b0a10",
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false,
+    "initialFocus": true
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 0,
+      "backgroundColor": "#0b0a10",
+      "showSpinner": false,
+      "splashFullScreen": true,
+      "splashImmersive": true
+    },
+    "StatusBar": {
+      "overlaysWebView": true,
+      "style": "DARK",
+      "backgroundColor": "#0b0a10"
+    }
+  }
+}

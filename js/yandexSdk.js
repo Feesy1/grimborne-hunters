@@ -314,6 +314,70 @@ export async function initYandexSdk({ onPauseAudio, onResumeAudio } = {}) {
 
   let pendingCloudSaveTimer = null;
   let latestSavePayload = null;
+  let lastCloudFlushAt = 0;
+  const CLOUD_DEBOUNCE_MS = 350;
+  const CLOUD_THROTTLE_MS = 1200;
+
+  async function loadCloudData() {
+    if (!player || typeof player.getData !== 'function') {
+      return null;
+    }
+    try {
+      const res = await Promise.race([
+        player.getData(),
+        new Promise((resolve) => setTimeout(() => resolve(null), 1800))
+      ]);
+      if (res && typeof res === 'object' && Object.keys(res).length > 0) {
+        return res;
+      }
+    } catch {
+      // Silent fallback off-platform or on transient network error
+    }
+    return null;
+  }
+
+  async function saveCloudData(obj, immediate = false) {
+    if (!obj || typeof obj !== 'object') return false;
+    const payload = {
+      ...obj,
+      updatedAt: Number(obj.updatedAt) || Date.now()
+    };
+    latestSavePayload = payload;
+
+    if (!player || typeof player.setData !== 'function') {
+      return false;
+    }
+
+    if (pendingCloudSaveTimer) {
+      clearTimeout(pendingCloudSaveTimer);
+      pendingCloudSaveTimer = null;
+    }
+
+    if (immediate) {
+      lastCloudFlushAt = Date.now();
+      try {
+        await player.setData(payload, true);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
+    const elapsed = Date.now() - lastCloudFlushAt;
+    const delayMs = Math.max(CLOUD_DEBOUNCE_MS, CLOUD_THROTTLE_MS - elapsed);
+    pendingCloudSaveTimer = setTimeout(async () => {
+      pendingCloudSaveTimer = null;
+      lastCloudFlushAt = Date.now();
+      try {
+        if (latestSavePayload) {
+          await player.setData(latestSavePayload, true);
+        }
+      } catch {
+        // Silent fallback: localStorage already has latest data
+      }
+    }, delayMs);
+    return true;
+  }
 
   const GameplayAPI = {
     start() {
@@ -354,23 +418,36 @@ export async function initYandexSdk({ onPauseAudio, onResumeAudio } = {}) {
     startGameplay: () => GameplayAPI.start(),
     stopGameplay: () => GameplayAPI.stop(),
 
+    loadLocalData() {
+      return safeReadLocal();
+    },
+
+    loadCloudData,
+    saveCloudData,
+
+    async setLeaderboardScore(leaderboardName, score) {
+      if (!ysdk || typeof ysdk.getLeaderboards !== 'function' || !leaderboardName) {
+        return false;
+      }
+      const cleanScore = Math.max(0, Math.floor(Number(score) || 0));
+      try {
+        const lb = await Promise.race([
+          ysdk.getLeaderboards(),
+          new Promise((resolve) => setTimeout(() => resolve(null), 1500))
+        ]);
+        if (lb && typeof lb.setLeaderboardScore === 'function') {
+          await lb.setLeaderboardScore(leaderboardName, cleanScore);
+          return true;
+        }
+      } catch {
+        // Silent off-platform / guest player fallback
+      }
+      return false;
+    },
+
     async loadData(defaultData = null) {
       const localData = safeReadLocal();
-      let cloudData = null;
-
-      if (player && typeof player.getData === 'function') {
-        try {
-          const res = await Promise.race([
-            player.getData(),
-            new Promise((resolve) => setTimeout(() => resolve(null), 1500))
-          ]);
-          if (res && typeof res === 'object' && Object.keys(res).length > 0) {
-            cloudData = res;
-          }
-        } catch {
-          cloudData = null;
-        }
-      }
+      const cloudData = await loadCloudData();
 
       const merged = mergeSavePayloads(localData, cloudData);
       const finalData = defaultData
@@ -384,9 +461,8 @@ export async function initYandexSdk({ onPauseAudio, onResumeAudio } = {}) {
       return finalData;
     },
 
-    // `immediate = true` skips the 250 ms debounce. Used on pagehide /
-    // beforeunload / visibilitychange(hidden), where a pending timer would be
-    // killed together with the page and the cloud save would be lost.
+    // `immediate = true` skips debounce/throttle. Used on pagehide /
+    // beforeunload / visibilitychange(hidden) / run end so cloud save is never lost.
     async saveData(obj, immediate = false) {
       if (!obj || typeof obj !== 'object') return false;
       const payload = {
@@ -394,32 +470,7 @@ export async function initYandexSdk({ onPauseAudio, onResumeAudio } = {}) {
         updatedAt: Date.now()
       };
       safeWriteLocal(payload);
-      latestSavePayload = payload;
-
-      if (player && typeof player.setData === 'function') {
-        if (pendingCloudSaveTimer) clearTimeout(pendingCloudSaveTimer);
-        pendingCloudSaveTimer = null;
-
-        if (immediate) {
-          // The call itself starts synchronously here, before this async
-          // function yields, so closing the tab right after is safe.
-          try {
-            await player.setData(payload, true);
-          } catch {
-            // Silent fallback: localStorage already has latest data
-          }
-        } else {
-          pendingCloudSaveTimer = setTimeout(async () => {
-            pendingCloudSaveTimer = null;
-            try {
-              await player.setData(latestSavePayload, true);
-            } catch {
-              // Silent fallback: localStorage already has latest data
-            }
-          }, 250);
-        }
-      }
-
+      await saveCloudData(payload, immediate);
       return true;
     },
 
@@ -493,20 +544,29 @@ export async function initYandexSdk({ onPauseAudio, onResumeAudio } = {}) {
       return new Promise((resolve) => {
         let rewarded = false;
         let settled = false;
+        let safetyTimer = null;
 
         const finish = () => {
           if (settled) return;
           settled = true;
+          if (safetyTimer) {
+            clearTimeout(safetyTimer);
+            safetyTimer = null;
+          }
           isAdShowing = false;
           syncAudioPauseState();
           if (wasGameplayActive) GameplayAPI.start();
           resolve(rewarded);
         };
 
+        safetyTimer = setTimeout(() => finish(), 8000);
+
         try {
           ysdk.adv.showRewardedVideo({
             callbacks: {
               onOpen: () => {
+                if (safetyTimer) clearTimeout(safetyTimer);
+                safetyTimer = setTimeout(() => finish(), 90000);
                 isAdShowing = true;
                 syncAudioPauseState();
               },
