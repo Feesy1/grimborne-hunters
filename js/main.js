@@ -2,15 +2,16 @@
 // Arsenal Progression, Procedural Web Audio, Gothic UI, and Yandex Games SDK v2.
 
 import * as THREE from '../vendor/three.module.js';
-import { LEVELS, MAGE_ELEMENTS, WEAPONS } from './config.js?v=20261120z35';
-import { createArenaWorld } from './world.js?v=20261120z35';
-import * as models from './models.js?v=20261120z40';
-import { createProgressionStore, mergeCloudState } from './progression.js?v=20261120z35';
-import { createCombatController } from './combat.js?v=20261120z38';
-import { createAudioEngine } from './audio.js?v=20261120z35';
-import { initYandexSdk } from './yandexSdk.js?v=20261120z35';
-import { createUIManager } from './ui.js?v=20261120z35';
-import { attachSeamlessLoop } from './ambientVideo.js?v=20261117z25';
+import { LEVELS, SOULS_LEVEL_DEF, getLevelDef, MAGE_ELEMENTS, WEAPONS } from './config.js?v=20261121z64';
+import { createArenaWorld } from './world.js?v=20261121z64';
+import * as models from './models.js?v=20261121z64';
+import { createProgressionStore, mergeCloudState } from './progression.js?v=20261121z64';
+import { createCombatController } from './combat.js?v=20261121z64';
+import { createAudioEngine } from './audio.js?v=20261121z64';
+import { initYandexSdk } from './yandexSdk.js?v=20261121z64';
+import { createUIManager } from './ui.js?v=20261121z64';
+import { createInputController } from './input.js?v=20261121z64';
+import { attachSeamlessLoop } from './ambientVideo.js?v=20261121z64';
 
 async function bootstrap() {
   const canvas = document.getElementById('game-canvas');
@@ -20,6 +21,8 @@ async function bootstrap() {
   let externalPaused = false;
   let activeRunLevel = 1;
   let activeRunEndless = false;
+  let soulsBossCheckpointUnlocked = false;
+  let soulsVictoryShownThisRun = false;
   let usedReviveThisRun = false;
   let usedDoubleGoldThisRun = false;
 
@@ -105,7 +108,7 @@ async function bootstrap() {
   const bootState = progression.getState();
   const bootClass = bootState.selectedClass || 'warrior';
   const bootWpn = progression.getEquippedWeaponId(bootClass);
-  const bootLevelDef = LEVELS[Math.max(0, (activeRunLevel || 1) - 1)];
+  const bootLevelDef = getLevelDef(activeRunLevel || 1);
   const bootPriorityKeys = models.getBootModelKeys(bootClass, bootWpn, bootLevelDef);
   await models.preloadModels({
     priorityKeys: bootPriorityKeys,
@@ -255,28 +258,8 @@ async function bootstrap() {
   const ui = createUIManager({});
   ui.setLang(sdk.getLang());
 
-  // Initialize 3-Class Combat Controller
-  const handleLevelUpReady = (choices = []) => {
-    if (!Array.isArray(choices) || choices.length === 0) return;
-    if (gameMode !== 'playing' && gameMode !== 'levelup') return;
-    gameMode = 'levelup';
-    keysDown.clear();
-    pointerFiring = false;
-    pointerClickQueued = false;
-    dashRequested = false;
-    ultRequested = false;
-    sdk.GameplayAPI.stop();
-    ui.showLevelUpModal(choices, (perkOrId) => {
-      const perkId = typeof perkOrId === 'string' ? perkOrId : perkOrId?.id;
-      gameMode = 'playing';
-      audio.playLevelUp?.();
-      combat.applyLevelUpChoice?.(perkId);
-      if (gameMode === 'playing') {
-        ui.updateHud(combat.getHudSnapshot());
-        sdk.GameplayAPI.start();
-      }
-    });
-  };
+  // In-run Soul Blessings removed per design focus (Hero Level Talent Points + Arsenal Weapons).
+  const handleLevelUpReady = () => {};
 
   const handleRunEnd = ({
     victory,
@@ -291,12 +274,56 @@ async function bootstrap() {
     starDetails,
     difficulty,
     isEndless,
-    endlessWave
+    endlessWave,
+    soulsBossReached
   } = {}) => {
     if (gameMode === 'result') return;
+    const endlessRun = Boolean(isEndless || activeRunEndless);
+    const isSoulsChapter = !endlessRun && Number(level) === 26;
+
+    // Standalone "Abandoned Knight Rift" mode: no PvE result modal, no gold/stars/ads.
+    if (isSoulsChapter) {
+      if (victory) {
+        if (soulsVictoryShownThisRun) return;
+        soulsVictoryShownThisRun = true;
+        soulsBossCheckpointUnlocked = false;
+        persistSave(true);
+        ui.showSoulsVictoryBanner?.({
+          title: 'ВЕЛИКИЙ ВРАГ ПОВЕРЖЕН',
+          subtitle: 'Судия Руин пал'
+        });
+        return;
+      }
+      gameMode = 'result';
+      exitSoulsPointerLock();
+      sdk.GameplayAPI.stop();
+      if (soulsBossReached || combat.isSoulsBossAwakened?.()) {
+        soulsBossCheckpointUnlocked = true;
+      }
+      persistSave(true);
+      ui.showSoulsDefeatOverlay?.({
+        canBossRematch: soulsBossCheckpointUnlocked,
+        onBossRematch: async () => {
+          ui.hideSoulsDefeatOverlay?.();
+          await startBattle(progression.getState().selectedClass, 26, { startAtBossArena: true });
+          requestSoulsPointerLock();
+        },
+        onBonfireRestart: async () => {
+          ui.hideSoulsDefeatOverlay?.();
+          await startBattle(progression.getState().selectedClass, 26);
+          requestSoulsPointerLock();
+        },
+        onHub: () => {
+          ui.hideSoulsDefeatOverlay?.();
+          enterHub('home');
+        }
+      });
+      syncSoulsPointerLockHint();
+      return;
+    }
+
     gameMode = 'result';
     sdk.GameplayAPI.stop();
-    const endlessRun = Boolean(isEndless || activeRunEndless);
     const runSec = Math.max(0, Math.round(Number(elapsedSec ?? elapsedTime ?? 0)));
     if (endlessRun) {
       const endlessScore = Math.max(0, Math.floor(Number(kills) || 0));
@@ -310,9 +337,11 @@ async function bootstrap() {
           .catch(() => {});
       }
     } else if (victory) {
-      progression.unlockNextLevel(level);
-      if (typeof stars === 'number') {
-        progression.recordLevelStars?.(level, stars);
+      if (Number(level) < 26) {
+        progression.unlockNextLevel(level);
+        if (typeof stars === 'number') {
+          progression.recordLevelStars?.(level, stars);
+        }
       }
     }
     persistSave(true);
@@ -337,9 +366,14 @@ async function bootstrap() {
           bestEndlessKills: bestEndlessState.bestEndlessKills || 0,
           bestEndlessTimeSec: bestEndlessState.bestEndlessTimeSec || 0,
           canRevive: (!victory || endlessRun) && !usedReviveThisRun,
-          canDoubleGold: currentGoldEarned > 0 && !usedDoubleGoldThisRun
+          canDoubleGold: currentGoldEarned > 0 && !usedDoubleGoldThisRun,
+          canBossRematch: isSoulsChapter && !victory && soulsBossCheckpointUnlocked
         },
         {
+          onBossRematch: async () => {
+            ui.hideResultModal();
+            await startBattle(progression.getState().selectedClass, 26, { startAtBossArena: true });
+          },
           onRevive: async () => {
             if (usedReviveThisRun) return false;
             const rewarded = await sdk.showRewarded('revive_hunter');
@@ -368,16 +402,18 @@ async function bootstrap() {
           onNext: async () => {
             ui.hideResultModal();
             await sdk.showInterstitial();
-            if (!endlessRun && victory) {
-              activeRunLevel = Math.min(LEVELS.length, (level || 1) + 1);
+            const isSoulsRun = Number(level) === 26;
+            if (!endlessRun && !isSoulsRun && victory) {
+              activeRunLevel = Math.min(25, (level || 1) + 1);
             }
-            enterHub(endlessRun ? 'home' : 'campaign_forest');
+            enterHub(endlessRun || isSoulsRun ? 'home' : 'campaign_forest');
           },
           onArsenal: async () => {
             ui.hideResultModal();
             await sdk.showInterstitial();
-            if (!endlessRun && victory) {
-              activeRunLevel = Math.min(LEVELS.length, (level || 1) + 1);
+            const isSoulsRun = Number(level) === 26;
+            if (!endlessRun && !isSoulsRun && victory) {
+              activeRunLevel = Math.min(25, (level || 1) + 1);
             }
             enterHub('arsenal');
           },
@@ -412,6 +448,9 @@ async function bootstrap() {
       onToast: (msg, dur) => {
         if (msg) ui.showToast(msg, dur);
       },
+      onSoulsCue: (text, kind) => {
+        if (text) ui.showSoulsBannerCue?.(text, kind);
+      },
       onWeaponUnlocked: (weaponDef) => {
         persistSave();
         if (weaponDef) {
@@ -428,9 +467,6 @@ async function bootstrap() {
     }
   });
 
-  let reloadRequested = false;
-  let dashRequested = false;
-  let ultRequested = false;
   let lastSyncedMusicMode = '';
   function syncMusicMode(nextMode) {
     if (nextMode !== lastSyncedMusicMode) {
@@ -439,14 +475,186 @@ async function bootstrap() {
     }
   }
 
+  const isSoulsRunActive = () => activeRunLevel === 26 && !activeRunEndless && !combat.getFreeRoam?.();
+  const isTouchOnlyDevice = () =>
+    Boolean(window.matchMedia?.('(pointer: coarse)')?.matches && !window.matchMedia?.('(any-pointer: fine)')?.matches);
+
+  const isDevEditorEnabled = () => {
+    try {
+      return window.location.search.includes('dev=1') || localStorage.getItem('grimborne_dev') === '1';
+    } catch {
+      return window.location.search.includes('dev=1');
+    }
+  };
+
+  function isSoulsPointerLocked() {
+    return Boolean(canvas && document.pointerLockElement === canvas);
+  }
+
+  function syncSoulsPointerLockHint() {
+    const shouldShow =
+      gameMode === 'playing' &&
+      isSoulsRunActive() &&
+      !isTouchOnlyDevice() &&
+      inputCtrl?.getInputSource?.() !== 'touch' &&
+      !isSoulsPointerLocked() &&
+      !ui.isPauseModalOpen?.() &&
+      !ui.isSoulsDefeatOpen?.();
+    ui.setSoulsPointerLockHintVisible?.(shouldShow);
+  }
+
+  function requestSoulsPointerLock() {
+    if (!canvas || !isSoulsRunActive() || isTouchOnlyDevice()) return;
+    if (document.pointerLockElement === canvas) return;
+    try {
+      const req = canvas.requestPointerLock?.();
+      if (req && typeof req.then === 'function') {
+        Promise.resolve(req).catch(() => {});
+      }
+    } catch (_) {
+      // Ignore Pointer Lock failures in headless/sandboxed environments
+    }
+  }
+
+  function exitSoulsPointerLock() {
+    inputCtrl?.clearBlockingFlags?.();
+    try {
+      if (document.pointerLockElement) {
+        const res = document.exitPointerLock?.();
+        if (res && typeof res.then === 'function') {
+          Promise.resolve(res).catch(() => {});
+        }
+      }
+    } catch (_) {}
+    syncSoulsPointerLockHint();
+  }
+
+  function toggleTargetLock() {
+    if (gameMode !== 'playing' || !isSoulsRunActive()) {
+      return { locked: false, target: null, unsupported: true };
+    }
+    audio.unlock();
+    const hadTarget = Boolean(combat.getLockedTarget?.());
+    const res = combat.toggleTargetLock?.();
+    if (res?.unsupported) return res;
+    if (res?.locked) {
+      ui.showToast(`🎯 Захват цели: ${res.target?.nameRu || 'Враг'} [Q / СКМ]`);
+    } else if (hadTarget) {
+      ui.showToast('🔓 Захват цели снят');
+    } else {
+      ui.showToast('🎯 Нет врагов рядом для захвата');
+    }
+    ui.updateHud(combat.getHudSnapshot?.());
+    return res || { locked: false, target: null };
+  }
+
+  function cycleTargetLock(dir = 1) {
+    if (gameMode !== 'playing' || !isSoulsRunActive()) {
+      return { locked: false, target: null, unsupported: true };
+    }
+    audio.unlock();
+    const prevTarget = combat.getLockedTarget?.();
+    if (!prevTarget) {
+      return toggleTargetLock();
+    }
+    const res = combat.cycleTargetLock?.(dir);
+    if (res?.unsupported) return res;
+    const nextTarget =
+      res?.target ||
+      (res && typeof res === 'object' && 'hp' in res ? res : null) ||
+      combat.getLockedTarget?.();
+    if (nextTarget && nextTarget !== prevTarget) {
+      ui.showToast(`🎯 Цель: ${nextTarget.nameRu || 'Враг'} [Tab]`);
+    } else if (nextTarget) {
+      ui.showToast(`🎯 Цель: ${nextTarget.nameRu || 'Враг'}`);
+    }
+    ui.updateHud(combat.getHudSnapshot?.());
+    return res ?? nextTarget;
+  }
+
+  const TELEGRAPH_HIDE_STORAGE_KEY = 'grimborne_hide_telegraphs';
+  let hideTelegraphs = false;
+  try {
+    hideTelegraphs = localStorage.getItem(TELEGRAPH_HIDE_STORAGE_KEY) === '1';
+  } catch {}
+
+  function applyTelegraphsVisibility(showCue = false) {
+    const visible = !hideTelegraphs;
+    world.setTelegraphsVisible?.(visible);
+    ui.setTelegraphsVisibleState?.(visible);
+    if (showCue) {
+      const msg = visible ? '🎯 Индикаторы атак показаны [9]' : '👁️ Индикаторы атак скрыты [9]';
+      ui.showSoulsBannerCue?.(msg, visible ? 'guard_counter' : 'partial_parry');
+    }
+    return visible;
+  }
+
+  function toggleTelegraphs(nextVisible = null) {
+    hideTelegraphs = typeof nextVisible === 'boolean' ? !nextVisible : !hideTelegraphs;
+    try {
+      localStorage.setItem(TELEGRAPH_HIDE_STORAGE_KEY, hideTelegraphs ? '1' : '0');
+    } catch {}
+    return applyTelegraphsVisibility(true);
+  }
+
+  const inputCtrl = createInputController({
+    canvas,
+    isPlaying: () => gameMode === 'playing',
+    isHub: () => gameMode === 'hub',
+    isPaused: () => gameMode === 'paused',
+    isSoulsRunActive,
+    isPointerLocked: isSoulsPointerLocked,
+    requestPointerLock: requestSoulsPointerLock,
+    exitPointerLock: exitSoulsPointerLock,
+    isDevEditorEnabled,
+    world,
+    audio,
+    callbacks: {
+      onManualReload: () => {
+        combat.triggerReload?.();
+      },
+      onToggleTargetLock: () => toggleTargetLock(),
+      onCycleTargetLock: (dir = 1) => cycleTargetLock(dir),
+      onToggleAutoAimHotkey: () => {
+        const next = !combat.getAutoAim();
+        combat.setAutoAim(next);
+        ui.setAutoAimState(next);
+        ui.showToast(next ? '🎯 Автоприцел включён' : '🎯 Ручной прицел курсором');
+      },
+      onToggleAttackHotkey: () => {
+        const next = !(combat.getAttackEnabled ? combat.getAttackEnabled() : true);
+        combat.setAttackEnabled?.(next);
+        ui.setAttackEnabledState?.(next);
+        ui.showToast(next ? '⚔️ Атака ВКЛ [E]' : '👁️ Атака ВЫКЛ [E] — режим наблюдения');
+      },
+      onTogglePause: () => togglePauseGame(),
+      onToggleTelegraphs: () => toggleTelegraphs(),
+      onWindowBlur: () => {
+        rmbRotatingHero = false;
+        touchRotatingHero = false;
+        activeHeroTouchId = null;
+        document.body.classList.remove('is-rotating-hero');
+      }
+    }
+  });
+
+  document.addEventListener('pointerlockchange', () => {
+    if (!isSoulsPointerLocked()) {
+      inputCtrl.clearBlockingFlags();
+    }
+    syncSoulsPointerLockHint();
+  });
+
   function enterHub(targetTab = null) {
-    reloadRequested = false;
-    dashRequested = false;
-    ultRequested = false;
+    exitSoulsPointerLock();
+    inputCtrl.resetCombatInputs();
     activeRunEndless = false;
-    pointerFiring = false;
-    pointerClickQueued = false;
-    rmbOrbitingCamera = false;
+    soulsBossCheckpointUnlocked = false;
+    soulsVictoryShownThisRun = false;
+    if (activeRunLevel === 26) {
+      activeRunLevel = Math.min(LEVELS.length, Math.max(1, progression.getState().maxUnlockedLevel || 1));
+    }
+    combat.setFreeRoam?.(false);
     combat.disposeRun();
     if (hubBgPlateEl) {
       hubBgPlateEl.classList.remove('hidden');
@@ -477,11 +685,8 @@ async function bootstrap() {
   function togglePauseGame() {
     if (gameMode === 'playing') {
       gameMode = 'paused';
-      keysDown.clear();
-      pointerFiring = false;
-      pointerClickQueued = false;
-      dashRequested = false;
-      ultRequested = false;
+      exitSoulsPointerLock();
+      inputCtrl.resetAllInputs();
       syncMusicMode('hub');
       sdk.GameplayAPI.stop();
       const snap = combat.getHudSnapshot?.() || {};
@@ -491,14 +696,20 @@ async function bootstrap() {
             gameMode = 'playing';
             syncMusicMode(combat.getHudSnapshot?.()?.finaleStarted ? 'boss' : 'combat');
             sdk.GameplayAPI.start();
+            if (isSoulsRunActive()) {
+              requestSoulsPointerLock();
+            }
+            syncSoulsPointerLockHint();
           }
         },
-        onRestart: () => {
+        onRestart: async () => {
           persistSave();
           if (activeRunEndless) {
-            startEndlessBattle(progression.getState().selectedClass);
+            await startEndlessBattle(progression.getState().selectedClass);
           } else {
-            startBattle(progression.getState().selectedClass, activeRunLevel);
+            const wasSouls = isSoulsRunActive();
+            await startBattle(progression.getState().selectedClass, activeRunLevel);
+            if (wasSouls) requestSoulsPointerLock();
           }
         },
         onExit: () => {
@@ -506,26 +717,31 @@ async function bootstrap() {
           enterHub();
         }
       });
+      syncSoulsPointerLockHint();
     } else if (gameMode === 'paused') {
       ui.hidePauseModal?.();
       gameMode = 'playing';
       syncMusicMode(combat.getHudSnapshot?.()?.finaleStarted ? 'boss' : 'combat');
       sdk.GameplayAPI.start();
+      syncSoulsPointerLockHint();
     }
   }
   let battleLaunchLock = false;
-  async function startBattle(classId, levelNum) {
+  async function startBattle(classId, levelNum, opts = {}) {
     if (battleLaunchLock) return;
     audio.unlock();
     const chosenClass = classId || progression.getState().selectedClass || 'warrior';
-    const maxLvl = progression.getState().maxUnlockedLevel || 1;
-    const chosenLevel = Math.min(maxLvl, Math.max(1, Number(levelNum) || activeRunLevel || 1));
+    const maxLvl = Math.min(LEVELS.length, Math.max(1, progression.getState().maxUnlockedLevel || 1));
+    const reqLvl = Number(levelNum) || activeRunLevel || 1;
+    const isFreeRoam = Boolean(combat.getFreeRoam?.());
+    const chosenLevel = reqLvl === 26 ? 26 : isFreeRoam ? Math.min(LEVELS.length, Math.max(1, reqLvl)) : Math.min(maxLvl, Math.max(1, reqLvl));
+    const startAtBossArena = Boolean(chosenLevel === 26 && opts?.startAtBossArena);
     const eqWpnId = progression.getEquippedWeaponId(chosenClass);
-    const stageDef = LEVELS[Math.max(0, chosenLevel - 1)];
+    const stageDef = getLevelDef(chosenLevel);
     const missingKeys = models.getMissingStageModelKeys(chosenClass, eqWpnId, stageDef);
     if (missingKeys.length > 0) {
       battleLaunchLock = true;
-      ui.showToast('⏳ Загружаем 3D-модели главы…');
+      ui.showToast('⏳ Загружаем 3D-модели локации…');
       try {
         await models.ensureModelKeysLoaded(missingKeys);
       } finally {
@@ -534,14 +750,13 @@ async function bootstrap() {
     }
     activeRunLevel = chosenLevel;
     activeRunEndless = false;
+    soulsVictoryShownThisRun = false;
+    if (!startAtBossArena) {
+      soulsBossCheckpointUnlocked = false;
+    }
     usedReviveThisRun = false;
     usedDoubleGoldThisRun = false;
-    reloadRequested = false;
-    dashRequested = false;
-    ultRequested = false;
-    pointerFiring = false;
-    pointerClickQueued = false;
-    rmbOrbitingCamera = false;
+    inputCtrl.resetCombatInputs();
 
     clearHubDiorama();
     if (hubBgPlateEl) hubBgPlateEl.classList.add('hidden');
@@ -550,41 +765,61 @@ async function bootstrap() {
     ui.hideAllModals();
     ui.showHub(false);
     ui.showHud(true);
-    combat.setAttackEnabled?.(true);
-    ui.setAutoAimState(combat.getAutoAim());
-    ui.setAttackEnabledState?.(true);
+    combat.setAttackEnabled?.(chosenLevel !== 26);
 
     const battleBiome =
-      chosenLevel >= 21
-        ? 'ash_citadel'
-        : chosenLevel >= 16
-          ? 'frost_ruins'
-          : chosenLevel >= 6
-            ? 'misty_forest'
-            : 'courtyard';
+      chosenLevel === 26
+        ? 'souls_citadel'
+        : chosenLevel >= 21
+          ? 'ash_citadel'
+          : chosenLevel >= 16
+            ? 'frost_ruins'
+            : chosenLevel >= 6
+              ? 'misty_forest'
+              : 'courtyard';
     world.setArenaBiome?.(battleBiome, chosenLevel);
     // Standard free combat camera (RMB orbit + mouse-wheel zoom) across all chapters,
-    // including Misty Forest (chapter 6+).
+    // including Misty Forest (chapter 6+) and Path of Ash (chapter 26 Souls prototype).
     world.setCameraLock?.(false);
     syncMusicMode('combat');
     const stBeforeRun = progression.getState();
     const difficultyMode = stBeforeRun.difficultyMode || 'normal';
     ui.setOnboardingDone?.(Boolean(stBeforeRun.onboardingDone));
-    combat.startRun({ classId: chosenClass, levelNumber: chosenLevel, difficultyMode });
+    combat.startRun({ classId: chosenClass, levelNumber: chosenLevel, difficultyMode, startAtBossArena });
+    ui.setAutoAimState(combat.getAutoAim());
+    ui.setAttackEnabledState?.(combat.getAttackEnabled ? combat.getAttackEnabled() : chosenLevel !== 26);
     ui.updateHud(combat.getHudSnapshot());
     if (chosenLevel === 1 && !stBeforeRun.onboardingDone) {
       ui.startOnboarding?.(chosenLevel, false);
     }
     gameMode = 'playing';
+    if (!isSoulsRunActive()) {
+      exitSoulsPointerLock();
+    } else {
+      syncSoulsPointerLockHint();
+    }
     sdk.GameplayAPI.start();
+  }
+
+  async function startSoulsLevel(classId = null) {
+    combat.setFreeRoam(false);
+    return startBattle(classId || progression.getState().selectedClass || 'warrior', 26);
+  }
+
+  async function startTrainingGround(classId = null) {
+    combat.setFreeRoam(true);
+    await startBattle(classId || progression.getState().selectedClass || 'warrior', 6);
+    world.setCameraLock?.(false);
+    ui.showToast('🎯 Тренировочный полигон — бей по мишени, тестируй комбо и анимации!');
   }
 
   async function startEndlessBattle(classId) {
     if (battleLaunchLock) return;
+    combat.setFreeRoam(false);
     audio.unlock();
     const chosenClass = classId || progression.getState().selectedClass || 'warrior';
     const eqWpnId = progression.getEquippedWeaponId(chosenClass);
-    const endlessStageDef = LEVELS[LEVELS.length - 1] || LEVELS[0];
+    const endlessStageDef = LEVELS.find((l) => l.level === 25) || LEVELS[LEVELS.length - 1] || LEVELS[0];
     const missingKeys = models.getMissingStageModelKeys(chosenClass, eqWpnId, endlessStageDef);
     if (missingKeys.length > 0) {
       battleLaunchLock = true;
@@ -596,14 +831,11 @@ async function bootstrap() {
       }
     }
     activeRunEndless = true;
+    soulsBossCheckpointUnlocked = false;
+    soulsVictoryShownThisRun = false;
     usedReviveThisRun = false;
     usedDoubleGoldThisRun = false;
-    reloadRequested = false;
-    dashRequested = false;
-    ultRequested = false;
-    pointerFiring = false;
-    pointerClickQueued = false;
-    rmbOrbitingCamera = false;
+    inputCtrl.resetCombatInputs();
 
     clearHubDiorama();
     if (hubBgPlateEl) hubBgPlateEl.classList.add('hidden');
@@ -625,6 +857,11 @@ async function bootstrap() {
     combat.startRun({ classId: chosenClass, levelNumber: 1, difficultyMode, endless: true });
     ui.updateHud(combat.getHudSnapshot());
     gameMode = 'playing';
+    if (!isSoulsRunActive()) {
+      exitSoulsPointerLock();
+    } else {
+      syncSoulsPointerLockHint();
+    }
     sdk.GameplayAPI.start();
   }
 
@@ -811,24 +1048,39 @@ async function bootstrap() {
       ui.renderHub(progression);
     },
     onStartRun: ({ classId, level } = {}) => {
+      combat.setFreeRoam(false);
       startBattle(classId, level || activeRunLevel);
     },
     onStartEndless: ({ classId } = {}) => {
       startEndlessBattle(classId);
     },
+    onStartSouls: ({ classId } = {}) => {
+      startSoulsLevel(classId);
+    },
+    onStartTraining: ({ classId } = {}) => {
+      startTrainingGround(classId);
+    },
     onReload: () => {
       audio.unlock();
-      if (gameMode === 'playing') {
+      if (gameMode === 'playing' && !isSoulsRunActive()) {
         combat.triggerReload?.();
-        reloadRequested = true;
+        inputCtrl.requestReload();
       }
     },
     onToggleAutoAim: (nextBool) => {
+      if (isSoulsRunActive()) return false;
       const next = typeof nextBool === 'boolean' ? nextBool : !combat.getAutoAim();
       combat.setAutoAim(next);
       ui.setAutoAimState(next);
     },
+    onToggleTargetLock: () => {
+      return toggleTargetLock();
+    },
+    onCycleTargetLock: (dir = 1) => {
+      return cycleTargetLock(dir);
+    },
     onToggleAttack: (nextBool) => {
+      if (isSoulsRunActive()) return false;
       const next = typeof nextBool === 'boolean' ? nextBool : !combat.getAttackEnabled?.();
       combat.setAttackEnabled?.(next);
       ui.setAttackEnabledState?.(next);
@@ -853,9 +1105,24 @@ async function bootstrap() {
     onTogglePause: () => {
       togglePauseGame();
     },
+    onToggleTelegraphs: () => {
+      toggleTelegraphs();
+    },
+    onSoulsInteract: () => {
+      if (gameMode === 'playing' && isSoulsRunActive()) {
+        audio.unlock();
+        inputCtrl.requestInteract();
+      }
+    },
+    onSkipBossDoorCutscene: () => {
+      if (gameMode === 'playing' && isSoulsRunActive()) {
+        combat.skipBossDoorCutscene?.();
+      }
+    },
     onExitToHub: () => {
+      const returnHome = Boolean(combat.getFreeRoam?.() || activeRunEndless || activeRunLevel === 26);
       persistSave();
-      enterHub('campaign_forest');
+      enterHub(returnHome ? 'home' : 'campaign_forest');
     },
     onHubTabChange: (tabId) => {
       currentHubTab = tabId || 'home';
@@ -893,98 +1160,7 @@ async function bootstrap() {
     }
   });
 
-  // === Layout-independent Keyboard & Pointer Input (works on both RU ЙЦУКЕН and EN QWERTY!) ===
-  const keysDown = new Set();
-  let pointerClientX = window.innerWidth * 0.5;
-  let pointerClientY = window.innerHeight * 0.5;
-  let pointerFiring = false;
-  let pointerClickQueued = false;
-  let pointerMovedRecently = 0;
-
-  const isDevEditorEnabled = () => {
-    try {
-      return window.location.search.includes('dev=1') || localStorage.getItem('grimborne_dev') === '1';
-    } catch {
-      return window.location.search.includes('dev=1');
-    }
-  };
-
-  window.addEventListener('keydown', (e) => {
-    if (e.code === 'KeyK' && !e.repeat) {
-      if (!isDevEditorEnabled() && !world.isWeaponEditMode?.()) return;
-      world.setWeaponEditMode?.(!world.isWeaponEditMode?.());
-      return;
-    }
-    if (e.code === 'KeyG' && !isDevEditorEnabled()) {
-      return;
-    }
-    if (world.isWeaponEditMode?.()) return;
-    if (world.isArenaEditMode?.()) {
-      if (!world.isArenaEditorHeroMovement?.()) return;
-      const moveKeys = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
-      if (!moveKeys.includes(e.code)) return;
-    }
-    keysDown.add(e.code);
-    if (e.code === 'Space' && gameMode === 'playing' && !e.repeat) {
-      e.preventDefault();
-      audio.unlock();
-      dashRequested = true;
-    }
-    if (e.code === 'KeyF' && gameMode === 'playing' && !e.repeat) {
-      e.preventDefault();
-      audio.unlock();
-      ultRequested = true;
-    }
-    if (e.code === 'KeyR' && gameMode === 'playing' && !e.repeat) {
-      audio.unlock();
-      combat.triggerReload?.();
-      reloadRequested = true;
-    }
-    if (e.code === 'KeyQ' && gameMode === 'playing' && !e.repeat) {
-      const next = !combat.getAutoAim();
-      combat.setAutoAim(next);
-      ui.setAutoAimState(next);
-      ui.showToast(next ? '🎯 Автоприцел включён' : '🎯 Ручной прицел курсором');
-    }
-    if (e.code === 'KeyE' && gameMode === 'playing' && !e.repeat) {
-      const next = !(combat.getAttackEnabled ? combat.getAttackEnabled() : true);
-      combat.setAttackEnabled?.(next);
-      ui.setAttackEnabledState?.(next);
-      ui.showToast(next ? '⚔️ Атака ВКЛ [E]' : '👁️ Атака ВЫКЛ [E] — режим наблюдения');
-    }
-    if ((e.code === 'Escape' || e.code === 'KeyP') && (gameMode === 'playing' || gameMode === 'paused') && !e.repeat) {
-      e.preventDefault();
-      togglePauseGame();
-    }
-  });
-
-  window.addEventListener('keyup', (e) => {
-    keysDown.delete(e.code);
-  });
-
-  window.addEventListener('blur', () => {
-    keysDown.clear();
-    pointerFiring = false;
-    pointerClickQueued = false;
-    reloadRequested = false;
-    dashRequested = false;
-    ultRequested = false;
-    rmbOrbitingCamera = false;
-    rmbRotatingHero = false;
-    touchRotatingHero = false;
-    activeHeroTouchId = null;
-    document.body.classList.remove('is-rotating-hero');
-  });
-
-  // Suppress browser context menu on Right-Click in Hub so Right-Mouse-Button rotates the 3D Hero cleanly!
-  window.addEventListener('contextmenu', (e) => {
-    if (gameMode !== 'hub') return;
-    if (e.target && typeof e.target.closest === 'function' && e.target.closest('.sound-trigger-btn')) {
-      return;
-    }
-    e.preventDefault();
-  });
-
+  // === Hub 3D Hero & Weapon Turntable Drag Listeners ===
   window.addEventListener('pointerdown', (e) => {
     if (gameMode !== 'hub' || (!hubPreviewHero?.root && !hubArsenalWeapon?.root)) return;
     if (ui.isHeroStageVisible && !ui.isHeroStageVisible()) return;
@@ -1069,176 +1245,20 @@ async function bootstrap() {
   window.addEventListener('pointerup', endHeroRotationDrag);
   window.addEventListener('pointercancel', endHeroRotationDrag);
 
-  let rmbOrbitingCamera = false;
-  let lastCombatOrbitX = 0;
-  let lastCombatOrbitY = 0;
-
-  window.addEventListener('wheel', (e) => {
-    if (gameMode !== 'playing') return;
-    if (e.target && typeof e.target.closest === 'function' && e.target.closest('.modal-backdrop:not(.hidden), .sound-popover:not(.hidden)')) {
-      return;
-    }
-    e.preventDefault();
-    world.zoomCombatOrbit?.(e.deltaY);
-  }, { passive: false });
-
-  canvas.addEventListener('pointermove', (e) => {
-    if (e.pointerType === 'touch') return;
-    if (rmbOrbitingCamera && gameMode === 'playing') {
-      if (typeof e.buttons === 'number' && (e.buttons & 2) === 0) {
-        rmbOrbitingCamera = false;
-      } else {
-        const mapped = window.__toGameCoords ? window.__toGameCoords(e.clientX, e.clientY) : { x: e.clientX, y: e.clientY };
-        const dx = mapped.x - lastCombatOrbitX;
-        const dy = mapped.y - lastCombatOrbitY;
-        lastCombatOrbitX = mapped.x;
-        lastCombatOrbitY = mapped.y;
-        world.adjustCombatOrbit?.(-dx * 0.0068, dy * 0.0056);
-      }
-    }
-    pointerClientX = e.clientX;
-    pointerClientY = e.clientY;
-    pointerMovedRecently = 2.5;
-  });
-
-  canvas.addEventListener('pointerdown', (e) => {
-    audio.unlock();
-    if (e.pointerType === 'touch') return;
-    if (e.button === 2 && gameMode === 'playing') {
-      e.preventDefault();
-      const mapped = window.__toGameCoords ? window.__toGameCoords(e.clientX, e.clientY) : { x: e.clientX, y: e.clientY };
-      rmbOrbitingCamera = true;
-      lastCombatOrbitX = mapped.x;
-      lastCombatOrbitY = mapped.y;
-      return;
-    }
-    if (e.button === 0 && gameMode === 'playing' && !world.isArenaEditMode?.() && !world.isWeaponEditMode?.()) {
-      pointerClientX = e.clientX;
-      pointerClientY = e.clientY;
-      pointerFiring = true;
-      pointerClickQueued = true;
-    }
-  });
-
-  const endCombatPointer = (e) => {
-    if (e.pointerType === 'touch') return;
-    if (e.type === 'pointercancel') {
-      rmbOrbitingCamera = false;
-      pointerFiring = false;
-      return;
-    }
-    if (e.button === 2) {
-      rmbOrbitingCamera = false;
-    }
-    if (e.button === 0) {
-      pointerFiring = false;
-    }
-  };
-  window.addEventListener('pointerup', endCombatPointer);
-  window.addEventListener('pointercancel', endCombatPointer);
-
   function gatherInput(dt) {
-    const touch = ui.getTouchInput();
-    if (world.isWeaponEditMode?.()) {
-      dashRequested = false;
-      ultRequested = false;
-      if (touch && touch.dash) touch.dash = false;
-      if (touch && touch.ult) touch.ult = false;
-      return { moveX: 0, moveZ: 0, aimWorldX: 0, aimWorldZ: 0, hasManualAim: false, firing: false, reload: false, dash: false, ult: false };
-    }
-    // While the arena editor is open, firing stays off. Hero movement (WASD)
-    // can be enabled from the editor panel so you can reposition while building.
-    if (world.isArenaEditMode?.() && !world.isArenaEditorHeroMovement?.()) {
-      dashRequested = false;
-      ultRequested = false;
-      if (touch && touch.dash) touch.dash = false;
-      if (touch && touch.ult) touch.ult = false;
-      return { moveX: 0, moveZ: 0, aimWorldX: 0, aimWorldZ: 0, hasManualAim: false, firing: false, reload: false, dash: false, ult: false };
-    }
-    let moveX = 0;
-    let moveZ = 0;
-
-    if (keysDown.has('KeyW') || keysDown.has('ArrowUp')) moveZ -= 1;
-    if (keysDown.has('KeyS') || keysDown.has('ArrowDown')) moveZ += 1;
-    if (keysDown.has('KeyA') || keysDown.has('ArrowLeft')) moveX -= 1;
-    if (keysDown.has('KeyD') || keysDown.has('ArrowRight')) moveX += 1;
-
-    if (touch?.moveActive) {
-      moveX = touch.moveX;
-      moveZ = touch.moveZ;
-      if (!combat.getAutoAim()) {
-        combat.setAutoAim(true);
-        ui.setAutoAimState(true);
-      }
-    } else {
-      const len = Math.hypot(moveX, moveZ);
-      if (len > 1) {
-        moveX /= len;
-        moveZ /= len;
-      }
-    }
-    const camYaw = world.getCombatOrbitYaw?.() || 0;
-    if (Math.abs(camYaw) > 0.0001 && (moveX !== 0 || moveZ !== 0)) {
-      const cosY = Math.cos(camYaw);
-      const sinY = Math.sin(camYaw);
-      const rx = moveX * cosY + moveZ * sinY;
-      const rz = -moveX * sinY + moveZ * cosY;
-      moveX = rx;
-      moveZ = rz;
-    }
-
-    if (pointerMovedRecently > 0) {
-      pointerMovedRecently = Math.max(0, pointerMovedRecently - dt);
-    }
-
-    let aimWorldX = 0;
-    let aimWorldZ = 0;
-    let hasManualAim = false;
-    let firing = false;
-    const explicitLmb = !touch?.moveActive && (pointerFiring || pointerClickQueued);
-    pointerClickQueued = false;
-
-    if (!touch?.moveActive && (explicitLmb || (!combat.getAutoAim() && pointerMovedRecently > 0))) {
-      const groundPt = world.getAimPointOnGround(pointerClientX, pointerClientY);
-      if (groundPt) {
-        aimWorldX = groundPt.x;
-        aimWorldZ = groundPt.z;
-        hasManualAim = true;
-      }
-      firing = explicitLmb || !combat.getAutoAim();
-    }
-
-    const reload = reloadRequested;
-    reloadRequested = false;
-    const touchDash = Boolean(touch?.dash);
-    if (touch && touch.dash) touch.dash = false;
-    const dash = dashRequested || touchDash;
-    dashRequested = false;
-    const touchUlt = Boolean(touch?.ult);
-    if (touch && touch.ult) touch.ult = false;
-    const ult = ultRequested || touchUlt;
-    ultRequested = false;
-    const sprint = keysDown.has('ShiftLeft') || keysDown.has('ShiftRight');
-
-    return {
-      moveX,
-      moveZ,
-      aimWorldX,
-      aimWorldZ,
-      hasManualAim,
-      firing,
-      manualTrigger: explicitLmb,
-      sprint,
-      reload,
-      dash,
-      ult
-    };
+    return inputCtrl.gatherFrameInput({
+      dt,
+      touch: ui.getTouchInput(),
+      combat,
+      ui
+    });
   }
 
-  // Sync initial volume/mute UI state & enter Hub behind splash screen
+  // Sync initial volume/mute/telegraph UI state & enter Hub behind splash screen
   ui.setVolumeState?.(audio.getSfxVolume ? audio.getSfxVolume() : audio.getVolume());
   ui.setMusicVolumeState?.(audio.getMusicVolume ? audio.getMusicVolume() : 0.38);
   ui.setMutedState?.(audio.isMuted());
+  applyTelegraphsVisibility(false);
   enterHub();
   // Render initial 3D Courtyard + Hero Pedestal frame BEFORE dismissing splash so mobile never flashes black!
   world.followTarget(0, 0, 0.016);
@@ -1256,6 +1276,23 @@ async function bootstrap() {
     enterHub,
     startBattle,
     startEndlessBattle,
+    startSoulsLevel,
+    startSoulsBossRematch: (classId = null) => {
+      combat.setFreeRoam(false);
+      return startBattle(classId || progression.getState().selectedClass || 'warrior', 26, { startAtBossArena: true });
+    },
+    startTrainingGround,
+    toggleTargetLock,
+    cycleTargetLock,
+    getLockedTarget: () => combat.getLockedTarget?.() || null,
+    requestSoulsPointerLock,
+    exitSoulsPointerLock,
+    isSoulsPointerLocked,
+    toggleTelegraphs,
+    getTelegraphsVisible: () => (world.getTelegraphsVisible ? world.getTelegraphsVisible() : !hideTelegraphs),
+    triggerSoulsInteract: () => inputCtrl.requestInteract(),
+    getInputSource: () => inputCtrl.getInputSource(),
+    setInputSource: (src) => inputCtrl.setInputSource(src),
     // Walk the new arena with no enemies and no damage (layout testing).
     startFreeRoam: async (level = 6, classId = null) => {
       combat.setFreeRoam(true);
@@ -1272,33 +1309,46 @@ async function bootstrap() {
     }
   };
 
-  // Optional URL param for peaceful map walk-around without mobs: ?freeroam=6&class=warrior
+  // Optional one-shot URL params: never auto-launch Training Ground (?freeroam/?nomobs) on load/reload;
+  // allow direct fresh navigation to Chapter 26 (?level=26 / ?souls=1) only when not a page reload, and clean URL immediately.
   try {
     const params = new URLSearchParams(window.location.search);
-    const frRaw = params.get('freeroam') ?? params.get('nomobs');
-    if (frRaw !== null && frRaw !== '0' && frRaw !== 'false') {
-      combat.setFreeRoam(true);
-      const parsedNum = Number(frRaw);
-      const levelParam = Number(params.get('level') || (parsedNum >= 1 && parsedNum <= 25 ? parsedNum : 6));
-      const targetLevel = Math.min(25, Math.max(1, Number.isFinite(levelParam) ? levelParam : 6));
-      const rawClass = (params.get('class') || '').trim().toLowerCase();
-      const targetClass = (rawClass === 'warrior' || rawClass === 'gunslinger' || rawClass === 'mage') ? rawClass : null;
-      if (targetClass) progression.selectClass?.(targetClass);
-      if (params.get('hub') !== '1') {
-        void window.__grimborne.startFreeRoam(targetLevel, targetClass);
+    const rawClass = (params.get('class') || '').trim().toLowerCase();
+    const targetClass = (rawClass === 'warrior' || rawClass === 'gunslinger' || rawClass === 'mage') ? rawClass : null;
+    if (targetClass) progression.selectClass?.(targetClass);
+
+    const soulsRaw = params.get('souls');
+    const directLvl = Number(params.get('level') || 0);
+    const hubOnly = params.get('hub') === '1';
+    const navType = performance.getEntriesByType?.('navigation')?.[0]?.type;
+
+    const oneShotKeys = ['freeroam', 'nomobs', 'souls', 'level', 'hub'];
+    let hadOneShotParam = false;
+    for (const k of oneShotKeys) {
+      if (params.has(k)) {
+        params.delete(k);
+        hadOneShotParam = true;
       }
+    }
+    if (hadOneShotParam && typeof window.history?.replaceState === 'function') {
+      const cleanQuery = params.toString();
+      const cleanUrl = `${window.location.pathname}${cleanQuery ? `?${cleanQuery}` : ''}${window.location.hash || ''}`;
+      window.history.replaceState(null, '', cleanUrl);
+    }
+
+    if ((soulsRaw === '1' || soulsRaw === 'true' || directLvl === 26) && !hubOnly && navType !== 'reload') {
+      void startSoulsLevel(targetClass || 'warrior');
     }
   } catch {}
 
   let lowFpsStreak = 0;
   let thermalLowSpecApplied = false;
 
-  // === High-Refresh Render & Simulation Loop (Up to 120 FPS ProMotion / Desktop) ===
+  // === Uncapped High-Refresh Render & Simulation Loop ===
   const fpsBadgeEl = document.getElementById('fps-badge');
-  const showDevFps = isDevEditorEnabled();
   if (fpsBadgeEl) {
-    fpsBadgeEl.classList.toggle('is-dev-visible', showDevFps);
-    fpsBadgeEl.classList.toggle('hidden', !showDevFps);
+    fpsBadgeEl.classList.remove('hidden');
+    fpsBadgeEl.classList.add('is-dev-visible');
   }
   let lastNow = performance.now();
   let elapsedTime = 0;
@@ -1319,8 +1369,8 @@ async function bootstrap() {
       if (fpsAccumTime >= 0.25) {
         const instFps = fpsFrameCount / fpsAccumTime;
         smoothedFps = smoothedFps * 0.35 + instFps * 0.65;
-        if (fpsBadgeEl && showDevFps) {
-          const shownFps = Math.min(120, Math.max(1, Math.round(smoothedFps)));
+        if (fpsBadgeEl) {
+          const shownFps = Math.max(1, Math.round(smoothedFps));
           fpsBadgeEl.textContent = `${shownFps} FPS`;
         }
         if (gameMode === 'playing' && !externalPaused && !thermalLowSpecApplied) {
@@ -1329,6 +1379,7 @@ async function bootstrap() {
             if (lowFpsStreak >= 8) {
               thermalLowSpecApplied = true;
               world.setLowSpecMode?.(true);
+              combat.setLowSpecMode?.(true);
             }
           } else {
             lowFpsStreak = Math.max(0, lowFpsStreak - 1);
@@ -1339,6 +1390,7 @@ async function bootstrap() {
       }
     }
 
+    const MAX_SIM_STEP = 1 / 60; // Deterministic <= 16.67ms sub-stepping for 30/60/144 FPS parity
     const dt = Math.min(0.05, Math.max(0.0005, rawDeltaSec));
 
     if (externalPaused) {
@@ -1348,17 +1400,42 @@ async function bootstrap() {
       return;
     }
 
-    elapsedTime += dt;
-
     if (gameMode === 'playing') {
-      const input = gatherInput(dt);
-      combat.update(dt, input, elapsedTime);
+      const subSteps = Math.max(1, Math.min(3, Math.ceil(dt / MAX_SIM_STEP)));
+      const stepDt = dt / subSteps;
+      const frameInput = gatherInput(dt);
+      const urgentHudSync = Boolean(
+        frameInput.reload ||
+        frameInput.dash ||
+        frameInput.ult ||
+        frameInput.heavyTrigger ||
+        frameInput.flask ||
+        frameInput.interact
+      );
+      for (let s = 0; s < subSteps; s++) {
+        if (gameMode !== 'playing') break;
+        elapsedTime += stepDt;
+        combat.update(stepDt, frameInput, elapsedTime);
+        world.update(stepDt, elapsedTime);
+        if (s === 0 && subSteps > 1) {
+          inputCtrl.clearSubStepEdgeTriggers(frameInput);
+        }
+      }
       hudSyncAccum = (hudSyncAccum || 0) + dt;
-      if (hudSyncAccum >= 0.05 || input.reload || input.dash || input.ult) {
+      if (hudSyncAccum >= 0.05 || urgentHudSync) {
         hudSyncAccum = 0;
         const snap = combat.getHudSnapshot();
         ui.updateHud(snap);
-        syncMusicMode(snap?.finaleStarted || (snap?.isEndless && snap?.boss) ? 'boss' : 'combat');
+        ui.setSoulsInteractPrompt?.(
+          Boolean(snap?.isSoulslike && (snap?.souls?.canOpenBossDoors || snap?.souls?.canInteract)),
+          snap?.souls?.interactLabel || 'Открыть врата'
+        );
+        const wantBossMusic = Boolean(
+          snap?.finaleStarted ||
+          (snap?.isEndless && snap?.boss) ||
+          (snap?.isSoulslike && snap?.souls?.bossAwakened && !snap?.souls?.bossDefeated && !snap?.souls?.doorCutsceneActive)
+        );
+        syncMusicMode(wantBossMusic ? 'boss' : 'combat');
       }
       autoSaveAccum += dt;
       if (autoSaveAccum >= 3.0) {
@@ -1367,8 +1444,8 @@ async function bootstrap() {
           persistSave();
         }
       }
-      world.update(dt, elapsedTime);
     } else if (gameMode === 'hub') {
+      elapsedTime += dt;
       // Close-up Hero Showcase camera centered on (0, 0) stone pedestal + RMB 360° Hero Rotation
       world.followTarget(0, 0, dt);
       if (!rmbRotatingHero && !touchRotatingHero && Math.abs(hubHeroRotVel) > 0.001) {
@@ -1392,6 +1469,7 @@ async function bootstrap() {
       }
       world.update(dt, elapsedTime);
     } else {
+      elapsedTime += dt;
       // Paused in Level-Up or Result modal: keep subtle lantern flicker alive
       world.update(dt * 0.25, elapsedTime);
     }

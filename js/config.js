@@ -1111,6 +1111,52 @@ export const LEVELS = CHAPTER_METADATA.map(([titleRu, subRu, bannerFile, _pool],
   };
 });
 
+// Standalone Boss Arena Mode («Abandoned Knight Rift») — separate from the 25-chapter PvE campaign!
+export const SOULS_LEVEL_DEF = Object.freeze({
+  level: 26,
+  id: 'abandoned_knight_rift',
+  act: 0,
+  roman: '',
+  shortTitleRu: 'Abandoned Knight Rift',
+  nameRu: 'Abandoned Knight Rift',
+  nameEn: 'Abandoned Knight Rift',
+  subtitleRu: 'Отдельный режим • Босс • Выносливость • Блок/Парирование [Alt] • Фляга [R]',
+  bannerImg: './assets/ui/act5_banner.jpg',
+  biome: 'souls_citadel',
+  isSoulslike: true,
+  isStandaloneMode: true,
+  recWeaponLevel: 1,
+  targetKills: 4,
+  enemyQuotas: null,
+  finaleMiniBossType: null,
+  bossSpawnTimerSec: 0,
+  finaleBosses: ['boss_warden'],
+  durationSec: 600,
+  spawnInterval: 99,
+  hpScale: 1.0,
+  dmgScale: 1.0,
+  enemyPool: ['cursed_footman', 'iron_knight', 'bone_archer'],
+  miniBossPool: [],
+  bossId: 'boss_warden',
+  bossType: 'boss_warden',
+  coBossId: null,
+  unlockWeaponTier: null,
+  hasBoss: true,
+  hasEliteFinale: false
+});
+
+export function getLevelDef(levelNum) {
+  if (Number(levelNum) === SOULS_LEVEL_DEF.level || levelNum === SOULS_LEVEL_DEF.id) {
+    return SOULS_LEVEL_DEF;
+  }
+  const num = Math.floor(Number(levelNum));
+  if (Number.isFinite(num)) {
+    const found = LEVELS.find((l) => l.level === num);
+    if (found) return found;
+  }
+  return LEVELS[0];
+}
+
 // Synergistic Roguelike In-Run Blessings (3-card level-up choices during battle!)
 export const RUN_UPGRADES = [
   {

@@ -14,11 +14,13 @@ import {
   WEAPONS,
   ENEMY_TYPES,
   LEVELS,
+  SOULS_LEVEL_DEF,
+  getLevelDef,
   RUN_UPGRADES,
   MAGE_TALENT_TREE,
   CLASS_TALENT_TREES
-} from './config.js?v=20261120z35';
-import { attachSeamlessLoop } from './ambientVideo.js?v=20261117z25';
+} from './config.js?v=20261121z64';
+import { attachSeamlessLoop } from './ambientVideo.js?v=20261121z64';
 import {
   CLASS_ORDER,
   CLASS_META,
@@ -34,18 +36,18 @@ import {
   resolveWeaponUpgradeCost,
   resolveMasteryList,
   normalizeActivePerks
-} from './ui/resolvers.js?v=20261120z35';
+} from './ui/resolvers.js?v=20261121z64';
 import {
   makeSvgNode,
   createWeaponSvg,
   createStatRuneSvg,
   createTalentRuneSvg,
   createBlessingRelicSvg
-} from './ui/svgIcons.js?v=20261120z35';
-import { createModalsController } from './ui/modals.js?v=20261120z35';
+} from './ui/svgIcons.js?v=20261121z64';
+import { createModalsController } from './ui/modals.js?v=20261121z64';
 
 // Backward-compatible facade re-exports (Wave 1/2 modularization)
-export { createWeaponSvg, createBlessingRelicSvg } from './ui/svgIcons.js?v=20261120z35';
+export { createWeaponSvg, createBlessingRelicSvg } from './ui/svgIcons.js?v=20261121z64';
 
 // ============================================================================
 // MAIN UI MANAGER FACTORY
@@ -117,6 +119,14 @@ export function createUIManager(initialCallbacks = {}) {
   const armorPill = el('div', 'armor-pill', 'Блок 26%');
   hpRowWrap.append(hpBarFrame, armorPill);
 
+  // Dark Souls / Chapter XXVI Stamina Bar directly beneath HP Bar (hidden outside Souls mode)
+  const soulsStaminaWrap = el('div', 'souls-stamina-wrap hidden');
+  const soulsStaminaFrame = el('div', 'souls-stamina-frame');
+  const soulsStaminaFill = el('div', 'souls-stamina-fill');
+  const soulsStaminaText = el('div', 'souls-stamina-text', 'ВЫН. 100 / 100');
+  soulsStaminaFrame.append(soulsStaminaFill, soulsStaminaText);
+  soulsStaminaWrap.appendChild(soulsStaminaFrame);
+
   const sealSlotsWrap = el('div', 'seal-slots');
   const sealLabel = el('span', 'seal-slots-label', 'Печати Зверя:');
   sealSlotsWrap.appendChild(sealLabel);
@@ -142,7 +152,7 @@ export function createUIManager(initialCallbacks = {}) {
   beastActiveBar.append(beastBarHead, beastBarTrack);
 
   const companionPill = el('div', 'companion-pill hidden', 'Напарник в строю');
-  hudTopLeft.append(hpRowWrap, sealSlotsWrap, beastActiveBar, companionPill);
+  hudTopLeft.append(hpRowWrap, soulsStaminaWrap, sealSlotsWrap, beastActiveBar, companionPill);
 
   // Top-Center: Chapter Wave Timer, Boss Bar, Relic Crate Compass
   const hudTopCenter = el('div', 'hud-top-center');
@@ -243,6 +253,11 @@ export function createUIManager(initialCallbacks = {}) {
   touchPreviewBtn.classList.remove('is-on');
   touchPreviewBtn.title = 'Плавающий джойстик и кнопка рывка (Вкл/Выкл)';
 
+  const hudTelegraphBtn = el('button', 'hud-btn hud-telegraph-btn is-on', '🎯 [9]');
+  hudTelegraphBtn.type = 'button';
+  hudTelegraphBtn.title = 'Скрыть/показать индикаторы атак врагов [9]';
+  hudTelegraphBtn.setAttribute('aria-pressed', 'true');
+
   const hudMuteBtn = el('button', 'hud-btn icon-btn sound-trigger-btn', '🔊');
   hudMuteBtn.type = 'button';
   hudMuteBtn.title = 'Настройки звука';
@@ -256,7 +271,7 @@ export function createUIManager(initialCallbacks = {}) {
     )
   );
 
-  hudActionsRow.append(hudMuteBtn, hudHomeBtn);
+  hudActionsRow.append(hudTelegraphBtn, hudMuteBtn, hudHomeBtn);
   hudTopRight.append(hudStatsPills, hudActionsRow);
 
   hudTopRow.append(hudTopLeft, hudTopCenter, hudTopRight);
@@ -268,10 +283,14 @@ export function createUIManager(initialCallbacks = {}) {
     typeof window !== 'undefined' &&
     ('ontouchstart' in window || (navigator && navigator.maxTouchPoints > 0));
   let touchPreviewEnabled = false;
+  let soulsModeActive = false;
 
   const touchLayer = el('div', `touch-layer${isTouchCapable ? '' : ' hidden'}`);
   const leftZone = el('div', 'touch-zone-left');
+  const rightCamZone = el('div', 'touch-camera-zone hidden');
   const leftBase = el('div', 'joystick-base left-stick');
+  const leftSprintRing = el('div', 'joystick-sprint-ring');
+  const leftSprintTag = el('span', 'joystick-sprint-tag', '⚡ СПРИНТ');
   const leftRingSvg = makeSvgNode(
     `<svg viewBox="0 0 112 112" width="112" height="112" fill="none" xmlns="http://www.w3.org/2000/svg" class="joystick-ring-svg">
       <circle cx="56" cy="56" r="52" stroke="rgba(253,224,147,0.42)" stroke-width="1.5" stroke-dasharray="6 5"/>
@@ -283,7 +302,7 @@ export function createUIManager(initialCallbacks = {}) {
   );
   const leftKnob = el('div', 'joystick-knob');
   const leftCap = el('span', 'joystick-caption', 'ДВИЖЕНИЕ');
-  leftBase.append(leftRingSvg, leftKnob, leftCap);
+  leftBase.append(leftSprintRing, leftSprintTag, leftRingSvg, leftKnob, leftCap);
 
   // Right-Thumb Gothic Touch Dash Button (shown alongside floating joystick on touch devices / preview)
   const TOUCH_DASH_RING_CIRC = 207.35; // 2 * PI * 33
@@ -330,7 +349,39 @@ export function createUIManager(initialCallbacks = {}) {
   const touchUltLabel = el('span', 'touch-ult-label', '0/5');
   touchUltBtn.append(touchUltRingSvg, touchUltIcon, touchUltLabel);
 
-  touchLayer.append(leftZone, leftBase, touchUltBtn, touchDashBtn);
+  // Right-Thumb Ergonomic Arc Cluster for Abandoned Knight Rift (Mobile Touch / Yandex Games)
+  const touchSoulsCluster = el('div', 'touch-souls-cluster hidden');
+
+  const touchAttackBtn = el('button', 'touch-souls-btn touch-souls-r1');
+  touchAttackBtn.type = 'button';
+  touchAttackBtn.setAttribute('aria-label', 'Атака R1');
+  touchAttackBtn.append(el('span', 'touch-souls-ico', '⚔️'), el('span', 'touch-souls-lbl', 'R1'));
+
+  const touchHeavyBtn = el('button', 'touch-souls-btn touch-souls-r2');
+  touchHeavyBtn.type = 'button';
+  touchHeavyBtn.setAttribute('aria-label', 'Тяжёлый удар R2');
+  touchHeavyBtn.append(el('span', 'touch-souls-ico', '💥'), el('span', 'touch-souls-lbl', 'R2'));
+
+  const touchBlockBtn = el('button', 'touch-souls-btn touch-souls-block');
+  touchBlockBtn.type = 'button';
+  touchBlockBtn.setAttribute('aria-label', 'Блок и Парирование');
+  const touchBlockLbl = el('span', 'touch-souls-lbl', 'БЛОК');
+  touchBlockBtn.append(el('span', 'touch-souls-ico', '🛡️'), touchBlockLbl);
+
+  const touchFlaskBtn = el('button', 'touch-souls-btn touch-souls-flask');
+  touchFlaskBtn.type = 'button';
+  touchFlaskBtn.setAttribute('aria-label', 'Фляга');
+  const touchFlaskCountLbl = el('span', 'touch-souls-lbl', '4/4');
+  touchFlaskBtn.append(el('span', 'touch-souls-ico', '🧪'), touchFlaskCountLbl);
+
+  const touchLockBtn = el('button', 'touch-souls-btn touch-souls-lock');
+  touchLockBtn.type = 'button';
+  touchLockBtn.setAttribute('aria-label', 'Захват цели');
+  touchLockBtn.append(el('span', 'touch-souls-ico', '🎯'), el('span', 'touch-souls-lbl', 'ЦЕЛЬ'));
+
+  touchSoulsCluster.append(touchAttackBtn, touchHeavyBtn, touchBlockBtn, touchFlaskBtn, touchLockBtn);
+
+  touchLayer.append(leftZone, rightCamZone, leftBase, touchUltBtn, touchDashBtn, touchSoulsCluster);
 
   // =========================================================================
   // 4. BOTTOM COMBAT HUD DOCK (Blessing Mini-Badges, Weapon/Shells/Reload, XP)
@@ -487,12 +538,55 @@ export function createUIManager(initialCallbacks = {}) {
   hudComboBarTrack.appendChild(hudComboBarFill);
   hudComboBadge.append(hudComboHead, hudComboBarTrack);
 
-  hudWeaponRow.append(weaponHudBadge, hudReloadBtn, hudDashBtn, hudUltBtn, hudComboBadge);
+  // Abandoned Knight Rift Action Pills: Shield Block/Parry [M4 / RMB] + Estus Flask [R]
+  const hudBlockBtn = el('button', 'hud-souls-block-btn hidden');
+  hudBlockBtn.type = 'button';
+  hudBlockBtn.title = 'Удерживать [Mouse 4 / ПКМ] — Блок щитом • Точное нажатие — Парирование (×2.2 контрудар)';
+  const hudBlockIcon = makeSvgNode(
+    `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M12 2.4 L19.8 5.6 V11.4 C19.8 16.4 16.4 20.1 12 21.8 C7.6 20.1 4.2 16.4 4.2 11.4 V5.6 Z" fill="#1e293b" stroke="#fde093" stroke-width="1.6" stroke-linejoin="round"/>
+      <path d="M12 5.4 V18.6 M7.6 10.6 H16.4" stroke="#93c5fd" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>`
+  );
+  const hudBlockMeta = el('span', 'hud-souls-meta');
+  const hudBlockStateText = el('span', 'hud-souls-state', 'БЛОК / ПАРИР.');
+  const hudBlockKeyTag = el('span', 'hud-souls-key', '[M4]');
+  hudBlockMeta.append(hudBlockStateText, hudBlockKeyTag);
+  hudBlockBtn.append(hudBlockIcon, hudBlockMeta);
 
-  // Soul XP Bar
+  const hudFlaskBtn = el('button', 'hud-souls-flask-btn hidden');
+  hudFlaskBtn.type = 'button';
+  hudFlaskBtn.title = 'Фляга Пепла [R] — восстанавливает 55% ОЗ (восполняется у Костра)';
+  const hudFlaskIcon = makeSvgNode(
+    `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M9.5 3 H14.5 M10.5 3 V7.2 L5.8 14.8 C4.9 16.3 5.9 19.6 8.4 19.6 H15.6 C18.1 19.6 19.1 16.3 18.2 14.8 L13.5 7.2 V3" stroke="#fde093" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M7.6 14.6 H16.4 L17.1 16 C17.5 16.9 16.9 18.2 15.6 18.2 H8.4 C7.1 18.2 6.5 16.9 6.9 16 Z" fill="#f59e0b"/>
+    </svg>`
+  );
+  const hudFlaskMeta = el('span', 'hud-souls-meta');
+  const hudFlaskStateText = el('span', 'hud-souls-state', 'ФЛЯГА 4/4');
+  const hudFlaskKeyTag = el('span', 'hud-souls-key', '[R]');
+  hudFlaskMeta.append(hudFlaskStateText, hudFlaskKeyTag);
+  hudFlaskBtn.append(hudFlaskIcon, hudFlaskMeta);
+
+  // Target Lock-On Pill [Q / Middle Mouse] — Dark Souls (Chapter XXVI) exclusive
+  const hudLockBtn = el('button', 'hud-lock-btn hidden');
+  hudLockBtn.type = 'button';
+  hudLockBtn.title = 'Захват цели [Q / СКМ] • Сменить цель [Tab]';
+  hudLockBtn.setAttribute('aria-pressed', 'false');
+  const hudLockGlyph = el('span', 'hud-lock-glyph', '🎯');
+  const hudLockMeta = el('span', 'hud-souls-meta');
+  const hudLockStateText = el('span', 'hud-souls-state hud-lock-state', 'ЦЕЛЬ');
+  const hudLockKeyTag = el('span', 'hud-souls-key', '[Q]');
+  hudLockMeta.append(hudLockStateText, hudLockKeyTag);
+  hudLockBtn.append(hudLockGlyph, hudLockMeta);
+
+  hudWeaponRow.append(weaponHudBadge, hudReloadBtn, hudDashBtn, hudBlockBtn, hudFlaskBtn, hudLockBtn, hudUltBtn, hudComboBadge);
+
+  // Hero Level XP Bar (feeds Talent Points — Soul Blessings removed)
   const soulXpWrap = el('div', 'soul-xp-wrap');
   const soulXpMeta = el('div', 'soul-xp-meta');
-  const soulXpTitle = el('span', 'soul-xp-title', 'Уровень душ 1');
+  const soulXpTitle = el('span', 'soul-xp-title', 'Уровень героя 1');
   const soulXpNums = el('span', 'soul-xp-nums', '0 / 45');
   soulXpMeta.append(soulXpTitle, soulXpNums);
   const soulXpTrack = el('div', 'soul-xp-track');
@@ -534,14 +628,54 @@ export function createUIManager(initialCallbacks = {}) {
     active: false,
     moveActive: false,
     aimActive: false,
+    sprint: false,
+    attackTrigger: false,
+    attackHeld: false,
+    heavyTrigger: false,
+    heavyHeld: false,
+    camDx: 0,
+    camDy: 0,
     dash: false,
-    ult: false
+    ult: false,
+    block: false,
+    flask: false,
+    interact: false
   };
 
-  const MAX_STICK_RADIUS = 46;
+  const MAX_STICK_RADIUS = 54;
+  const SPRINT_ENTER_RATIO = 1.18;
+  const SPRINT_EXIT_RATIO = 0.90;
   const DEADZONE = 0.07;
 
+  function syncSoulsTouchLayout() {
+    touchLayer.classList.toggle('is-souls-touch', soulsModeActive);
+    rightCamZone.classList.toggle('hidden', !soulsModeActive);
+    touchSoulsCluster.classList.toggle('hidden', !soulsModeActive);
+    const soulsTouchVisible = soulsModeActive && !touchLayer.classList.contains('hidden');
+    hudScreen.classList.toggle('is-souls-touch-active', soulsTouchVisible);
+  }
+
+  function clearAllTouchActions() {
+    touchState.sprint = false;
+    touchState.attackTrigger = false;
+    touchState.attackHeld = false;
+    touchState.heavyTrigger = false;
+    touchState.heavyHeld = false;
+    touchState.camDx = 0;
+    touchState.camDy = 0;
+    touchState.dash = false;
+    touchState.ult = false;
+    touchState.block = false;
+    touchState.flask = false;
+    touchState.interact = false;
+    leftBase.classList.remove('is-sprinting');
+    touchAttackBtn.classList.remove('is-pressed');
+    touchHeavyBtn.classList.remove('is-pressed');
+    touchBlockBtn.classList.remove('is-pressed');
+  }
+
   function ensureAutoAimForTouch() {
+    if (soulsModeActive) return;
     if (!autoAim) {
       autoAim = true;
       callbacks.onToggleAutoAim?.(true);
@@ -601,6 +735,19 @@ export function createUIManager(initialCallbacks = {}) {
       const norm = clamped / MAX_STICK_RADIUS;
       touchState.moveX = norm < DEADZONE ? 0 : kx / MAX_STICK_RADIUS;
       touchState.moveZ = norm < DEADZONE ? 0 : ky / MAX_STICK_RADIUS;
+
+      if (soulsModeActive) {
+        if (!touchState.sprint && dist > MAX_STICK_RADIUS * SPRINT_ENTER_RATIO) {
+          touchState.sprint = true;
+          baseEl.classList.add('is-sprinting');
+        } else if (touchState.sprint && dist < MAX_STICK_RADIUS * SPRINT_EXIT_RATIO) {
+          touchState.sprint = false;
+          baseEl.classList.remove('is-sprinting');
+        }
+      } else if (touchState.sprint) {
+        touchState.sprint = false;
+        baseEl.classList.remove('is-sprinting');
+      }
     };
 
     const releaseStick = (instant = false) => {
@@ -612,7 +759,8 @@ export function createUIManager(initialCallbacks = {}) {
       touchState.moveZ = 0;
       touchState.moveActive = false;
       touchState.active = false;
-      baseEl.classList.remove('is-active');
+      touchState.sprint = false;
+      baseEl.classList.remove('is-active', 'is-sprinting');
 
       if (returnTimer) {
         clearTimeout(returnTimer);
@@ -755,14 +903,12 @@ export function createUIManager(initialCallbacks = {}) {
       if (activePointerId !== null || activeTouchId !== null) {
         releaseStick(true);
       }
-      touchState.dash = false;
-      touchState.ult = false;
+      clearAllTouchActions();
     });
     document.addEventListener('visibilitychange', () => {
       if (document.hidden && (activePointerId !== null || activeTouchId !== null)) {
         releaseStick(true);
-        touchState.dash = false;
-        touchState.ult = false;
+        clearAllTouchActions();
       }
     });
 
@@ -771,11 +917,67 @@ export function createUIManager(initialCallbacks = {}) {
 
   const releaseLeftStick = setupFloatingLeftStick(leftZone, leftBase, leftKnob);
 
+  // Right-half 1-finger Camera Swipe Zone (Abandoned Knight Rift mobile touch)
+  (function setupTouchCameraSwipe(camZoneEl) {
+    let camPointerId = null;
+    let lastX = 0;
+    let lastY = 0;
+    const mapPt = (cx, cy) =>
+      window.__toGameCoords ? window.__toGameCoords(cx, cy) : { x: cx, y: cy };
+
+    camZoneEl.addEventListener('pointerdown', (e) => {
+      if (!soulsModeActive || hudScreen.classList.contains('hidden')) return;
+      if (e.pointerType === 'mouse' && !touchPreviewEnabled) return;
+      if (camPointerId !== null) return;
+      e.preventDefault();
+      camPointerId = e.pointerId;
+      try {
+        camZoneEl.setPointerCapture(e.pointerId);
+      } catch {}
+      const pt = mapPt(e.clientX, e.clientY);
+      lastX = pt.x;
+      lastY = pt.y;
+    });
+
+    camZoneEl.addEventListener('pointermove', (e) => {
+      if (e.pointerId !== camPointerId) return;
+      e.preventDefault();
+      const pt = mapPt(e.clientX, e.clientY);
+      const dx = pt.x - lastX;
+      const dy = pt.y - lastY;
+      lastX = pt.x;
+      lastY = pt.y;
+      touchState.camDx += dx * 1.45;
+      touchState.camDy += dy * 1.25;
+    });
+
+    const releaseCam = (e) => {
+      if (e && e.pointerId !== undefined && e.pointerId !== camPointerId) return;
+      if (camPointerId !== null) {
+        try {
+          if (camZoneEl.hasPointerCapture?.(camPointerId)) {
+            camZoneEl.releasePointerCapture(camPointerId);
+          }
+        } catch {}
+      }
+      camPointerId = null;
+    };
+    camZoneEl.addEventListener('pointerup', releaseCam);
+    camZoneEl.addEventListener('pointercancel', releaseCam);
+    camZoneEl.addEventListener('lostpointercapture', () => {
+      camPointerId = null;
+    });
+    window.addEventListener('blur', () => {
+      camPointerId = null;
+    });
+  })(rightCamZone);
+
   window.addEventListener(
     'touchstart',
     () => {
       if (!hudScreen.classList.contains('hidden')) {
         touchLayer.classList.remove('hidden');
+        syncSoulsTouchLayout();
         ensureAutoAimForTouch();
       }
     },
@@ -791,9 +993,9 @@ export function createUIManager(initialCallbacks = {}) {
     } else {
       touchLayer.classList.add('hidden');
       releaseLeftStick();
-      touchState.dash = false;
-      touchState.ult = false;
+      clearAllTouchActions();
     }
+    syncSoulsTouchLayout();
     syncTouchPreviewButton();
   });
 
@@ -850,6 +1052,131 @@ export function createUIManager(initialCallbacks = {}) {
   hudReloadBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     callbacks.onReload?.();
+  });
+
+  // Fixed pointer-captured Block/Parry hold on both desktop HUD pill & mobile touch button
+  function bindCapturedHoldBtn(btnEl, onDown, onUp) {
+    let heldPid = null;
+    btnEl.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (hudScreen.classList.contains('hidden') || btnEl.classList.contains('hidden')) return;
+      heldPid = e.pointerId;
+      try {
+        btnEl.setPointerCapture(e.pointerId);
+      } catch {}
+      btnEl.classList.add('is-pressed');
+      onDown();
+    });
+    const finish = (e) => {
+      if (e && e.pointerId !== undefined && heldPid !== null && e.pointerId !== heldPid) return;
+      if (heldPid !== null) {
+        try {
+          if (btnEl.hasPointerCapture?.(heldPid)) {
+            btnEl.releasePointerCapture(heldPid);
+          }
+        } catch {}
+      }
+      heldPid = null;
+      btnEl.classList.remove('is-pressed');
+      onUp();
+    };
+    btnEl.addEventListener('pointerup', finish);
+    btnEl.addEventListener('pointercancel', finish);
+    btnEl.addEventListener('lostpointercapture', () => {
+      if (heldPid !== null) {
+        heldPid = null;
+        btnEl.classList.remove('is-pressed');
+        onUp();
+      }
+    });
+    window.addEventListener('blur', () => {
+      if (heldPid !== null) {
+        heldPid = null;
+        btnEl.classList.remove('is-pressed');
+        onUp();
+      }
+    });
+  }
+
+  bindCapturedHoldBtn(
+    hudBlockBtn,
+    () => {
+      touchState.block = true;
+    },
+    () => {
+      touchState.block = false;
+    }
+  );
+
+  bindCapturedHoldBtn(
+    touchBlockBtn,
+    () => {
+      touchState.block = true;
+    },
+    () => {
+      touchState.block = false;
+    }
+  );
+
+  bindCapturedHoldBtn(
+    touchAttackBtn,
+    () => {
+      touchState.attackTrigger = true;
+      touchState.attackHeld = true;
+    },
+    () => {
+      touchState.attackHeld = false;
+    }
+  );
+
+  bindCapturedHoldBtn(
+    touchHeavyBtn,
+    () => {
+      touchState.heavyTrigger = true;
+      touchState.heavyHeld = true;
+    },
+    () => {
+      touchState.heavyHeld = false;
+    }
+  );
+
+  touchFlaskBtn.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (hudScreen.classList.contains('hidden')) return;
+    touchState.flask = true;
+    touchFlaskBtn.classList.add('is-pressed');
+    setTimeout(() => touchFlaskBtn.classList.remove('is-pressed'), 130);
+  });
+
+  let lastTouchLockTapAt = 0;
+  touchLockBtn.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (hudScreen.classList.contains('hidden')) return;
+    const nowMs = performance.now();
+    touchLockBtn.classList.add('is-pressed');
+    setTimeout(() => touchLockBtn.classList.remove('is-pressed'), 130);
+    if (hudCache.isTargetLocked && nowMs - lastTouchLockTapAt <= 300) {
+      lastTouchLockTapAt = 0;
+      callbacks.onCycleTargetLock?.(1);
+    } else {
+      lastTouchLockTapAt = nowMs;
+      callbacks.onToggleTargetLock?.();
+    }
+  });
+
+  hudFlaskBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (hudScreen.classList.contains('hidden')) return;
+    touchState.flask = true;
+  });
+
+  hudLockBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (hudScreen.classList.contains('hidden') || hudLockBtn.classList.contains('hidden')) return;
+    callbacks.onToggleTargetLock?.();
   });
 
   // =========================================================================
@@ -951,8 +1278,6 @@ export function createUIManager(initialCallbacks = {}) {
   const homeRotateHint = el('div', 'hub-rotate-hint', 'ПКМ — повернуть героя');
 
   const homeCtaStack = el('div', 'home-cta-stack');
-  const homeWeaponWarn = el('button', 'launch-weapon-warn home-weapon-warn hidden');
-  homeWeaponWarn.type = 'button';
 
   const homeJourneyBtn = el('button', 'home-journey-btn');
   homeJourneyBtn.type = 'button';
@@ -975,7 +1300,45 @@ export function createUIManager(initialCallbacks = {}) {
   const homeEndlessRecord = el('span', 'home-endless-record', 'Выживание • Таблица лидеров');
   homeEndlessBtn.append(homeEndlessTop, homeEndlessRecord);
 
-  homeCtaStack.append(homeWeaponWarn, homeJourneyBtn, homeEndlessBtn);
+  // Standalone Abandoned Knight Rift Mode Launch Button
+  const homeSoulsBtn = el('button', 'home-souls-btn');
+  homeSoulsBtn.type = 'button';
+  const homeSoulsTop = el('span', 'home-souls-top');
+  homeSoulsTop.appendChild(
+    makeSvgNode(
+      `<svg viewBox="0 0 22 22" width="17" height="17" fill="none" xmlns="http://www.w3.org/2000/svg" class="home-souls-svg" aria-hidden="true">
+        <path d="M11 2.2 C11 2.2 15.2 6.8 15.2 11 C15.2 13.7 13.4 15.7 11 16.2 C8.6 15.7 6.8 13.7 6.8 11 C6.8 6.8 11 2.2 11 2.2 Z" fill="#f97316" stroke="#fef08a" stroke-width="1.35" stroke-linejoin="round"/>
+        <path d="M11 6.5 L11 19.5 M8 14.5 L14 14.5" stroke="#fffbeb" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>`
+    )
+  );
+  const homeSoulsLabel = el('span', 'home-souls-label', 'ABANDONED KNIGHT RIFT');
+  homeSoulsTop.appendChild(homeSoulsLabel);
+  const homeSoulsSub = el('span', 'home-souls-sub', 'Отдельный режим • Босс');
+  homeSoulsBtn.append(homeSoulsTop, homeSoulsSub);
+
+  // Permanent Training Ground CTA Button (Peaceful Dummy Arena for testing animations & mechanics anytime)
+  const homeTrainingBtn = el('button', 'home-training-btn');
+  homeTrainingBtn.type = 'button';
+  const homeTrainingTop = el('span', 'home-training-top');
+  homeTrainingTop.appendChild(
+    makeSvgNode(
+      `<svg viewBox="0 0 22 22" width="17" height="17" fill="none" xmlns="http://www.w3.org/2000/svg" class="home-training-svg" aria-hidden="true">
+        <circle cx="11" cy="11" r="8" stroke="#6ee7b7" stroke-width="1.6"/>
+        <circle cx="11" cy="11" r="4.4" stroke="#a7f3d0" stroke-width="1.4"/>
+        <circle cx="11" cy="11" r="1.7" fill="#fde047"/>
+      </svg>`
+    )
+  );
+  const homeTrainingLabel = el('span', 'home-training-label', 'ПОЛИГОН');
+  homeTrainingTop.appendChild(homeTrainingLabel);
+  const homeTrainingSub = el('span', 'home-training-sub', 'Мишень • Тест атак');
+  homeTrainingBtn.append(homeTrainingTop, homeTrainingSub);
+
+  const homeSecondaryRow = el('div', 'home-secondary-row');
+  homeSecondaryRow.append(homeEndlessBtn, homeTrainingBtn, homeSoulsBtn);
+
+  homeCtaStack.append(homeJourneyBtn, homeSecondaryRow);
   homePanel.append(homeCtaStack);
 
   // =========================================================================
@@ -1139,16 +1502,13 @@ export function createUIManager(initialCallbacks = {}) {
   const chapterMiniFeature = el('span', '');
   const chapterMiniTitle = el('div', '');
 
-  const launchWeaponWarn = el('button', 'launch-weapon-warn hidden');
-  launchWeaponWarn.type = 'button';
-
   const launchBattleBtn = el('button', 'launch-battle-btn gothic-plaque-battle-btn');
   launchBattleBtn.type = 'button';
   const launchMainText = el('span', 'launch-main-text', '⚔️ В БОЙ!');
   const launchSubText = el('span', 'launch-sub-text', `${LEVELS[0].nameRu}`);
   launchBattleBtn.append(launchMainText, launchSubText);
 
-  heroShowcaseDocks.append(heroInfoCard, launchWeaponWarn, launchBattleBtn);
+  heroShowcaseDocks.append(heroInfoCard, launchBattleBtn);
   heroesPanel.append(heroStageArea, heroShowcaseDocks);
 
   // =========================================================================
@@ -1322,15 +1682,9 @@ export function createUIManager(initialCallbacks = {}) {
   forestInfoCol.append(campaignChapterTitle, campaignChapterLore, forestGoalsRow);
 
   const forestActionsCol = el('div', 'forest-stage-actions-col');
-  const campaignWpnCheckBtn = el('button', 'campaign-wpn-check is-ready');
-  campaignWpnCheckBtn.type = 'button';
-  const campaignWpnCheckIcon = el('span', 'campaign-wpn-check-icon');
-  const campaignWpnCheckText = el('span', 'campaign-wpn-check-text', 'Оружие готово');
-  campaignWpnCheckBtn.append(campaignWpnCheckIcon, campaignWpnCheckText);
-
   const campaignStartBtn = el('button', 'forest-fight-gothic-btn', 'В БОЙ!');
   campaignStartBtn.type = 'button';
-  forestActionsCol.append(campaignWpnCheckBtn, campaignStartBtn);
+  forestActionsCol.append(campaignStartBtn);
   forestBottomStrip.append(forestInfoCol, forestActionsCol);
 
   campaignForestView.append(forestTopBar, forestStageFrame, forestBottomStrip);
@@ -1716,6 +2070,416 @@ export function createUIManager(initialCallbacks = {}) {
   const generalToast = el('div', 'general-toast hidden');
   root.appendChild(generalToast);
   let generalToastTimer = null;
+
+  // Abandoned Knight Rift Atmospheric Gothic Vignette (soft edges, pointer-events: none, Souls mode ONLY)
+  const soulsAtmosphereVignette = el('div', 'souls-atmosphere-vignette hidden');
+  hudScreen.insertBefore(soulsAtmosphereVignette, hudScreen.firstChild);
+
+  // Abandoned Knight Rift Cinematic 7.2s Cutscene Overlay: Letterbox + Gothic Boss Title Card + Skip Prompt
+  const soulsLetterboxTop = el('div', 'souls-letterbox-bar souls-letterbox-top');
+  const soulsLetterboxBottom = el('div', 'souls-letterbox-bar souls-letterbox-bottom');
+
+  const soulsBossTitleCard = el('div', 'souls-boss-titlecard');
+  const soulsTitleCardOrnamentTop = makeSvgNode(
+    `<svg viewBox="0 0 360 18" width="360" height="18" fill="none" xmlns="http://www.w3.org/2000/svg" class="souls-titlecard-ornament" aria-hidden="true">
+      <defs>
+        <linearGradient id="sbOrnGrad" x1="0%" y1="50%" x2="100%" y2="50%">
+          <stop offset="0%" stop-color="#e5b85c" stop-opacity="0"/>
+          <stop offset="32%" stop-color="#fde093" stop-opacity="0.72"/>
+          <stop offset="50%" stop-color="#fffbeb" stop-opacity="0.95"/>
+          <stop offset="68%" stop-color="#fde093" stop-opacity="0.72"/>
+          <stop offset="100%" stop-color="#e5b85c" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <line x1="12" y1="9" x2="164" y2="9" stroke="url(#sbOrnGrad)" stroke-width="1.25"/>
+      <line x1="196" y1="9" x2="348" y2="9" stroke="url(#sbOrnGrad)" stroke-width="1.25"/>
+      <polygon points="180,2.5 188,9 180,15.5 172,9" fill="rgba(253,224,147,0.22)" stroke="#fde093" stroke-width="1.35"/>
+      <circle cx="180" cy="9" r="2" fill="#fffbeb"/>
+      <circle cx="152" cy="9" r="1.4" fill="#fde093" opacity="0.75"/>
+      <circle cx="208" cy="9" r="1.4" fill="#fde093" opacity="0.75"/>
+    </svg>`
+  );
+  const soulsTitleCardMain = el('div', 'souls-titlecard-title', 'РЫЦАРЬ ПЕПЛА');
+  const soulsTitleCardSub = el('div', 'souls-titlecard-sub', 'СУДИЯ РУИН');
+  const soulsTitleCardLineBot = el('div', 'souls-titlecard-line-bot');
+  soulsBossTitleCard.append(soulsTitleCardOrnamentTop, soulsTitleCardMain, soulsTitleCardSub, soulsTitleCardLineBot);
+
+  // Cinematic Boss Dialogue Subtitles (integrated into the same letterbox overlay)
+  const soulsSubtitleWrap = el('div', 'souls-cutscene-subtitle-wrap');
+  const soulsSubtitleSpeaker = el('div', 'souls-cutscene-speaker', 'РЫЦАРЬ ПЕПЛА');
+  const soulsSubtitleText = el('div', 'souls-cutscene-subtitle', '');
+  soulsSubtitleWrap.append(soulsSubtitleSpeaker, soulsSubtitleText);
+
+  const soulsCutsceneSkipBtn = el(
+    'button',
+    'souls-cutscene-skip',
+    'Нажмите [Esc] / [Пробел] или тап — пропустить'
+  );
+  soulsCutsceneSkipBtn.type = 'button';
+  soulsCutsceneSkipBtn.setAttribute('aria-label', 'Пропустить кат-сцену');
+
+  root.append(soulsLetterboxTop, soulsLetterboxBottom, soulsBossTitleCard, soulsSubtitleWrap, soulsCutsceneSkipBtn);
+
+  let soulsLetterboxActive = false;
+  let soulsTitleCardVisible = false;
+  let soulsSubtitleVisible = false;
+  let soulsSubtitleSpeakerCache = 'РЫЦАРЬ ПЕПЛА';
+  let soulsSubtitleTextCache = '';
+  let soulsSubtitleSwapTimer = null;
+  let soulsCutsceneCanSkip = false;
+  let soulsTitleCardTextCache = 'РЫЦАРЬ ПЕПЛА';
+  let soulsTitleCardSubCache = 'СУДИЯ РУИН';
+  let lastCutsceneSkipDispatchMs = 0;
+
+  function triggerSkipBossDoorCutscene() {
+    if (!soulsLetterboxActive || !soulsCutsceneCanSkip) return;
+    const nowMs = performance.now();
+    if (nowMs - lastCutsceneSkipDispatchMs < 240) return;
+    lastCutsceneSkipDispatchMs = nowMs;
+    callbacks.onSkipBossDoorCutscene?.();
+    if (typeof window !== 'undefined' && typeof CustomEvent !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('grimborne-skip-cutscene'));
+    }
+  }
+
+  soulsCutsceneSkipBtn.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    triggerSkipBossDoorCutscene();
+  });
+
+  window.addEventListener(
+    'keydown',
+    (e) => {
+      if (!soulsLetterboxActive || !soulsCutsceneCanSkip || e.repeat) return;
+      if (e.code === 'Escape' || e.code === 'Space') {
+        e.preventDefault();
+        e.stopImmediatePropagation?.();
+        triggerSkipBossDoorCutscene();
+      }
+    },
+    { capture: true }
+  );
+
+  function setSoulsLetterbox(active, meta = null) {
+    const next = Boolean(active);
+    if (next !== soulsLetterboxActive) {
+      soulsLetterboxActive = next;
+      soulsLetterboxTop.classList.toggle('is-active', next);
+      soulsLetterboxBottom.classList.toggle('is-active', next);
+      hudScreen.classList.toggle('is-cutscene-active', next);
+      if (typeof document !== 'undefined' && document.body) {
+        document.body.classList.toggle('is-souls-cutscene', next);
+      }
+    }
+
+    const showTitle = next && Boolean(meta?.showBossTitleCard);
+    if (showTitle !== soulsTitleCardVisible) {
+      soulsTitleCardVisible = showTitle;
+      soulsBossTitleCard.classList.toggle('is-visible', showTitle);
+    }
+    if (showTitle) {
+      const nextTitle = (meta?.bossTitleRu && String(meta.bossTitleRu).trim()) || 'РЫЦАРЬ ПЕПЛА';
+      const nextSub = (meta?.bossSubtitleRu && String(meta.bossSubtitleRu).trim()) || 'СУДИЯ РУИН';
+      if (nextTitle !== soulsTitleCardTextCache) {
+        soulsTitleCardTextCache = nextTitle;
+        soulsTitleCardMain.textContent = nextTitle;
+      }
+      if (nextSub !== soulsTitleCardSubCache) {
+        soulsTitleCardSubCache = nextSub;
+        soulsTitleCardSub.textContent = nextSub;
+      }
+    }
+
+    const canSkip = next && Boolean(meta?.canSkip);
+    if (canSkip !== soulsCutsceneCanSkip) {
+      soulsCutsceneCanSkip = canSkip;
+      soulsCutsceneSkipBtn.classList.toggle('is-visible', canSkip);
+    }
+
+    const nextSubText = next && meta?.subtitleText ? String(meta.subtitleText).trim() : '';
+    const showSub = Boolean(nextSubText);
+    soulsSubtitleWrap.classList.toggle('is-above-title', showSub && showTitle);
+    if (showSub) {
+      const nextSpeaker =
+        meta?.subtitleSpeaker === ''
+          ? ''
+          : (meta?.subtitleSpeaker && String(meta.subtitleSpeaker).trim()) || 'РЫЦАРЬ ПЕПЛА';
+      if (nextSpeaker !== soulsSubtitleSpeakerCache) {
+        soulsSubtitleSpeakerCache = nextSpeaker;
+        soulsSubtitleSpeaker.textContent = nextSpeaker;
+        soulsSubtitleSpeaker.classList.toggle('hidden', !nextSpeaker);
+      }
+      if (nextSubText !== soulsSubtitleTextCache) {
+        soulsSubtitleTextCache = nextSubText;
+        if (soulsSubtitleSwapTimer) {
+          clearTimeout(soulsSubtitleSwapTimer);
+          soulsSubtitleSwapTimer = null;
+        }
+        if (soulsSubtitleVisible) {
+          soulsSubtitleText.classList.add('is-swapping');
+          soulsSubtitleSwapTimer = setTimeout(() => {
+            soulsSubtitleText.textContent = soulsSubtitleTextCache;
+            soulsSubtitleText.classList.remove('is-swapping');
+            soulsSubtitleSwapTimer = null;
+          }, 110);
+        } else {
+          soulsSubtitleText.textContent = nextSubText;
+          soulsSubtitleText.classList.remove('is-swapping');
+        }
+      }
+    } else {
+      if (soulsSubtitleSwapTimer) {
+        clearTimeout(soulsSubtitleSwapTimer);
+        soulsSubtitleSwapTimer = null;
+      }
+      soulsSubtitleText.classList.remove('is-swapping');
+      soulsSubtitleTextCache = '';
+    }
+    if (showSub !== soulsSubtitleVisible) {
+      soulsSubtitleVisible = showSub;
+      soulsSubtitleWrap.classList.toggle('is-visible', showSub);
+    }
+  }
+
+  // Abandoned Knight Rift Cinematic Victory Banner (pointer-events: none over live 3D arena)
+  const soulsBanner = el('div', 'souls-cinematic-banner hidden');
+  const soulsBannerLineTop = el('div', 'souls-banner-line top');
+  const soulsBannerTitle = el('div', 'souls-banner-title', 'ВЕЛИКИЙ ВРАГ ПОВЕРЖЕН');
+  const soulsBannerSubtitle = el('div', 'souls-banner-subtitle', 'Судия Руин пал');
+  const soulsBannerLineBottom = el('div', 'souls-banner-line bottom');
+  soulsBanner.append(soulsBannerLineTop, soulsBannerTitle, soulsBannerSubtitle, soulsBannerLineBottom);
+  root.appendChild(soulsBanner);
+  let soulsBannerFadeTimer = null;
+  let soulsBannerHideTimer = null;
+
+  // Unobtrusive corner hint after boss defeat in Abandoned Knight Rift
+  const soulsClearedHint = el('button', 'souls-cleared-hint hidden', '🔥 Локация зачищена • [Esc] Меню / В Хаб');
+  soulsClearedHint.type = 'button';
+  soulsClearedHint.addEventListener('click', (e) => {
+    e.stopPropagation();
+    callbacks.onTogglePause?.();
+  });
+  hudScreen.appendChild(soulsClearedHint);
+
+  // Compact Pointer Lock free-look camera hint (shown only in Abandoned Knight Rift while cursor is unlocked)
+  const soulsPointerHint = el('div', 'souls-pointer-hint hidden', '🖱️ Клик по экрану — свободная камера мышкой • [Esc] курсор');
+  hudScreen.appendChild(soulsPointerHint);
+
+  // Crisp non-blocking Elden Ring Combat Cue Pill (КОНТРУДАР! / СЛОМ СТОЙКИ! / ЧАСТИЧНОЕ ПАРИР.)
+  const soulsCombatCue = el('div', 'souls-combat-cue hidden');
+  hudScreen.appendChild(soulsCombatCue);
+  let soulsCombatCueTimer = null;
+
+  // Gothic Interact Prompt Pill ("🚪 [E] Открыть врата" — clickable & touch-tappable in Abandoned Knight Rift)
+  const soulsInteractPrompt = el('button', 'souls-interact-prompt hidden');
+  soulsInteractPrompt.type = 'button';
+  soulsInteractPrompt.setAttribute('aria-label', 'Взаимодействовать [E]');
+  const soulsInteractIcon = el('span', 'souls-interact-icon', '🚪');
+  const soulsInteractKey = el('span', 'souls-interact-key', '[E]');
+  const soulsInteractText = el('span', 'souls-interact-label', 'Открыть врата');
+  soulsInteractPrompt.append(soulsInteractIcon, soulsInteractKey, soulsInteractText);
+  soulsInteractPrompt.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (hudScreen.classList.contains('hidden') || soulsInteractPrompt.classList.contains('hidden')) return;
+    touchState.interact = true;
+    callbacks.onSoulsInteract?.();
+    soulsInteractPrompt.classList.add('is-pressed');
+    setTimeout(() => soulsInteractPrompt.classList.remove('is-pressed'), 140);
+  });
+  hudScreen.appendChild(soulsInteractPrompt);
+  let soulsInteractVisible = false;
+  let soulsInteractLabel = 'Открыть врата';
+
+  // Golden Elden Ring Critical Strike / Riposte Prompt ("⚔️ [ЛКМ / E] КРИТИЧЕСКИЙ УДАР")
+  const soulsRipostePrompt = el('button', 'souls-riposte-prompt hidden');
+  soulsRipostePrompt.type = 'button';
+  soulsRipostePrompt.setAttribute('aria-label', 'Критический удар [ЛКМ / E]');
+  soulsRipostePrompt.append(
+    el('span', 'souls-riposte-icon', '⚔️'),
+    el('span', 'souls-riposte-key', '[ЛКМ / E]'),
+    el('span', 'souls-riposte-label', 'КРИТИЧЕСКИЙ УДАР')
+  );
+  soulsRipostePrompt.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (hudScreen.classList.contains('hidden') || soulsRipostePrompt.classList.contains('hidden')) return;
+    touchState.attackTrigger = true;
+    touchState.interact = true;
+    callbacks.onSoulsInteract?.();
+    soulsRipostePrompt.classList.add('is-pressed');
+    setTimeout(() => soulsRipostePrompt.classList.remove('is-pressed'), 140);
+  });
+  hudScreen.appendChild(soulsRipostePrompt);
+
+  function setSoulsInteractPrompt(visible, label = 'Открыть врата') {
+    const show = Boolean(visible);
+    const nextLabel = (label && String(label).trim()) || 'Открыть врата';
+    if (show !== soulsInteractVisible) {
+      soulsInteractVisible = show;
+      soulsInteractPrompt.classList.toggle('hidden', !show);
+    }
+    if (nextLabel !== soulsInteractLabel) {
+      soulsInteractLabel = nextLabel;
+      soulsInteractText.textContent = nextLabel;
+    }
+  }
+
+  function showSoulsBannerCue(text, kind = 'guard_counter') {
+    const label =
+      text ||
+      (kind === 'stance_break'
+        ? '💥 СЛОМ СТОЙКИ!'
+        : kind === 'partial_parry'
+          ? '🛡️ ЧАСТИЧНОЕ ПАРИР.'
+          : '⚡ КОНТРУДАР!');
+    soulsCombatCue.textContent = label;
+    soulsCombatCue.className = `souls-combat-cue cue-${kind || 'guard_counter'}`;
+    void soulsCombatCue.offsetWidth;
+    if (soulsCombatCueTimer) clearTimeout(soulsCombatCueTimer);
+    soulsCombatCueTimer = setTimeout(() => {
+      soulsCombatCue.classList.add('hidden');
+      soulsCombatCueTimer = null;
+    }, 1350);
+  }
+
+  // Abandoned Knight Rift Atmospheric Defeat Overlay ("ВЫ ПОГИБЛИ" — no PvE gold/kills/ads)
+  const soulsDefeatOverlay = el('div', 'souls-defeat-overlay hidden');
+  const soulsDefeatBand = el('div', 'souls-defeat-band');
+  soulsDefeatBand.append(
+    el('div', 'souls-banner-line top'),
+    el('div', 'souls-defeat-title', 'ВЫ ПОГИБЛИ'),
+    el('div', 'souls-defeat-sub', 'ABANDONED KNIGHT RIFT'),
+    el('div', 'souls-banner-line bottom')
+  );
+  const soulsDefeatActions = el('div', 'souls-defeat-actions');
+  soulsDefeatOverlay.append(soulsDefeatBand, soulsDefeatActions);
+  root.appendChild(soulsDefeatOverlay);
+
+  function clearSoulsBannerTimers() {
+    if (soulsBannerFadeTimer) {
+      clearTimeout(soulsBannerFadeTimer);
+      soulsBannerFadeTimer = null;
+    }
+    if (soulsBannerHideTimer) {
+      clearTimeout(soulsBannerHideTimer);
+      soulsBannerHideTimer = null;
+    }
+  }
+
+  function showSoulsBanner({
+    type = 'victory',
+    title = 'ВЕЛИКИЙ ВРАГ ПОВЕРЖЕН',
+    subtitle = 'Судия Руин пал',
+    durationMs = 4800
+  } = {}) {
+    clearSoulsBannerTimers();
+    soulsBanner.classList.toggle('is-victory', type === 'victory');
+    soulsBanner.classList.toggle('is-defeat', type === 'defeat');
+    soulsBannerTitle.textContent = title;
+    soulsBannerSubtitle.textContent = subtitle || '';
+    soulsBannerSubtitle.classList.toggle('hidden', !subtitle);
+    soulsBanner.classList.remove('is-fading', 'hidden');
+    void soulsBanner.offsetWidth;
+    const totalMs = Math.max(1600, Number(durationMs) || 4800);
+    soulsBannerFadeTimer = setTimeout(() => {
+      soulsBanner.classList.add('is-fading');
+      soulsBannerFadeTimer = null;
+    }, Math.max(800, totalMs - 900));
+    soulsBannerHideTimer = setTimeout(() => {
+      soulsBanner.classList.add('hidden');
+      soulsBanner.classList.remove('is-fading');
+      soulsBannerHideTimer = null;
+    }, totalMs);
+  }
+
+  function showSoulsVictoryBanner({
+    title = 'ВЕЛИКИЙ ВРАГ ПОВЕРЖЕН',
+    subtitle = 'Судия Руин пал',
+    durationMs = 4800
+  } = {}) {
+    soulsDefeatOverlay.classList.add('hidden');
+    showSoulsBanner({ type: 'victory', title, subtitle, durationMs });
+    soulsClearedHint.classList.remove('hidden');
+  }
+
+  function hideSoulsDefeatOverlay() {
+    soulsDefeatOverlay.classList.add('hidden');
+  }
+
+  function setSoulsPointerLockHintVisible(visible) {
+    soulsPointerHint.classList.toggle('hidden', !visible);
+  }
+
+  function hideSoulsOverlays() {
+    clearSoulsBannerTimers();
+    if (soulsCombatCueTimer) {
+      clearTimeout(soulsCombatCueTimer);
+      soulsCombatCueTimer = null;
+    }
+    soulsBanner.classList.add('hidden');
+    soulsBanner.classList.remove('is-fading');
+    soulsClearedHint.classList.add('hidden');
+    soulsPointerHint.classList.add('hidden');
+    soulsCombatCue.classList.add('hidden');
+    soulsInteractVisible = false;
+    soulsInteractPrompt.classList.add('hidden');
+    soulsRipostePrompt.classList.add('hidden');
+    touchAttackBtn.classList.remove('is-riposte-ready');
+    setSoulsLetterbox(false);
+    soulsAtmosphereVignette.classList.toggle('hidden', !soulsModeActive);
+    soulsDefeatOverlay.classList.add('hidden');
+  }
+
+  function showSoulsDefeatOverlay({
+    canBossRematch = false,
+    onBossRematch,
+    onBonfireRestart,
+    onHub
+  } = {}) {
+    closeSoundPopover();
+    clearSoulsBannerTimers();
+    soulsBanner.classList.add('hidden');
+    soulsBanner.classList.remove('is-fading');
+    soulsClearedHint.classList.add('hidden');
+    soulsDefeatActions.innerHTML = '';
+
+    if (canBossRematch) {
+      const rematchBtn = el('button', 'souls-defeat-btn btn-boss-rematch', '⚔️ Возродиться на арене босса');
+      rematchBtn.type = 'button';
+      rematchBtn.addEventListener('click', async () => {
+        rematchBtn.disabled = true;
+        hideSoulsDefeatOverlay();
+        await onBossRematch?.();
+      });
+      soulsDefeatActions.appendChild(rematchBtn);
+    }
+
+    const bonfireBtn = el('button', 'souls-defeat-btn btn-bonfire-restart', '🔥 Возродиться у Костра');
+    bonfireBtn.type = 'button';
+    bonfireBtn.addEventListener('click', async () => {
+      bonfireBtn.disabled = true;
+      hideSoulsDefeatOverlay();
+      await onBonfireRestart?.();
+    });
+    soulsDefeatActions.appendChild(bonfireBtn);
+
+    const hubBtn = el('button', 'souls-defeat-btn btn-souls-hub', 'В Хаб');
+    hubBtn.type = 'button';
+    hubBtn.addEventListener('click', () => {
+      hubBtn.disabled = true;
+      hideSoulsDefeatOverlay();
+      onHub?.();
+    });
+    soulsDefeatActions.appendChild(hubBtn);
+
+    soulsDefeatOverlay.classList.remove('hidden');
+  }
+
+  function isSoulsDefeatOpen() {
+    return !soulsDefeatOverlay.classList.contains('hidden');
+  }
 
   // Hub Daily Quests Gothic Drawer
   const hubQuestsDrawer = el('div', 'hub-quests-drawer hidden');
@@ -2220,7 +2984,6 @@ export function createUIManager(initialCallbacks = {}) {
     }
   });
 
-  homeWeaponWarn.addEventListener('click', () => setActiveTab('arsenal'));
   forestBackWorldBtn.addEventListener('click', () => {
     triggerVioletMistTransition(() => setActiveTab('campaign_world'));
   });
@@ -2228,7 +2991,6 @@ export function createUIManager(initialCallbacks = {}) {
   diffHardBtn.addEventListener('click', () => callbacks.onSetDifficulty?.('hard'));
 
   heroWeaponChip.addEventListener('click', () => setActiveTab('arsenal'));
-  launchWeaponWarn.addEventListener('click', () => setActiveTab('arsenal'));
   changeChapterBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     setActiveTab('campaign');
@@ -2253,6 +3015,11 @@ export function createUIManager(initialCallbacks = {}) {
     const res = callbacks.onToggleAttack?.(next);
     attackEnabled = typeof res === 'boolean' ? res : next;
     syncAttackToggleButton();
+  });
+
+  hudTelegraphBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    callbacks.onToggleTelegraphs?.();
   });
 
   hudHomeBtn.addEventListener('click', () => {
@@ -2423,8 +3190,28 @@ export function createUIManager(initialCallbacks = {}) {
     });
   }
 
+  function triggerStartSouls() {
+    closeSoundPopover();
+    closeQuestsDrawer();
+    callbacks.onStartSouls?.({
+      classId: localSelectedClass,
+      weaponId: currentEquippedWeaponId
+    });
+  }
+
+  function triggerStartTraining() {
+    closeSoundPopover();
+    closeQuestsDrawer();
+    callbacks.onStartTraining?.({
+      classId: localSelectedClass,
+      weaponId: currentEquippedWeaponId
+    });
+  }
+
   homeJourneyBtn.addEventListener('click', () => setActiveTab('campaign_world'));
   homeEndlessBtn.addEventListener('click', () => triggerStartEndless());
+  homeTrainingBtn.addEventListener('click', () => triggerStartTraining());
+  homeSoulsBtn.addEventListener('click', () => triggerStartSouls());
   launchBattleBtn.addEventListener('click', () => triggerStartRun(localSelectedLevel));
   arsenalQuickPlayBtn.addEventListener('click', () => triggerStartRun(localSelectedLevel));
   shopQuickPlayBtn.addEventListener('click', () => triggerStartRun(localSelectedLevel));
@@ -2436,10 +3223,6 @@ export function createUIManager(initialCallbacks = {}) {
     localSelectedLevel = viewedCampaignLevel;
     callbacks.onSelectLevel?.(viewedCampaignLevel);
     triggerStartRun(viewedCampaignLevel);
-  });
-
-  campaignWpnCheckBtn.addEventListener('click', () => {
-    setActiveTab('arsenal');
   });
 
   // Keyboard shortcuts: Level-Up [1/2/3], Hub Heroes/Campaign [ArrowLeft/ArrowRight], Popovers/Modals [Escape]
@@ -2689,17 +3472,6 @@ export function createUIManager(initialCallbacks = {}) {
 
     chapterMiniTitle.textContent = isEn ? selLevelDef.nameEn : selLevelDef.nameRu;
 
-    const isUnderleveledForSelected = eqShopLvl < (selLevelDef.recWeaponLevel || 1);
-    launchWeaponWarn.classList.toggle('hidden', !isUnderleveledForSelected);
-    homeWeaponWarn.classList.toggle('hidden', !isUnderleveledForSelected);
-    if (isUnderleveledForSelected) {
-      const warnMsg = isEn
-        ? `⚠️ Weapon Lv. ${eqShopLvl} / rec. ${selLevelDef.recWeaponLevel}`
-        : `⚠️ Оружие Ур. ${eqShopLvl} / рек. ${selLevelDef.recWeaponLevel}`;
-      launchWeaponWarn.textContent = warnMsg;
-      homeWeaponWarn.textContent = warnMsg;
-    }
-
     changeChapterBtn.textContent = isEn
       ? `📖 Ch. ${selLevelDef.roman} ›`
       : `📖 Глава ${selLevelDef.roman} ›`;
@@ -2754,16 +3526,6 @@ export function createUIManager(initialCallbacks = {}) {
     forestGoal1.classList.toggle('is-done', viewStarsEarned >= 1);
     forestGoal2.classList.toggle('is-done', viewStarsEarned >= 2);
     forestGoal3.classList.toggle('is-done', viewStarsEarned >= 3);
-
-    const recLvl = viewDef.recWeaponLevel || 1;
-    const wpnReady = eqShopLvl >= recLvl;
-    campaignWpnCheckBtn.classList.toggle('is-ready', wpnReady);
-    campaignWpnCheckBtn.classList.toggle('is-warn', !wpnReady);
-    campaignWpnCheckIcon.innerHTML = '';
-    campaignWpnCheckIcon.appendChild(createWeaponSvg(eqWpnDef.id, 'mini-check-wpn-svg'));
-    campaignWpnCheckText.textContent = wpnReady
-      ? (isEn ? `✓ Weapon Lv.${eqShopLvl}` : `✓ Оружие Ур.${eqShopLvl}`)
-      : (isEn ? `⚠️ Rec. Lv.${recLvl}` : `⚠️ Рек. Ур.${recLvl}`);
 
     campaignStartBtn.disabled = isViewLocked;
     campaignStartBtn.textContent = isViewLocked
@@ -3476,6 +4238,17 @@ export function createUIManager(initialCallbacks = {}) {
     ultTouchText: '',
     isEndless: false,
     endlessText: '',
+    isSoulslike: false,
+    soulsStaminaScale: -1,
+    soulsStaminaText: '',
+    soulsGuardBroken: false,
+    soulsBlockState: '',
+    soulsFlaskText: '',
+    soulsFlaskEmpty: false,
+    soulsFlaskDrinking: false,
+    soulsGuardCounterReady: false,
+    soulsCanRiposte: false,
+    isTargetLocked: false,
     comboStep: 0,
     comboVisible: false,
     comboQuant: -1
@@ -3509,6 +4282,146 @@ export function createUIManager(initialCallbacks = {}) {
       armorPill.textContent = `Блок ${blockPct}%`;
     }
 
+    // 1b. Dark Souls / Chapter XXVI Stamina, Block/Parry [Alt], & Estus Flask [R] HUD
+    const isSoulsHud = Boolean(snapshot.isSoulslike && snapshot.souls);
+    if (isSoulsHud !== hudCache.isSoulslike) {
+      hudCache.isSoulslike = isSoulsHud;
+      soulsModeActive = isSoulsHud;
+      soulsAtmosphereVignette.classList.toggle('hidden', !isSoulsHud);
+      soulsStaminaWrap.classList.toggle('hidden', !isSoulsHud);
+      hudBlockBtn.classList.toggle('hidden', !isSoulsHud);
+      hudFlaskBtn.classList.toggle('hidden', !isSoulsHud);
+      hudLockBtn.classList.toggle('hidden', !isSoulsHud);
+      hudUltBtn.classList.toggle('hidden', isSoulsHud);
+      touchUltBtn.classList.toggle('hidden', isSoulsHud);
+      autoAimBtn.classList.toggle('hidden', isSoulsHud);
+      attackToggleBtn.classList.toggle('hidden', isSoulsHud);
+      killsPill.classList.toggle('hidden', isSoulsHud);
+      soulXpWrap.classList.toggle('hidden', isSoulsHud);
+      hudDashKeyTag.textContent = isSoulsHud ? '[Alt]' : '[Space]';
+      hudDashBtn.title = isSoulsHud ? 'Перекат [Alt / Space] • Тяжёлый удар R2: [F] / Shift+ЛКМ' : 'Рывок с неуязвимостью [Space]';
+      touchDashLabel.textContent = isSoulsHud ? (lang === 'en' ? 'ROLL' : 'ПЕРЕКАТ') : (lang === 'en' ? 'DASH' : 'РЫВОК');
+      goldPill.title = isSoulsHud ? 'Золото Abandoned Knight Rift (отдельный кошелёк режима)' : 'Золото';
+      syncSoulsTouchLayout();
+      if (isSoulsHud) {
+        sealSlotsWrap.classList.add('hidden');
+        beastActiveBar.classList.add('hidden');
+      } else {
+        sealSlotsWrap.classList.toggle('hidden', Boolean(hudCache.beastActive));
+        beastActiveBar.classList.toggle('hidden', !hudCache.beastActive);
+      }
+    }
+    if (isSoulsHud) {
+      const sData = snapshot.souls;
+      if (typeof sData.doorCutsceneActive === 'boolean') {
+        setSoulsLetterbox(sData.doorCutsceneActive, {
+          showBossTitleCard: Boolean(sData.showBossTitleCard),
+          canSkip: Boolean(sData.canSkip ?? sData.cutsceneCanSkip),
+          bossTitleRu: sData.bossTitleRu,
+          bossSubtitleRu: sData.bossSubtitleRu,
+          subtitleSpeaker: sData.subtitleSpeaker,
+          subtitleText: sData.subtitleText,
+          letterbox01: sData.letterbox01
+        });
+      }
+      const stMax = Math.max(1, Number(sData.staminaMax ?? 100));
+      const stVal = Math.max(0, Math.min(stMax, Math.round(Number(sData.stamina ?? stMax))));
+      const stRatio = stVal / stMax;
+      const stQuant = Math.round(stRatio * 500);
+      if (stQuant !== hudCache.soulsStaminaScale) {
+        hudCache.soulsStaminaScale = stQuant;
+        soulsStaminaFill.style.transform = `scaleX(${stRatio.toFixed(3)})`;
+      }
+      const guardBroken = Boolean(sData.guardBroken);
+      if (guardBroken !== hudCache.soulsGuardBroken) {
+        hudCache.soulsGuardBroken = guardBroken;
+        soulsStaminaWrap.classList.toggle('is-guard-broken', guardBroken);
+      }
+      const stText = guardBroken
+        ? (lang === 'en' ? 'GUARD BROKEN!' : 'ПРОБИТ БЛОК!')
+        : `${lang === 'en' ? 'STAMINA' : 'ВЫН.'} ${stVal} / ${stMax}`;
+      if (stText !== hudCache.soulsStaminaText) {
+        hudCache.soulsStaminaText = stText;
+        soulsStaminaText.textContent = stText;
+      }
+
+      const bState = guardBroken
+        ? 'broken'
+        : sData.parryActive
+          ? 'parry'
+          : sData.isBlocking
+            ? 'blocking'
+            : 'idle';
+      if (bState !== hudCache.soulsBlockState) {
+        hudCache.soulsBlockState = bState;
+        hudBlockBtn.classList.toggle('is-blocking', bState === 'blocking');
+        hudBlockBtn.classList.toggle('is-parry', bState === 'parry');
+        hudBlockBtn.classList.toggle('is-guard-broken', bState === 'broken');
+        touchBlockBtn.classList.toggle('is-blocking', bState === 'blocking');
+        touchBlockBtn.classList.toggle('is-parry', bState === 'parry');
+        touchBlockBtn.classList.toggle('is-guard-broken', bState === 'broken');
+        touchBlockLbl.textContent =
+          bState === 'parry' ? 'ПАРИР!' : bState === 'broken' ? 'ПРОБИТ' : 'БЛОК';
+        hudBlockStateText.textContent =
+          bState === 'parry'
+            ? (lang === 'en' ? 'PARRY!' : 'ПАРИР.!')
+            : bState === 'blocking'
+              ? (lang === 'en' ? 'BLOCKING' : 'БЛОК')
+              : bState === 'broken'
+                ? (lang === 'en' ? 'BROKEN' : 'ПРОБИТ')
+                : (lang === 'en' ? 'BLOCK / PARRY' : 'БЛОК / ПАРИР.');
+      }
+
+      const guardCounterReady = Boolean(sData.guardCounterReady || Number(sData.guardCounterTimer ?? sData.guardCounterWindow ?? 0) > 0);
+      if (guardCounterReady !== hudCache.soulsGuardCounterReady) {
+        hudCache.soulsGuardCounterReady = guardCounterReady;
+        touchAttackBtn.classList.toggle('is-counter-ready', guardCounterReady);
+        hudBlockBtn.classList.toggle('is-counter-ready', guardCounterReady);
+        if (guardCounterReady) {
+          showSoulsBannerCue('⚡ КОНТРУДАР!', 'guard_counter');
+        }
+      }
+
+      const canRiposte = Boolean(sData.canRiposte);
+      if (canRiposte !== hudCache.soulsCanRiposte) {
+        hudCache.soulsCanRiposte = canRiposte;
+        soulsRipostePrompt.classList.toggle('hidden', !canRiposte);
+        touchAttackBtn.classList.toggle('is-riposte-ready', canRiposte);
+      }
+
+      const fl = Math.max(0, Math.round(Number(sData.flasks ?? 0)));
+      const flMax = Math.max(1, Math.round(Number(sData.flasksMax ?? 4)));
+      const flEmpty = fl <= 0;
+      const flDrink = Boolean(sData.flaskDrinking);
+      const flText = flDrink
+        ? (lang === 'en' ? 'DRINKING…' : 'ПЬЁТ…')
+        : `${lang === 'en' ? 'FLASK' : 'ФЛЯГА'} ${fl}/${flMax}`;
+      if (flText !== hudCache.soulsFlaskText) {
+        hudCache.soulsFlaskText = flText;
+        hudFlaskStateText.textContent = flText;
+        touchFlaskCountLbl.textContent = `${fl}/${flMax}`;
+      }
+      if (flEmpty !== hudCache.soulsFlaskEmpty) {
+        hudCache.soulsFlaskEmpty = flEmpty;
+        hudFlaskBtn.classList.toggle('is-empty', flEmpty);
+        touchFlaskBtn.classList.toggle('is-empty', flEmpty);
+      }
+      if (flDrink !== hudCache.soulsFlaskDrinking) {
+        hudCache.soulsFlaskDrinking = flDrink;
+        hudFlaskBtn.classList.toggle('is-drinking', flDrink);
+        touchFlaskBtn.classList.toggle('is-drinking', flDrink);
+      }
+    }
+
+    // 1c. Target Lock-On Indicator [Q / СКМ] (Dark Souls Chapter XXVI only)
+    const isTargetLocked = Boolean(isSoulsHud && snapshot.isTargetLocked);
+    if (isTargetLocked !== hudCache.isTargetLocked) {
+      hudCache.isTargetLocked = isTargetLocked;
+      hudLockBtn.classList.toggle('is-active', isTargetLocked);
+      hudLockBtn.setAttribute('aria-pressed', isTargetLocked ? 'true' : 'false');
+      touchLockBtn.classList.toggle('is-active', isTargetLocked);
+    }
+
     // 2. Beast Seals vs Manual Beast Rage Ult [F] vs Active Beast Mode Bar
     const beastTimer = Number(snapshot.beastTimer ?? snapshot.beastTimeLeft ?? 0);
     const isBeast = Boolean(snapshot.beastActive || snapshot.isBeastMode || beastTimer > 0);
@@ -3519,8 +4432,10 @@ export function createUIManager(initialCallbacks = {}) {
 
     if (isBeast !== hudCache.beastActive) {
       hudCache.beastActive = isBeast;
-      sealSlotsWrap.classList.toggle('hidden', isBeast);
-      beastActiveBar.classList.toggle('hidden', !isBeast);
+      if (!isSoulsHud) {
+        sealSlotsWrap.classList.toggle('hidden', isBeast);
+        beastActiveBar.classList.toggle('hidden', !isBeast);
+      }
     }
 
     if (isBeast) {
@@ -3689,12 +4604,15 @@ export function createUIManager(initialCallbacks = {}) {
         bossBarBox.classList.remove('is-staggered');
       }
       const lvlNum = Number(snapshot.level ?? snapshot.levelNumber ?? 1);
-      const lTitle =
-        snapshot.levelNameRu ||
-        snapshot.levelTitle ||
-        snapshot.levelName ||
-        LEVELS[lvlNum - 1]?.nameRu ||
-        `Глава ${lvlNum}`;
+      const lTitle = isSoulsHud
+        ? (snapshot.souls?.zoneTitleRu ? `Abandoned Knight Rift • ${snapshot.souls.zoneTitleRu}` : (SOULS_LEVEL_DEF?.nameRu || 'Abandoned Knight Rift'))
+        : (
+          snapshot.levelNameRu ||
+          snapshot.levelTitle ||
+          snapshot.levelName ||
+          getLevelDef(lvlNum)?.nameRu ||
+          `Глава ${lvlNum}`
+        );
       if (lTitle !== hudCache.levelTitle) {
         hudCache.levelTitle = lTitle;
         hudLevelTitle.textContent = lTitle;
@@ -3737,9 +4655,13 @@ export function createUIManager(initialCallbacks = {}) {
       }
     }
 
-    // 6. Gold, Kills, Auto-Aim, Volume & Mute
+    // 6. Gold (isolated riftGold wallet in Abandoned Knight Rift vs PvE gold), Kills, Auto-Aim, Volume & Mute
     const goldVal = Math.floor(
-      Number(snapshot.gold ?? snapshot.goldTotal ?? snapshot.goldRun ?? snapshot.runGold ?? snapshot.coins ?? 0)
+      Number(
+        isSoulsHud
+          ? (snapshot.riftGold ?? snapshot.souls?.riftGold ?? 0)
+          : (snapshot.gold ?? snapshot.goldTotal ?? snapshot.goldRun ?? snapshot.runGold ?? snapshot.coins ?? 0)
+      )
     );
     if (goldVal !== hudCache.gold) {
       hudCache.gold = goldVal;
@@ -3800,7 +4722,7 @@ export function createUIManager(initialCallbacks = {}) {
     const ammoKind = wDef?.type === 'magic' ? 'mana' : 'shell';
 
     const hasMagazine = maxAmmo > 0 && !usesMana;
-    hudReloadBtn.classList.toggle('hidden', !hasMagazine);
+    hudReloadBtn.classList.toggle('hidden', isSoulsHud || !hasMagazine);
     manaBarWrap.classList.toggle('hidden', !usesMana);
     if (usesMana) {
       const curMana = Math.max(0, Number(snapshot.mana) || 0);
@@ -3930,7 +4852,9 @@ export function createUIManager(initialCallbacks = {}) {
       hudDashBarFill.style.transform = `scaleX(${dashRatio.toFixed(3)})`;
     }
     const dashLabelStr = dashReady
-      ? (lang === 'en' ? 'DASH' : 'РЫВОК')
+      ? isSoulsHud
+        ? (lang === 'en' ? 'ROLL' : 'ПЕРЕКАТ')
+        : (lang === 'en' ? 'DASH' : 'РЫВОК')
       : `${dashCd.toFixed(1)}${lang === 'en' ? 's' : 'с'}`;
     if (dashLabelStr !== hudCache.dashText) {
       hudCache.dashText = dashLabelStr;
@@ -3991,31 +4915,28 @@ export function createUIManager(initialCallbacks = {}) {
       }
     }
 
-    // 9. Soul XP Bar (prefer in-run roguelike perk XP when present so bar matches 3-card blessing level-ups)
-    const hasRunXp = typeof snapshot.runXpNext === 'number' && snapshot.runXpNext > 0;
+    // 9. Hero XP Bar (feeds Talent Points — Soul Blessings removed)
     const soulLvl = Math.max(
       1,
       Number(
-        (hasRunXp ? snapshot.runPerkLevel : null) ??
+        snapshot.runLevel ??
           snapshot.soulLevel ??
           snapshot.xpLevel ??
-          snapshot.runLevel ??
           snapshot.playerLevel ??
           1
       )
     );
     if (soulLvl !== hudCache.soulLevel) {
       hudCache.soulLevel = soulLvl;
-      soulXpTitle.textContent = lang === 'en' ? `Soul Level ${soulLvl}` : `Уровень душ ${soulLvl}`;
+      soulXpTitle.textContent = lang === 'en' ? `Hero Level ${soulLvl}` : `Уровень героя ${soulLvl}`;
     }
 
-    const xp = Math.floor(Number((hasRunXp ? snapshot.runXp : null) ?? snapshot.xp ?? snapshot.souls ?? 0));
+    const xp = Math.floor(Number(snapshot.xp ?? snapshot.souls ?? 0));
     const xpNext = Math.max(
       1,
       Math.floor(
         Number(
-          (hasRunXp ? snapshot.runXpNext : null) ??
-            snapshot.xpNext ??
+          snapshot.xpNext ??
             snapshot.xpToNext ??
             snapshot.maxXp ??
             snapshot.nextLevelXp ??
@@ -4030,7 +4951,7 @@ export function createUIManager(initialCallbacks = {}) {
     }
 
     const xpRatio =
-      !hasRunXp && typeof snapshot.xpRatio === 'number'
+      typeof snapshot.xpRatio === 'number'
         ? Math.max(0, Math.min(1, snapshot.xpRatio))
         : Math.max(0, Math.min(1, xp / xpNext));
     const xpQuant = Math.round(xpRatio * 1000);
@@ -4165,10 +5086,17 @@ export function createUIManager(initialCallbacks = {}) {
       closeQuestsDrawer();
       hubScreen.classList.toggle('hidden', !visible);
       if (visible) {
+        soulsModeActive = false;
+        soulsAtmosphereVignette.classList.add('hidden');
+        hudCache.isSoulslike = null;
+        hudCache.soulsGuardCounterReady = false;
+        hudCache.soulsCanRiposte = false;
+        hudCache.isTargetLocked = false;
+        syncSoulsTouchLayout();
         hideOnboardingBar();
+        hideSoulsOverlays();
         releaseLeftStick();
-        touchState.dash = false;
-        touchState.ult = false;
+        clearAllTouchActions();
         if (activeHubTab === 'campaign') {
           if (campaignSubView === 'world') {
             forestMapVideoLoop?.pause();
@@ -4193,11 +5121,12 @@ export function createUIManager(initialCallbacks = {}) {
       hudScreen.classList.toggle('hidden', !visible);
       if (!visible) {
         hideOnboardingBar();
+        hideSoulsOverlays();
         releaseLeftStick();
-        touchState.dash = false;
-        touchState.ult = false;
+        clearAllTouchActions();
       } else if (isTouchCapable) {
         touchLayer.classList.remove('hidden');
+        syncSoulsTouchLayout();
         ensureAutoAimForTouch();
       }
     },
@@ -4237,6 +5166,17 @@ export function createUIManager(initialCallbacks = {}) {
       syncAttackToggleButton();
     },
 
+    setTelegraphsVisibleState(visible) {
+      const shown = Boolean(visible);
+      hudTelegraphBtn.classList.toggle('is-on', shown);
+      hudTelegraphBtn.classList.toggle('is-off', !shown);
+      hudTelegraphBtn.setAttribute('aria-pressed', shown ? 'true' : 'false');
+      hudTelegraphBtn.textContent = shown ? '🎯 [9]' : '👁️ [9]';
+      hudTelegraphBtn.title = shown
+        ? 'Скрыть/показать индикаторы атак врагов [9] (сейчас: ВКЛ)'
+        : 'Скрыть/показать индикаторы атак врагов [9] (сейчас: СКРЫТЫ)';
+    },
+
     spawnFloatingText,
 
     getTouchInput() {
@@ -4268,6 +5208,18 @@ export function createUIManager(initialCallbacks = {}) {
     showResultModal,
     hideResultModal,
 
+    showSoulsBanner,
+    showSoulsVictoryBanner,
+    showSoulsBannerCue,
+    showSoulsCombatCue: showSoulsBannerCue,
+    setSoulsInteractPrompt,
+    setSoulsLetterbox,
+    showSoulsDefeatOverlay,
+    hideSoulsDefeatOverlay,
+    hideSoulsOverlays,
+    isSoulsDefeatOpen,
+    setSoulsPointerLockHintVisible,
+
     showPauseModal,
     hidePauseModal,
     isPauseModalOpen,
@@ -4277,6 +5229,7 @@ export function createUIManager(initialCallbacks = {}) {
 
     hideAllModals() {
       closeQuestsDrawer();
+      hideSoulsOverlays();
       modals.hideAllModals();
     }
   };

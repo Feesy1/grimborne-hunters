@@ -4,8 +4,19 @@
 import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { DRACOLoader } from '../vendor/DRACOLoader.js';
-import { ARENA_HALF_SIZE } from './config.js?v=20261120z35';
-import { createMistyArena } from './mistyArena.js?v=20261120z35';
+import { ARENA_HALF_SIZE } from './config.js?v=20261121z64';
+import { createMistyArena } from './mistyArena.js?v=20261121z64';
+import { createSoulsArena } from './soulsArena.js?v=20261121z64';
+import {
+  BOSS_DOOR_CUTSCENE_DURATION,
+  evaluateBossDoorCutscene,
+  getBossDoorCutsceneSkipState,
+  computeBossDoorCutsceneShakeOffset
+} from './souls/soulsCutsceneChoreography.js?v=20261121z64';
+import {
+  clampCastleCameraPosition,
+  SOULS_CASTLE_CONSTANTS
+} from './souls/soulsCastleLayout.js?v=20261121z64';
 import {
   createCourtyardStoneTexture,
   createHubMistTexture,
@@ -16,7 +27,7 @@ import {
   createHubContactAoTexture,
   createArcaneCircleTexture,
   getSlashCrescentGeo
-} from './world/textures.js?v=20261120z35';
+} from './world/textures.js?v=20261121z64';
 
 const sharedDracoLoader = new DRACOLoader();
 sharedDracoLoader.setDecoderPath('./vendor/draco/');
@@ -48,7 +59,7 @@ export function createArenaWorld(canvas) {
   renderer.setPixelRatio(getTargetPixelRatio());
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = isMobileDevice ? THREE.BasicShadowMap : THREE.PCFShadowMap;
+  renderer.shadowMap.type = isMobileDevice ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.28;
@@ -116,6 +127,14 @@ export function createArenaWorld(canvas) {
     dir: new THREE.Color(0xffe0e8),
     plazaRune: new THREE.Color(0xf43f5e)
   };
+  const PALETTE_SOULS = {
+    bg: new THREE.Color(0x0a0d16),
+    fog: new THREE.Color(0x0d1220),
+    hemiSky: new THREE.Color(0x5a7cb8),
+    hemiGround: new THREE.Color(0x2a1710),
+    dir: new THREE.Color(0xa8c8ff),
+    plazaRune: new THREE.Color(0xf59e0b)
+  };
   const PALETTE_HUB = {
     bg: new THREE.Color(0x221630),
     fog: new THREE.Color(0x2d1c38),
@@ -126,6 +145,7 @@ export function createArenaWorld(canvas) {
   };
   function getBiomeForLevel(levelNumber = 1) {
     const lvl = Math.max(1, Math.floor(Number(levelNumber) || 1));
+    if (lvl === 26) return 'souls_citadel';
     if (lvl >= 21) return 'ash_citadel';
     if (lvl >= 16) return 'frost_ruins';
     if (lvl >= 6) return 'misty_forest';
@@ -136,7 +156,7 @@ export function createArenaWorld(canvas) {
       return getBiomeForLevel(biomeOrLevel);
     }
     const raw = typeof biomeOrLevel === 'string' ? biomeOrLevel.trim().toLowerCase() : '';
-    if (raw === 'frost_ruins' || raw === 'ash_citadel') return raw;
+    if (raw === 'souls_citadel' || raw === 'frost_ruins' || raw === 'ash_citadel') return raw;
     if (levelNumber !== null && levelNumber !== undefined && Number.isFinite(Number(levelNumber))) {
       return getBiomeForLevel(Number(levelNumber));
     }
@@ -146,29 +166,91 @@ export function createArenaWorld(canvas) {
   let currentBiome = 'courtyard';
   const isMistyBiome = (b = currentBiome) =>
     b === 'misty_forest' || b === 'frost_ruins' || b === 'ash_citadel';
+  const isSoulsBiome = (b = currentBiome) => b === 'souls_citadel';
   const getCombatBasePalette = () => {
+    if (currentBiome === 'souls_citadel') return PALETTE_SOULS;
     if (currentBiome === 'frost_ruins') return PALETTE_FROST;
     if (currentBiome === 'ash_citadel') return PALETTE_ASH;
     if (currentBiome === 'misty_forest') return PALETTE_FOREST;
     return PALETTE_NORMAL;
   };
+  // Never overwrite PALETTE_SOULS with neon-pink PALETTE_BOSS during Souls boss fights!
+  const getActiveCombatPalette = () => {
+    if (isSoulsBiome(currentBiome)) return PALETTE_SOULS;
+    return bossModeActive ? PALETTE_BOSS : getCombatBasePalette();
+  };
+
+  // Lazy 64px procedural PMREM environment map strictly for souls_citadel
+  // (cool moonlit zenith #3b5588 + warm coal/ember nadir #3d1e10; null in Hub & PvE)
+  let soulsEnvRenderTarget = null;
+  let soulsEnvMap = null;
+  function getSoulsEnvMap() {
+    if (soulsEnvMap) return soulsEnvMap;
+    try {
+      const pmrem = new THREE.PMREMGenerator(renderer);
+      pmrem.compileEquirectangularShader();
+      const w = 64;
+      const h = 32;
+      const c = document.createElement('canvas');
+      c.width = w;
+      c.height = h;
+      const g = c.getContext('2d');
+      const grad = g.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0.0, '#3b5588');
+      grad.addColorStop(0.32, '#2d4470');
+      grad.addColorStop(0.50, '#182136');
+      grad.addColorStop(0.68, '#2b1b18');
+      grad.addColorStop(1.0, '#3d1e10');
+      g.fillStyle = grad;
+      g.fillRect(0, 0, w, h);
+      // Cool moonlight reflection lobe + warm bonfire underside bounce
+      const moonGrad = g.createRadialGradient(w * 0.28, h * 0.24, 0.5, w * 0.28, h * 0.24, 9);
+      moonGrad.addColorStop(0.0, 'rgba(210, 228, 255, 0.92)');
+      moonGrad.addColorStop(0.45, 'rgba(130, 168, 232, 0.34)');
+      moonGrad.addColorStop(1.0, 'rgba(59, 85, 136, 0.0)');
+      g.fillStyle = moonGrad;
+      g.fillRect(0, 0, w, h);
+      const emberGrad = g.createRadialGradient(w * 0.72, h * 0.68, 0.5, w * 0.72, h * 0.68, 11);
+      emberGrad.addColorStop(0.0, 'rgba(255, 148, 66, 0.48)');
+      emberGrad.addColorStop(1.0, 'rgba(61, 30, 16, 0.0)');
+      g.fillStyle = emberGrad;
+      g.fillRect(0, 0, w, h);
+
+      const eqTex = new THREE.CanvasTexture(c);
+      eqTex.mapping = THREE.EquirectangularReflectionMapping;
+      eqTex.colorSpace = THREE.SRGBColorSpace;
+      eqTex.needsUpdate = true;
+
+      soulsEnvRenderTarget = pmrem.fromEquirectangular(eqTex);
+      soulsEnvMap = soulsEnvRenderTarget.texture;
+      eqTex.dispose();
+      pmrem.dispose();
+    } catch {
+      soulsEnvMap = null;
+    }
+    return soulsEnvMap;
+  }
   const getCombatExposureForBiome = (b = currentBiome) => {
+    if (b === 'souls_citadel') return 1.12;
     if (b === 'misty_forest') return COMBAT_FOREST_EXPOSURE;
     if (b === 'frost_ruins' || b === 'ash_citadel') return 1.36;
     return COMBAT_EXPOSURE;
   };
   const getCombatAmbientColorForBiome = (b = currentBiome) => {
+    if (b === 'souls_citadel') return 0x4f5a74;
     if (b === 'frost_ruins') return 0x7aaec9;
     if (b === 'ash_citadel') return 0xa66e64;
     return COMBAT_AMBIENT_COLOR;
   };
   const getCombatFogForBiome = (b = currentBiome, isModeSwitch = false) => {
+    if (b === 'souls_citadel') return { near: 14, far: 58 };
     if (b === 'frost_ruins') return { near: 46, far: 116 };
     if (b === 'ash_citadel') return { near: 44, far: 114 };
     if (b === 'misty_forest') return { near: 48, far: isModeSwitch ? 122 : 120 };
     return { near: 48, far: 112 };
   };
   const getOuterGroundColorForBiome = (b = currentBiome) => {
+    if (b === 'souls_citadel') return 0x090a10;
     if (b === 'frost_ruins') return 0x102436;
     if (b === 'ash_citadel') return 0x1a0b0d;
     if (b === 'misty_forest') return 0x221638;
@@ -268,6 +350,16 @@ export function createArenaWorld(canvas) {
       arenaGroup.add(mistyArena.group);
     }
     return mistyArena;
+  }
+
+  let soulsArena = null;
+  function ensureSoulsArena() {
+    if (!soulsArena) {
+      soulsArena = createSoulsArena();
+      if (lowSpecMode) soulsArena.setLowSpecMode?.(true);
+      arenaGroup.add(soulsArena.group);
+    }
+    return soulsArena;
   }
 
   const courtyardPropsGroup = new THREE.Group();
@@ -1816,6 +1908,8 @@ export function createArenaWorld(canvas) {
     return g;
   })();
 
+  let telegraphsVisible = true;
+
   function releaseTelegraphZone(entry) {
     entry.group.visible = false;
     if (freeTelegraphZones.length < MAX_TELEGRAPH_POOL) {
@@ -1829,6 +1923,20 @@ export function createArenaWorld(canvas) {
     }
   }
 
+  function setTelegraphsVisible(visible) {
+    telegraphsVisible = Boolean(visible);
+    if (!telegraphsVisible) {
+      while (activeTelegraphZones.length > 0) {
+        releaseTelegraphZone(activeTelegraphZones.pop());
+      }
+    }
+    return telegraphsVisible;
+  }
+
+  function getTelegraphsVisible() {
+    return Boolean(telegraphsVisible);
+  }
+
   function spawnTelegraphZone({
     x = 0,
     z = 0,
@@ -1836,6 +1944,7 @@ export function createArenaWorld(canvas) {
     color = 0xef4444,
     duration = 0.65
   } = {}) {
+    if (!telegraphsVisible) return { cancel() {} };
     const safeRadius = Math.max(0.35, Number(radius) || 2.0);
     const safeDuration = Math.max(0.1, Number(duration) || 0.65);
 
@@ -3482,6 +3591,129 @@ export function createArenaWorld(canvas) {
   let currentHubShiftX = 0;
   let targetX = 0;
   let targetZ = 0;
+  let lastHeroX = 0;
+  let lastHeroZ = 0;
+
+  // Cinematic 7.2s 4-Act Boss Door Opening Cutscene (Abandoned Knight Rift [E])
+  let bossDoorCutsceneActive = false;
+  let bossDoorCutsceneElapsed = 0;
+  let bossDoorCutsceneDuration = BOSS_DOOR_CUTSCENE_DURATION;
+  let bossDoorCutsceneStartFov = 52;
+  let bossDoorCutsceneNormalFov = 52;
+  const _cutsceneStartPos = new THREE.Vector3();
+  const _cutsceneStartLook = new THREE.Vector3();
+  const _cutsceneNormalPos = new THREE.Vector3();
+  const _cutsceneNormalLook = new THREE.Vector3();
+  const _cutsceneStateOut = {
+    camPos: { x: 0, y: 0, z: 0 },
+    camLook: { x: 0, y: 0, z: 0 }
+  };
+  const _cutsceneShakeOut = { x: 0, y: 0, z: 0, roll: 0 };
+  let _cutsceneState = null;
+
+  function startBossDoorCutscene(durationSec = BOSS_DOOR_CUTSCENE_DURATION) {
+    if (cameraMode === 'hub' || !isSoulsBiome(currentBiome)) return null;
+    _cutsceneStartPos.copy(camera.position);
+    const groundY = getGroundHeight(targetX, targetZ);
+    _cutsceneStartLook.set(
+      targetX + lockLookOffsetX,
+      groundY + 1.05 + lockLookOffsetY,
+      targetZ + lockLookOffsetZ
+    );
+    bossDoorCutsceneStartFov = camera.fov || 52;
+    bossDoorCutsceneNormalFov = getCombatFovForBiome(camera.aspect || 1);
+    bossDoorCutsceneElapsed = 0;
+    bossDoorCutsceneDuration = Math.max(0.8, Number(durationSec) || BOSS_DOOR_CUTSCENE_DURATION);
+    bossDoorCutsceneActive = true;
+    _cutsceneState = evaluateBossDoorCutscene(
+      0,
+      _cutsceneStartPos,
+      _cutsceneStartLook,
+      _cutsceneStartPos,
+      _cutsceneStartLook,
+      {
+        startFov: bossDoorCutsceneStartFov,
+        normalFov: bossDoorCutsceneNormalFov,
+        out: _cutsceneStateOut
+      }
+    );
+    _cutsceneState.active = true;
+    _cutsceneState.elapsed = 0;
+    _cutsceneState.duration = bossDoorCutsceneDuration;
+    return _cutsceneState;
+  }
+
+  function isBossDoorCutsceneActive() {
+    return Boolean(bossDoorCutsceneActive && cameraMode !== 'hub' && isSoulsBiome(currentBiome));
+  }
+
+  function getBossDoorCutsceneState() {
+    if (!isBossDoorCutsceneActive()) return null;
+    return _cutsceneState;
+  }
+
+  // Pre-allocated spring-arm collision output (0 GC allocations per frame)
+  const _castleCamClampOut = { x: 0, y: 0, z: 0, hitWall: false, fraction: 1 };
+  const _castleCamClampOpts = { out: _castleCamClampOut };
+
+  function skipBossDoorCutscene(force = false, overrideHeroPos = null) {
+    if (!isBossDoorCutsceneActive()) return null;
+    const scaledElapsed = bossDoorCutsceneDuration > 0
+      ? (bossDoorCutsceneElapsed / bossDoorCutsceneDuration) * BOSS_DOOR_CUTSCENE_DURATION
+      : BOSS_DOOR_CUTSCENE_DURATION;
+    if (!force && scaledElapsed < 1.5 && !_cutsceneState?.canSkip) {
+      return null;
+    }
+    const normalFov = getCombatFovForBiome(camera.aspect || 1);
+
+    // Optional explicit final hero position (default Boss Hall entry z = BOSS_HERO_ENTRY_Z):
+    // camera jumps straight inside the Throne Hall behind the hero (not to the old pre-door point)
+    const effectiveOverride = overrideHeroPos === true
+      ? { x: 0, z: SOULS_CASTLE_CONSTANTS.BOSS_HERO_ENTRY_Z }
+      : overrideHeroPos;
+    const hasOverride = Boolean(effectiveOverride && Number.isFinite(Number(effectiveOverride.z)));
+    if (hasOverride) {
+      const hx = Number.isFinite(Number(effectiveOverride.x)) ? Number(effectiveOverride.x) : 0;
+      const hz = Number(effectiveOverride.z);
+      targetX = hx;
+      targetZ = hz;
+      lastHeroX = hx;
+      lastHeroZ = hz;
+      const hgY = getGroundHeight(hx, hz);
+      const hPivotY = hgY + 1.05;
+      const cosP = Math.cos(orbitPitch);
+      const reqDist = Math.max(3.2, orbitDist);
+      let cX = hx + Math.sin(orbitYaw) * cosP * reqDist;
+      let cY = Math.max(hgY + 0.52, hPivotY + Math.sin(orbitPitch) * reqDist);
+      let cZ = hz + Math.cos(orbitYaw) * cosP * reqDist;
+      const clamped = clampCastleCameraPosition(hx, hPivotY, hz, cX, cY, cZ, 'sealed', _castleCamClampOpts);
+      cX = clamped.x;
+      cY = clamped.y;
+      cZ = clamped.z;
+      _cutsceneNormalPos.set(cX, cY, cZ);
+      _cutsceneNormalLook.set(hx + lockLookOffsetX, hPivotY + lockLookOffsetY, hz + lockLookOffsetZ);
+      soulsCamClipDist = Math.max(3.2, Math.hypot(cX - hx, cZ - hz) / Math.max(0.2, cosP));
+      hasFollowedOnce = false;
+    }
+
+    _cutsceneState = getBossDoorCutsceneSkipState(_cutsceneNormalPos, _cutsceneNormalLook, {
+      normalFov,
+      out: _cutsceneStateOut
+    });
+    _cutsceneState.active = false;
+    _cutsceneState.elapsed = bossDoorCutsceneDuration;
+    _cutsceneState.duration = bossDoorCutsceneDuration;
+    bossDoorCutsceneActive = false;
+    bossDoorCutsceneElapsed = 0;
+    if (Math.abs(camera.fov - normalFov) > 0.01) {
+      camera.fov = normalFov;
+      camera.updateProjectionMatrix();
+    }
+    camera.position.copy(_cutsceneNormalPos);
+    camera.lookAt(_cutsceneNormalLook);
+    camera.updateMatrixWorld();
+    return _cutsceneState;
+  }
   let hasFollowedOnce = false;
   let shakeIntensity = 0;
   let shakeTime = 0;
@@ -3531,6 +3763,90 @@ export function createArenaWorld(canvas) {
     dirLight.target.updateMatrixWorld();
   }
 
+  function syncDirLightShadowMapSize(targetRes) {
+    const safeRes = Math.max(512, Math.min(2048, targetRes | 0));
+    if (dirLight.shadow.mapSize.width === safeRes && dirLight.shadow.mapSize.height === safeRes) return;
+    dirLight.shadow.mapSize.set(safeRes, safeRes);
+    if (dirLight.shadow.map) {
+      dirLight.shadow.map.dispose();
+      dirLight.shadow.map = null;
+    }
+    dirLight.shadow.needsUpdate = true;
+  }
+
+  function applyCombatLightingAndShadows(isModeSwitch = false) {
+    const basePal = getCombatBasePalette();
+    const combatPal = getActiveCombatPalette();
+    const isSouls = isSoulsBiome(currentBiome);
+    const isMisty = isMistyBiome(currentBiome);
+    const isAsh = currentBiome === 'ash_citadel';
+    const isFrost = currentBiome === 'frost_ruins';
+    const fogCfg = getCombatFogForBiome(currentBiome, isModeSwitch);
+
+    if (!scene.background) scene.background = combatPal.bg.clone();
+    else scene.background.copy(combatPal.bg);
+    renderer.setClearColor((isModeSwitch ? basePal : combatPal).bg.getHex(), 1);
+    renderer.toneMappingExposure = getCombatExposureForBiome(currentBiome);
+    scene.environment = isSouls ? getSoulsEnvMap() : null;
+    scene.fog.color.copy(combatPal.fog);
+    scene.fog.near = fogCfg.near;
+    scene.fog.far = fogCfg.far;
+    // CRITICAL (#351): strictly hide legacy square motesPoints in souls_citadel (replaced by round cathedral dust in soulsAtmosphere.js)
+    motesPoints.visible = !isSouls;
+
+    hemiLight.color.copy(combatPal.hemiSky);
+    hemiLight.groundColor.copy(combatPal.hemiGround);
+    hemiLight.intensity = isSouls
+      ? 0.50
+      : isMisty
+        ? COMBAT_HEMI_INTENSITY * (isAsh ? 1.14 : 1.12)
+        : COMBAT_HEMI_INTENSITY;
+
+    ambientLight.color.setHex(getCombatAmbientColorForBiome(currentBiome));
+    ambientLight.intensity = isSouls
+      ? 0.15
+      : isMisty
+        ? COMBAT_AMBIENT_INTENSITY * (isAsh ? 1.12 : isFrost ? 1.14 : 1.15)
+        : COMBAT_AMBIENT_INTENSITY;
+
+    dirLight.color.copy(combatPal.dir);
+    dirLight.intensity = isSouls
+      ? 1.85
+      : isMisty
+        ? COMBAT_DIR_INTENSITY * (isFrost || isAsh ? 1.08 : 1.06)
+        : COMBAT_DIR_INTENSITY;
+
+    // Subtle cool moonlit rim fill on hero in souls_citadel so warm bonfire/brazier/boss fire pops with cinematic contrast
+    heroAuraLight.color.setHex(isSouls ? 0x9eb8e8 : COMBAT_HERO_AURA_COLOR);
+    heroAuraLight.intensity = isSouls ? 0.28 : COMBAT_HERO_AURA_INTENSITY;
+    heroAuraLight.distance = isSouls ? 8.5 : 16.5;
+
+    dirLight.castShadow = !lowSpecMode;
+    const targetShadowRes = isMobileDevice
+      ? 512
+      : lowSpecMode
+        ? 512
+        : isSouls
+          ? 2048
+          : 1024;
+    syncDirLightShadowMapSize(targetShadowRes);
+
+    const combatShadExt = isSouls ? (isMobileDevice ? 13 : 11.8) : 21;
+    dirLight.shadow.camera.left = -combatShadExt;
+    dirLight.shadow.camera.right = combatShadExt;
+    dirLight.shadow.camera.top = combatShadExt;
+    dirLight.shadow.camera.bottom = -combatShadExt;
+    dirLight.shadow.camera.near = isSouls ? 2 : 4;
+    dirLight.shadow.camera.far = isSouls ? 62 : 75;
+    dirLight.shadow.radius = isSouls ? 2.4 : 2.2;
+    dirLight.shadow.bias = isSouls ? -0.0003 : -0.00035;
+    dirLight.shadow.normalBias = isSouls ? 0.035 : 0.0;
+    dirLight.shadow.camera.updateProjectionMatrix();
+
+    plazaRuneMat.color.copy(combatPal.plazaRune);
+    moteMat.color.copy(combatPal.plazaRune);
+  }
+
   function setCameraMode(mode = 'combat') {
     const nextMode = mode === 'hub' ? 'hub' : 'combat';
     const changed = cameraMode !== nextMode;
@@ -3538,6 +3854,7 @@ export function createArenaWorld(canvas) {
 
     if (cameraMode === 'hub') {
       scene.background = null;
+      scene.environment = null;
       renderer.setClearColor(0x000000, 0);
       renderer.toneMappingExposure = HUB_EXPOSURE;
       arenaGroup.visible = false;
@@ -3562,8 +3879,10 @@ export function createArenaWorld(canvas) {
       dirLight.intensity = HUB_DIR_INTENSITY;
       heroAuraLight.color.setHex(HUB_HERO_AURA_COLOR);
       heroAuraLight.intensity = HUB_HERO_AURA_INTENSITY;
+      heroAuraLight.distance = 16.5;
 
       dirLight.castShadow = !lowSpecMode;
+      syncDirLightShadowMapSize(isMobileDevice || lowSpecMode ? 512 : 1024);
       // Tighten directional shadow frustum around the Hub pedestal for crisp-yet-soft ground shadows!
       const hubShadExt = 2.6;
       dirLight.shadow.camera.left = -hubShadExt;
@@ -3574,63 +3893,36 @@ export function createArenaWorld(canvas) {
       dirLight.shadow.camera.far = 28;
       dirLight.shadow.radius = 4;
       dirLight.shadow.bias = -0.0002;
+      dirLight.shadow.normalBias = 0.0;
       dirLight.shadow.camera.updateProjectionMatrix();
       scene.fog.near = 40;
       scene.fog.far = 120;
       targetX = 0;
       targetZ = 0;
+      bossDoorCutsceneActive = false;
+      bossDoorCutsceneElapsed = 0;
+      _cutsceneState = null;
+      lockOnTarget = null;
+      lockLookOffsetX = 0;
+      lockLookOffsetY = 0;
+      lockLookOffsetZ = 0;
+      lockOnReticle.visible = false;
       applyHubCameraPose(0.016, changed || !hasFollowedOnce);
       hasFollowedOnce = true;
     } else {
-      const basePal = getCombatBasePalette();
-      const combatPal = bossModeActive ? PALETTE_BOSS : basePal;
-      const isMisty = isMistyBiome(currentBiome);
-      const isAsh = currentBiome === 'ash_citadel';
-      const isFrost = currentBiome === 'frost_ruins';
-      const fogCfg = getCombatFogForBiome(currentBiome, true);
-      scene.background = combatPal.bg.clone();
-      renderer.setClearColor(basePal.bg.getHex(), 1);
-      renderer.toneMappingExposure = getCombatExposureForBiome(currentBiome);
       arenaGroup.visible = true;
-      motesPoints.visible = true;
+      motesPoints.visible = !isSoulsBiome(currentBiome);
       syncBiomeWeatherVisibility();
       hubKeySpotLight.visible = false;
       hubRimLight.visible = false;
       hubBackdropGroup.visible = false;
 
-      // Restore exact original Combat light colors & intensities (with gentle biome lift for chapters 6+)
-      hemiLight.color.copy(combatPal.hemiSky);
-      hemiLight.groundColor.copy(combatPal.hemiGround);
-      hemiLight.intensity = isMisty
-        ? COMBAT_HEMI_INTENSITY * (isAsh ? 1.14 : 1.12)
-        : COMBAT_HEMI_INTENSITY;
-      ambientLight.color.setHex(getCombatAmbientColorForBiome(currentBiome));
-      ambientLight.intensity = isMisty
-        ? COMBAT_AMBIENT_INTENSITY * (isAsh ? 1.12 : isFrost ? 1.14 : 1.15)
-        : COMBAT_AMBIENT_INTENSITY;
-      dirLight.color.copy(combatPal.dir);
-      dirLight.intensity = isMisty
-        ? COMBAT_DIR_INTENSITY * (isFrost || isAsh ? 1.08 : 1.06)
-        : COMBAT_DIR_INTENSITY;
-      heroAuraLight.color.setHex(COMBAT_HERO_AURA_COLOR);
-      heroAuraLight.intensity = COMBAT_HERO_AURA_INTENSITY;
+      // Apply biome-accurate Combat lighting, PMREM env (Souls only), and shadow frustum
+      applyCombatLightingAndShadows(true);
 
-      dirLight.castShadow = !lowSpecMode;
-      const combatShadExt = 21;
-      dirLight.shadow.camera.left = -combatShadExt;
-      dirLight.shadow.camera.right = combatShadExt;
-      dirLight.shadow.camera.top = combatShadExt;
-      dirLight.shadow.camera.bottom = -combatShadExt;
-      dirLight.shadow.camera.near = 4;
-      dirLight.shadow.camera.far = 75;
-      dirLight.shadow.radius = 2.2;
-      dirLight.shadow.bias = -0.00035;
-      dirLight.shadow.camera.updateProjectionMatrix();
-      scene.fog.near = fogCfg.near;
-      scene.fog.far = fogCfg.far;
       hasFollowedOnce = false;
       const aspect = camera.aspect || 1;
-      camera.fov = aspect < 1.0 ? Math.min(64, 44 + (1.0 - aspect) * 34) : 44;
+      camera.fov = getCombatFovForBiome(aspect);
       camera.updateProjectionMatrix();
       const mult = aspect < 0.92 ? 1.15 : 1;
       camera.position.set(
@@ -3641,6 +3933,13 @@ export function createArenaWorld(canvas) {
       camera.lookAt(targetX, 0.5, targetZ);
       heroAuraLight.position.set(targetX, 3.2, targetZ);
     }
+  }
+
+  function getCombatFovForBiome(aspect = 1) {
+    if (isSoulsBiome(currentBiome)) {
+      return aspect < 1.0 ? Math.min(68, 52 + (1.0 - aspect) * 24) : 52;
+    }
+    return aspect < 1.0 ? Math.min(64, 44 + (1.0 - aspect) * 34) : 44;
   }
 
   // Debug: draw every invisible collider and the movement boundary on the floor.
@@ -3707,12 +4006,29 @@ export function createArenaWorld(canvas) {
 
   function setArenaBiome(biomeOrLevel = 'courtyard', levelNumber = null) {
     currentBiome = resolveBiomeId(biomeOrLevel, levelNumber);
+    const isSouls = isSoulsBiome(currentBiome);
     const isMisty = isMistyBiome(currentBiome);
     const isAsh = currentBiome === 'ash_citadel';
     const isFrost = currentBiome === 'frost_ruins';
-    courtyardPropsGroup.visible = !isMisty;
+    courtyardPropsGroup.visible = !isMisty && !isSouls;
 
-    if (isMisty) {
+    if (isSouls) {
+      if (mistyArena) mistyArena.group.visible = false;
+      const sa = ensureSoulsArena();
+      sa.group.visible = true;
+      sa.setFogGateSealed(false);
+      obstacles.length = 0;
+      const cols = sa.getColliders();
+      for (let i = 0; i < cols.length; i++) obstacles.push(cols[i]);
+      // Authentic Dark Souls 3 / Elden Ring over-the-shoulder 3rd-person camera framing
+      cameraLocked = false;
+      orbitYaw = orbitTargetYaw = 0;
+      orbitPitch = orbitTargetPitch = 0.56;
+      orbitDist = orbitTargetDist = 9.8;
+      soulsCamClipDist = 9.8;
+      soulsLockDistBonus = 0;
+    } else if (isMisty) {
+      if (soulsArena) soulsArena.group.visible = false;
       const ma = ensureMistyArena();
       ma.setBiomeTheme?.(currentBiome);
       ma.group.visible = true;
@@ -3727,6 +4043,7 @@ export function createArenaWorld(canvas) {
       }
     } else {
       if (mistyArena) mistyArena.group.visible = false;
+      if (soulsArena) soulsArena.group.visible = false;
       obstacles.length = 0;
       // The original courtyard was authored for a 54 m arena; keep its layout
       // proportionally identical after the arena was enlarged.
@@ -3740,8 +4057,9 @@ export function createArenaWorld(canvas) {
       }
     }
 
-    groundMesh.visible = !isMisty;
-    if (!isMisty) {
+    groundMesh.visible = !isMisty && !isSouls;
+    outerGround.visible = !isSouls;
+    if (!isMisty && !isSouls) {
       groundMesh.material.map = cobbleTex;
       groundMesh.material.color.setHex(0xe8e6f0);
       groundMesh.material.emissive.setHex(0x161422);
@@ -3758,30 +4076,12 @@ export function createArenaWorld(canvas) {
     syncBiomeWeatherVisibility();
 
     if (cameraMode !== 'hub') {
-      const pal = bossModeActive ? PALETTE_BOSS : getCombatBasePalette();
-      const fogCfg = getCombatFogForBiome(currentBiome, false);
-      if (!scene.background) scene.background = pal.bg.clone();
-      else scene.background.copy(pal.bg);
-      renderer.setClearColor(pal.bg.getHex(), 1);
-      renderer.toneMappingExposure = getCombatExposureForBiome(currentBiome);
-      scene.fog.color.copy(pal.fog);
-      scene.fog.near = fogCfg.near;
-      scene.fog.far = fogCfg.far;
-      hemiLight.color.copy(pal.hemiSky);
-      hemiLight.groundColor.copy(pal.hemiGround);
-      hemiLight.intensity = isMisty
-        ? COMBAT_HEMI_INTENSITY * (isAsh ? 1.14 : 1.12)
-        : COMBAT_HEMI_INTENSITY;
-      ambientLight.color.setHex(getCombatAmbientColorForBiome(currentBiome));
-      ambientLight.intensity = isMisty
-        ? COMBAT_AMBIENT_INTENSITY * (isAsh ? 1.12 : isFrost ? 1.14 : 1.15)
-        : COMBAT_AMBIENT_INTENSITY;
-      dirLight.color.copy(pal.dir);
-      dirLight.intensity = isMisty
-        ? COMBAT_DIR_INTENSITY * (isFrost || isAsh ? 1.08 : 1.06)
-        : COMBAT_DIR_INTENSITY;
-      plazaRuneMat.color.copy(pal.plazaRune);
-      moteMat.color.copy(pal.plazaRune);
+      applyCombatLightingAndShadows(false);
+      const targetFov = getCombatFovForBiome(camera.aspect || 1);
+      if (Math.abs(camera.fov - targetFov) > 0.05) {
+        camera.fov = targetFov;
+        camera.updateProjectionMatrix();
+      }
     }
   }
 
@@ -3794,6 +4094,8 @@ export function createArenaWorld(canvas) {
   let orbitTargetYaw = Math.PI / 4;
   let orbitTargetPitch = DEFAULT_ORBIT_PITCH;
   let orbitTargetDist = DEFAULT_ORBIT_DIST;
+  let soulsCamClipDist = 6.2;
+  let soulsLockDistBonus = 0;
 
   let cameraLocked = false;
   let activeCameraPreset = null;
@@ -3801,13 +4103,26 @@ export function createArenaWorld(canvas) {
   function adjustCombatOrbit(dYaw = 0, dPitch = 0) {
     if (cameraLocked) return;
     orbitTargetYaw += dYaw;
-    orbitTargetPitch = Math.max(0.10, Math.min(1.48, orbitTargetPitch + dPitch));
+    const minP = isSoulsBiome() ? 0.12 : 0.10;
+    const maxP = isSoulsBiome() ? 1.10 : 1.48;
+    orbitTargetPitch = Math.max(minP, Math.min(maxP, orbitTargetPitch + dPitch));
+  }
+
+  function applyFreeLookDelta(dx = 0, dy = 0) {
+    if (cameraLocked) return;
+    if (!Number.isFinite(dx) || !Number.isFinite(dy)) return;
+    orbitTargetYaw -= dx * 0.0024;
+    const minP = isSoulsBiome() ? 0.12 : 0.14;
+    const maxP = isSoulsBiome() ? 1.10 : 1.25;
+    orbitTargetPitch = Math.max(minP, Math.min(maxP, orbitTargetPitch + dy * 0.0018));
   }
 
   function zoomCombatOrbit(wheelDelta = 0) {
     if (cameraLocked) return;
     const step = Math.sign(wheelDelta) * Math.min(Math.abs(wheelDelta), 160) * 0.018;
-    orbitTargetDist = Math.max(3.0, Math.min(68.0, orbitTargetDist * Math.exp(step * 0.12)));
+    const minD = isSoulsBiome() ? 4.5 : 3.0;
+    const maxD = isSoulsBiome() ? 14.5 : 68.0;
+    orbitTargetDist = Math.max(minD, Math.min(maxD, orbitTargetDist * Math.exp(step * 0.12)));
   }
 
   function setCameraLock(locked = true) {
@@ -3870,7 +4185,7 @@ export function createArenaWorld(canvas) {
     if (devEditors) return Promise.resolve(devEditors);
     if (!isDevModeEnabled()) return Promise.resolve(null);
     if (!devEditorsPromise) {
-      devEditorsPromise = import('./world/devEditors.js?v=20261120z35')
+      devEditorsPromise = import('./world/devEditors.js?v=20261121z64')
         .then((mod) => {
           devEditors = mod.createWorldDevEditors({
             scene,
@@ -4008,10 +4323,212 @@ export function createArenaWorld(canvas) {
     orbitTargetDist = DEFAULT_ORBIT_DIST;
   }
 
+  // Dark Souls / Elden Ring Target Lock-On State & Iconic 3D Reticle
+  let lockOnTarget = null;
+  const _lockOnTargetData = { x: 0, y: 1.2, z: 0, radius: 0.7, isBoss: false };
+  let lockLookOffsetX = 0;
+  let lockLookOffsetY = 0;
+  let lockLookOffsetZ = 0;
+  let lockOnPulseTime = 0;
+
+  function createLockOnReticleTexture() {
+    const size = 128;
+    const c = document.createElement('canvas');
+    c.width = size;
+    c.height = size;
+    const ctx = c.getContext('2d');
+    const half = size * 0.5;
+
+    ctx.clearRect(0, 0, size, size);
+
+    // Soft golden-white ambient halo
+    const halo = ctx.createRadialGradient(half, half, 4, half, half, 54);
+    halo.addColorStop(0.0, 'rgba(255, 252, 235, 0.95)');
+    halo.addColorStop(0.24, 'rgba(253, 230, 138, 0.42)');
+    halo.addColorStop(0.58, 'rgba(250, 204, 21, 0.14)');
+    halo.addColorStop(1.0, 'rgba(250, 204, 21, 0.0)');
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(half, half, 54, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Thin outer golden-white ring
+    ctx.strokeStyle = 'rgba(254, 243, 199, 0.82)';
+    ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    ctx.arc(half, half, 30, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Thin crisp Souls-style diamond around the center
+    ctx.strokeStyle = 'rgba(255, 250, 224, 0.92)';
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.moveTo(half, half - 42);
+    ctx.lineTo(half + 42, half);
+    ctx.lineTo(half, half + 42);
+    ctx.lineTo(half - 42, half);
+    ctx.closePath();
+    ctx.stroke();
+
+    // Bright pure-white central pinpoint dot
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = 'rgba(255, 245, 200, 0.95)';
+    ctx.shadowBlur = 12;
+    ctx.beginPath();
+    ctx.arc(half, half, 8.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.needsUpdate = true;
+    return tex;
+  }
+
+  const lockOnReticle = new THREE.Group();
+  lockOnReticle.name = 'LockOnReticle';
+  lockOnReticle.visible = false;
+
+  const lockOnSpriteMat = new THREE.SpriteMaterial({
+    map: createLockOnReticleTexture(),
+    transparent: true,
+    depthTest: false,
+    depthWrite: false,
+    fog: false
+  });
+  const lockOnSprite = new THREE.Sprite(lockOnSpriteMat);
+  lockOnSprite.renderOrder = 999;
+  lockOnReticle.add(lockOnSprite);
+
+  const lockOnFootRingGeo = new THREE.RingGeometry(0.86, 1.0, 40);
+  lockOnFootRingGeo.rotateX(-Math.PI / 2);
+  const lockOnFootRingMat = new THREE.MeshBasicMaterial({
+    color: 0xfde68a,
+    transparent: true,
+    opacity: 0.34,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending
+  });
+  const lockOnFootRing = new THREE.Mesh(lockOnFootRingGeo, lockOnFootRingMat);
+  lockOnFootRing.renderOrder = 12;
+  lockOnReticle.add(lockOnFootRing);
+  scene.add(lockOnReticle);
+
+  function setLockOnTarget(target = null) {
+    if (cameraMode === 'hub' || !target || !Number.isFinite(target.x) || !Number.isFinite(target.z)) {
+      lockOnTarget = null;
+      lockOnReticle.visible = false;
+      return;
+    }
+    _lockOnTargetData.x = target.x;
+    _lockOnTargetData.y = Number.isFinite(target.y) ? target.y : (target.isBoss ? 1.75 : 1.15);
+    _lockOnTargetData.z = target.z;
+    _lockOnTargetData.radius = Number.isFinite(target.radius) ? target.radius : 0.7;
+    _lockOnTargetData.isBoss = Boolean(target.isBoss);
+    lockOnTarget = _lockOnTargetData;
+  }
+
+  function computeSoulsSafeCamDist(pivotX, pivotY, pivotZ, dirX, dirY, dirZ, desiredDist) {
+    const minDist = 3.2;
+    if (desiredDist <= minDist) return desiredDist;
+    const steps = 16;
+    const camPad = 0.36;
+    let safeDist = desiredDist;
+
+    for (let s = 1; s <= steps; s++) {
+      const d = minDist + ((desiredDist - minDist) * s) / steps;
+      const px = pivotX + dirX * d;
+      const py = pivotY + dirY * d;
+      const pz = pivotZ + dirZ * d;
+      let hit = false;
+
+      // 1. Rear wall behind Bonfire Courtyard (generous margin so 9.8m spawn camera & mobile portrait never clip)
+      if (pz > 32.2) {
+        hit = true;
+      } else if (pz >= 4.5) {
+        // South Bonfire Courtyard & First Duel Terrace low stone side walls (|x| ~ 7.35, h ~ 1.45)
+        if (py < 1.65 && Math.abs(px) > 6.65) hit = true;
+      } else if (pz >= -10.8) {
+        // Narrow Gothic Bridge low stone parapets (|x| ~ 3.85)
+        if (py < 1.35 && Math.abs(px) > 3.65) hit = true;
+      } else {
+        // Circular Boss Cathedral Courtyard (center (0, -23.0), walkable radius 13.2m, colonnade wall ~13.6m)
+        const inBridgeNeck = pz > -12.6 && Math.abs(px) <= 3.55;
+        if (!inBridgeNeck) {
+          const rBoss = Math.hypot(px, pz + 23.0);
+          if (rBoss > 13.0) hit = true;
+        }
+      }
+
+      // 2. Tall solid arena columns & Throne backrest ONLY (ignore low Bonfire at (0,25), braziers & small props!)
+      if (!hit && obstacles.length > 0) {
+        for (let i = 0; i < obstacles.length; i++) {
+          const o = obstacles[i];
+          if (!o || o.isBonfire) continue;
+          if (o.height != null && py > o.height + 0.2) continue;
+          if (Math.hypot(o.x, o.z - 25.0) < 1.6) continue;
+          if (o.halfW != null && o.halfD != null) {
+            if (Math.max(o.halfW, o.halfD) < 0.85) continue;
+            if (
+              Math.abs(px - o.x) < o.halfW + camPad &&
+              Math.abs(pz - o.z) < o.halfD + camPad
+            ) {
+              hit = true;
+              break;
+            }
+          } else if (o.radius != null) {
+            if (o.radius < 0.85) continue;
+            const ox = px - o.x;
+            const oz = pz - o.z;
+            const rLim = o.radius + camPad;
+            if (ox * ox + oz * oz < rLim * rLim) {
+              hit = true;
+              break;
+            }
+          }
+        }
+      }
+
+      if (hit) {
+        safeDist = Math.max(minDist, d - (desiredDist - minDist) / steps - 0.12);
+        break;
+      }
+    }
+    return safeDist;
+  }
+
   function followTarget(x = 0, z = 0, dt = 0.016) {
     if (cameraMode === 'hub') {
+      lockOnTarget = null;
+      lockOnReticle.visible = false;
       applyHubCameraPose(dt, false);
       return;
+    }
+
+    const clampedDt = Math.min(Math.max(dt || 0.016, 0), 0.1);
+    lastHeroX = x;
+    lastHeroZ = z;
+    const groundY = getGroundHeight(x, z);
+    const isSouls = isSoulsBiome(currentBiome);
+
+    // Smooth Dark Souls Lock-On Camera Yaw Tracking (shortest angular path, zero 360-deg wraps!)
+    if (lockOnTarget && !cameraLocked) {
+      const dxLock = x - lockOnTarget.x;
+      const dzLock = z - lockOnTarget.z;
+      if (dxLock * dxLock + dzLock * dzLock > 0.64) {
+        const desiredYaw = Math.atan2(dxLock, dzLock);
+        const yawDiff = Math.atan2(
+          Math.sin(desiredYaw - orbitTargetYaw),
+          Math.cos(desiredYaw - orbitTargetYaw)
+        );
+        const lockYawStep = 1 - Math.exp(-5.5 * clampedDt);
+        orbitTargetYaw += yawDiff * lockYawStep;
+      }
+      // Keep towering boss comfortably framed when locked on in Souls mode
+      if (isSouls && lockOnTarget.isBoss && orbitTargetPitch < 0.44) {
+        const pitchNudge = 1 - Math.exp(-5.5 * clampedDt);
+        orbitTargetPitch += (0.44 - orbitTargetPitch) * pitchNudge;
+      }
     }
 
     if (!hasFollowedOnce || !dt || dt <= 0) {
@@ -4020,18 +4537,61 @@ export function createArenaWorld(canvas) {
       orbitYaw = orbitTargetYaw;
       orbitPitch = orbitTargetPitch;
       orbitDist = orbitTargetDist;
+      soulsLockDistBonus = isSouls && lockOnTarget?.isBoss ? 0.80 : 0;
+      soulsCamClipDist = orbitDist + soulsLockDistBonus;
       hasFollowedOnce = true;
     } else {
-      const factor = 1 - Math.exp(-26 * Math.min(dt, 0.1));
-      targetX += (x - targetX) * factor;
-      targetZ += (z - targetZ) * factor;
-      const orbitSmooth = 1 - Math.exp(-18 * Math.min(dt, 0.1));
-      orbitYaw += (orbitTargetYaw - orbitYaw) * orbitSmooth;
+      const posFactor = isSouls
+        ? 1 - Math.exp(-11.5 * clampedDt)
+        : 1 - Math.exp(-26 * clampedDt);
+      targetX += (x - targetX) * posFactor;
+      targetZ += (z - targetZ) * posFactor;
+      const orbitSmooth = isSouls
+        ? 1 - Math.exp(-24 * clampedDt)
+        : 1 - Math.exp(-18 * clampedDt);
+      const orbitYawDiff = Math.atan2(
+        Math.sin(orbitTargetYaw - orbitYaw),
+        Math.cos(orbitTargetYaw - orbitYaw)
+      );
+      orbitYaw += orbitYawDiff * orbitSmooth;
       orbitPitch += (orbitTargetPitch - orbitPitch) * orbitSmooth;
       orbitDist += (orbitTargetDist - orbitDist) * orbitSmooth;
+
+      const wantLockBonus = isSouls && lockOnTarget?.isBoss ? 0.80 : 0;
+      soulsLockDistBonus += (wantLockBonus - soulsLockDistBonus) * (1 - Math.exp(-5.5 * clampedDt));
     }
 
-    const groundY = getGroundHeight(x, z);
+    const pivotY = isSouls ? groundY + 1.05 : groundY + 0.85;
+
+    // Smoothly interpolate weighted lookAt offset (Souls boss lock: 62% hero + 38% boss chest; PvE: 70% / 30%)
+    const lockXzWeight = isSouls && lockOnTarget?.isBoss ? 0.38 : 0.30;
+    const lockYWeight = isSouls && lockOnTarget?.isBoss ? 0.42 : 0.35;
+    const wantLookOffX = lockOnTarget ? (lockOnTarget.x - targetX) * lockXzWeight : 0;
+    const wantLookOffZ = lockOnTarget ? (lockOnTarget.z - targetZ) * lockXzWeight : 0;
+    const wantLookOffY = lockOnTarget ? (lockOnTarget.y - pivotY) * lockYWeight : 0;
+    const lookSmooth = (!dt || dt <= 0) ? 1 : (1 - Math.exp(-8.5 * clampedDt));
+    lockLookOffsetX += (wantLookOffX - lockLookOffsetX) * lookSmooth;
+    lockLookOffsetY += (wantLookOffY - lockLookOffsetY) * lookSmooth;
+    lockLookOffsetZ += (wantLookOffZ - lockLookOffsetZ) * lookSmooth;
+
+    // Update iconic 3D Lock-On reticle & subtle ground ring
+    if (lockOnTarget) {
+      lockOnPulseTime += clampedDt;
+      const spPulse = 1 + Math.sin(lockOnPulseTime * 6.5) * 0.08;
+      const ringPulse = 1 + Math.sin(lockOnPulseTime * 4.2) * 0.04;
+      const spBase = lockOnTarget.isBoss ? 0.62 : 0.44;
+      lockOnReticle.visible = true;
+      lockOnSprite.position.set(lockOnTarget.x, lockOnTarget.y, lockOnTarget.z);
+      lockOnSprite.scale.set(spBase * spPulse, spBase * spPulse, 1);
+      const targetGroundY = getGroundHeight(lockOnTarget.x, lockOnTarget.z);
+      lockOnFootRing.position.set(lockOnTarget.x, targetGroundY + 0.04, lockOnTarget.z);
+      const ringScale = Math.max(0.65, lockOnTarget.radius * 1.15) * ringPulse;
+      lockOnFootRing.scale.set(ringScale, ringScale, 1);
+      lockOnFootRingMat.opacity = 0.28 + Math.sin(lockOnPulseTime * 4.2) * 0.08;
+    } else {
+      lockOnReticle.visible = false;
+    }
+
     combatHeroContactShadow.position.set(x, groundY + 0.022, z);
 
     let sx = 0, sy = 0, sz = 0;
@@ -4042,14 +4602,114 @@ export function createArenaWorld(canvas) {
     }
 
     const mult = camera.aspect < 0.92 ? 1.15 : 1;
-    const effDist = orbitDist * mult;
-    const horizDist = Math.cos(orbitPitch) * effDist;
-    const camY = groundY + 0.5 + Math.sin(orbitPitch) * effDist;
-    const camX = targetX + Math.sin(orbitYaw) * horizDist;
-    const camZ = targetZ + Math.cos(orbitYaw) * horizDist;
+    const baseEffDist = orbitDist * mult;
+    let camX, camY, camZ;
+    if (isSouls) {
+      const desiredDist = baseEffDist + soulsLockDistBonus;
+      const cosP = Math.cos(orbitPitch);
+      const dirX = Math.sin(orbitYaw) * cosP;
+      const dirY = Math.sin(orbitPitch);
+      const dirZ = Math.cos(orbitYaw) * cosP;
+      const safeDist = computeSoulsSafeCamDist(targetX, pivotY, targetZ, dirX, dirY, dirZ, desiredDist);
+      const clipSmooth = (!dt || dt <= 0)
+        ? 1
+        : safeDist < soulsCamClipDist
+          ? 1 - Math.exp(-24 * clampedDt)
+          : 1 - Math.exp(-6.5 * clampedDt);
+      soulsCamClipDist += (safeDist - soulsCamClipDist) * clipSmooth;
+      const finalDist = Math.max(3.2, Math.min(desiredDist, soulsCamClipDist));
+      camX = targetX + dirX * finalDist;
+      camZ = targetZ + dirZ * finalDist;
+      const camGroundY = getGroundHeight(camX, camZ);
+      camY = Math.max(Math.max(groundY, camGroundY) + 0.52, pivotY + dirY * finalDist);
 
-    camera.position.set(camX + sx, Math.max(groundY + 0.65, camY + sy), camZ + sz);
-    camera.lookAt(targetX + sx * 0.35, groundY + 0.85, targetZ + sz * 0.35);
+      // Spring-arm castle wall + sealed-Boss-Door collision: ray (hero pivot -> camera) can never
+      // look through walls into the void or get stuck outside the sealed Boss Gates.
+      if (!bossDoorCutsceneActive) {
+        const doorStateNow = soulsArena?.getBossDoorState?.() || 'closed';
+        const sprung = clampCastleCameraPosition(
+          targetX, pivotY, targetZ, camX, camY, camZ, doorStateNow, _castleCamClampOpts
+        );
+        if (sprung.hitWall) {
+          camX = sprung.x;
+          camY = Math.max(Math.max(groundY, camGroundY) + 0.52, sprung.y);
+          camZ = sprung.z;
+          const sprungDist = Math.hypot(camX - targetX, camY - pivotY, camZ - targetZ);
+          if (sprungDist < soulsCamClipDist) soulsCamClipDist = sprungDist;
+        }
+      }
+    } else {
+      const horizDist = Math.cos(orbitPitch) * baseEffDist;
+      camY = Math.max(groundY + 0.65, groundY + 0.5 + Math.sin(orbitPitch) * baseEffDist);
+      camX = targetX + Math.sin(orbitYaw) * horizDist;
+      camZ = targetZ + Math.cos(orbitYaw) * horizDist;
+    }
+
+    const finalNormCamX = camX + sx;
+    const finalNormCamY = Math.max(groundY + (isSouls ? 0.52 : 0.65), camY + sy);
+    const finalNormCamZ = camZ + sz;
+    const finalNormLookX = targetX + lockLookOffsetX + sx * 0.35;
+    const finalNormLookY = pivotY + lockLookOffsetY;
+    const finalNormLookZ = targetZ + lockLookOffsetZ + sz * 0.35;
+
+    _cutsceneNormalPos.set(finalNormCamX, finalNormCamY, finalNormCamZ);
+    _cutsceneNormalLook.set(finalNormLookX, finalNormLookY, finalNormLookZ);
+
+    if (bossDoorCutsceneActive && isSouls) {
+      bossDoorCutsceneElapsed += clampedDt;
+      const tEval = bossDoorCutsceneDuration > 0
+        ? (bossDoorCutsceneElapsed / bossDoorCutsceneDuration) * BOSS_DOOR_CUTSCENE_DURATION
+        : BOSS_DOOR_CUTSCENE_DURATION;
+      const normalFov = getCombatFovForBiome(camera.aspect || 1);
+      _cutsceneState = evaluateBossDoorCutscene(
+        tEval,
+        _cutsceneStartPos,
+        _cutsceneStartLook,
+        _cutsceneNormalPos,
+        _cutsceneNormalLook,
+        {
+          startFov: bossDoorCutsceneStartFov,
+          normalFov,
+          out: _cutsceneStateOut
+        }
+      );
+      _cutsceneState.active = !_cutsceneState.finished;
+      _cutsceneState.elapsed = bossDoorCutsceneElapsed;
+      _cutsceneState.duration = bossDoorCutsceneDuration;
+
+      if (_cutsceneState.finished) {
+        bossDoorCutsceneActive = false;
+        bossDoorCutsceneElapsed = 0;
+        if (Math.abs(camera.fov - normalFov) > 0.01) {
+          camera.fov = normalFov;
+          camera.updateProjectionMatrix();
+        }
+        camera.position.set(finalNormCamX, finalNormCamY, finalNormCamZ);
+        camera.lookAt(finalNormLookX, finalNormLookY, finalNormLookZ);
+      } else {
+        if (Math.abs(camera.fov - _cutsceneState.fov) > 0.01) {
+          camera.fov = _cutsceneState.fov;
+          camera.updateProjectionMatrix();
+        }
+        const sh = computeBossDoorCutsceneShakeOffset(tEval, _cutsceneState.shake, _cutsceneShakeOut);
+        camera.position.set(
+          _cutsceneState.camPos.x + sh.x,
+          _cutsceneState.camPos.y + sh.y,
+          _cutsceneState.camPos.z + sh.z
+        );
+        camera.lookAt(
+          _cutsceneState.camLook.x + sh.x * 0.35,
+          _cutsceneState.camLook.y + sh.y * 0.35,
+          _cutsceneState.camLook.z + sh.z * 0.35
+        );
+        if (sh.roll) {
+          camera.rotateZ(sh.roll);
+        }
+      }
+    } else {
+      camera.position.set(finalNormCamX, finalNormCamY, finalNormCamZ);
+      camera.lookAt(finalNormLookX, finalNormLookY, finalNormLookZ);
+    }
     camera.updateMatrixWorld();
 
     heroAuraLight.position.set(targetX, 3.2, targetZ);
@@ -4057,7 +4717,12 @@ export function createArenaWorld(canvas) {
     const snap = 0.5;
     const lx = Math.round(targetX / snap) * snap;
     const lz = Math.round(targetZ / snap) * snap;
-    dirLight.position.set(lx + 14, 28, lz + 16);
+    if (isSouls) {
+      // ~50+ deg cool moonlit directional angle — casts crisp gothic shadows cleanly inside enclosed castle halls
+      dirLight.position.set(lx + 11.5, 22.0, lz + 9.5);
+    } else {
+      dirLight.position.set(lx + 14, 28, lz + 16);
+    }
     dirLight.target.position.set(lx, 0, lz);
     dirLight.target.updateMatrixWorld();
   }
@@ -4118,7 +4783,7 @@ export function createArenaWorld(canvas) {
       shakeIntensity = Math.max(0, shakeIntensity - safeDt * 3.4);
     }
 
-    const pal = cameraMode === 'hub' ? PALETTE_HUB : bossModeActive ? PALETTE_BOSS : getCombatBasePalette();
+    const pal = cameraMode === 'hub' ? PALETTE_HUB : getActiveCombatPalette();
     const atmLerp = Math.min(1, safeDt * 2.8);
     if (cameraMode !== 'hub' && scene.background) {
       scene.background.lerp(pal.bg, atmLerp);
@@ -4131,8 +4796,10 @@ export function createArenaWorld(canvas) {
     moteMat.color.lerp(pal.plazaRune, atmLerp);
 
     plazaRuneMat.opacity = 0.44 + Math.sin(t * 2.5) * 0.12;
-    motesPoints.position.y = Math.sin(t * 0.9) * 0.28;
-    motesPoints.rotation.y = t * 0.03;
+    if (motesPoints.visible) {
+      motesPoints.position.y = Math.sin(t * 0.9) * 0.28;
+      motesPoints.rotation.y = t * 0.03;
+    }
 
     waterProjUniforms.uTime.value = t;
 
@@ -4252,6 +4919,17 @@ export function createArenaWorld(canvas) {
     // Animate Misty Forest / Frost Ruins / Ash Citadel mist, glowing portal sigil, campfire & lanterns
     if (cameraMode !== 'hub' && isMistyBiome(currentBiome) && mistyArena?.isLoaded()) {
       mistyArena.update(safeDt, t);
+    }
+    // Animate Chapter 26 Dark Souls prototype bonfire, braziers, fog wall, dynamic light pool, roof & cutscene doors
+    if (cameraMode !== 'hub' && isSoulsBiome(currentBiome) && soulsArena) {
+      soulsArena.update(safeDt, t, {
+        playerX: lastHeroX,
+        playerZ: lastHeroZ,
+        camX: camera.position.x,
+        camY: camera.position.y,
+        camZ: camera.position.z,
+        cutsceneState: isBossDoorCutsceneActive() ? _cutsceneState : null
+      });
     }
 
     // Chapters 16–20 (Frost Ruins): falling snowflakes & glacial ice crystals
@@ -4890,10 +5568,16 @@ export function createArenaWorld(canvas) {
     dirLight.castShadow = !lowSpecMode;
     if (cameraMode === 'hub') {
       hubShadowCatcher.visible = hubStageFocus !== 'arsenal' && !lowSpecMode;
+      syncDirLightShadowMapSize(isMobileDevice || lowSpecMode ? 512 : 1024);
+    } else {
+      syncDirLightShadowMapSize(
+        isMobileDevice || lowSpecMode ? 512 : isSoulsBiome(currentBiome) ? 2048 : 1024
+      );
     }
     refreshAdaptiveBloomMaterials();
     syncBiomeWeatherVisibility();
     mistyArena?.setLowSpecMode?.(lowSpecMode);
+    soulsArena?.setLowSpecMode?.(lowSpecMode);
   }
 
   function resize() {
@@ -4907,8 +5591,8 @@ export function createArenaWorld(canvas) {
     camera.aspect = aspect;
     if (cameraMode === 'hub') {
       camera.fov = aspect < 0.92 ? 48 : 40;
-    } else {
-      camera.fov = aspect < 1.0 ? Math.min(64, 44 + (1.0 - aspect) * 34) : 44;
+    } else if (!isBossDoorCutsceneActive()) {
+      camera.fov = getCombatFovForBiome(aspect);
     }
     camera.updateProjectionMatrix();
     camera.updateMatrixWorld();
@@ -4917,6 +5601,9 @@ export function createArenaWorld(canvas) {
   function resetVfx() {
     shakeIntensity = 0;
     bossModeActive = false;
+    bossDoorCutsceneActive = false;
+    bossDoorCutsceneElapsed = 0;
+    _cutsceneState = null;
     const basePal = getCombatBasePalette();
     const activePal = cameraMode === 'hub' ? PALETTE_HUB : basePal;
     if (cameraMode !== 'hub') {
@@ -5009,6 +5696,11 @@ export function createArenaWorld(canvas) {
       proj.dispose();
     }
     activeProjectiles.clear();
+    lockOnTarget = null;
+    lockLookOffsetX = 0;
+    lockLookOffsetY = 0;
+    lockLookOffsetZ = 0;
+    lockOnReticle.visible = false;
   }
 
   return {
@@ -5019,8 +5711,10 @@ export function createArenaWorld(canvas) {
     obstacles,
     HUB_PEDESTAL_TOP_Y,
     followTarget,
+    setLockOnTarget,
     getGroundHeight,
     adjustCombatOrbit,
+    applyFreeLookDelta,
     zoomCombatOrbit,
     setCameraLock,
     setCameraPreset,
@@ -5042,6 +5736,33 @@ export function createArenaWorld(canvas) {
     setArenaBiome,
     getBiomeForLevel,
     isArenaCircular,
+    isSoulsArena: () => isSoulsBiome(currentBiome),
+    getSurfaceType: (x = 0, z = 0) => {
+      if (!isSoulsBiome(currentBiome)) return 'dirt';
+      if (soulsArena?.getSurfaceType) return soulsArena.getSurfaceType(x, z);
+      if (z >= 4.5) return 'stone_courtyard';
+      if (z >= -10.5) return 'stone_bridge';
+      return 'cathedral_stone';
+    },
+    setSoulsFogGate: (sealed) => soulsArena?.setFogGateSealed?.(Boolean(sealed)),
+    getBossDoorState: () => soulsArena?.getBossDoorState?.() || 'closed',
+    openBossDoors: () => soulsArena?.openBossDoors?.() ?? false,
+    sealBossDoors: () => soulsArena?.sealBossDoors?.() ?? false,
+    resetBossDoors: (keepOpen = false) => soulsArena?.resetBossDoors?.(Boolean(keepOpen)),
+    tryBreakCandlesNear: (x, z, r = 0.72) => soulsArena?.tryBreakCandlesNear?.(x, z, r) || [],
+    resetCandles: () => soulsArena?.resetCandles?.(),
+    setShrineClaimed: (id, claimed = true) => soulsArena?.setShrineClaimed?.(id, claimed),
+    getSoulsCastleLayout: () => soulsArena?.getSoulsCastleLayout?.() || soulsArena?.SOULS_CASTLE_ZONES || null,
+    startBossDoorCutscene,
+    isBossDoorCutsceneActive,
+    getBossDoorCutsceneState,
+    skipBossDoorCutscene,
+    getActiveFlameBoxes: () => soulsArena?.getActiveFlameBoxes?.() || [],
+    isPointInFlameTrap: (x, z, y = 0.6, r = 0.5) => Boolean(soulsArena?.isPointInFlameTrap?.(x, z, y, r)),
+    getFlameTrapStates: () => soulsArena?.getFlameTrapStates?.() || [],
+    isBossHallOccluded: (playerZ = 0) => Boolean(soulsArena?.isBossHallOccluded?.(playerZ)),
+    clampSoulsPosition: (x, z, r = 0.5) => soulsArena ? soulsArena.clampPosition(x, z, r) : { x, z },
+    getSoulsBonfirePos: () => soulsArena ? soulsArena.getBonfirePos() : { x: 0, z: 25 },
     setDebugColliders,
     setHubStageFocus,
     addScreenShake,
@@ -5061,6 +5782,8 @@ export function createArenaWorld(canvas) {
     spawnMeteorStrike,
     spawnDangerZone,
     spawnTelegraphZone,
+    setTelegraphsVisible,
+    getTelegraphsVisible,
     spawnFireTrailPatch,
     spawnBarrelExplosion,
     createProjectileVisual,

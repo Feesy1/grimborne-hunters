@@ -1,7 +1,7 @@
 // UI Metadata Constants, Formatters & Progression / Shop Resolvers
 // Extracted from js/ui.js (Wave 1 modularization) — pure helpers, zero circular deps.
 
-import { WEAPON_MAX_LEVEL } from '../config.js?v=20261120z35';
+import { WEAPON_MAX_LEVEL } from '../config.js?v=20261121z64';
 
 export const CLASS_ORDER = ['warrior', 'gunslinger', 'mage'];
 

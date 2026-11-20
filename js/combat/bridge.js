@@ -5,7 +5,7 @@ import {
   ARENA_HALF_SIZE,
   CLASSES,
   ENEMY_TYPES
-} from '../config.js?v=20261120z35';
+} from '../config.js?v=20261121z64';
 
 export const TWO_PI = Math.PI * 2;
 // Keep the player just inside the decorative fence ring (HALF_SIZE - 1.6).
@@ -32,6 +32,7 @@ export function lerpAngle(current, target, t) {
 
 export function resolveArenaBiomeForLevel(levelNumber) {
   const lvl = Number(levelNumber) || 1;
+  if (lvl === 26) return 'souls_citadel';
   if (lvl >= 21) return 'ash_citadel';
   if (lvl >= 16) return 'frost_ruins';
   if (lvl >= 6) return 'misty_forest';
@@ -239,14 +240,14 @@ export function createCombatBridge({ world, models, progression } = {}) {
 
   function emitTelegraphZone(x, z, radius = 2.0, duration = 0.65, color = 0xef4444) {
     if (typeof world?.spawnTelegraphZone === 'function') {
-      world.spawnTelegraphZone({ x, z, radius, color, duration });
-      return;
+      return world.spawnTelegraphZone({ x, z, radius, color, duration });
     }
     if (typeof world?.spawnShockwaveRing === 'function') {
       world.spawnShockwaveRing({ x, y: 0.06, z, radius, color, duration });
-      return;
+      return null;
     }
     emitDangerZone(x, z, radius, duration, color);
+    return null;
   }
 
   function emitDangerZone(x, z, radius, duration = 1.1, color = 0x9333ea) {
@@ -535,6 +536,13 @@ export function createCombatBridge({ world, models, progression } = {}) {
     else if (typeof obj?.userData?.flashHit === 'function') obj.userData.flashHit();
   }
 
+  function setModelBlocking(modelWrap, active) {
+    if (!modelWrap) return;
+    const { handle, obj } = modelWrap;
+    if (typeof handle?.setBlocking === 'function') handle.setBlocking(Boolean(active));
+    else if (typeof obj?.userData?.setBlocking === 'function') obj.userData.setBlocking(Boolean(active));
+  }
+
   // === Smooth Obstacle Collision & Arena Clamping ===
   function resolveObstaclesAndBounds(x, z, entityRadius, arenaLimit) {
     let nx = x;
@@ -583,6 +591,10 @@ export function createCombatBridge({ world, models, progression } = {}) {
       }
     }
 
+    if (world?.isSoulsArena?.() && typeof world.clampSoulsPosition === 'function') {
+      return world.clampSoulsPosition(nx, nz, entityRadius);
+    }
+
     nx = clamp(nx, -arenaLimit, arenaLimit);
     nz = clamp(nz, -arenaLimit, arenaLimit);
 
@@ -620,6 +632,7 @@ export function createCombatBridge({ world, models, progression } = {}) {
     animateEntityModel,
     triggerModelAttack,
     triggerModelHitFlash,
+    setModelBlocking,
     resolveObstaclesAndBounds
   };
 }

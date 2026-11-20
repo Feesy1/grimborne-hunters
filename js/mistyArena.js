@@ -6,7 +6,7 @@
 import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { DRACOLoader } from '../vendor/DRACOLoader.js';
-import { createBloomHaloTexture } from './world/textures.js?v=20261120z35';
+import { createBloomHaloTexture } from './world/textures.js?v=20261121z64';
 
 const sharedDracoLoader = new DRACOLoader();
 sharedDracoLoader.setDecoderPath('./vendor/draco/');

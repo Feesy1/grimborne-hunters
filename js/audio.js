@@ -1,5 +1,11 @@
-// Procedural Web Audio API Dark-Fantasy Synthesizer
-// Zero external audio assets — instant startup, crisp dynamics, full suspend/mute compliance.
+// Procedural Web Audio API Dark-Fantasy Synthesizer + Abandoned Knight Rift Studio Audio Router
+// Instant startup, crisp dynamics, full suspend/mute compliance.
+
+import { createSoulsEnvAudio } from './souls/soulsEnvAudio.js?v=20261121z64';
+import { createSoulsHeroAudio } from './souls/soulsHeroAudio.js?v=20261121z64';
+import { createSoulsEnemyAudio } from './souls/soulsEnemyAudio.js?v=20261121z64';
+import { createSoulsMusicManager } from './souls/soulsMusicManager.js?v=20261121z64';
+import { createSoulsSpatialAudio } from './souls/soulsSpatialAudio.js?v=20261121z64';
 
 export function createAudioEngine() {
   let ctx = null;
@@ -8,6 +14,7 @@ export function createAudioEngine() {
   let musicGain = null;
   let musicFilter = null;
   let compressor = null;
+  let stoneReflIn = null;
   let whiteNoiseBuffer = null;
   let brownNoiseBuffer = null;
   const externalSampleBuffers = new Map();
@@ -18,7 +25,7 @@ export function createAudioEngine() {
 
   function preloadExternalSamples(audioCtx) {
     if (!audioCtx || typeof fetch === 'undefined') return;
-    const stepVer = '20261120z28';
+    const stepVer = '20261121z64';
     const files = [
       ['usp_1', './assets/audio/usp_shot_1.wav?v=20261117z25'],
       ['usp_2', './assets/audio/usp_shot_2.wav?v=20261117z25'],
@@ -192,6 +199,131 @@ export function createAudioEngine() {
     return curve;
   }
 
+  function getOrCreateStoneReverbSend() {
+    if (!ctx || !compressor) return null;
+    if (stoneReflIn) return stoneReflIn;
+
+    // Shared early-reflection bus for Souls stone footsteps & cathedral cues
+    // Tap 1: 28 ms @ -14 dB (~0.200), Tap 2: 64 ms @ -20 dB (~0.100), LP 2400 Hz
+    stoneReflIn = ctx.createGain();
+    stoneReflIn.gain.setValueAtTime(1.0, ctx.currentTime);
+    const stoneReflLp = ctx.createBiquadFilter();
+    stoneReflLp.type = 'lowpass';
+    stoneReflLp.frequency.setValueAtTime(2400, ctx.currentTime);
+    stoneReflLp.Q.setValueAtTime(0.75, ctx.currentTime);
+
+    const reflDelay1 = ctx.createDelay(0.12);
+    reflDelay1.delayTime.setValueAtTime(0.028, ctx.currentTime);
+    const reflGain1 = ctx.createGain();
+    reflGain1.gain.setValueAtTime(0.20, ctx.currentTime); // -14 dB
+
+    const reflDelay2 = ctx.createDelay(0.12);
+    reflDelay2.delayTime.setValueAtTime(0.064, ctx.currentTime);
+    const reflGain2 = ctx.createGain();
+    reflGain2.gain.setValueAtTime(0.10, ctx.currentTime); // -20 dB
+
+    stoneReflIn.connect(reflDelay1);
+    reflDelay1.connect(reflGain1);
+    reflGain1.connect(stoneReflLp);
+
+    stoneReflIn.connect(reflDelay2);
+    reflDelay2.connect(reflGain2);
+    reflGain2.connect(stoneReflLp);
+
+    stoneReflLp.connect(compressor);
+    return stoneReflIn;
+  }
+
+  // Dedicated Abandoned Knight Rift 44.1 kHz studio audio sub-engines
+  const soulsEnv = createSoulsEnvAudio({
+    getCtx: () => ctx,
+    getSfxDest: () => compressor || sfxGain,
+    getMusicDest: () => musicFilter || musicGain || compressor,
+    getStoneReverbDest: () => getOrCreateStoneReverbSend()
+  });
+  const soulsHero = createSoulsHeroAudio({
+    getCtx: () => ctx,
+    getSfxDest: () => compressor || sfxGain,
+    getStoneReverbDest: () => getOrCreateStoneReverbSend()
+  });
+  const soulsEnemy = createSoulsEnemyAudio({
+    getCtx: () => ctx,
+    getSfxDest: () => compressor || sfxGain,
+    getStoneReverbDest: () => getOrCreateStoneReverbSend(),
+    duckMusic: (db, a, r) => soulsMusic?.duck?.(db, a, r)
+  });
+  const soulsSpatial = createSoulsSpatialAudio({
+    getCtx: () => ctx,
+    getMasterGain: () => masterGain || sfxGain || compressor,
+    duckMusic: (db, holdSec, relSec) => soulsMusic?.duck?.(db, holdSec, relSec)
+  });
+  soulsSpatial.setMuted(muted);
+  soulsSpatial.setVolume(Math.max(0, Math.min(1, sfxVolume * 0.92)));
+
+  // Dedicated studio soundtracks for Abandoned Knight Rift:
+  // - rift_explore: Elden Castle Drone (Bonfire / Castle Corridor / East Alcove)
+  // - boss_phase1/boss_phase2: unified Epic Boss Battle (God of War Style)
+  // Routed directly to masterGain (bypassing retro 980Hz musicFilter lowpass!) with own musicVolume scaling
+  const SOULS_EXPLORE_TRACK_URL = './assets/audio/music_rift_explore.mp3?v=20261121z64';
+  const SOULS_BOSS_TRACK_URL = './assets/audio/music_boss_rift.mp3?v=20261121z64';
+  let soulsAmbientActive = false;
+  const soulsMusic = createSoulsMusicManager({
+    getCtx: () => ctx,
+    getMusicDest: () => masterGain || musicGain,
+    tracks: {
+      rift_explore: SOULS_EXPLORE_TRACK_URL,
+      boss_phase1: SOULS_BOSS_TRACK_URL,
+      boss_phase2: SOULS_BOSS_TRACK_URL
+    },
+    crossfadeSec: 1.2,
+    initialVolume: Math.max(0, Math.min(1, musicVolume * 0.82))
+  });
+  soulsMusic.setMuted(muted);
+
+  function isSoulsMusicActive() {
+    return Boolean(soulsAmbientActive && (musicMode === 'combat' || musicMode === 'boss'));
+  }
+
+  function syncSoulsBossMusic() {
+    const targetSlot = !soulsAmbientActive
+      ? 'off'
+      : musicMode === 'boss'
+        ? 'boss_phase1'
+        : musicMode === 'combat'
+          ? 'rift_explore'
+          : 'off';
+
+    if (targetSlot !== 'off') {
+      // Silence old procedural synth drone so studio Rift explore / Boss tracks play cleanly
+      stopMusicLoop();
+      soulsMusic.setVolume(Math.max(0, Math.min(1, musicVolume * 0.82)));
+      soulsMusic.setMuted(muted || musicVolume <= 0.001);
+      soulsMusic.setSuspended(suspendedBySystem);
+      if (!muted && !suspendedBySystem && musicVolume > 0.001) {
+        if (ctx) {
+          try { soulsMusic.preload(ctx); } catch {}
+        }
+        soulsMusic.setSlot(targetSlot, { crossfadeSec: 1.2 });
+      }
+    } else if (soulsMusic.getSlot() !== 'off') {
+      soulsMusic.stop(0.8);
+    }
+  }
+
+  function preloadSoulsAudio(audioCtx) {
+    if (!audioCtx) return;
+    try { soulsEnv.preload?.(audioCtx); } catch {}
+    try { soulsHero.preload?.(audioCtx); } catch {}
+    try { soulsEnemy.preload?.(audioCtx); } catch {}
+    try {
+      soulsSpatial.attachContext?.(audioCtx, masterGain || sfxGain || compressor);
+      soulsSpatial.preload?.(audioCtx);
+    } catch {}
+    if (soulsAmbientActive) {
+      try { soulsMusic.preload?.(audioCtx); } catch {}
+    }
+  }
+
   function ensureContext() {
     if (ctx) return ctx;
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -228,6 +360,7 @@ export function createAudioEngine() {
 
       compressor.connect(sfxGain);
       sfxGain.connect(masterGain);
+      getOrCreateStoneReverbSend();
       musicFilter.connect(musicGain);
       musicGain.connect(masterGain);
       masterGain.connect(ctx.destination);
@@ -248,6 +381,7 @@ export function createAudioEngine() {
 
       distortionCurve = makeDistortionCurve(42);
       preloadExternalSamples(ctx);
+      preloadSoulsAudio(ctx);
     } catch {
       ctx = null;
     }
@@ -468,6 +602,10 @@ export function createAudioEngine() {
   }
 
   function startMusicLoop() {
+    if (isSoulsMusicActive()) {
+      stopMusicLoop();
+      return;
+    }
     if (musicMode === 'off' || muted || suspendedBySystem || musicVolume <= 0.001) {
       stopMusicLoop();
       return;
@@ -476,7 +614,7 @@ export function createAudioEngine() {
     if (!ctx) return;
     nextNoteTime = Math.max(ctx.currentTime + 0.04, nextNoteTime || ctx.currentTime + 0.04);
     musicTimerId = setInterval(() => {
-      if (musicMode === 'off' || muted || suspendedBySystem || musicVolume <= 0.001) {
+      if (isSoulsMusicActive() || musicMode === 'off' || muted || suspendedBySystem || musicVolume <= 0.001) {
         stopMusicLoop();
         return;
       }
@@ -508,6 +646,9 @@ export function createAudioEngine() {
     }
     unlocked = true;
     preloadExternalSamples(audio);
+    preloadSoulsAudio(audio);
+    soulsMusic.unlock();
+    syncSoulsBossMusic();
     startMusicLoop();
   }
 
@@ -1232,9 +1373,17 @@ export function createAudioEngine() {
       });
     },
 
-    playFootstep(classId = 'gunslinger', stepParity = 0, isSprinting = false) {
+    playFootstep(classId = 'gunslinger', stepParity = 0, isSprinting = false, surface = 'dirt') {
       const minStepMs = isSprinting ? 160 : 180;
       if (!readyToPlay() || !canTrigger('footstep', minStepMs)) return;
+
+      // Dedicated Abandoned Knight Rift 44.1 kHz studio stone/bridge footsteps + plate clink
+      // (zero earthen step_warrior_1..6.wav samples and zero dry gravel kick!)
+      if (surface === 'stone_courtyard' || surface === 'stone_bridge' || surface === 'cathedral_stone') {
+        preloadSoulsAudio(ctx);
+        soulsEnv.playStoneFootstep({ classId, stepParity, isSprinting, surface });
+        return;
+      }
 
       preloadExternalSamples(ctx);
 
@@ -2185,8 +2334,338 @@ export function createAudioEngine() {
       });
     },
 
-    playShieldBlock() {
+    // =========================================================================
+    // Abandoned Knight Rift — Routed 44.1 kHz Studio Souls Audio API
+    // =========================================================================
+
+    updateSoulsSpatial(listenerX = 0, listenerZ = 0, listenerYaw = 0, isInSouls = false, bossAwakened = false, dt = 0.016) {
+      if (!isInSouls) {
+        try { soulsSpatial.update?.(listenerX, listenerZ, listenerYaw, false, false, dt); } catch {}
+        return;
+      }
+      if (muted || suspendedBySystem || !ctx || !unlocked) return;
+      try {
+        soulsSpatial.attachContext?.(ctx, masterGain || sfxGain || compressor);
+        soulsSpatial.update?.(listenerX, listenerZ, listenerYaw, true, Boolean(bossAwakened), dt);
+      } catch {}
+    },
+
+    playCinematicBossDoorSequence(opts = {}) {
+      if (!readyToPlay()) return false;
+      preloadSoulsAudio(ctx);
+      try {
+        soulsSpatial.attachContext?.(ctx, masterGain || sfxGain || compressor);
+        soulsMusic.duck(-2.8, 0.25, 1.2);
+        return Boolean(soulsSpatial.playCinematicBossDoorSequence?.(opts));
+      } catch {
+        return false;
+      }
+    },
+
+    stopCinematicBossDoorSequence(fadeSec = 0.08) {
+      try {
+        return Boolean(soulsSpatial.stopCinematicSequence?.(fadeSec));
+      } catch {
+        return false;
+      }
+    },
+
+    playBossIntroVoiceLine(cueIndex, opts = {}) {
+      if (!readyToPlay()) return false;
+      preloadSoulsAudio(ctx);
+      try {
+        soulsSpatial.attachContext?.(ctx, masterGain || sfxGain || compressor);
+        return Boolean(soulsSpatial?.playBossIntroVoiceLine?.(cueIndex, opts));
+      } catch {
+        return false;
+      }
+    },
+
+    playBossArmorShift(intensity = 1.0) {
+      if (!readyToPlay()) return false;
+      preloadSoulsAudio(ctx);
+      try {
+        soulsSpatial.attachContext?.(ctx, masterGain || sfxGain || compressor);
+        return Boolean(soulsSpatial?.playBossArmorShift?.(intensity));
+      } catch {
+        return false;
+      }
+    },
+
+    stopBossIntroVoice(fadeSec = 0.08) {
+      try {
+        return Boolean(soulsSpatial?.stopBossIntroVoice?.(fadeSec));
+      } catch {
+        return false;
+      }
+    },
+
+    playHeroRoll(heavy = false) {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      const isHeavy = typeof heavy === 'object' && heavy !== null ? Boolean(heavy.heavy) : Boolean(heavy);
+      if (typeof soulsHero.playHeroRoll === 'function') {
+        soulsHero.playHeroRoll({ heavy: isHeavy });
+        return;
+      }
+      soulsEnv.playRollStone({ surface: 'stone_courtyard' });
+    },
+
+    playRollStone(optsOrHeavy = {}) {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      const isHeavy = typeof optsOrHeavy === 'boolean'
+        ? optsOrHeavy
+        : Boolean(optsOrHeavy && optsOrHeavy.heavy);
+      if (typeof soulsHero.playHeroRoll === 'function') {
+        soulsHero.playHeroRoll({ heavy: isHeavy });
+        return;
+      }
+      soulsEnv.playRollStone(typeof optsOrHeavy === 'object' && optsOrHeavy !== null ? optsOrHeavy : {});
+    },
+
+    playTurnScrape(opts = {}) {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      soulsEnv.playTurnScrape(opts);
+    },
+
+    playFogGate() {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      soulsEnv.playFogGate();
+    },
+
+    playCastleDoorOpen() {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      soulsMusic.duck(-3.8, 0.10, 1.4);
+      try {
+        soulsSpatial.attachContext?.(ctx, masterGain || sfxGain || compressor);
+        if (soulsSpatial.triggerCinematicStage?.('open')) return;
+      } catch {}
+      soulsEnv.playCastleDoorOpen?.();
+    },
+
+    playCastleDoorClose() {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      soulsMusic.duck(-3.5, 0.06, 0.9);
+      try {
+        soulsSpatial.attachContext?.(ctx, masterGain || sfxGain || compressor);
+        if (soulsSpatial.triggerCinematicStage?.('close')) return;
+      } catch {}
+      soulsEnv.playCastleDoorClose?.();
+    },
+
+    setSoulsAmbientActive(active, opts = {}) {
+      soulsAmbientActive = Boolean(active);
+      if (!soulsAmbientActive || muted || suspendedBySystem) {
+        soulsEnv.setAmbientActive(false);
+        try {
+          soulsSpatial.update?.(0, 0, 0, false, false, 0.016);
+          if (!soulsAmbientActive) soulsSpatial.stopCinematicSequence?.(0.08);
+        } catch {}
+        syncSoulsBossMusic();
+        return;
+      }
+      if (!readyToPlay()) {
+        soulsEnv.setAmbientActive(false);
+        syncSoulsBossMusic();
+        return;
+      }
+      preloadSoulsAudio(ctx);
+      soulsEnv.setAmbientActive(true, opts);
+      syncSoulsBossMusic();
+    },
+
+    setAmbientActive(active, opts = {}) {
+      this.setSoulsAmbientActive(active, opts);
+    },
+
+    playSwordSwing(comboStep = 1, isHeavy = false) {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      soulsHero.playSwordSwing(comboStep, isHeavy);
+    },
+
+    playHeavyThrust(charged = false) {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      if (typeof soulsHero.playHeavyThrust === 'function') {
+        soulsHero.playHeavyThrust(charged);
+      } else {
+        soulsHero.playSwordSwing(3, true);
+      }
+    },
+
+    playSwordHit(opts = {}) {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      soulsHero.playSwordHit(opts);
+    },
+
+    playShieldBlock(opts) {
+      if (!readyToPlay()) return;
+      if (opts !== undefined || soulsEnv.isAmbientActive?.()) {
+        preloadSoulsAudio(ctx);
+        soulsHero.playShieldBlock(opts && typeof opts === 'object' ? opts : {});
+        return;
+      }
       this.playBlock();
+    },
+
+    playParrySuccess() {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      soulsMusic.duck(-4.5, 0.35, 0.55);
+      soulsHero.playParrySuccess();
+    },
+
+    playPartialParry() {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      soulsHero.playPartialParry();
+    },
+
+    playGuardCounterCue() {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      soulsHero.playGuardCounterCue();
+    },
+
+    playGuardBreak() {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      soulsHero.playGuardBreak();
+    },
+
+    playRiposteImpact() {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      soulsHero.playRiposteImpact();
+    },
+
+    playFlaskDrink() {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      soulsHero.playFlaskDrink();
+    },
+
+    playBossFootstep(distNorm = 0) {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      soulsEnemy.playBossFootstep(distNorm);
+    },
+
+    playBossLeap() {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      soulsEnemy.playBossLeap?.();
+    },
+
+    playBossHammerWhoosh(heavy = false) {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      soulsEnemy.playBossHammerWhoosh(heavy);
+    },
+
+    playBossHammerGround(intensity = 1.0) {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      if (typeof soulsEnemy.playBossHammerGround === 'function') {
+        soulsEnemy.playBossHammerGround(intensity);
+      } else {
+        soulsEnemy.playBossHammerSlam(intensity);
+      }
+    },
+
+    playBossHammerHit(intensity = 1.0) {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      if (typeof soulsEnemy.playBossHammerHit === 'function') {
+        soulsEnemy.playBossHammerHit(intensity);
+      } else {
+        soulsEnemy.playBossHammerSlam(intensity);
+      }
+    },
+
+    playBossHammerSlam(intensity = 1.0) {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      soulsEnemy.playBossHammerSlam(intensity);
+    },
+
+    playBossRoar() {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      soulsEnemy.playBossRoar();
+    },
+
+    playStanceBreak() {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      soulsEnemy.playStanceBreak();
+    },
+
+    playBossRecoil() {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      soulsEnemy.playBossRecoil();
+    },
+
+    playMobKnightSwing(heavy = false) {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      soulsEnemy.playMobKnightSwing(heavy);
+    },
+
+    playMobHeavyWhoosh() {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      soulsEnemy.playMobHeavyWhoosh?.();
+    },
+
+    playMobBowDraw() {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      soulsEnemy.playMobBowDraw();
+    },
+
+    playMobArrowWhoosh() {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      soulsEnemy.playMobArrowWhoosh();
+    },
+
+    playMobDeath(enemyType = 'default', distNorm = 0) {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      soulsEnemy.playMobDeath?.(enemyType, distNorm);
+    },
+
+    playMobFootstep(enemyType = 'default', distNorm = 0) {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      soulsEnemy.playMobFootstep?.(enemyType, distNorm);
+    },
+
+    playMobAttackGrunt(enemyType = 'default', heavy = false, distNorm = 0) {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      soulsEnemy.playMobAttackGrunt?.(enemyType, heavy, distNorm);
+    },
+
+    playMobHurt(enemyType = 'default', distNorm = 0) {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      soulsEnemy.playMobHurt?.(enemyType, distNorm);
+    },
+
+    playMobAggro(enemyType = 'default', distNorm = 0) {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      soulsEnemy.playMobAggro?.(enemyType, distNorm);
     },
 
     playBeastReady() {
@@ -2471,7 +2950,18 @@ export function createAudioEngine() {
 
     setMusicMode(mode = 'hub') {
       const next = mode === 'combat' || mode === 'boss' || mode === 'off' ? mode : 'hub';
-      if (next === musicMode) return;
+      if (next === musicMode) {
+        if (next === 'hub' || next === 'off') {
+          soulsAmbientActive = false;
+          soulsEnv.setAmbientActive(false);
+          try {
+            soulsSpatial.update?.(0, 0, 0, false, false, 0.016);
+            soulsSpatial.stopCinematicSequence?.(0.08);
+          } catch {}
+        }
+        syncSoulsBossMusic();
+        return;
+      }
       musicMode = next;
       musicStep = 0;
       if (ctx) {
@@ -2479,8 +2969,28 @@ export function createAudioEngine() {
         nextNoteTime = ctx.currentTime + 0.05;
       }
       syncGain();
-      if (next !== 'off') startMusicLoop();
+      if (next === 'hub' || next === 'off') {
+        soulsAmbientActive = false;
+        soulsEnv.setAmbientActive(false);
+        try {
+          soulsSpatial.update?.(0, 0, 0, false, false, 0.016);
+          soulsSpatial.stopCinematicSequence?.(0.08);
+        } catch {}
+      }
+      syncSoulsBossMusic();
+      if (next !== 'off' && !isSoulsMusicActive()) startMusicLoop();
       else stopMusicLoop();
+    },
+
+    stopMusic() {
+      stopMusicLoop();
+      soulsAmbientActive = false;
+      soulsEnv.setAmbientActive(false);
+      try {
+        soulsSpatial.update?.(0, 0, 0, false, false, 0.016);
+        soulsSpatial.stopCinematicSequence?.(0.08);
+      } catch {}
+      soulsMusic.stop(0.5);
     },
 
     playMapOpenSfx() {
@@ -2507,6 +3017,8 @@ export function createAudioEngine() {
           localStorage.setItem('grimborne_music_volume', String(musicVolume));
         } catch {}
         syncGain();
+        soulsMusic.setVolume(Math.max(0, Math.min(1, musicVolume * 0.82)));
+        syncSoulsBossMusic();
         if (musicVolume > 0.001) startMusicLoop();
         else stopMusicLoop();
       }
@@ -2524,7 +3036,10 @@ export function createAudioEngine() {
         userVolume = sfxVolume;
         if (sfxVolume > 0 && muted) {
           muted = false;
+          soulsMusic.setMuted(false);
+          soulsSpatial.setMuted(false);
         }
+        soulsSpatial.setVolume(Math.max(0, Math.min(1, sfxVolume * 0.92)));
         try {
           localStorage.setItem('grimborne_sfx_volume', String(sfxVolume));
           localStorage.setItem('grimborne_volume', String(sfxVolume));
@@ -2546,7 +3061,10 @@ export function createAudioEngine() {
         sfxVolume = userVolume;
         if (userVolume > 0 && muted) {
           muted = false;
+          soulsMusic.setMuted(false);
+          soulsSpatial.setMuted(false);
         }
+        soulsSpatial.setVolume(Math.max(0, Math.min(1, sfxVolume * 0.92)));
         try {
           localStorage.setItem('grimborne_volume', String(userVolume));
           localStorage.setItem('grimborne_sfx_volume', String(sfxVolume));
@@ -2567,8 +3085,15 @@ export function createAudioEngine() {
         localStorage.setItem('grimborne_muted', muted ? '1' : '0');
       } catch {}
       syncGain();
-      if (muted) stopMusicLoop();
-      else startMusicLoop();
+      soulsMusic.setMuted(muted);
+      soulsSpatial.setMuted(muted);
+      if (muted) {
+        stopMusicLoop();
+        soulsEnv.setAmbientActive(false);
+      } else {
+        syncSoulsBossMusic();
+        startMusicLoop();
+      }
       return muted;
     },
 
@@ -2578,8 +3103,15 @@ export function createAudioEngine() {
         localStorage.setItem('grimborne_muted', muted ? '1' : '0');
       } catch {}
       syncGain();
-      if (muted) stopMusicLoop();
-      else startMusicLoop();
+      soulsMusic.setMuted(muted);
+      soulsSpatial.setMuted(muted);
+      if (muted) {
+        stopMusicLoop();
+        soulsEnv.setAmbientActive(false);
+      } else {
+        syncSoulsBossMusic();
+        startMusicLoop();
+      }
       return muted;
     },
 
@@ -2590,6 +3122,9 @@ export function createAudioEngine() {
     suspend() {
       suspendedBySystem = true;
       stopMusicLoop();
+      soulsEnv.setAmbientActive(false);
+      soulsMusic.setSuspended(true);
+      try { soulsSpatial.suspend?.(); } catch {}
       syncGain();
       if (ctx && ctx.state === 'running') {
         ctx.suspend().catch(() => {});
@@ -2599,9 +3134,15 @@ export function createAudioEngine() {
     resume() {
       suspendedBySystem = false;
       syncGain();
+      soulsMusic.setSuspended(false);
+      try { soulsSpatial.resume?.(); } catch {}
       if (ctx && ctx.state === 'suspended' && unlocked) {
-        ctx.resume().then(() => startMusicLoop()).catch(() => {});
+        ctx.resume().then(() => {
+          syncSoulsBossMusic();
+          startMusicLoop();
+        }).catch(() => {});
       } else {
+        syncSoulsBossMusic();
         startMusicLoop();
       }
     }

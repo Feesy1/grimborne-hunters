@@ -8,7 +8,7 @@ import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { DRACOLoader } from '../vendor/DRACOLoader.js';
 import { clone as cloneSkinned } from '../vendor/SkeletonUtils.js';
-import { WEAPONS } from './config.js?v=20261120z35';
+import { WEAPONS } from './config.js?v=20261121z64';
 import {
   getGeo,
   getMat,
@@ -17,12 +17,29 @@ import {
   createAnimController,
   setBoneRelEuler,
   solveMixamoArmIK
-} from './models/shared.js?v=20261120z40';
+} from './models/shared.js?v=20261121z64';
+import {
+  getWarriorWeaponMountConfig,
+  createWarriorStanceState,
+  applyWarriorWeaponStance,
+  applyWarriorAttackOverlay
+} from './models/warriorStances.js?v=20261121z64';
+import {
+  computeFootSyncPlaybackRate,
+  computeCombatPostureDynamics,
+  applyCombatPostureToObject3D,
+  applyCombatRecoilImpulse
+} from './souls/soulsPhysicsFeel.js?v=20261121z64';
+import { createActorContactShadowMesh } from './souls/soulsAtmosphere.js?v=20261121z64';
+import {
+  applyEldenDissolveToModel,
+  resetEldenDissolveFromModel
+} from './souls/soulsDissolveVfx.js?v=20261121z64';
 
 const MODEL_PATHS = {
   gunslinger_tripo: './assets/models/Gunslinger_Tripo.glb?v=20261120z34',
-  // New clean warrior with Mixamo "Sword And Shield Run" baked in as Running_A.
-  warrior_run: './assets/models/Warrior_Run.glb?v=20261120z34',
+  // New clean warrior with Mixamo "Sword And Shield Run" baked in as Running_A + custom diagonal Slash v4 + 60 FPS Turn_180 + 60 FPS Combat_Roll + 60 FPS Heavy_Thrust + 60 FPS Door_Push.
+  warrior_run: './assets/models/Warrior_Run.glb?v=20261121z64',
 
   sword_tripo: './assets/models/Sword_Tripo.glb?v=20261120z34',
   shield_custom: './assets/models/Shield_Custom.glb?v=20261120z34',
@@ -43,7 +60,10 @@ const MODEL_PATHS = {
   mimic_tripo: './assets/models/Mimic_Tripo.glb?v=20261120z34',
   chest_disguise_tripo: './assets/models/Chest_Disguise_Tripo.glb?v=20261120z34',
   lich_tripo: './assets/models/Lich_Tripo.glb?v=20261120z34',
-  troll_tripo: './assets/models/Troll_Tripo.glb?v=20261120z34',
+  troll_tripo: './assets/models/Troll_Tripo.glb?v=20261121z64',
+  rift_executioner: './assets/models/Rift_Executioner_Tripo.glb?v=20261121z64',
+  rift_vanguard: './assets/models/Rift_Vanguard_Tripo.glb?v=20261121z64',
+  rift_acolyte: './assets/models/Rift_Acolyte_Tripo.glb?v=20261121z64',
   succubus_tripo: './assets/models/Succubus_Tripo.glb?v=20261120z34',
   spider_tripo: './assets/models/Spider_Tripo.glb?v=20261120z34',
   barbarian: './assets/models/Barbarian.glb?v=20261120z34',
@@ -65,6 +85,201 @@ let sharedModelLoader = null;
 let sharedDracoLoader = null;
 const cachedEyeEmissiveTextures = new Map();
 let cachedStaffGlobeAlphaTex = null;
+
+// ============================================================================
+// Fresnel Moonlit Rim-Light for Abandoned Knight Rift (0 extra draw calls!)
+// Injected via onBeforeCompile on MeshStandardMaterial / MeshPhysicalMaterial
+// right before <opaque_fragment> so USE_SKINNING, normalMap, emissiveMap (eyes),
+// ACES tone-mapping, and abyss fog remain 100% intact.
+// Auto-activates in souls_citadel (uSoulsRimStrength = 0.38) and stays 0.0 in
+// Hub / PvE unless overridden via setSoulsRimLight(enabled, opts).
+// ============================================================================
+const SOULS_RIM_DEFAULT_STRENGTH = 0.38;
+const SOULS_RIM_DEFAULT_POWER = 2.55;
+const SOULS_RIM_COLOR_HEX = 0x8ab4f8;
+
+const SOULS_RIM_UNIFORMS = {
+  uSoulsRimColor: { value: new THREE.Color(SOULS_RIM_COLOR_HEX) },
+  uSoulsRimStrength: { value: 0.0 },
+  uSoulsRimPower: { value: SOULS_RIM_DEFAULT_POWER }
+};
+let soulsRimExplicitOverride = null;
+let soulsRimCustomStrength = SOULS_RIM_DEFAULT_STRENGTH;
+
+const SOULS_RIM_WEAPON_KEYS = new Set([
+  'sword_tripo',
+  'shield_custom',
+  'spear_tripo',
+  'zweihander_tripo',
+  'axe_tripo',
+  'hammer_tripo'
+]);
+
+const SOULS_RIM_ENEMY_TYPES = new Set([
+  'iron_knight',
+  'cursed_footman',
+  'bone_archer',
+  'rift_executioner',
+  'rift_vanguard',
+  'rift_acolyte',
+  'ember_skeleton',
+  'boss_warden',
+  'boss_troll'
+]);
+
+const SOULS_RIFT_ENEMY_MAP = {
+  iron_knight: 'rift_executioner',
+  cursed_footman: 'rift_vanguard',
+  bone_archer: 'rift_acolyte'
+};
+
+const SOULS_RIFT_BIOME_KEYS = [
+  'rift_executioner',
+  'rift_vanguard',
+  'rift_acolyte',
+  'troll_tripo'
+];
+
+function isSoulsLevelOrBiome(input) {
+  if (!input) return false;
+  if (typeof input === 'string') {
+    const s = input.toLowerCase();
+    return s === 'souls_citadel' || s === 'abandoned_knight_rift' || s === 'souls';
+  }
+  if (typeof input === 'number') {
+    return input === 26;
+  }
+  if (typeof input === 'object') {
+    return Boolean(
+      input.isSoulslike ||
+        input.isSouls ||
+        input.biome === 'souls_citadel' ||
+        Number(input.level) === 26
+    );
+  }
+  return false;
+}
+
+function isSoulsBiomeActive(explicitOpts = null) {
+  if (explicitOpts && typeof explicitOpts === 'object') {
+    if (explicitOpts.isSouls === false || explicitOpts.forceKayKit === true) return false;
+    if (
+      explicitOpts.isSouls === true ||
+      isSoulsLevelOrBiome(explicitOpts.biome) ||
+      isSoulsLevelOrBiome(explicitOpts.levelDef)
+    ) {
+      return true;
+    }
+  }
+  const worldApi = typeof window !== 'undefined' ? window.__grimborne?.world : null;
+  if (worldApi && typeof worldApi.isSoulsArena === 'function') {
+    return Boolean(worldApi.isSoulsArena());
+  }
+  return false;
+}
+
+function syncSoulsRimLightFromBiome() {
+  if (soulsRimExplicitOverride !== null) {
+    SOULS_RIM_UNIFORMS.uSoulsRimStrength.value = soulsRimExplicitOverride ? soulsRimCustomStrength : 0.0;
+    return SOULS_RIM_UNIFORMS.uSoulsRimStrength.value;
+  }
+  const worldApi = typeof window !== 'undefined' ? window.__grimborne?.world : null;
+  if (worldApi && typeof worldApi.isSoulsArena === 'function') {
+    SOULS_RIM_UNIFORMS.uSoulsRimStrength.value = worldApi.isSoulsArena() ? soulsRimCustomStrength : 0.0;
+  } else {
+    SOULS_RIM_UNIFORMS.uSoulsRimStrength.value = 0.0;
+  }
+  return SOULS_RIM_UNIFORMS.uSoulsRimStrength.value;
+}
+
+export function setSoulsRimLight(enabled, opts = null) {
+  if (enabled === null || enabled === undefined || enabled === 'auto') {
+    soulsRimExplicitOverride = null;
+    return syncSoulsRimLightFromBiome();
+  }
+  if (typeof opts === 'number' && Number.isFinite(opts)) {
+    soulsRimCustomStrength = Math.max(0, Math.min(1.5, opts));
+  } else if (opts && typeof opts === 'object') {
+    const rawStr = opts.strength ?? opts.intensity;
+    if (rawStr !== undefined && Number.isFinite(Number(rawStr))) {
+      soulsRimCustomStrength = Math.max(0, Math.min(1.5, Number(rawStr)));
+    }
+    if (opts.power !== undefined && Number.isFinite(Number(opts.power))) {
+      SOULS_RIM_UNIFORMS.uSoulsRimPower.value = Math.max(0.8, Math.min(8.0, Number(opts.power)));
+    }
+    if (opts.color !== undefined && opts.color !== null) {
+      SOULS_RIM_UNIFORMS.uSoulsRimColor.value.set(opts.color);
+    }
+  }
+  soulsRimExplicitOverride = Boolean(enabled);
+  SOULS_RIM_UNIFORMS.uSoulsRimStrength.value = soulsRimExplicitOverride ? soulsRimCustomStrength : 0.0;
+  return SOULS_RIM_UNIFORMS.uSoulsRimStrength.value;
+}
+
+export function getSoulsRimLightState() {
+  syncSoulsRimLightFromBiome();
+  return {
+    enabled: SOULS_RIM_UNIFORMS.uSoulsRimStrength.value > 0.001,
+    mode: soulsRimExplicitOverride === null ? 'auto' : 'manual',
+    strength: SOULS_RIM_UNIFORMS.uSoulsRimStrength.value,
+    power: SOULS_RIM_UNIFORMS.uSoulsRimPower.value,
+    colorHex: `#${SOULS_RIM_UNIFORMS.uSoulsRimColor.value.getHexString()}`
+  };
+}
+
+function applySoulsRimLight(mat) {
+  if (!mat || !(mat.isMeshStandardMaterial || mat.isMeshPhysicalMaterial)) return mat;
+  if (mat.userData?.hasSoulsRimLight) return mat;
+  mat.userData = { ...(mat.userData || {}), hasSoulsRimLight: true };
+  const hasOwnCompile = Object.prototype.hasOwnProperty.call(mat, 'onBeforeCompile') && typeof mat.onBeforeCompile === 'function';
+  const prevOnBeforeCompile = hasOwnCompile ? mat.onBeforeCompile : null;
+  const hasOwnCacheKey = Object.prototype.hasOwnProperty.call(mat, 'customProgramCacheKey') && typeof mat.customProgramCacheKey === 'function';
+  const prevCacheKey = hasOwnCacheKey ? mat.customProgramCacheKey : null;
+  mat.customProgramCacheKey = () => {
+    const base = prevCacheKey ? prevCacheKey.call(mat) : '';
+    return base ? `${base}|souls_moon_rim_v1` : 'souls_moon_rim_v1';
+  };
+  mat.onBeforeCompile = (shader, renderer) => {
+    if (prevOnBeforeCompile) prevOnBeforeCompile.call(mat, shader, renderer);
+    shader.uniforms.uSoulsRimColor = SOULS_RIM_UNIFORMS.uSoulsRimColor;
+    shader.uniforms.uSoulsRimStrength = SOULS_RIM_UNIFORMS.uSoulsRimStrength;
+    shader.uniforms.uSoulsRimPower = SOULS_RIM_UNIFORMS.uSoulsRimPower;
+    if (!shader.fragmentShader.includes('uSoulsRimStrength')) {
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <common>',
+        `#include <common>
+uniform vec3 uSoulsRimColor;
+uniform float uSoulsRimStrength;
+uniform float uSoulsRimPower;`
+      );
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <opaque_fragment>',
+        `if ( uSoulsRimStrength > 0.001 ) {
+  float soulsNdotV = clamp( dot( geometryNormal, geometryViewDir ), 0.0, 1.0 );
+  float soulsFresnel = pow( max( 1.0 - soulsNdotV, 0.0001 ), uSoulsRimPower );
+  float soulsTopMask = smoothstep( -0.35, 0.55, geometryNormal.y );
+  outgoingLight += uSoulsRimColor * ( soulsFresnel * ( 0.35 + 0.65 * soulsTopMask ) * uSoulsRimStrength );
+}
+#include <opaque_fragment>`
+      );
+    }
+  };
+  mat.needsUpdate = true;
+  return mat;
+}
+
+function applySoulsRimLightToObject(obj) {
+  if (!obj) return;
+  obj.traverse((n) => {
+    if (!n.isMesh || !n.material) return;
+    if (/Eyes/i.test(n.name || '')) return;
+    if (Array.isArray(n.material)) {
+      for (let i = 0; i < n.material.length; i++) applySoulsRimLight(n.material[i]);
+    } else {
+      applySoulsRimLight(n.material);
+    }
+  });
+}
 
 function buildStaffGlobeCutoutAlphaMap(img) {
   if (cachedStaffGlobeAlphaTex) return cachedStaffGlobeAlphaTex;
@@ -550,6 +765,16 @@ function loadSingleModelKey(key) {
         (gltf) => {
           clearTimeout(timer);
           const clipMap = new Map();
+          let warriorIdleHipsX = null;
+          let warriorIdleHipsZ = null;
+          if (key === 'warrior_run') {
+            const idleRaw = (gltf.animations || []).find((c) => /^Idle(?:\.\d+)?$/i.test(c?.name || ''));
+            const idleHipsTr = idleRaw?.tracks?.find((tr) => /^mixamorig:?Hips\.position$/i.test(tr?.name || ''));
+            if (idleHipsTr?.values && idleHipsTr.values.length >= 3) {
+              warriorIdleHipsX = idleHipsTr.values[0];
+              warriorIdleHipsZ = idleHipsTr.values[2];
+            }
+          }
           for (const clip of gltf.animations || []) {
             // Normalize Blender-exported clips whose keyframes start at a non-zero timestamp (e.g. t0 = 0.0333s or 0.0417s).
             // Three.js loops [0, clip.duration], so t0 > 0 causes a 1-2 frame freeze + snap on every loop wrap.
@@ -584,11 +809,13 @@ function loadSingleModelKey(key) {
                 return !/(?:UpLeg|Leg|Foot|Toe)/i.test(nodePart);
               });
             }
-            // Warrior Mixamo clips:
+            // Warrior Mixamo/custom clips:
             // 1) Convert Running_A & Running_Back to true in-place loops by detrending horizontal Hips.position.z drift
             //    (preserves vertical bounce & lateral sway while eliminating loop-wrap snaps).
-            // 2) Strip Hips & lower-body leg tracks from melee attack clips so attacks play smoothly on the upper body
-            //    without hijacking running legs, twisting hips 75deg, or lunging the skeleton forward.
+            // 2) For melee attack clips (1H_Melee_Attack_Slice_Horizontal, Slash, Attack), build BOTH:
+            //    a) <name>__Full (full-body footwork + linear X/Z drift compensation) for standing attacks from Idle;
+            //    b) <name> (upper-body masked) for attacking on the move over Running_A__Lower / Running_Back__Lower.
+            //    Block stays upper-body masked only.
             // 3) Stabilize Idle lower-body (Hips + legs/feet/toes) to frame 0 so both boots stay rock-solid planted
             //    on the Hub pedestal with zero knee/foot micro-twitch while keeping natural upper-body breathing.
             if (key === 'warrior_run') {
@@ -621,12 +848,58 @@ function loadSingleModelKey(key) {
                   }
                 }
                 if (legMeans.size > 0) clip.userData = { ...(clip.userData || {}), legMeans };
-              } else if (/^(?:1H_Melee_Attack_Slice_Horizontal|Slash|Attack)(?:\.\d+)?$/i.test(clip.name || '')) {
+              } else if (/^(?:1H_Melee_Attack_Slice_Horizontal|Slash|Attack|Heavy_Thrust|Block)(?:\.\d+)?$/i.test(clip.name || '')) {
+                const cleanAtkName = (clip.name || '').replace(/\.\d+$/, '');
+                const isMeleeAttackClip = /^(?:1H_Melee_Attack_Slice_Horizontal|Slash|Attack|Heavy_Thrust)$/i.test(cleanAtkName);
+                if (isMeleeAttackClip) {
+                  // a) Full-body variant (<name>__Full) for standing attacks:
+                  //    Preserves ALL leg/foot/hips rotations and natural mid-swing step/lunge displacement,
+                  //    removing only linear net X/Z drift in Hips.position so frame 0 & end match Idle seamlessly.
+                  const fullName = `${cleanAtkName}__Full`;
+                  if (!clipMap.has(fullName)) {
+                    const fullTracks = (clip.tracks || []).map((tr) => {
+                      if (/^mixamorig:?Hips\.position$/i.test(tr?.name || '') && tr.values && tr.values.length >= 6) {
+                        const v = tr.values;
+                        const count = Math.floor(v.length / 3);
+                        const outV = new Float32Array(v.length);
+                        const x0 = v[0];
+                        const z0 = v[2];
+                        const x1 = v[(count - 1) * 3];
+                        const z1 = v[(count - 1) * 3 + 2];
+                        const dx = x1 - x0;
+                        const dz = z1 - z0;
+                        const denom = Math.max(1, count - 1);
+                        const baseOffX = warriorIdleHipsX !== null ? x0 - warriorIdleHipsX : 0;
+                        const baseOffZ = warriorIdleHipsZ !== null ? z0 - warriorIdleHipsZ : 0;
+                        for (let i = 0; i < count; i++) {
+                          const frac = i / denom;
+                          outV[i * 3] = v[i * 3] - baseOffX - dx * frac;
+                          outV[i * 3 + 1] = v[i * 3 + 1];
+                          outV[i * 3 + 2] = v[i * 3 + 2] - baseOffZ - dz * frac;
+                        }
+                        return new THREE.VectorKeyframeTrack(tr.name, tr.times.slice(), outV);
+                      }
+                      return tr;
+                    });
+                    const fullClip = new THREE.AnimationClip(fullName, clip.duration, fullTracks);
+                    fullClip.userData = {
+                      ...(clip.userData || {}),
+                      isFullBodyAttack: true,
+                      maskedClipName: cleanAtkName
+                    };
+                    clipMap.set(fullName, fullClip);
+                  }
+                }
+                // b) Upper-body masked variant (<name>) for attacking while running over Running_A__Lower
                 clip.tracks = (clip.tracks || []).filter((tr) => {
                   const nodePart = (tr?.name || '').split('.')[0] || '';
                   return !LOWER_BODY_RE.test(nodePart);
                 });
-                clip.userData = { ...(clip.userData || {}), isUpperBodyMask: true };
+                clip.userData = {
+                  ...(clip.userData || {}),
+                  isUpperBodyMask: true,
+                  ...(isMeleeAttackClip ? { fullClipName: `${cleanAtkName}__Full` } : {})
+                };
               } else if (/^Idle(?:\.\d+)?$/i.test(clip.name || '')) {
                 for (const tr of clip.tracks || []) {
                   const trName = tr?.name || '';
@@ -645,6 +918,160 @@ function loadSingleModelKey(key) {
                     }
                   }
                   tr.values = locked;
+                }
+              } else if (/^Turn_180(?:\.\d+)?$/i.test(clip.name || '')) {
+                // Extract the exact 60 FPS Mixamo yaw trajectory from Hips.quaternion and convert
+                // Turn_180 to an in-place forward-aligned pivot clip (0 deg -> 0 deg local Hips yaw)
+                // while storing the exact normalized yaw curve for player.facing synchronization.
+                // Guarantees zero entry/exit pop with Running_A and instant clean attack interruption!
+                let hipsRotTrack = null;
+                let hipsPosTrack = null;
+                for (const tr of clip.tracks || []) {
+                  const trName = tr?.name || '';
+                  if (/^mixamorig:?Hips\.quaternion$/i.test(trName)) hipsRotTrack = tr;
+                  else if (/^mixamorig:?Hips\.position$/i.test(trName)) hipsPosTrack = tr;
+                }
+                if (hipsRotTrack?.values && hipsRotTrack.values.length >= 8) {
+                  const v = hipsRotTrack.values;
+                  const count = Math.floor(v.length / 4);
+                  const qTmp = new THREE.Quaternion();
+                  const qComp = new THREE.Quaternion();
+                  const yAxis = new THREE.Vector3(0, 1, 0);
+                  const fwd = new THREE.Vector3();
+                  const rawYaws = new Float32Array(count);
+                  for (let i = 0; i < count; i++) {
+                    qTmp.set(v[i * 4], v[i * 4 + 1], v[i * 4 + 2], v[i * 4 + 3]).normalize();
+                    // Mixamo Hips local +X points along character forward (+Z in model space at rest)
+                    fwd.set(1, 0, 0).applyQuaternion(qTmp);
+                    let yaw = Math.atan2(fwd.x, fwd.z);
+                    if (i > 0) {
+                      let d = yaw - rawYaws[i - 1];
+                      while (d > Math.PI) d -= Math.PI * 2;
+                      while (d < -Math.PI) d += Math.PI * 2;
+                      yaw = rawYaws[i - 1] + d;
+                    }
+                    rawYaws[i] = yaw;
+                  }
+                  const yaw0 = rawYaws[0];
+                  const totalYaw = rawYaws[count - 1] - yaw0;
+                  if (Math.abs(totalYaw) > 1.5) {
+                    const turnYawCurve = new Float32Array(count);
+                    const outQ = new Float32Array(v.length);
+                    for (let i = 0; i < count; i++) {
+                      const deltaYaw = rawYaws[i] - yaw0;
+                      turnYawCurve[i] = Math.max(0, Math.min(1, deltaYaw / totalYaw));
+                      qTmp.set(v[i * 4], v[i * 4 + 1], v[i * 4 + 2], v[i * 4 + 3]).normalize();
+                      qComp.setFromAxisAngle(yAxis, -deltaYaw);
+                      qTmp.premultiply(qComp).normalize();
+                      if (i > 0) {
+                        const prevDot =
+                          outQ[(i - 1) * 4] * qTmp.x +
+                          outQ[(i - 1) * 4 + 1] * qTmp.y +
+                          outQ[(i - 1) * 4 + 2] * qTmp.z +
+                          outQ[(i - 1) * 4 + 3] * qTmp.w;
+                        if (prevDot < 0) {
+                          qTmp.x = -qTmp.x;
+                          qTmp.y = -qTmp.y;
+                          qTmp.z = -qTmp.z;
+                          qTmp.w = -qTmp.w;
+                        }
+                      }
+                      outQ[i * 4] = qTmp.x;
+                      outQ[i * 4 + 1] = qTmp.y;
+                      outQ[i * 4 + 2] = qTmp.z;
+                      outQ[i * 4 + 3] = qTmp.w;
+                    }
+                    hipsRotTrack.values = outQ;
+
+                    // Keep subtle horizontal Hips pivot sway aligned with the de-yawed body
+                    // and soften excessive mid-turn crouch dip by ~28% so the pivot stays athletic and grounded
+                    if (hipsPosTrack?.values && hipsPosTrack.values.length >= count * 3) {
+                      const pv = hipsPosTrack.values;
+                      const outP = new Float32Array(pv.length);
+                      const px0 = pv[0];
+                      const py0 = pv[1];
+                      const pz0 = pv[2];
+                      const pCount = Math.floor(pv.length / 3);
+                      const pyEnd = pv[(pCount - 1) * 3 + 1];
+                      for (let i = 0; i < pCount; i++) {
+                        const uP = i / Math.max(1, pCount - 1);
+                        const idxYaw = Math.min(count - 1, Math.round(uP * (count - 1)));
+                        const ang = -(rawYaws[idxYaw] - yaw0);
+                        const c = Math.cos(ang);
+                        const s = Math.sin(ang);
+                        const dx = pv[i * 3] - px0;
+                        const dz = pv[i * 3 + 2] - pz0;
+                        const env = Math.sin(Math.PI * uP);
+                        const yBase = py0 + (pyEnd - py0) * uP;
+                        outP[i * 3] = px0 + (dx * c + dz * s) * (1 - 0.30 * env);
+                        outP[i * 3 + 1] = pv[i * 3 + 1] + (yBase - pv[i * 3 + 1]) * (0.28 * env);
+                        outP[i * 3 + 2] = pz0 + (-dx * s + dz * c) * (1 - 0.30 * env);
+                      }
+                      hipsPosTrack.values = outP;
+                    }
+
+                    // Moderate the wide braking/push-off leg kick (~55% restraint on Left push-off leg
+                    // toward athletic stride midpoint via smooth bell envelope) so the push-off leg stays
+                    // clearly visible yet restrained, with untouched frame 0 & end poses for seamless Run blends
+                    const qLeg0 = new THREE.Quaternion();
+                    const qLegEnd = new THREE.Quaternion();
+                    const qLegTarget = new THREE.Quaternion();
+                    const qLegCur = new THREE.Quaternion();
+                    for (const tr of clip.tracks || []) {
+                      const legMatch = (tr?.name || '').match(/^mixamorig:?(LeftUpLeg|LeftLeg|RightUpLeg|RightLeg)\.quaternion$/i);
+                      if (!legMatch) continue;
+                      const lv = tr.values;
+                      if (!lv || lv.length < 8) continue;
+                      const lCnt = Math.floor(lv.length / 4);
+                      const legKey = legMatch[1];
+                      const isLeftPushLeg = /^Left/i.test(legKey);
+                      const restraint = isLeftPushLeg ? 0.56 : 0.28;
+                      qLeg0.set(lv[0], lv[1], lv[2], lv[3]).normalize();
+                      qLegEnd.set(
+                        lv[(lCnt - 1) * 4],
+                        lv[(lCnt - 1) * 4 + 1],
+                        lv[(lCnt - 1) * 4 + 2],
+                        lv[(lCnt - 1) * 4 + 3]
+                      ).normalize();
+                      if (qLeg0.dot(qLegEnd) < 0) {
+                        qLegEnd.set(-qLegEnd.x, -qLegEnd.y, -qLegEnd.z, -qLegEnd.w);
+                      }
+                      qLegTarget.copy(qLeg0).slerp(qLegEnd, 0.5).normalize();
+                      const outL = new Float32Array(lv.length);
+                      for (let i = 0; i < lCnt; i++) {
+                        const uL = i / Math.max(1, lCnt - 1);
+                        const env = Math.sin(Math.PI * uL);
+                        qLegCur.set(lv[i * 4], lv[i * 4 + 1], lv[i * 4 + 2], lv[i * 4 + 3]).normalize();
+                        if (qLegCur.dot(qLegTarget) < 0) {
+                          qLegCur.set(-qLegCur.x, -qLegCur.y, -qLegCur.z, -qLegCur.w);
+                        }
+                        qLegCur.slerp(qLegTarget, restraint * env).normalize();
+                        if (i > 0) {
+                          const pDot =
+                            outL[(i - 1) * 4] * qLegCur.x +
+                            outL[(i - 1) * 4 + 1] * qLegCur.y +
+                            outL[(i - 1) * 4 + 2] * qLegCur.z +
+                            outL[(i - 1) * 4 + 3] * qLegCur.w;
+                          if (pDot < 0) {
+                            qLegCur.set(-qLegCur.x, -qLegCur.y, -qLegCur.z, -qLegCur.w);
+                          }
+                        }
+                        outL[i * 4] = qLegCur.x;
+                        outL[i * 4 + 1] = qLegCur.y;
+                        outL[i * 4 + 2] = qLegCur.z;
+                        outL[i * 4 + 3] = qLegCur.w;
+                      }
+                      tr.values = outL;
+                    }
+
+                    clip.userData = {
+                      ...(clip.userData || {}),
+                      isTurn180Clip: true,
+                      turnYawCurve,
+                      turnTotalYaw: totalYaw,
+                      turnSign: totalYaw < 0 ? -1 : 1
+                    };
+                  }
                 }
               }
               // Build complementary lower-body-only clip for Idle / Running_A / Running_Back
@@ -682,6 +1109,10 @@ function loadSingleModelKey(key) {
             key === 'axe_tripo' ||
             key === 'hammer_tripo' ||
             key === 'staff_tripo';
+          const isRiftTripo =
+            key === 'rift_executioner' ||
+            key === 'rift_vanguard' ||
+            key === 'rift_acolyte';
           const isTripoMonster =
             key === 'zombie_tripo' ||
             key === 'tree_tripo' ||
@@ -704,7 +1135,27 @@ function loadSingleModelKey(key) {
               node.castShadow = true;
               node.receiveShadow = true;
               node.frustumCulled = false;
-              if (isTripoAsset && node.material) {
+              if (isRiftTripo && node.material) {
+                // Preserve Cycles PBR materials (albedo + ORM + normal + emissiveMap + emissiveStrength) intact!
+                node.receiveShadow = false;
+                const srcMats = Array.isArray(node.material) ? node.material : [node.material];
+                for (let mi = 0; mi < srcMats.length; mi++) {
+                  const m = srcMats[mi];
+                  if (!m) continue;
+                  for (const t of [m.map, m.normalMap, m.roughnessMap, m.metalnessMap, m.aoMap, m.emissiveMap]) {
+                    if (t) {
+                      t.anisotropy = maxAniso;
+                      t.minFilter = THREE.LinearMipmapLinearFilter;
+                      t.magFilter = THREE.LinearFilter;
+                      t.generateMipmaps = true;
+                      t.needsUpdate = true;
+                    }
+                  }
+                  if (!/Eyes/i.test(node.name || '')) {
+                    applySoulsRimLight(m);
+                  }
+                }
+              } else if (isTripoAsset && node.material) {
                 node.receiveShadow = false;
                 const isEmbeddedWeapon = /HeroWeapon|Sword|Staff|Shotgun/i.test(node.name);
                 const isStaffMesh = key === 'staff_tripo' || /Staff/i.test(node.name);
@@ -741,6 +1192,13 @@ function loadSingleModelKey(key) {
                   return std;
                 });
                 node.material = Array.isArray(node.material) ? cleanMats : cleanMats[0];
+              }
+              if (SOULS_RIM_WEAPON_KEYS.has(key) && node.material) {
+                if (Array.isArray(node.material)) {
+                  for (let mi = 0; mi < node.material.length; mi++) applySoulsRimLight(node.material[mi]);
+                } else {
+                  applySoulsRimLight(node.material);
+                }
               }
             }
           });
@@ -792,6 +1250,7 @@ export function resetFailedModelKeys() {
 }
 
 export function getBootModelKeys(classId = 'warrior', weaponId = null, levelDef = null) {
+  const isSouls = isSoulsLevelOrBiome(levelDef);
   const set = new Set([
     getHeroAssetKey(classId),
     ...(classId === 'warrior' ? ['shield_custom'] : []),
@@ -815,10 +1274,30 @@ export function getBootModelKeys(classId = 'warrior', weaponId = null, levelDef 
   for (const eType of pool) {
     if (!eType) continue;
     const canon = ENEMY_TYPE_ALIASES?.[eType] || eType;
-    const k = ENEMY_MODEL_CFG?.[canon]?.key || ENEMY_MODEL_CFG?.[eType]?.key;
+    const resolved = isSouls && SOULS_RIFT_ENEMY_MAP[canon] ? SOULS_RIFT_ENEMY_MAP[canon] : canon;
+    const k = ENEMY_MODEL_CFG?.[resolved]?.key || ENEMY_MODEL_CFG?.[canon]?.key || ENEMY_MODEL_CFG?.[eType]?.key;
     if (k && MODEL_PATHS[k]) set.add(k);
   }
+  if (isSouls) {
+    for (let i = 0; i < SOULS_RIFT_BIOME_KEYS.length; i++) {
+      const k = SOULS_RIFT_BIOME_KEYS[i];
+      if (MODEL_PATHS[k]) set.add(k);
+    }
+  }
   return [...set].filter(Boolean);
+}
+
+export function getMissingEnemyKeysForBiome(biomeOrLevel = 'souls_citadel') {
+  if (!isSoulsLevelOrBiome(biomeOrLevel)) return [];
+  return SOULS_RIFT_BIOME_KEYS.filter((k) => MODEL_PATHS[k] && !gltfCache.has(k) && !failedModelKeys.has(k));
+}
+
+export async function preloadAssetsForBiome(biomeOrLevel = 'souls_citadel') {
+  const missing = getMissingEnemyKeysForBiome(biomeOrLevel);
+  if (missing.length > 0) {
+    await ensureModelKeysLoaded(missing);
+  }
+  return missing;
 }
 
 export function getMissingHeroOrWeaponKeys(classId = 'warrior', weaponId = null) {
@@ -2012,6 +2491,237 @@ function createMagePotionFlask() {
 }
 
 // ============================================================================
+// Stylized Dark-Souls Golden Estus Flask 3D Prop + Zero-Alloc Drink Solver
+// Mounted to Warrior's LeftHand (visible = false by default). During drinking,
+// the left-hand shield smoothly swings behind the left shoulder onto Spine2,
+// the right-hand sword lowers calmly to the right hip (blade down-and-back),
+// and the left hand raises & tilts the glowing Estus Flask to the visor!
+// ============================================================================
+function createEstusFlaskMesh() {
+  const grp = new THREE.Group();
+  grp.name = 'HeroProp_EstusFlask';
+
+  // Faceted 6-sided crystal Estus bottle (base -> belly -> shoulder -> slender neck -> flared rim)
+  const bottleGeo = getGeo('estus_flask_glass_v1', () => {
+    const pts = [
+      new THREE.Vector2(0.0, -0.052),
+      new THREE.Vector2(0.028, -0.052),
+      new THREE.Vector2(0.044, -0.022),
+      new THREE.Vector2(0.042, 0.016),
+      new THREE.Vector2(0.024, 0.046),
+      new THREE.Vector2(0.015, 0.058),
+      new THREE.Vector2(0.016, 0.080),
+      new THREE.Vector2(0.024, 0.090),
+      new THREE.Vector2(0.013, 0.088)
+    ];
+    const g = new THREE.LatheGeometry(pts, 6);
+    g.computeVertexNormals();
+    return g;
+  });
+
+  const glassMat = new THREE.MeshStandardMaterial({
+    color: 0xfef08a,
+    emissive: 0xf59e0b,
+    emissiveIntensity: 0.78,
+    roughness: 0.16,
+    metalness: 0.14,
+    transparent: true,
+    opacity: 0.84
+  });
+  const glassMesh = new THREE.Mesh(bottleGeo, glassMat);
+  glassMesh.castShadow = false;
+  glassMesh.frustumCulled = false;
+
+  // Blazing amber-gold Estus liquid core inside the faceted bottle
+  const coreMat = new THREE.MeshStandardMaterial({
+    color: 0xfef9c3,
+    emissive: 0xf59e0b,
+    emissiveIntensity: 2.2,
+    roughness: 0.12,
+    metalness: 0.05
+  });
+  const coreMesh = new THREE.Mesh(
+    getGeo('estus_flask_core_v1', () => new THREE.OctahedronGeometry(0.032, 0)),
+    coreMat
+  );
+  coreMesh.scale.set(1.05, 1.24, 1.05);
+  coreMesh.position.y = -0.004;
+  coreMesh.frustumCulled = false;
+
+  // Forged antique brass neck collar + flared drinking lip band
+  const brassMat = getMat('estus_flask_brass_mat', () =>
+    new THREE.MeshStandardMaterial({
+      color: 0xd99b26,
+      metalness: 0.85,
+      roughness: 0.24
+    })
+  );
+  const collarMesh = new THREE.Mesh(
+    getGeo('estus_flask_collar_v1', () => new THREE.CylinderGeometry(0.019, 0.023, 0.015, 6)),
+    brassMat
+  );
+  collarMesh.position.y = 0.056;
+  collarMesh.frustumCulled = false;
+
+  const rimMesh = new THREE.Mesh(
+    getGeo('estus_flask_rim_v1', () => {
+      const tg = new THREE.TorusGeometry(0.021, 0.0044, 6, 8);
+      tg.rotateX(Math.PI * 0.5);
+      return tg;
+    }),
+    brassMat
+  );
+  rimMesh.position.y = 0.088;
+  rimMesh.frustumCulled = false;
+
+  // Soft additive golden aura that surges brightly while pouring into the visor
+  const haloMat = new THREE.MeshBasicMaterial({
+    color: 0xfbbf24,
+    transparent: true,
+    opacity: 0.16,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    toneMapped: false
+  });
+  const haloMesh = new THREE.Mesh(
+    getGeo('estus_flask_halo_v1', () => new THREE.SphereGeometry(0.046, 10, 10)),
+    haloMat
+  );
+  haloMesh.position.y = 0.008;
+  haloMesh.frustumCulled = false;
+
+  grp.add(glassMesh, coreMesh, collarMesh, rimMesh, haloMesh);
+  grp.visible = false;
+  grp.userData.glassMat = glassMat;
+  grp.userData.coreMat = coreMat;
+  grp.userData.haloMat = haloMat;
+  grp.userData.haloMesh = haloMesh;
+  grp.userData.ownedMaterials = [glassMat, coreMat, haloMat];
+  return grp;
+}
+
+function smoothstep01(edge0, edge1, x) {
+  const t = Math.max(0, Math.min(1, (x - edge0) / Math.max(1e-5, edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
+
+// Precomputed Warrior RightHand model-space orientation for relaxed lowered-hip sword hold
+// (blade points down, outward-right, and back along (-0.42, -0.44, -0.79) — clear of face & floor!)
+const _FLASK_SWORD_LOWER_HAND_R_MODEL_Q = (() => {
+  const qMount = new THREE.Quaternion().setFromEuler(new THREE.Euler(-1.04, 0.24, -1.52, 'XYZ'));
+  const qFlip = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI, 0, 0, 'XYZ'));
+  const qWeaponInHandRInv = qMount.multiply(qFlip).normalize().invert();
+  const bladeY = new THREE.Vector3(-0.42, -0.44, -0.79).normalize();
+  const xHint = new THREE.Vector3(0.85, -0.25, -0.45).normalize();
+  const wx = xHint.clone().addScaledVector(bladeY, -xHint.dot(bladeY)).normalize();
+  const wz = new THREE.Vector3().crossVectors(wx, bladeY).normalize();
+  wx.crossVectors(bladeY, wz).normalize();
+  const m = new THREE.Matrix4().makeBasis(wx, bladeY, wz);
+  const qWeaponModel = new THREE.Quaternion().setFromRotationMatrix(m);
+  return qWeaponModel.multiply(qWeaponInHandRInv).normalize();
+})();
+
+const _FLASK_UPRIGHT_AXIS_M = new THREE.Vector3(-0.14, 0.98, 0.12).normalize();
+const _FLASK_POUR_AXIS_M = new THREE.Vector3(-0.35, 0.42, -0.84).normalize();
+const _FLASK_UNIT_X = new THREE.Vector3(1, 0, 0);
+const _FLASK_UNIT_Y = new THREE.Vector3(0, 1, 0);
+const _FLASK_UNIT_Z = new THREE.Vector3(0, 0, 1);
+
+const _fModelMatInv = new THREE.Matrix4();
+const _fModelQ = new THREE.Quaternion();
+const _fModelQInv = new THREE.Quaternion();
+const _fParentQInv = new THREE.Quaternion();
+const _fBoneModelQ = new THREE.Quaternion();
+const _fTargetModelQ = new THREE.Quaternion();
+const _fTargetWorldQ = new THREE.Quaternion();
+const _fTargetLocalQ = new THREE.Quaternion();
+const _fPrevLocalQ = new THREE.Quaternion();
+const _fRotAxisQ = new THREE.Quaternion();
+const _fClavYawQ = new THREE.Quaternion();
+const _fClavRollQ = new THREE.Quaternion();
+const _fHandLModelQ = new THREE.Quaternion();
+const _fShieldHandPosM = new THREE.Vector3();
+const _fShieldHandQuatM = new THREE.Quaternion();
+const _fShieldBackPosM = new THREE.Vector3();
+const _fShieldBackQuatM = new THREE.Quaternion();
+const _fShieldTmpM4 = new THREE.Matrix4();
+const _fShieldTmpS = new THREE.Vector3();
+const _fFwd = new THREE.Vector3();
+const _fSpineM = new THREE.Vector3();
+const _fHeadM = new THREE.Vector3();
+const _fTargetRM = new THREE.Vector3();
+const _fPoleRM = new THREE.Vector3();
+const _fTargetRW = new THREE.Vector3();
+const _fPoleRW = new THREE.Vector3();
+const _fLowLM = new THREE.Vector3();
+const _fHighLM = new THREE.Vector3();
+const _fTargetLM = new THREE.Vector3();
+const _fPoleLM = new THREE.Vector3();
+const _fTargetLW = new THREE.Vector3();
+const _fPoleLW = new THREE.Vector3();
+const _fElbLM = new THREE.Vector3();
+const _fHandLM = new THREE.Vector3();
+const _fFlaskAxisX = new THREE.Vector3();
+const _fForeY = new THREE.Vector3();
+const _fHandZ = new THREE.Vector3();
+const _fBasisM4 = new THREE.Matrix4();
+
+function normalizeFlaskAngle(rad) {
+  let a = rad;
+  while (a > Math.PI) a -= Math.PI * 2;
+  while (a < -Math.PI) a += Math.PI * 2;
+  return a;
+}
+
+function setFlaskBoneModelQuat(node, targetModelQ, blend) {
+  if (!node || !node.parent) return;
+  _fPrevLocalQ.copy(node.quaternion);
+  _fTargetWorldQ.copy(_fModelQ).multiply(targetModelQ);
+  node.parent.getWorldQuaternion(_fParentQInv).invert();
+  _fTargetLocalQ.copy(_fParentQInv).multiply(_fTargetWorldQ).normalize();
+  if (blend < 0.999) {
+    _fPrevLocalQ.slerp(_fTargetLocalQ, blend);
+    node.quaternion.copy(_fPrevLocalQ);
+  } else {
+    node.quaternion.copy(_fTargetLocalQ);
+  }
+  node.updateMatrixWorld(true);
+}
+
+function rotateFlaskBoneModelAxis(node, axisModel, angleRad, blend) {
+  if (!node || Math.abs(angleRad) < 1e-5 || blend <= 1e-4) return;
+  node.getWorldQuaternion(_fBoneModelQ).premultiply(_fModelQInv);
+  _fRotAxisQ.setFromAxisAngle(axisModel, angleRad);
+  _fTargetModelQ.copy(_fRotAxisQ).multiply(_fBoneModelQ).normalize();
+  setFlaskBoneModelQuat(node, _fTargetModelQ, blend);
+}
+
+function setFlaskClavicleModelRot(entry, yawY, rollZ, blend) {
+  if (!entry || !entry.node || !entry.node.parent || blend <= 1e-4) return;
+  const node = entry.node;
+  _fPrevLocalQ.copy(node.quaternion);
+  node.quaternion.copy(entry.restQ);
+  node.updateMatrixWorld(true);
+
+  node.getWorldQuaternion(_fBoneModelQ).premultiply(_fModelQInv);
+  _fClavYawQ.setFromAxisAngle(_FLASK_UNIT_Y, yawY);
+  _fClavRollQ.setFromAxisAngle(_FLASK_UNIT_Z, rollZ);
+  _fTargetModelQ.copy(_fClavYawQ).multiply(_fClavRollQ).multiply(_fBoneModelQ).normalize();
+
+  _fTargetWorldQ.copy(_fModelQ).multiply(_fTargetModelQ);
+  node.parent.getWorldQuaternion(_fParentQInv).invert();
+  _fTargetLocalQ.copy(_fParentQInv).multiply(_fTargetWorldQ).normalize();
+
+  if (blend < 0.999) {
+    _fPrevLocalQ.slerp(_fTargetLocalQ, blend);
+    node.quaternion.copy(_fPrevLocalQ);
+  } else {
+    node.quaternion.copy(_fTargetLocalQ);
+  }
+  node.updateMatrixWorld(true);
+}
+
+// ============================================================================
 // 1. HERO FACTORY — Exact Undead Chibi Skeleton Trio matching User Reference!
 //    - gunslinger -> Gunslinger_Tripo.glb (fallback: Skeleton_Minion.glb)
 //    - warrior    -> Warrior_Run.glb (fallback: Skeleton_Warrior.glb)
@@ -2081,12 +2791,17 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
         : HERO_BASE_SCALE;
 
   const root = new THREE.Group();
+  syncSoulsRimLightFromBiome();
   let currentWeaponId =
     weaponId || (safeClass === 'warrior' ? 'club' : safeClass === 'gunslinger' ? 'usp_pistol' : 'spark_staff');
   let currentMageElement = mageElement || 'fire';
   let isBeast = false;
   let flashTimer = 0;
   let isDisposed = false;
+  let isDeadState = false;
+  let proceduralDeathFall = false;
+  let deathFallProgress = 0;
+  let lastDeathDuration = 0;
 
   // Gunslinger two-handed carry pivot, recoil kick, pump rack & walk cycle state
   let gunCarryPivot = null;
@@ -2107,12 +2822,17 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
   let handR = null;
   let handL = null;
   let chestBone = null;
+  let headBone = null;
   let upperArmR = null;
   let lowerArmR = null;
   let upperArmL = null;
   let lowerArmL = null;
   let mountedWeaponObj = null;
   let mountedShieldObj = null;
+  let legacyWarriorShieldObj = null;
+  let estusFlaskMesh = null;
+  let warriorShieldBackAnchor = null;
+  let shieldStowedToModelSpace = false;
   let embeddedWarriorSwordNode = null;
   let embeddedPistolNode = null;
   let embeddedShotgunNode = null;
@@ -2121,6 +2841,8 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
   let staffCastPulse = 0;
   let warriorAttackTimer = 0;
   let warriorAttackDur = 0.45;
+  let flaskDrinkAnimTimer = 0;
+  let flaskDrinkAnimDur = 0.88;
   const hasBakedGunslingerClips = Boolean(isTripoGunslinger && asset?.clips && asset.clips.has('Idle'));
 
   // Mixamo skeletal rig map for Tripo Gunslinger (used when IK fallback is active)
@@ -2156,12 +2878,18 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
   beastRing.visible = false;
   root.add(beastRing);
 
+  const heroContactShadow = createActorContactShadowMesh({
+    radius: 0.88,
+    isBoss: false,
+    opacity: 0.56,
+    yOffset: 0.016
+  });
+  root.add(heroContactShadow);
+
   if (asset) {
     modelInstance = cloneSkinned(asset.scene);
     modelInstance.scale.setScalar(heroBaseScale);
     root.add(modelInstance);
-
-    let headBone = null;
 
     modelInstance.traverse((node) => {
       const nm = node.name || '';
@@ -2251,6 +2979,7 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
               m.color.lerp(new THREE.Color(0x6b2146), 0.45);
             }
           }
+          applySoulsRimLight(m);
           const entry = {
             mat: m,
             baseEmissive: m.emissive ? m.emissive.getHex() : 0x000000,
@@ -2276,7 +3005,12 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
 
     if (safeClass === 'warrior' && !isTripoWarrior) {
       if (handL) {
-        handL.add(createSkullShield(false));
+        const legShield = createSkullShield(false);
+        legShield.userData.basePos = legShield.position.clone();
+        legShield.userData.baseQuat = legShield.quaternion.clone();
+        legShield.userData.baseScale = legShield.scale.clone();
+        handL.add(legShield);
+        legacyWarriorShieldObj = legShield;
       }
     } else if (safeClass === 'gunslinger' && !isTripoGunslinger) {
       if (chestBone) {
@@ -2287,6 +3021,38 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
     } else if (safeClass === 'mage' && !isTripoMage) {
       if (handL) {
         handL.add(createMagePotionFlask());
+      }
+    }
+
+    // Golden Estus Flask prop mounted to Warrior's LeftHand (hidden until playFlaskDrinkAnim!)
+    // + Spine2/chest back-sling anchor so the left-hand shield cleanly stows onto the back while drinking.
+    if (safeClass === 'warrior') {
+      if (handL) {
+        estusFlaskMesh = createEstusFlaskMesh();
+        if (assetKey === 'warrior_run') {
+          estusFlaskMesh.position.set(0.006, 0.056, -0.030);
+          estusFlaskMesh.rotation.set(0, 0, -Math.PI * 0.5);
+          estusFlaskMesh.userData.baseScale = 1.0;
+        } else {
+          estusFlaskMesh.position.set(0, 0.06, 0.06);
+          estusFlaskMesh.scale.setScalar(1.85);
+          estusFlaskMesh.userData.baseScale = 1.85;
+        }
+        estusFlaskMesh.visible = false;
+        handL.add(estusFlaskMesh);
+      }
+      if (assetKey === 'warrior_run' && mx.Spine2?.node) {
+        warriorShieldBackAnchor = new THREE.Object3D();
+        warriorShieldBackAnchor.name = 'Warrior_ShieldBackAnchor';
+        warriorShieldBackAnchor.position.set(-0.2044, -0.2263, -0.0020);
+        warriorShieldBackAnchor.quaternion.set(0.1249, 0.7775, -0.0723, -0.6120).normalize();
+        mx.Spine2.node.add(warriorShieldBackAnchor);
+      } else if (!isTripoWarrior && chestBone) {
+        warriorShieldBackAnchor = new THREE.Object3D();
+        warriorShieldBackAnchor.name = 'Warrior_ShieldBackAnchor';
+        warriorShieldBackAnchor.position.set(0.04, 0.14, -0.34);
+        warriorShieldBackAnchor.rotation.set(0.12, Math.PI + 0.18, 0.22);
+        chestBone.add(warriorShieldBackAnchor);
       }
     }
 
@@ -2593,13 +3359,17 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
   let currentWeaponStyle = '1h_sword';
   let isCurrentWeaponTwoHanded = false;
   let warriorLeftGripSocket = null;
+  let isWarriorBlocking = false;
   let dashAnimTimer = 0;
   let dashAnimDur = 0.22;
-  const warriorPoleL = new THREE.Object3D();
-  warriorPoleL.position.set(0.48, 0.72, -0.22);
-  root.add(warriorPoleL);
-  const _warriorGripW = new THREE.Vector3();
-  const _warriorPoleW = new THREE.Vector3();
+  const warriorStanceState = createWarriorStanceState();
+  const warriorStanceRig = {
+    mx,
+    modelInstance,
+    mountedWeaponObj: null,
+    leftGripSocket: null,
+    state: warriorStanceState
+  };
 
   function resolveHeroWeaponStyle(wId) {
     const id = String(wId || 'club');
@@ -2610,12 +3380,96 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
     return { style: '1h_sword', twoHanded: Boolean(WEAPONS[id]?.twoHanded) };
   }
 
+  function restoreShieldToLeftHand() {
+    const activeShield = mountedShieldObj || legacyWarriorShieldObj;
+    if (!activeShield || !handL) {
+      shieldStowedToModelSpace = false;
+      return;
+    }
+    if (activeShield.parent !== handL) {
+      handL.add(activeShield);
+    }
+    if (activeShield.userData?.basePos) activeShield.position.copy(activeShield.userData.basePos);
+    if (activeShield.userData?.baseQuat) activeShield.quaternion.copy(activeShield.userData.baseQuat);
+    if (activeShield.userData?.baseScale) activeShield.scale.copy(activeShield.userData.baseScale);
+    activeShield.visible = true;
+    shieldStowedToModelSpace = false;
+  }
+
+  function cancelFlaskDrinkAnim() {
+    flaskDrinkAnimTimer = 0;
+    if (estusFlaskMesh) {
+      estusFlaskMesh.visible = false;
+      const baseSc = estusFlaskMesh.userData?.baseScale ?? 1.0;
+      estusFlaskMesh.scale.setScalar(baseSc);
+    }
+    restoreShieldToLeftHand();
+  }
+
+  let isDoorPushing = false;
+  function setDoorPushMode(active, effort01 = 1.0) {
+    if (isDeadState) {
+      isDoorPushing = false;
+      return false;
+    }
+    const want = Boolean(active);
+    if (want) {
+      cancelFlaskDrinkAnim();
+      warriorAttackTimer = 0;
+      dashAnimTimer = 0;
+      isWarriorBlocking = false;
+      animCtrl?.setBlockState?.(false);
+      animCtrl?.cancelOneShot?.();
+      animCtrl?.cancelTurn180?.();
+      if (modelInstance) {
+        modelInstance.rotation.x = 0;
+        modelInstance.position.y = 0;
+      }
+    }
+    const ok = Boolean(animCtrl?.setDoorPushState?.(want, effort01));
+    isDoorPushing = want && ok;
+    return ok;
+  }
+
+  function isDoorPushActive() {
+    return Boolean(!isDeadState && (isDoorPushing || animCtrl?.isDoorPushActive?.()));
+  }
+
+  function playFlaskDrinkAnim(durationSec = 0.88) {
+    if (isDeadState || animCtrl?.isRollActive?.() || animCtrl?.isHitActive?.()) {
+      return false;
+    }
+    isDoorPushing = false;
+    animCtrl?.setDoorPushState?.(false, 0);
+    warriorAttackTimer = 0;
+    dashAnimTimer = 0;
+    isWarriorBlocking = false;
+    animCtrl?.setBlockState?.(false);
+    animCtrl?.cancelOneShot?.();
+    animCtrl?.cancelTurn180?.();
+    flaskDrinkAnimDur = Math.max(0.35, Math.min(2.2, Number(durationSec) || 0.88));
+    flaskDrinkAnimTimer = flaskDrinkAnimDur;
+    if (estusFlaskMesh) {
+      estusFlaskMesh.visible = true;
+    }
+    return true;
+  }
+
+  function isFlaskDrinkActive() {
+    return Boolean(!isDeadState && flaskDrinkAnimTimer > 0);
+  }
+
   function triggerDash(durationSec = 0.22) {
+    if (isDeadState || animCtrl?.isRollActive?.()) return;
+    cancelFlaskDrinkAnim();
+    animCtrl?.cancelTurn180?.();
+    animCtrl?.cancelHit?.();
     dashAnimDur = Math.max(0.12, Math.min(0.65, Number(durationSec) || 0.22));
     dashAnimTimer = dashAnimDur;
   }
 
   function setWeapon(newWeaponId, nextElement = null) {
+    cancelFlaskDrinkAnim();
     currentWeaponId = newWeaponId || currentWeaponId;
     const styleInfo = resolveHeroWeaponStyle(currentWeaponId);
     currentWeaponStyle = styleInfo.style;
@@ -2649,9 +3503,13 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
       // shield are mounted here as children of the hand bones so they follow
       // every animation exactly.
       if (assetKey === 'warrior_run') {
-        const useDefaultSword = currentWeaponId === 'club' || !WEAPONS[currentWeaponId];
-        const isTwoHanded = Boolean(WEAPONS[currentWeaponId]?.twoHanded);
+        const stanceMountCfg = getWarriorWeaponMountConfig(currentWeaponId);
+        const useDefaultSword = currentWeaponId === 'club' || (!stanceMountCfg && !WEAPONS[currentWeaponId]);
+        const isTwoHanded = Boolean(WEAPONS[currentWeaponId]?.twoHanded || stanceMountCfg?.twoHanded);
         const wantedWeaponId = currentWeaponId;
+        warriorStanceRig.modelInstance = modelInstance;
+        warriorStanceRig.mountedWeaponObj = null;
+        warriorStanceRig.leftGripSocket = null;
 
         if (handR) {
           if (useDefaultSword) {
@@ -2684,24 +3542,25 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
             }
           } else {
             // Purchased / boss Warrior weapons (Spear, Zweihander, Axe, Hammer):
-            // Upright Tripo GLBs (pommel at Y=0, tip at Y≈0.98). Mount inside a pivot
-            // placed at Sword_Tripo's exact palm grip point (-0.0235, 0.0415, -0.0086)
-            // and blade basis (-1.04, 0.24, -1.52) so the grip sits cleanly inside
-            // the right fist and the blade/spearhead points outward identically.
+            // Mounted via unified Blender-verified grip & left-hand socket configs from warriorStances.js.
             const weaponKey = getWeaponAssetKey(currentWeaponId);
             const weaponAsset = weaponKey ? gltfCache.get(weaponKey) : null;
             if (weaponAsset?.scene) {
-              const mountCfgByKey = {
-                spear_tripo: { scale: 1.05, gripY: 0.36, rotY: 0, centerZ: 0.021, gripLX: 0.01, gripLY: -0.25, gripLZ: 0.02 },
-                zweihander_tripo: { scale: 0.90, gripY: 0.14, rotY: Math.PI * 0.5, centerZ: 0, gripLX: 0.01, gripLY: 0.11, gripLZ: 0.01 },
-                axe_tripo: { scale: 0.74, gripY: 0.26, rotY: 0, centerZ: 0, gripLX: 0.01, gripLY: 0.15, gripLZ: 0.01 },
-                hammer_tripo: { scale: 0.78, gripY: 0.26, rotY: 0, centerZ: 0, gripLX: 0.01, gripLY: 0.16, gripLZ: 0.01 }
+              const cfg = stanceMountCfg || {
+                scale: 0.80,
+                gripY: 0.24,
+                rotY: 0,
+                centerZ: 0,
+                pivotPos: { x: -0.0235, y: 0.0415, z: -0.0086 },
+                pivotRot: { x: -1.04, y: 0.24, z: -1.52 },
+                gripLX: 0,
+                gripLY: 0.12,
+                gripLZ: 0
               };
-              const cfg = mountCfgByKey[weaponKey] || { scale: 0.80, gripY: 0.24, rotY: 0, centerZ: 0, gripLX: 0.01, gripLY: 0.12, gripLZ: 0.01 };
               const mountPivot = new THREE.Group();
               mountPivot.name = 'HeroWeapon_Sword_Mount';
-              mountPivot.position.set(-0.0235, 0.0415, -0.0086);
-              mountPivot.rotation.set(-1.04, 0.24, -1.52);
+              mountPivot.position.set(cfg.pivotPos.x, cfg.pivotPos.y, cfg.pivotPos.z);
+              mountPivot.rotation.set(cfg.pivotRot.x, cfg.pivotRot.y, cfg.pivotRot.z);
               mountPivot.userData.basePos = mountPivot.position.clone();
               mountPivot.userData.baseQuat = mountPivot.quaternion.clone();
 
@@ -2750,6 +3609,9 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
             sh.scale.setScalar(0.42);
             sh.position.set(-0.1763, 0.1213, -0.0632);
             sh.rotation.set(-0.4292, -0.24, -2);
+            sh.userData.basePos = sh.position.clone();
+            sh.userData.baseQuat = sh.quaternion.clone();
+            sh.userData.baseScale = sh.scale.clone();
             handL.add(sh);
             mountedShieldObj = sh;
           } else if (MODEL_PATHS.shield_custom && !failedModelKeys.has('shield_custom')) {
@@ -2760,6 +3622,21 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
             });
           }
         }
+
+        warriorStanceRig.mountedWeaponObj = mountedWeaponObj;
+        warriorStanceRig.leftGripSocket = warriorLeftGripSocket;
+        if (animCtrl?.mixer) {
+          animCtrl.mixer.update(0);
+        }
+        applyWarriorWeaponStance(warriorStanceRig, currentWeaponId, 0, {
+          isAttacking: warriorAttackTimer > 0 || Boolean(animCtrl?.isOneShotActive?.()),
+          isBlocking: isWarriorBlocking,
+          isHub: true,
+          moveSpeed: 0,
+          isMoving: false,
+          elapsedTime: 0,
+          isDead: Boolean(animCtrl?.isDeadState?.())
+        });
         return;
       }
       const useEmbeddedSword = currentWeaponId === 'club' || !WEAPONS[currentWeaponId];
@@ -2901,11 +3778,17 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
     if (!attackDuration || attackDuration <= 0 || !asset?.clips) return fallbackSpeed;
     const cl = asset.clips.get(clipName);
     if (!cl || !cl.duration) return fallbackSpeed;
-    const minNeededSpeed = cl.duration / Math.max(0.18, attackDuration * 0.90);
-    return Math.min(3.8, Math.max(fallbackSpeed, minNeededSpeed));
+    const minNeededSpeed = cl.duration / Math.max(0.22, attackDuration * 0.96);
+    return Math.min(3.5, Math.max(fallbackSpeed, minNeededSpeed));
   }
 
   function playAttackAnim(_weaponType = null, attackDuration = 0, comboStep = 1) {
+    if (isDeadState) return;
+    isDoorPushing = false;
+    animCtrl?.setDoorPushState?.(false, 0);
+    cancelFlaskDrinkAnim();
+    animCtrl?.cancelTurn180?.();
+    animCtrl?.cancelRoll?.();
     if (safeClass === 'gunslinger') {
       gunShotCounter += 1;
       gunKickTimer = Math.min(0.24, Math.max(0.12, (attackDuration || 0.25) * 0.65));
@@ -2923,21 +3806,47 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
     }
     if (!animCtrl) return;
     if (safeClass === 'warrior') {
-      const step = comboStep === 2 ? 2 : comboStep === 3 ? 3 : 1;
+      const isHeavyThrust =
+        comboStep === 4 ||
+        comboStep === 'heavy' ||
+        comboStep === 'r2' ||
+        comboStep === 'heavy_thrust' ||
+        _weaponType === 'heavy_thrust' ||
+        _weaponType === 'Heavy_Thrust';
+      const step = isHeavyThrust ? 4 : comboStep === 2 ? 2 : comboStep === 3 ? 3 : 1;
+      const isHeavyWpn = currentWeaponId === 'axe' || currentWeaponId === 'boss_hammer';
       let targetClip = '1H_Melee_Attack_Slice_Horizontal';
-      let baseClipSpd = currentWeaponId === 'axe' || currentWeaponId === 'boss_hammer' ? 1.25 : 1.65;
+      // Snappy explosive 1st & 2nd combo strikes, weightier 3rd overhead finisher, dedicated Heavy_Thrust R2!
+      let baseClipSpd = isHeavyThrust
+        ? (isHeavyWpn ? 0.90 : 1.0)
+        : step === 3
+          ? (isHeavyWpn ? 0.86 : 0.98)
+          : step === 2
+            ? (isHeavyWpn ? 1.18 : 1.42)
+            : (isHeavyWpn ? 1.25 : 1.55);
       if (isTripoWarrior) {
-        // Warrior_Run.glb carries 3 distinct sword-and-shield Mixamo clips:
-        //   1 -> 1H_Melee_Attack_Slice_Horizontal (wide horizontal sweep)
-        //   2 -> Slash (high wind-up diagonal downward cut)
-        //   3 -> Attack (heavy overhead two-arm slam finisher)
-        const desired =
-          step === 2 ? 'Slash' : step === 3 ? 'Attack' : '1H_Melee_Attack_Slice_Horizontal';
-        targetClip = asset?.clips?.has(desired) ? desired : '1H_Melee_Attack_Slice_Horizontal';
+        // Warrior_Run.glb carries 4 distinct melee attack clips:
+        //   1 -> 1H_Melee_Attack_Slice_Horizontal (crisp top-right -> bottom-left R1 opener)
+        //   2 -> Slash (right-foot step-in diagonal top-left -> bottom-right R1 cut)
+        //   3 -> Attack (slow, heavy overhead slam R1 finisher)
+        //   4 -> Heavy_Thrust (60 FPS 1H piercing forward lunge for R2 / Charged R2)
+        const desired = isHeavyThrust
+          ? 'Heavy_Thrust'
+          : step === 2
+            ? 'Slash'
+            : step === 3
+              ? 'Attack'
+              : '1H_Melee_Attack_Slice_Horizontal';
+        targetClip = asset?.clips?.has(desired)
+          ? desired
+          : isHeavyThrust && asset?.clips?.has('Attack')
+            ? 'Attack'
+            : '1H_Melee_Attack_Slice_Horizontal';
       } else {
-        baseClipSpd = 1.85;
-        const desired =
-          currentWeaponId === 'flail'
+        baseClipSpd = isHeavyThrust ? 1.05 : step === 3 ? 1.15 : step === 2 ? 1.32 : 1.75;
+        const desired = isHeavyThrust
+          ? '1H_Melee_Attack_Stab'
+          : currentWeaponId === 'flail'
             ? '2H_Melee_Attack_Spin'
             : currentWeaponId === 'cleaver'
               ? '2H_Melee_Attack_Slice'
@@ -2948,18 +3857,33 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
                   : '1H_Melee_Attack_Slice_Horizontal';
         targetClip = asset?.clips?.has(desired) ? desired : '1H_Melee_Attack_Slice_Horizontal';
       }
-      // Prevent same-clip restart spam, while allowing smooth cross-fade into the next combo clip
+      // Prevent same-clip restart spam, while allowing smooth cross-fade into the next combo clip or R2 Heavy_Thrust
       const remSec = animCtrl.getOneShotRemainingSec ? animCtrl.getOneShotRemainingSec() : (animCtrl.isOneShotActive?.() ? 0.2 : 0);
       const activeClip = animCtrl.getActiveAttackClipName ? animCtrl.getActiveAttackClipName() : null;
-      const isDifferentComboClip = Boolean(activeClip && activeClip !== targetClip);
-      if (remSec > (isDifferentComboClip ? 0.24 : 0.06)) return;
+      const cleanActiveClip = activeClip ? activeClip.replace(/__Full$/, '') : null;
+      const isDifferentComboClip = Boolean(cleanActiveClip && cleanActiveClip !== targetClip);
+      if (!isHeavyThrust && remSec > (isDifferentComboClip ? 0.24 : 0.06)) return;
+      if (isHeavyThrust && !isDifferentComboClip && remSec > 0.14) return;
 
-      warriorAttackDur = attackDuration > 0 ? Math.max(0.28, Math.min(0.95, attackDuration * 0.85)) : 0.44;
+      let finalSpd;
+      if (isHeavyThrust) {
+        const thrustCl = asset?.clips?.get(targetClip);
+        finalSpd =
+          attackDuration > 0 && thrustCl?.duration
+            ? Math.max(0.45, Math.min(2.2, thrustCl.duration / Math.max(0.30, attackDuration)))
+            : baseClipSpd;
+        warriorAttackDur =
+          attackDuration > 0
+            ? Math.max(0.32, Math.min(1.65, attackDuration))
+            : thrustCl?.duration
+              ? Math.max(0.35, thrustCl.duration / Math.max(0.3, finalSpd))
+              : 0.90;
+      } else {
+        finalSpd = computeSyncedClipSpeed(targetClip, baseClipSpd, attackDuration);
+        warriorAttackDur = attackDuration > 0 ? Math.max(0.28, Math.min(1.15, attackDuration * 0.90)) : 0.52;
+      }
       warriorAttackTimer = warriorAttackDur;
-      animCtrl.triggerOneShot(
-        targetClip,
-        computeSyncedClipSpeed(targetClip, baseClipSpd, attackDuration)
-      );
+      animCtrl.triggerOneShot(targetClip, finalSpd);
     } else {
       if (animCtrl.isOneShotActive && animCtrl.isOneShotActive()) return;
       staffCastPulse = 1.0;
@@ -2968,7 +3892,284 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
     }
   }
 
+  function playHeavyThrustAnim(speedScale = 1.0, attackDuration = 0) {
+    if (isDeadState || !animCtrl) return false;
+    cancelFlaskDrinkAnim();
+    animCtrl.cancelTurn180?.();
+    animCtrl.cancelRoll?.();
+    isWarriorBlocking = false;
+    animCtrl.setBlockState?.(false);
+
+    const safeScale = Math.max(0.4, Math.min(2.5, Number(speedScale) || 1.0));
+    const targetClip =
+      asset?.clips?.has('Heavy_Thrust')
+        ? 'Heavy_Thrust'
+        : asset?.clips?.has('1H_Melee_Attack_Stab')
+          ? '1H_Melee_Attack_Stab'
+          : asset?.clips?.has('Attack')
+            ? 'Attack'
+            : '1H_Melee_Attack_Slice_Horizontal';
+    const cl = asset?.clips?.get(targetClip);
+    let finalSpd = safeScale;
+    if (attackDuration > 0 && cl?.duration) {
+      finalSpd = Math.max(0.42, Math.min(2.4, (cl.duration / Math.max(0.28, attackDuration)) * safeScale));
+    }
+    warriorAttackDur = cl?.duration
+      ? Math.max(0.28, Math.min(1.8, cl.duration / Math.max(0.3, finalSpd)))
+      : Math.max(0.35, 0.90 / finalSpd);
+    warriorAttackTimer = warriorAttackDur;
+    animCtrl.triggerOneShot(targetClip, finalSpd);
+    return true;
+  }
+
+  function triggerAttack(arg1 = null, arg2 = 0, arg3 = 1) {
+    if (typeof arg1 === 'number') {
+      return playAttackAnim(null, Number(arg2) || 0, arg1);
+    }
+    return playAttackAnim(arg1, arg2, arg3);
+  }
+
+  function setBlocking(active) {
+    const rolling = Boolean(animCtrl?.isRollActive?.());
+    isWarriorBlocking = isDeadState || rolling ? false : Boolean(active);
+    if (isWarriorBlocking) {
+      isDoorPushing = false;
+      animCtrl?.setDoorPushState?.(false, 0);
+      cancelFlaskDrinkAnim();
+      animCtrl?.cancelTurn180?.();
+    }
+    if (safeClass === 'warrior' && animCtrl?.setBlockState) {
+      animCtrl.setBlockState(isWarriorBlocking);
+    }
+  }
+
+  function playRollAnim(durationSec = 0.6833) {
+    if (isDeadState) return false;
+    const safeDur = Math.max(0.18, Math.min(1.2, Number(durationSec) || 0.6833));
+    isDoorPushing = false;
+    animCtrl?.setDoorPushState?.(false, 0);
+    cancelFlaskDrinkAnim();
+    warriorAttackTimer = 0;
+    dashAnimTimer = 0;
+    isWarriorBlocking = false;
+    animCtrl?.setBlockState?.(false);
+    animCtrl?.cancelTurn180?.();
+    animCtrl?.cancelHit?.();
+    if (animCtrl?.triggerRoll?.(safeDur, 'Combat_Roll')) {
+      if (modelInstance) {
+        modelInstance.rotation.x = 0;
+        modelInstance.position.y = 0;
+      }
+      return true;
+    }
+    // Safe fallback for hero classes without a baked Combat_Roll clip (Mage / Gunslinger)
+    triggerDash(safeDur);
+    return false;
+  }
+
+  function playCriticalRiposte(speed = 1.0, blendInSec = 0.12) {
+    if (isDeadState || !animCtrl) return { ok: false, duration: 0 };
+    const riposteAct = animCtrl.getAction?.('Critical_Riposte');
+    if (!riposteAct) return { ok: false, duration: 0 };
+    const safeSpeed = Number.isFinite(Number(speed)) && Number(speed) > 0.1 ? Number(speed) : 1.0;
+    const safeBlend = Number.isFinite(Number(blendInSec)) && Number(blendInSec) >= 0.02 ? Number(blendInSec) : 0.12;
+    isDoorPushing = false;
+    animCtrl.setDoorPushState?.(false, 0);
+    cancelFlaskDrinkAnim();
+    warriorAttackTimer = 0;
+    dashAnimTimer = 0;
+    isWarriorBlocking = false;
+    animCtrl.setBlockState?.(false);
+    animCtrl.cancelRoll?.();
+    animCtrl.cancelTurn180?.();
+    animCtrl.cancelHit?.();
+    if (modelInstance) {
+      modelInstance.rotation.x = 0;
+      modelInstance.position.y = 0;
+    }
+    animCtrl.triggerOneShot('Critical_Riposte', safeSpeed, safeBlend);
+    const clipDur = riposteAct.getClip?.()?.duration || 2.25;
+    return { ok: true, duration: clipDur / safeSpeed };
+  }
+
+  function isCriticalRiposteActive() {
+    if (isDeadState || !animCtrl) return false;
+    return animCtrl.getActiveAttackClipName?.() === 'Critical_Riposte' && Boolean(animCtrl.isOneShotActive?.());
+  }
+
+  function cancelRollAnim() {
+    animCtrl?.cancelRoll?.();
+  }
+
+  function isRollActive() {
+    return Boolean(!isDeadState && animCtrl?.isRollActive?.());
+  }
+
+  function triggerTurn180(speed = 1.38) {
+    if (isDeadState || isWarriorBlocking || warriorAttackTimer > 0 || flaskDrinkAnimTimer > 0 || isDoorPushActive() || animCtrl?.isHitActive?.() || animCtrl?.isRollActive?.()) return false;
+    if (assetKey !== 'warrior_run' || !animCtrl?.triggerTurn180) return false;
+    return Boolean(animCtrl.triggerTurn180(speed));
+  }
+
+  function cancelTurn180() {
+    animCtrl?.cancelTurn180?.();
+  }
+
+  function isTurn180Active() {
+    return Boolean(!isDeadState && animCtrl?.isTurn180Active?.());
+  }
+
+  function getTurn180State() {
+    if (isDeadState || !animCtrl?.getTurn180Progress) return null;
+    return animCtrl.getTurn180Progress();
+  }
+
+  function triggerHitReact(speed = 4.16, clipName = 'Impact', opts = null) {
+    if (isDeadState || isWarriorBlocking || animCtrl?.isRollActive?.() || isDoorPushActive()) return false;
+    cancelFlaskDrinkAnim();
+    if (!animCtrl?.triggerHit) return false;
+    const interruptAttack = opts?.interruptAttack !== false;
+    if (interruptAttack) {
+      warriorAttackTimer = 0;
+    }
+    animCtrl.cancelTurn180?.();
+    return Boolean(
+      animCtrl.triggerHit(speed, clipName, {
+        interruptAttack,
+        blockGuard: true,
+        blendInSec: opts?.blendInSec ?? 0.028,
+        blendOutSec: opts?.blendOutSec ?? 0.070,
+        maxWeight: opts?.maxWeight ?? 1.0
+      })
+    );
+  }
+
+  function cancelHitReact() {
+    animCtrl?.cancelHit?.();
+  }
+
+  function isHitReactActive() {
+    return Boolean(!isDeadState && animCtrl?.isHitActive?.());
+  }
+
+  function setDeadState(dead, speed = 1.25) {
+    const wantDead = Boolean(dead);
+    if (wantDead) {
+      isDoorPushing = false;
+      animCtrl?.setDoorPushState?.(false, 0);
+      cancelFlaskDrinkAnim();
+      if (isDeadState) {
+        return lastDeathDuration || 1.4;
+      }
+      isDeadState = true;
+      isWarriorBlocking = false;
+      isReloadingState = false;
+      dashAnimTimer = 0;
+      warriorAttackTimer = 0;
+      gunKickTimer = 0;
+      warriorSprintBlend = 0;
+      beastRing.visible = false;
+      if (heroContactShadow) {
+        heroContactShadow.userData?.setShadowOpacity?.(0.22);
+      }
+      pendingFootstepEvent = null;
+      prevLocomotionClip = null;
+      prevLocomotionPhase = null;
+      if (warriorStanceRig?.state) {
+        warriorStanceRig.state.blend = 0;
+      }
+
+      const safeSpeed = Math.max(0.25, Math.abs(Number(speed) || 1.25));
+      let clipDur = 0;
+      if (animCtrl) {
+        if (typeof animCtrl.setDeadState === 'function') {
+          clipDur = Number(animCtrl.setDeadState(true, safeSpeed)) || 0;
+        } else if (animCtrl.triggerDeath?.(safeSpeed)) {
+          clipDur = Number(animCtrl.getDeathClipDuration?.(safeSpeed)) || 1.73;
+        }
+      }
+      if (clipDur > 0) {
+        proceduralDeathFall = false;
+        deathFallProgress = 0;
+        if (modelInstance) {
+          modelInstance.rotation.x = 0;
+          modelInstance.position.y = 0;
+          modelInstance.position.z = 0;
+        }
+        lastDeathDuration = clipDur;
+      } else {
+        proceduralDeathFall = true;
+        deathFallProgress = 0;
+        lastDeathDuration = 1.4;
+      }
+      return lastDeathDuration;
+    }
+
+    // Revive / reset back to clean Idle & normal controls
+    if (!isDeadState && !animCtrl?.isDeadState?.()) {
+      return 0;
+    }
+    cancelFlaskDrinkAnim();
+    isDoorPushing = false;
+    animCtrl?.setDoorPushState?.(false, 0);
+    isDeadState = false;
+    proceduralDeathFall = false;
+    deathFallProgress = 0;
+    lastDeathDuration = 0;
+    isWarriorBlocking = false;
+    isReloadingState = false;
+    dashAnimTimer = 0;
+    warriorAttackTimer = 0;
+    gunKickTimer = 0;
+    warriorSprintBlend = 0;
+    flashTimer = 0;
+    if (heroContactShadow) {
+      heroContactShadow.visible = true;
+      heroContactShadow.userData?.setShadowOpacity?.(heroContactShadow.userData?.baseOpacity ?? 0.56);
+    }
+    pendingFootstepEvent = null;
+    prevLocomotionClip = null;
+    prevLocomotionPhase = null;
+
+    if (modelInstance) {
+      modelInstance.rotation.x = 0;
+      modelInstance.position.y = 0;
+      modelInstance.position.z = 0;
+    }
+    if (animCtrl) {
+      if (typeof animCtrl.setDeadState === 'function') {
+        animCtrl.setDeadState(false);
+      } else {
+        animCtrl.resetAlive?.();
+      }
+    }
+    if (warriorStanceRig?.state) {
+      warriorStanceRig.state.blend = 1;
+    }
+    if (assetKey === 'warrior_run' && isCurrentWeaponTwoHanded) {
+      applyWarriorWeaponAnimOverlay(0.016, false, 0, 0);
+    } else if (isTripoGunslinger && !hasBakedGunslingerClips) {
+      positionTripoGunPivot(0, 0, 0, 0, isBeast ? 1.78 : 1);
+      applyTripoGunslingerPose(0, 0, 0);
+    }
+    setBeastMode(isBeast);
+    return 0;
+  }
+
+  function playDeathAnim(speed = 1.25) {
+    return setDeadState(true, speed);
+  }
+
+  function resetDeath() {
+    return setDeadState(false);
+  }
+
+  function isDead() {
+    return Boolean(isDeadState || animCtrl?.isDeadState?.());
+  }
+
   function flashHit() {
+    if (isDeadState) return;
     flashTimer = 0.12;
     for (const item of instanceMats) {
       if (item.mat.emissive && !item.hasEyeMap && item.baseEmissiveInt < 2.0) {
@@ -2986,7 +4187,7 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
   const _strideBoostQ = new THREE.Quaternion();
   let warriorSprintBlend = 0;
 
-  function applyWarriorWeaponAnimOverlay(safeDt, isMoving, elapsedTime) {
+  function applyWarriorWeaponAnimOverlay(safeDt, isMoving, elapsedTime, speedRatio = 1) {
     if (safeClass !== 'warrior' || !modelInstance) return;
     if (warriorAttackTimer > 0) {
       warriorAttackTimer = Math.max(0, warriorAttackTimer - safeDt);
@@ -2997,31 +4198,61 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
     const isZwei = currentWeaponStyle === 'zweihander';
     const isTwoHand = isCurrentWeaponTwoHanded || isSpear || isZwei || isAxe || isHammer;
 
-    // Keep 1H Oath Sword + Shield on warrior_run 100% pure golden Mixamo clip animation!
-    if (assetKey === 'warrior_run' && !isTwoHand) {
+    if (mountedWeaponObj?.userData?.basePos && mountedWeaponObj?.userData?.baseQuat) {
+      mountedWeaponObj.position.copy(mountedWeaponObj.userData.basePos);
+      mountedWeaponObj.quaternion.copy(mountedWeaponObj.userData.baseQuat);
+    }
+
+    // Warrior_Run.glb:
+    //  - 1H Sword + Shield ('club', 'blade', 'claymore'): 100% pure golden Mixamo clips!
+    //  - 2H weapons (Axe, Hammer, Zweihander, Spear): dedicated Blender-verified stance solver
+    //    (warriorStances.js) with smooth fade-out during active swings/block/death & zero clipping!
+    if (assetKey === 'warrior_run') {
+      if (!isTwoHand) {
+        return;
+      }
+      const isDead = Boolean(animCtrl?.isDeadState?.());
+      const isHitReacting = Boolean(animCtrl?.isHitActive?.());
+      const isRolling = Boolean(animCtrl?.isRollActive?.());
+      const isDrinking = flaskDrinkAnimTimer > 0;
+      const isDoorPush = isDoorPushActive();
+      const isAttacking = warriorAttackTimer > 0 || Boolean(animCtrl?.isOneShotActive?.());
+      warriorStanceRig.modelInstance = modelInstance;
+      warriorStanceRig.mountedWeaponObj = mountedWeaponObj;
+      warriorStanceRig.leftGripSocket = warriorLeftGripSocket;
+
+      const stanceBlend = applyWarriorWeaponStance(warriorStanceRig, currentWeaponId, safeDt, {
+        isAttacking: isAttacking || isHitReacting || isRolling || isDrinking || isDoorPush,
+        isBlocking: isWarriorBlocking,
+        isHub: !isMoving && !isAttacking && !isHitReacting && !isRolling && !isWarriorBlocking && !isDrinking && !isDoorPush,
+        moveSpeed: isMoving ? (speedRatio || 1) : 0,
+        isMoving,
+        elapsedTime,
+        isDead
+      });
+
+      if (!isDead && warriorAttackTimer > 0 && warriorAttackDur > 0) {
+        const u = Math.max(0, Math.min(1, 1 - warriorAttackTimer / warriorAttackDur));
+        applyWarriorAttackOverlay(warriorStanceRig, currentWeaponId, u, stanceBlend);
+      }
+
+      modelInstance.position.z = 0;
       return;
     }
 
     const wChest = chestBone || mx.Spine2?.node || mx.Spine1?.node;
     const wUpperR = upperArmR || mx.RightArm?.node;
     const wLowerR = lowerArmR || mx.RightForeArm?.node;
-    const wShoulderL = mx.LeftShoulder?.node;
     const wUpperL = upperArmL || mx.LeftArm?.node;
     const wLowerL = lowerArmL || mx.LeftForeArm?.node;
 
-    if (mountedWeaponObj?.userData?.basePos && mountedWeaponObj?.userData?.baseQuat) {
-      mountedWeaponObj.position.copy(mountedWeaponObj.userData.basePos);
-      mountedWeaponObj.quaternion.copy(mountedWeaponObj.userData.baseQuat);
-    }
-
     let lungeZ = 0;
 
-    // Distinct Two-Handed Carry & Guard Stance (Idle & Run)
+    // Legacy KayKit fallback Two-Handed Carry & Guard Stance (when warrior_run is unavailable)
     if (isTwoHand) {
       const sway = isMoving ? Math.sin(elapsedTime * 9.5) * 0.065 : Math.sin(elapsedTime * 2.2) * 0.022;
       if (warriorAttackTimer <= 0) {
         if (isSpear) {
-          // Spear: couched forward-angled guard across the right hip
           if (wChest) {
             _wEuler.set(0.05, -0.14, 0);
             _wQuat.setFromEuler(_wEuler);
@@ -3038,7 +4269,6 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
             wLowerR.quaternion.multiply(_wQuat);
           }
         } else {
-          // Zweihander / Axe / Hammer: weighty diagonal two-handed battle carry
           const heavyLift = isZwei ? -0.18 : 0.10;
           if (wChest) {
             _wEuler.set(0.04, 0.10, 0);
@@ -3059,11 +4289,10 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
       }
     }
 
-    // Distinct Two-Handed Attack Trajectories (Spear Thrust vs Heavy 2H Greatsword/Axe/Hammer Cleave)
+    // Legacy KayKit fallback attack trajectories
     if (warriorAttackTimer > 0 && warriorAttackDur > 0) {
       const u = Math.max(0, Math.min(1, 1 - warriorAttackTimer / warriorAttackDur));
       if (isSpear) {
-        // Directed Forward Spear Thrust: snappy pullback -> straight piercing lunge -> recovery
         const wind = u < 0.22 ? Math.sin((u / 0.22) * Math.PI * 0.5) : Math.max(0, 1 - (u - 0.22) / 0.14);
         const thrust =
           u < 0.20
@@ -3088,14 +4317,12 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
           wLowerR.quaternion.multiply(_wQuat);
         }
         if (mountedWeaponObj?.userData?.basePos) {
-          // Slide spear shaft directly along its forward tip axis (-Y in mountPivot)
           mountedWeaponObj.translateY(-(thrust * 0.20 - wind * 0.09));
           _wEuler.set(0.18 * thrust, 0, -0.14 * thrust);
           _wQuat.setFromEuler(_wEuler);
           mountedWeaponObj.quaternion.multiply(_wQuat);
         }
       } else if (isZwei || isAxe || isHammer) {
-        // Heavy Wide Two-Handed Cleave with full torso wind-up twist & weighty arc follow-through
         const wind = u < 0.28 ? Math.sin((u / 0.28) * Math.PI * 0.5) : 0;
         const swing =
           u < 0.28
@@ -3129,7 +4356,6 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
           mountedWeaponObj.quaternion.multiply(_wQuat);
         }
       } else {
-        // Fallback KayKit 1H Sword diagonal chop
         const wind = u < 0.28 ? u / 0.28 : 0;
         const chop = u >= 0.28 ? Math.sin(Math.min(1, (u - 0.28) / 0.52) * Math.PI * 0.5) : 0;
         const release = u > 0.80 ? 1 - (u - 0.80) / 0.20 : 1;
@@ -3153,34 +4379,267 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
       }
     }
 
-    // Procedural Two-Handed Left-Arm Grip onto shaft/hilt (2-Bone Analytic IK on Mixamo, quaternion fallback on KayKit)
+    // Legacy KayKit fallback Two-Handed Left-Arm pose
     if (isTwoHand) {
-      if (mx.LeftArm && mx.LeftForeArm && mx.LeftHand && warriorLeftGripSocket) {
-        if (wShoulderL) {
-          _wEuler.set(0.14, 0.22, -0.12);
-          _wQuat.setFromEuler(_wEuler);
-          wShoulderL.quaternion.multiply(_wQuat);
-        }
-        root.updateMatrixWorld(true);
-        warriorLeftGripSocket.getWorldPosition(_warriorGripW);
-        warriorPoleL.getWorldPosition(_warriorPoleW);
-        solveMixamoArmIK(mx.LeftArm, mx.LeftForeArm, mx.LeftHand, _warriorGripW, _warriorPoleW, 0.88);
-      } else {
-        const sway = isMoving ? Math.sin(elapsedTime * 9.5) * 0.07 : Math.sin(elapsedTime * 2.2) * 0.025;
-        if (wUpperL) {
-          _wEuler.set(0.28 + sway, 0.24, -0.42);
-          _wQuat.setFromEuler(_wEuler);
-          wUpperL.quaternion.multiply(_wQuat);
-        }
-        if (wLowerL) {
-          _wEuler.set(-0.36, 0.34, 0.22);
-          _wQuat.setFromEuler(_wEuler);
-          wLowerL.quaternion.multiply(_wQuat);
-        }
+      const sway = isMoving ? Math.sin(elapsedTime * 9.5) * 0.07 : Math.sin(elapsedTime * 2.2) * 0.025;
+      if (wUpperL) {
+        _wEuler.set(0.28 + sway, 0.24, -0.42);
+        _wQuat.setFromEuler(_wEuler);
+        wUpperL.quaternion.multiply(_wQuat);
+      }
+      if (wLowerL) {
+        _wEuler.set(-0.36, 0.34, 0.22);
+        _wQuat.setFromEuler(_wEuler);
+        wLowerL.quaternion.multiply(_wQuat);
       }
     }
 
     modelInstance.position.z = isTripoWarrior ? 0 : lungeZ;
+  }
+
+  // Dark Souls / Elden Ring Estus Flask Drinking Overlay (runs AFTER mixer.update so Hero can slow-walk while drinking!):
+  //  - Shield on LeftHand smoothly swings around left shoulder onto Spine2 back-sling (u: 0..0.15 stow, 0.82..1.00 return)
+  //  - RightArm + Sword gently lowers to relaxed right-hip hold (blade pointed down-and-back, NEVER near visor/mouth!)
+  //  - LeftArm lifts glowing Golden Estus Flask straight to helmet visor (u: 0..0.28), tilts to pour (0.28..0.72)
+  //    with Head tilt-back (-0.22 rad) & golden emissive surge, then lowers cleanly and stows flask (0.72..1.0)!
+  function applyWarriorFlaskDrinkOverlay(safeDt, _isMoving, elapsedTime) {
+    if (flaskDrinkAnimTimer <= 0) {
+      if (estusFlaskMesh?.visible || shieldStowedToModelSpace) {
+        cancelFlaskDrinkAnim();
+      }
+      return;
+    }
+    if (isDeadState || animCtrl?.isRollActive?.() || animCtrl?.isHitActive?.()) {
+      cancelFlaskDrinkAnim();
+      return;
+    }
+
+    flaskDrinkAnimTimer = Math.max(0, flaskDrinkAnimTimer - safeDt);
+    if (flaskDrinkAnimTimer <= 0) {
+      cancelFlaskDrinkAnim();
+      return;
+    }
+    if (safeClass !== 'warrior' || !modelInstance) {
+      return;
+    }
+
+    const u = Math.max(0, Math.min(1, 1 - flaskDrinkAnimTimer / Math.max(0.05, flaskDrinkAnimDur)));
+    const stowT = smoothstep01(0.00, 0.15, u) * (1 - smoothstep01(0.82, 1.00, u));
+    const armBlend = smoothstep01(0.00, 0.18, u) * (1 - smoothstep01(0.76, 1.00, u));
+    const leftBlend = smoothstep01(0.00, 0.16, u) * (1 - smoothstep01(0.80, 1.00, u));
+    const liftT = smoothstep01(0.02, 0.28, u) * (1 - smoothstep01(0.72, 0.96, u));
+    const pourT = smoothstep01(0.28, 0.42, u) * (1 - smoothstep01(0.62, 0.74, u));
+    const flaskScaleT = smoothstep01(0.00, 0.10, u) * (1 - smoothstep01(0.88, 1.00, u));
+
+    const activeShield = mountedShieldObj || legacyWarriorShieldObj;
+
+    // 1. Update Golden Estus Flask visibility, smooth scale & amber glow surge during pour
+    if (estusFlaskMesh) {
+      estusFlaskMesh.visible = flaskScaleT > 0.005;
+      const baseSc = estusFlaskMesh.userData?.baseScale ?? 1.0;
+      estusFlaskMesh.scale.setScalar(baseSc * (0.28 + 0.72 * flaskScaleT));
+      const { glassMat, coreMat, haloMat, haloMesh } = estusFlaskMesh.userData || {};
+      const flicker = Math.sin(elapsedTime * 18.0) * 0.22 * pourT;
+      if (coreMat) {
+        coreMat.emissiveIntensity = 2.1 + pourT * 2.8 + flicker;
+      }
+      if (glassMat) {
+        glassMat.emissiveIntensity = 0.75 + pourT * 1.15 + flicker * 0.4;
+      }
+      if (haloMat) {
+        haloMat.opacity = 0.15 + pourT * 0.24 + Math.sin(elapsedTime * 14.0) * 0.04 * pourT;
+      }
+      if (haloMesh) {
+        haloMesh.scale.setScalar(1.0 + pourT * 0.28 + Math.sin(elapsedTime * 14.0) * 0.06 * pourT);
+      }
+    }
+
+    // 2. Full Mixamo 2-Bone IK + Spine2 back-shield sling for Warrior_Run.glb
+    if (assetKey === 'warrior_run' && mx.Spine2?.node && mx.LeftArm?.node && mx.LeftForeArm?.node && mx.LeftHand?.node) {
+      modelInstance.updateWorldMatrix(true, true);
+      _fModelMatInv.copy(modelInstance.matrixWorld).invert();
+      modelInstance.getWorldQuaternion(_fModelQ);
+      _fModelQInv.copy(_fModelQ).invert();
+
+      // Capture the shield's pre-IK LeftHand pose BEFORE raising LeftArm so the shield detaches cleanly
+      // from resting hip/forearm level and sweeps outward around the left shoulder onto Spine2 (0 helmet clipping!).
+      let hasHandShieldPose = false;
+      if (activeShield && handL && activeShield.userData?.basePos && activeShield.userData?.baseQuat && activeShield.userData?.baseScale) {
+        _fShieldTmpM4.compose(
+          activeShield.userData.basePos,
+          activeShield.userData.baseQuat,
+          activeShield.userData.baseScale
+        );
+        _fShieldTmpM4.premultiply(handL.matrixWorld).premultiply(_fModelMatInv);
+        _fShieldTmpM4.decompose(_fShieldHandPosM, _fShieldHandQuatM, _fShieldTmpS);
+        hasHandShieldPose = true;
+      }
+
+      // A) Torso: gently square upper chest forward (+0.08 rad yaw) + slight chest-up pour lean
+      mx.Spine2.node.getWorldQuaternion(_fBoneModelQ).premultiply(_fModelQInv);
+      _fFwd.copy(_FLASK_UNIT_X).applyQuaternion(_fBoneModelQ);
+      const curTorsoYaw = Math.atan2(_fFwd.x, _fFwd.z);
+      const torsoYawDelta = normalizeFlaskAngle(0.08 - curTorsoYaw);
+      if (mx.Spine1?.node) {
+        rotateFlaskBoneModelAxis(mx.Spine1.node, _FLASK_UNIT_Y, torsoYawDelta * 0.38, armBlend * 0.85);
+      }
+      rotateFlaskBoneModelAxis(mx.Spine2.node, _FLASK_UNIT_Y, torsoYawDelta * 0.62, armBlend * 0.85);
+      if (pourT > 0.001) {
+        rotateFlaskBoneModelAxis(mx.Spine2.node, _FLASK_UNIT_X, -0.055 * pourT, 1.0);
+      }
+
+      // B) Neck & Head: face straight forward and smoothly tilt horned helmet BACK (-0.22 rad) while pouring!
+      if (mx.Head?.node) {
+        mx.Head.node.getWorldQuaternion(_fBoneModelQ).premultiply(_fModelQInv);
+        _fFwd.copy(_FLASK_UNIT_X).applyQuaternion(_fBoneModelQ);
+        const headYawFix = normalizeFlaskAngle(-Math.atan2(_fFwd.x, _fFwd.z)) * 0.92;
+        if (mx.Neck?.node) {
+          rotateFlaskBoneModelAxis(mx.Neck.node, _FLASK_UNIT_Y, headYawFix * 0.42, armBlend);
+        }
+        rotateFlaskBoneModelAxis(mx.Head.node, _FLASK_UNIT_Y, headYawFix * 0.58, armBlend);
+        if (pourT > 0.001) {
+          if (mx.Neck?.node) {
+            rotateFlaskBoneModelAxis(mx.Neck.node, _FLASK_UNIT_X, -0.08 * pourT, 1.0);
+          }
+          rotateFlaskBoneModelAxis(mx.Head.node, _FLASK_UNIT_X, -0.17 * pourT, 1.0);
+        }
+      }
+
+      // C) Clavicles: soften right shoulder down, protract left shoulder gently up-forward for visor reach
+      if (mx.RightShoulder) {
+        setFlaskClavicleModelRot(mx.RightShoulder, 0.06, -0.06, armBlend);
+      }
+      if (mx.LeftShoulder) {
+        setFlaskClavicleModelRot(mx.LeftShoulder, -0.22 * liftT, 0.07 * liftT, leftBlend);
+      }
+
+      // Refresh live Spine2 & Head positions in modelInstance space after torso/head adjustments
+      mx.Spine2.node.getWorldPosition(_fSpineM).applyMatrix4(_fModelMatInv);
+      if (mx.Head?.node) {
+        mx.Head.node.getWorldPosition(_fHeadM).applyMatrix4(_fModelMatInv);
+      } else {
+        _fHeadM.set(_fSpineM.x, _fSpineM.y + 0.095, _fSpineM.z + 0.025);
+      }
+
+      // D) Right Arm + Sword: relaxed low grip at right hip (blade directed down-outward-back, 0 face/floor clip!)
+      if (mx.RightArm?.node && mx.RightForeArm?.node && mx.RightHand?.node && armBlend > 0.002) {
+        _fTargetRM.set(_fSpineM.x - 0.175, _fSpineM.y - 0.090, _fSpineM.z - 0.015);
+        _fPoleRM.set(_fSpineM.x - 0.340, _fSpineM.y - 0.050, _fSpineM.z - 0.160);
+        _fTargetRW.copy(_fTargetRM).applyMatrix4(modelInstance.matrixWorld);
+        _fPoleRW.copy(_fPoleRM).applyMatrix4(modelInstance.matrixWorld);
+        solveMixamoArmIK(mx.RightArm, mx.RightForeArm, mx.RightHand, _fTargetRW, _fPoleRW, armBlend);
+        setFlaskBoneModelQuat(mx.RightHand.node, _FLASK_SWORD_LOWER_HAND_R_MODEL_Q, armBlend);
+      }
+
+      // E) Left Arm + Glowing Golden Estus Flask: smooth lift from left hip -> jaw/visor -> pour tilt -> lower
+      if (leftBlend > 0.002) {
+        _fLowLM.set(_fSpineM.x + 0.165, _fSpineM.y - 0.075, _fSpineM.z + 0.105);
+        _fHighLM.set(
+          _fHeadM.x + 0.068,
+          _fHeadM.y - 0.032 + 0.010 * pourT,
+          _fHeadM.z + 0.145 - 0.012 * pourT
+        );
+        _fTargetLM.lerpVectors(_fLowLM, _fHighLM, liftT);
+        _fTargetLM.x += 0.032 * Math.sin(Math.PI * liftT);
+
+        _fPoleLM.set(
+          _fSpineM.x + 0.35 + 0.04 * pourT,
+          _fSpineM.y - 0.09 + 0.12 * liftT + 0.05 * pourT,
+          _fSpineM.z - 0.02 + 0.09 * liftT
+        );
+        _fTargetLW.copy(_fTargetLM).applyMatrix4(modelInstance.matrixWorld);
+        _fPoleLW.copy(_fPoleLM).applyMatrix4(modelInstance.matrixWorld);
+        solveMixamoArmIK(mx.LeftArm, mx.LeftForeArm, mx.LeftHand, _fTargetLW, _fPoleLW, leftBlend);
+
+        // Align LeftHand so bottle neck (+X_LeftHand) holds upright on lift and pours cleanly into visor during pourT!
+        mx.LeftForeArm.node.getWorldPosition(_fElbLM).applyMatrix4(_fModelMatInv);
+        mx.LeftHand.node.getWorldPosition(_fHandLM).applyMatrix4(_fModelMatInv);
+        _fForeY.subVectors(_fHandLM, _fElbLM);
+        if (_fForeY.lengthSq() > 1e-6) {
+          _fForeY.normalize();
+          _fFlaskAxisX.copy(_FLASK_UPRIGHT_AXIS_M).lerp(_FLASK_POUR_AXIS_M, pourT).normalize();
+          _fForeY.addScaledVector(_fFlaskAxisX, -_fForeY.dot(_fFlaskAxisX));
+          if (_fForeY.lengthSq() < 1e-5) {
+            _fForeY.set(-0.7, 0.0, 0.7).addScaledVector(_fFlaskAxisX, -(-0.7 * _fFlaskAxisX.x + 0.7 * _fFlaskAxisX.z));
+          }
+          _fForeY.normalize();
+          _fHandZ.crossVectors(_fFlaskAxisX, _fForeY).normalize();
+          _fForeY.crossVectors(_fHandZ, _fFlaskAxisX).normalize();
+          _fBasisM4.makeBasis(_fFlaskAxisX, _fForeY, _fHandZ);
+          _fHandLModelQ.setFromRotationMatrix(_fBasisM4).normalize();
+          setFlaskBoneModelQuat(mx.LeftHand.node, _fHandLModelQ, leftBlend);
+        }
+      }
+
+      // F) Shield smoothly slung behind left shoulder onto Spine2 back anchor (u: 0..0.15 stow, 0.82..1.00 return)
+      if (activeShield && warriorShieldBackAnchor && hasHandShieldPose) {
+        if (activeShield.parent !== modelInstance) {
+          modelInstance.add(activeShield);
+          shieldStowedToModelSpace = true;
+        }
+        mx.Spine2.node.updateMatrixWorld(true);
+        _fShieldTmpM4.copy(warriorShieldBackAnchor.matrixWorld).premultiply(_fModelMatInv);
+        _fShieldTmpM4.decompose(_fShieldBackPosM, _fShieldBackQuatM, _fShieldTmpS);
+
+        activeShield.position.lerpVectors(_fShieldHandPosM, _fShieldBackPosM, stowT);
+        const arc = Math.sin(Math.PI * stowT);
+        activeShield.position.x += 0.14 * arc;
+        activeShield.position.z -= 0.04 * arc;
+        activeShield.quaternion.copy(_fShieldHandQuatM).slerp(_fShieldBackQuatM, stowT).normalize();
+        if (activeShield.userData?.baseScale) {
+          activeShield.scale.copy(activeShield.userData.baseScale);
+        }
+      }
+      return;
+    }
+
+    // 3. Legacy KayKit fallback Warrior drinking pose (when Warrior_Run.glb is unavailable)
+    if (upperArmR) {
+      _wEuler.set(0.32 * armBlend, 0.10 * armBlend, 0.28 * armBlend);
+      _wQuat.setFromEuler(_wEuler);
+      upperArmR.quaternion.multiply(_wQuat);
+    }
+    if (lowerArmR) {
+      _wEuler.set(-0.22 * armBlend, 0, -0.12 * armBlend);
+      _wQuat.setFromEuler(_wEuler);
+      lowerArmR.quaternion.multiply(_wQuat);
+    }
+    if (upperArmL) {
+      _wEuler.set((-1.05 * liftT - 0.18 * pourT) * leftBlend, -0.42 * liftT * leftBlend, -0.35 * liftT * leftBlend);
+      _wQuat.setFromEuler(_wEuler);
+      upperArmL.quaternion.multiply(_wQuat);
+    }
+    if (lowerArmL) {
+      _wEuler.set((-0.85 * liftT - 0.35 * pourT) * leftBlend, 0.25 * liftT * leftBlend, 0.22 * pourT * leftBlend);
+      _wQuat.setFromEuler(_wEuler);
+      lowerArmL.quaternion.multiply(_wQuat);
+    }
+    if (headBone && pourT > 0.001) {
+      _wEuler.set(-0.22 * pourT, 0, 0);
+      _wQuat.setFromEuler(_wEuler);
+      headBone.quaternion.multiply(_wQuat);
+    }
+    if (activeShield && warriorShieldBackAnchor && handL && activeShield.userData?.basePos) {
+      modelInstance.updateWorldMatrix(true, true);
+      _fModelMatInv.copy(modelInstance.matrixWorld).invert();
+      _fShieldTmpM4.compose(
+        activeShield.userData.basePos,
+        activeShield.userData.baseQuat,
+        activeShield.userData.baseScale
+      );
+      _fShieldTmpM4.premultiply(handL.matrixWorld).premultiply(_fModelMatInv);
+      _fShieldTmpM4.decompose(_fShieldHandPosM, _fShieldHandQuatM, _fShieldTmpS);
+      _fShieldTmpM4.copy(warriorShieldBackAnchor.matrixWorld).premultiply(_fModelMatInv);
+      _fShieldTmpM4.decompose(_fShieldBackPosM, _fShieldBackQuatM, _fShieldTmpS);
+      if (activeShield.parent !== modelInstance) {
+        modelInstance.add(activeShield);
+        shieldStowedToModelSpace = true;
+      }
+      activeShield.position.lerpVectors(_fShieldHandPosM, _fShieldBackPosM, stowT);
+      activeShield.position.x += 0.22 * Math.sin(Math.PI * stowT);
+      activeShield.quaternion.copy(_fShieldHandQuatM).slerp(_fShieldBackQuatM, stowT).normalize();
+      activeShield.scale.copy(activeShield.userData.baseScale);
+    }
   }
 
   function applyGunslingerWeaponAnimOverlay(safeDt, isMoving, elapsedTime) {
@@ -3303,7 +4762,45 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
 
   function update(dt, isMoving = false, speedRatio = 1, elapsedTime = 0, moveLocalX = 0, moveLocalZ = 1, isSprinting = false) {
     const safeDt = Math.min(Math.max(dt || 0.016, 0), 0.1);
+    syncSoulsRimLightFromBiome();
+
+    // Dead state: advance Death_A to its clamped final frame (or procedural collapse fallback)
+    // and never overwrite weights with Idle/Running/weapon stances until setDeadState(false).
+    if (isDeadState) {
+      pendingFootstepEvent = null;
+      prevLocomotionClip = null;
+      prevLocomotionPhase = null;
+      beastRing.visible = false;
+      if (animCtrl) {
+        animCtrl.updateOneShotFade?.(safeDt);
+        animCtrl.mixer.update(safeDt);
+      }
+      if (proceduralDeathFall && modelInstance) {
+        deathFallProgress = Math.min(1, deathFallProgress + safeDt / 0.85);
+        const t = deathFallProgress;
+        const fall =
+          t < 0.68
+            ? (t / 0.68) * (t / 0.68) * 0.86
+            : 0.86 + Math.sin(((t - 0.68) / 0.32) * Math.PI * 0.5) * 0.14;
+        modelInstance.rotation.x = -Math.PI * 0.46 * fall;
+        modelInstance.position.y = 0.12 * fall;
+      }
+      if (staffCastPulse > 0) {
+        staffCastPulse = Math.max(0, staffCastPulse - safeDt * 5.2);
+      }
+      if (embeddedStaffVfx) {
+        embeddedStaffVfx.updateVfx(elapsedTime, staffCastPulse);
+      }
+      if (flashTimer > 0) {
+        flashTimer = Math.max(0, flashTimer - safeDt);
+        if (flashTimer <= 0) setBeastMode(false);
+      }
+      return;
+    }
+
     let activeRunClip = 'Running_A';
+    const isTurning180 = Boolean(animCtrl?.isTurn180Active?.());
+    const isRolling = Boolean(animCtrl?.isRollActive?.());
     if (animCtrl) {
       if (isMoving) {
         let runClip = isBeast && asset?.clips?.has('Running_B') ? 'Running_B' : 'Running_A';
@@ -3314,16 +4811,19 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
           } else if (moveLocalZ < -0.35 && asset?.clips?.has('Running_Back')) {
             runClip = 'Running_Back';
           }
-        } else if (isTripoWarrior && moveLocalZ < -0.35 && asset?.clips?.has('Running_Back')) {
+        } else if (isTripoWarrior && !isTurning180 && !isRolling && moveLocalZ < -0.35 && asset?.clips?.has('Running_Back')) {
           runClip = 'Running_Back';
         }
         activeRunClip = runClip;
         let runScale;
         if (assetKey === 'warrior_run') {
+          // Measured heavy-armored knight cadence (Running_A ×0.84 vs legacy 3.15 -> weighty grounded footsteps, 0 chatter!)
+          const minRunSpd = flaskDrinkAnimTimer > 0 ? 0.72 : 1.22;
+          const minBackSpd = flaskDrinkAnimTimer > 0 ? 0.75 : 1.15;
           runScale =
             runClip === 'Running_Back'
-              ? Math.max(1.15, Math.min(2.9, speedRatio * 2.55))
-              : Math.max(1.45, Math.min(3.85, speedRatio * 3.15));
+              ? Math.max(minBackSpd, Math.min(2.9, speedRatio * 2.55))
+              : Math.max(minRunSpd, Math.min(3.23, speedRatio * 2.65));
         } else {
           runScale = Math.max(0.95, Math.min(2.15, speedRatio * 1.32));
         }
@@ -3337,11 +4837,16 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
       // Sync footstep audio strictly to exact visual boot-plant phase crossings of the active run clip.
       if (footPlantMap) {
         pendingFootstepEvent = null;
-        if (isMoving) {
+        if (isMoving && !isRolling) {
           const plantPhases = footPlantMap[activeRunClip];
           const lowerRunAct = plantPhases ? animCtrl.getAction?.(`${activeRunClip}__Lower`) : null;
           const fullRunAct = plantPhases ? animCtrl.getAction?.(activeRunClip) : null;
-          const act = lowerRunAct && lowerRunAct.getEffectiveWeight() > 0.35 ? lowerRunAct : fullRunAct;
+          const act =
+            lowerRunAct && lowerRunAct.isRunning() && lowerRunAct.getEffectiveWeight() > 0.35
+              ? lowerRunAct
+              : fullRunAct && fullRunAct.isRunning()
+                ? fullRunAct
+                : null;
           const dur = act?.getClip?.()?.duration || 0;
           if (act && dur > 0.01 && act.getEffectiveWeight() > 0.35) {
             const currPhase01 = (((act.time % dur) + dur) % dur) / dur;
@@ -3375,13 +4880,24 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
     // and add a subtle athletic forward lean when sprinting (Shift), so faster movement
     // looks grounded rather than pushed by an external force.
     if (assetKey === 'warrior_run' && modelInstance && animCtrl) {
-      const targetSprint = isMoving && isSprinting && activeRunClip === 'Running_A' ? 1 : 0;
+      const isHitReacting = Boolean(animCtrl.isHitActive?.());
+      const isDoorPush = isDoorPushActive();
+      const targetSprint = isMoving && isSprinting && !isHitReacting && !isRolling && !isDoorPush && activeRunClip === 'Running_A' ? 1 : 0;
       warriorSprintBlend += (targetSprint - warriorSprintBlend) * Math.min(1, safeDt * 9);
-      const runAct = animCtrl.getAction?.('Running_A');
-      const runWeight = runAct ? runAct.getEffectiveWeight() : 0;
-      const legMeans = runAct?.getClip?.()?.userData?.legMeans;
+      let runWeight = 0;
+      let legMeans = null;
+      if (isMoving && !isTurning180 && !isHitReacting && !isRolling && !isDoorPush && activeRunClip === 'Running_A') {
+        const runAct = animCtrl.getAction?.('Running_A');
+        const lowerRunAct = animCtrl.getAction?.('Running_A__Lower');
+        runWeight = Math.min(
+          1,
+          (runAct && runAct.isRunning() ? runAct.getEffectiveWeight() : 0) +
+            (lowerRunAct && lowerRunAct.isRunning() ? lowerRunAct.getEffectiveWeight() : 0)
+        );
+        legMeans = runAct?.getClip?.()?.userData?.legMeans || null;
+      }
       if (runWeight > 0.05 && legMeans) {
-        const amp = 1 + (0.22 + warriorSprintBlend * 0.28) * runWeight;
+        const amp = 1 + (0.28 + warriorSprintBlend * 0.26) * runWeight;
         for (const [boneName, qMean] of legMeans.entries()) {
           const bone = mx[boneName]?.node;
           if (!bone) continue;
@@ -3396,19 +4912,26 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
           const sinHalf = Math.hypot(_strideDelta.x, _strideDelta.y, _strideDelta.z);
           if (sinHalf > 1e-4) {
             const halfAngle = Math.atan2(sinHalf, _strideDelta.w);
-            const scaledAngle = Math.min(1.22, halfAngle * 2 * amp);
+            const scaledAngle = Math.min(1.25, halfAngle * 2 * amp);
             _strideAxis.set(_strideDelta.x / sinHalf, _strideDelta.y / sinHalf, _strideDelta.z / sinHalf);
             _strideBoostQ.setFromAxisAngle(_strideAxis, scaledAngle);
             bone.quaternion.copy(qMean).multiply(_strideBoostQ);
           }
         }
       }
-      const targetLean = (isMoving && activeRunClip === 'Running_A' ? 0.035 : 0) + warriorSprintBlend * 0.11;
+      const targetLean = isTurning180 || isHitReacting || isRolling || isDoorPush || isCriticalRiposteActive() || flaskDrinkAnimTimer > 0
+        ? 0
+        : (isMoving && activeRunClip === 'Running_A' ? 0.035 : 0) + warriorSprintBlend * 0.11;
       modelInstance.rotation.x += (targetLean - modelInstance.rotation.x) * Math.min(1, safeDt * 10);
     }
 
-    // Dynamic Dash lean + athletic arm sweep / crouch across all hero classes!
-    if (dashAnimTimer > 0 && modelInstance) {
+    // Dynamic Dash lean + athletic arm sweep / crouch across all hero classes (suppressed during 60 FPS Combat_Roll)!
+    if (isRolling) {
+      dashAnimTimer = 0;
+      if (modelInstance && modelInstance.position.y !== 0) {
+        modelInstance.position.y = 0;
+      }
+    } else if (dashAnimTimer > 0 && modelInstance) {
       dashAnimTimer = Math.max(0, dashAnimTimer - safeDt);
       const dProg = dashAnimDur > 0 ? 1 - dashAnimTimer / dashAnimDur : 1;
       const dEnv = Math.sin(Math.max(0, Math.min(1, dProg)) * Math.PI);
@@ -3445,7 +4968,8 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
       }
     }
 
-    applyWarriorWeaponAnimOverlay(safeDt, isMoving, elapsedTime);
+    applyWarriorWeaponAnimOverlay(safeDt, isMoving, elapsedTime, speedRatio);
+    applyWarriorFlaskDrinkOverlay(safeDt, isMoving, elapsedTime);
     applyGunslingerWeaponAnimOverlay(safeDt, isMoving, elapsedTime);
 
     if (staffCastPulse > 0) {
@@ -3542,12 +5066,164 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
 
   const hasSyncedFootsteps = Boolean(animCtrl && footPlantMap);
   const getWeaponStyle = () => ({ style: currentWeaponStyle, twoHanded: isCurrentWeaponTwoHanded });
+
+  // Cached weapon hilt -> tip endpoints in mounted-weapon local space for zero-alloc Swept Capsule hitboxes.
+  let weaponSegSourceObj = null;
+  let hasCachedWeaponSeg = false;
+  const weaponHiltLocal = new THREE.Vector3();
+  const weaponTipLocal = new THREE.Vector3();
+  const _wSegHilt = new THREE.Vector3();
+  const _wSegTip = new THREE.Vector3();
+  const _wSegInvMount = new THREE.Matrix4();
+  const _wSegToMount = new THREE.Matrix4();
+  const _wSegEndA = new THREE.Vector3();
+  const _wSegEndB = new THREE.Vector3();
+
+  function refreshWeaponSegmentCache(srcObj) {
+    weaponSegSourceObj = srcObj || null;
+    hasCachedWeaponSeg = false;
+    if (!srcObj) return;
+    root.updateMatrixWorld(true);
+    _wSegInvMount.copy(srcObj.matrixWorld).invert();
+    if (handR) {
+      handR.getWorldPosition(weaponHiltLocal).applyMatrix4(_wSegInvMount);
+    } else {
+      weaponHiltLocal.set(0, 0, 0);
+    }
+    let bestDistSq = -1;
+    let foundMesh = false;
+    srcObj.traverse((node) => {
+      if (!node.isMesh || !node.geometry) return;
+      if (!node.geometry.boundingBox) {
+        node.geometry.computeBoundingBox();
+      }
+      const bb = node.geometry.boundingBox;
+      if (!bb || bb.isEmpty()) return;
+      const dx = bb.max.x - bb.min.x;
+      const dy = bb.max.y - bb.min.y;
+      const dz = bb.max.z - bb.min.z;
+      const cx = (bb.min.x + bb.max.x) * 0.5;
+      const cy = (bb.min.y + bb.max.y) * 0.5;
+      const cz = (bb.min.z + bb.max.z) * 0.5;
+      if (dy >= dx && dy >= dz) {
+        _wSegEndA.set(cx, bb.min.y, cz);
+        _wSegEndB.set(cx, bb.max.y, cz);
+      } else if (dz >= dx && dz >= dy) {
+        _wSegEndA.set(cx, cy, bb.min.z);
+        _wSegEndB.set(cx, cy, bb.max.z);
+      } else {
+        _wSegEndA.set(bb.min.x, cy, cz);
+        _wSegEndB.set(bb.max.x, cy, cz);
+      }
+      _wSegToMount.copy(_wSegInvMount).multiply(node.matrixWorld);
+      _wSegEndA.applyMatrix4(_wSegToMount);
+      _wSegEndB.applyMatrix4(_wSegToMount);
+      const dA = _wSegEndA.distanceToSquared(weaponHiltLocal);
+      const dB = _wSegEndB.distanceToSquared(weaponHiltLocal);
+      if (dA > bestDistSq) {
+        bestDistSq = dA;
+        weaponTipLocal.copy(_wSegEndA);
+        foundMesh = true;
+      }
+      if (dB > bestDistSq) {
+        bestDistSq = dB;
+        weaponTipLocal.copy(_wSegEndB);
+        foundMesh = true;
+      }
+    });
+    if (foundMesh && bestDistSq > 1e-4) {
+      hasCachedWeaponSeg = true;
+    }
+  }
+
+  function getWeaponSegmentWorld() {
+    root.updateMatrixWorld(true);
+    const activeSrc = mountedWeaponObj || (embeddedWarriorSwordNode?.visible ? embeddedWarriorSwordNode : null);
+    if (activeSrc && (!hasCachedWeaponSeg || weaponSegSourceObj !== activeSrc)) {
+      refreshWeaponSegmentCache(activeSrc);
+    } else if (!activeSrc) {
+      hasCachedWeaponSeg = false;
+      weaponSegSourceObj = null;
+    }
+    if (hasCachedWeaponSeg && weaponSegSourceObj) {
+      _wSegHilt.copy(weaponHiltLocal).applyMatrix4(weaponSegSourceObj.matrixWorld);
+      _wSegTip.copy(weaponTipLocal).applyMatrix4(weaponSegSourceObj.matrixWorld);
+      if (
+        Number.isFinite(_wSegHilt.x) &&
+        Number.isFinite(_wSegHilt.y) &&
+        Number.isFinite(_wSegHilt.z) &&
+        Number.isFinite(_wSegTip.x) &&
+        Number.isFinite(_wSegTip.y) &&
+        Number.isFinite(_wSegTip.z) &&
+        _wSegHilt.distanceToSquared(_wSegTip) >= 0.16
+      ) {
+        return {
+          hiltX: _wSegHilt.x,
+          hiltY: _wSegHilt.y,
+          hiltZ: _wSegHilt.z,
+          tipX: _wSegTip.x,
+          tipY: _wSegTip.y,
+          tipZ: _wSegTip.z
+        };
+      }
+    }
+    // Reliable fallback segment along hero facing from right hand (or root chest height)
+    const yaw = root.rotation?.y || 0;
+    const fwdX = Math.sin(yaw);
+    const fwdZ = Math.cos(yaw);
+    let hx = root.position.x + fwdX * 0.25;
+    let hy = root.position.y + 1.05;
+    let hz = root.position.z + fwdZ * 0.25;
+    if (handR) {
+      handR.getWorldPosition(_wSegHilt);
+      if (Number.isFinite(_wSegHilt.x) && Number.isFinite(_wSegHilt.y) && Number.isFinite(_wSegHilt.z)) {
+        hx = _wSegHilt.x;
+        hy = _wSegHilt.y;
+        hz = _wSegHilt.z;
+      }
+    }
+    const reach = isCurrentWeaponTwoHanded ? 1.85 : 1.35;
+    return {
+      hiltX: hx,
+      hiltY: hy,
+      hiltZ: hz,
+      tipX: hx + fwdX * reach,
+      tipY: hy,
+      tipZ: hz + fwdZ * reach
+    };
+  }
+
   const heroAnimFacade = {
     ...(animCtrl || {}),
     triggerDash,
+    playRollAnim,
+    cancelRollAnim,
+    isRollActive,
+    playCriticalRiposte,
+    isCriticalRiposteActive,
+    setDoorPushMode,
+    isDoorPushActive,
+    playFlaskDrinkAnim,
+    cancelFlaskDrinkAnim,
+    isFlaskDrinkActive,
+    playHeavyThrustAnim,
+    triggerAttack,
+    triggerTurn180,
+    cancelTurn180,
+    isTurn180Active,
+    getTurn180State,
+    triggerHitReact,
+    cancelHitReact,
+    isHitReactActive,
     setWeapon,
     getWeaponStyle,
-    playAttackAnim
+    getWeaponSegmentWorld,
+    playAttackAnim,
+    playDeathAnim,
+    setDeadState,
+    resetDeath,
+    isDead,
+    setBlocking
   };
   root.userData.animCtrl = heroAnimFacade;
   root.userData.setWeapon = setWeapon;
@@ -3555,8 +5231,34 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
   root.userData.setBeastMode = setBeastMode;
   root.userData.setReloading = setReloading;
   root.userData.playAttackAnim = playAttackAnim;
+  root.userData.playHeavyThrustAnim = playHeavyThrustAnim;
+  root.userData.triggerAttack = triggerAttack;
+  root.userData.playFlaskDrinkAnim = playFlaskDrinkAnim;
+  root.userData.cancelFlaskDrinkAnim = cancelFlaskDrinkAnim;
+  root.userData.isFlaskDrinkActive = isFlaskDrinkActive;
+  root.userData.setDoorPushMode = setDoorPushMode;
+  root.userData.isDoorPushActive = isDoorPushActive;
+  root.userData.contactShadow = heroContactShadow;
+  root.userData.playDeathAnim = playDeathAnim;
+  root.userData.setDeadState = setDeadState;
+  root.userData.resetDeath = resetDeath;
+  root.userData.isDead = isDead;
+  root.userData.setBlocking = setBlocking;
   root.userData.triggerDash = triggerDash;
+  root.userData.playRollAnim = playRollAnim;
+  root.userData.cancelRollAnim = cancelRollAnim;
+  root.userData.isRollActive = isRollActive;
+  root.userData.playCriticalRiposte = playCriticalRiposte;
+  root.userData.isCriticalRiposteActive = isCriticalRiposteActive;
+  root.userData.triggerTurn180 = triggerTurn180;
+  root.userData.cancelTurn180 = cancelTurn180;
+  root.userData.isTurn180Active = isTurn180Active;
+  root.userData.getTurn180State = getTurn180State;
+  root.userData.triggerHitReact = triggerHitReact;
+  root.userData.cancelHitReact = cancelHitReact;
+  root.userData.isHitReactActive = isHitReactActive;
   root.userData.getWeaponStyle = getWeaponStyle;
+  root.userData.getWeaponSegmentWorld = getWeaponSegmentWorld;
   root.userData.flashHit = flashHit;
   root.userData.update = update;
   if (hasSyncedFootsteps) {
@@ -3569,6 +5271,22 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
   // mixer bindings belong to this instance.
   function dispose() {
     isDisposed = true;
+    isDoorPushing = false;
+    animCtrl?.setDoorPushState?.(false, 0);
+    cancelFlaskDrinkAnim();
+    if (heroContactShadow) {
+      if (heroContactShadow.parent) heroContactShadow.parent.remove(heroContactShadow);
+      heroContactShadow.userData?.dispose?.();
+    }
+    if (estusFlaskMesh) {
+      if (estusFlaskMesh.parent) estusFlaskMesh.parent.remove(estusFlaskMesh);
+      disposeOwnedWeaponMaterials(estusFlaskMesh);
+      estusFlaskMesh = null;
+    }
+    if (warriorShieldBackAnchor?.parent) {
+      warriorShieldBackAnchor.parent.remove(warriorShieldBackAnchor);
+      warriorShieldBackAnchor = null;
+    }
     if (mountedWeaponObj) {
       if (mountedWeaponObj.parent) mountedWeaponObj.parent.remove(mountedWeaponObj);
       disposeOwnedWeaponMaterials(mountedWeaponObj);
@@ -3578,6 +5296,10 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
       if (mountedShieldObj.parent) mountedShieldObj.parent.remove(mountedShieldObj);
       disposeOwnedWeaponMaterials(mountedShieldObj);
       mountedShieldObj = null;
+    }
+    if (legacyWarriorShieldObj) {
+      if (legacyWarriorShieldObj.parent) legacyWarriorShieldObj.parent.remove(legacyWarriorShieldObj);
+      legacyWarriorShieldObj = null;
     }
     if (embeddedStaffVfx) {
       if (embeddedStaffVfx.group?.parent) {
@@ -3606,14 +5328,40 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
 
   const heroHandle = {
     root,
+    contactShadow: heroContactShadow,
     dispose,
     setWeapon,
     setElement,
     setBeastMode,
     setReloading,
     playAttackAnim,
+    playHeavyThrustAnim,
+    triggerAttack,
+    playFlaskDrinkAnim,
+    cancelFlaskDrinkAnim,
+    isFlaskDrinkActive,
+    setDoorPushMode,
+    isDoorPushActive,
+    playDeathAnim,
+    setDeadState,
+    resetDeath,
+    isDead,
+    setBlocking,
     triggerDash,
+    playRollAnim,
+    cancelRollAnim,
+    isRollActive,
+    playCriticalRiposte,
+    isCriticalRiposteActive,
+    triggerTurn180,
+    cancelTurn180,
+    isTurn180Active,
+    getTurn180State,
+    triggerHitReact,
+    cancelHitReact,
+    isHitReactActive,
     getWeaponStyle,
+    getWeaponSegmentWorld,
     flashHit,
     update
   };
@@ -5449,16 +7197,29 @@ const ENEMY_MODEL_CFG = {
     key: 'skel_minion',
     scale: 0.90,
     moveClip: 'Walking_D_Skeletons',
+    idleClip: 'Idle',
     atkClip: '1H_Melee_Attack_Slice_Horizontal',
     weapon: 'bone_sword',
     tint: 0xe7dfd3,
     tintLerp: 0.38,
     eye: 0xff6a00
   },
+  bone_archer: {
+    key: 'skel_minion',
+    scale: 0.90,
+    moveClip: 'Walking_D_Skeletons',
+    idleClip: 'Idle',
+    atkClip: 'Spellcast_Shoot',
+    weapon: 'cultist_skull_staff',
+    tint: 0xd8cec0,
+    tintLerp: 0.42,
+    eye: 0xf97316
+  },
   goblin: {
     key: 'barbarian',
     scale: 0.80,
     moveClip: 'Running_B',
+    idleClip: 'Idle',
     atkClip: '1H_Melee_Attack_Chop',
     weapon: 'goblin_stone_axe',
     tint: 0x5c8a32,
@@ -5470,6 +7231,7 @@ const ENEMY_MODEL_CFG = {
     key: 'barbarian',
     scale: 0.95,
     moveClip: 'Running_B',
+    idleClip: 'Idle',
     atkClip: 'Dualwield_Melee_Attack_Slice',
     weapon: null,
     tint: 0x2b2930,
@@ -5481,6 +7243,7 @@ const ENEMY_MODEL_CFG = {
     key: 'skel_warrior',
     scale: 1.00,
     moveClip: 'Walking_B',
+    idleClip: 'Idle',
     atkClip: '1H_Melee_Attack_Slice_Horizontal',
     weapon: 'broadsword',
     tint: 0x5c6842,
@@ -5491,6 +7254,7 @@ const ENEMY_MODEL_CFG = {
     key: 'zombie_tripo',
     scale: 2.02,
     moveClip: 'Strut_Walking',
+    idleClip: 'Idle',
     atkClip: 'Attack',
     weapon: null,
     tint: null,
@@ -5500,16 +7264,77 @@ const ENEMY_MODEL_CFG = {
     key: 'knight',
     scale: 1.26,
     moveClip: 'Walking_B',
+    idleClip: 'Idle',
     atkClip: '2H_Melee_Attack_Chop',
     weapon: null, // Uses built-in 2H_Sword!
     tint: 0x523c2b,
     tintLerp: 0.66,
     eye: 0xff6a00
   },
+  // === Abandoned Knight Rift (Level 26 souls_citadel) Exclusive AAA Tripo Enemies ===
+  // PvE Chapters 1-25 continue using lightweight KayKit iron_knight / cursed_footman / bone_archer.
+  rift_executioner: {
+    key: 'rift_executioner',
+    scale: 2.48, // In Souls Citadel (enc.scale 1.18 / def.scale 1.32 = 0.894x) -> ~2.20m (~1.22x Hero!)
+    moveClip: 'Combat_Walk',
+    patrolClip: 'Patrol_Walk',
+    idleClip: 'Idle',
+    atkClip: 'Attack_Slash_1',
+    weapon: null,
+    tint: null,
+    eye: null,
+    isRiftTripo: true,
+    physicsType: 'iron_knight',
+    moveSpeedAnim: 1.0,
+    contactShadowRadius: 1.14,
+    weaponBoneSegment: {
+      hilt: [0.04, 0.06, 0.00],
+      tip: [-0.88, 0.08, 0.00]
+    }
+  },
+  rift_vanguard: {
+    key: 'rift_vanguard',
+    scale: 2.02, // In Souls Citadel (enc.scale 1.12 / def.scale 1.04 = 1.077x) -> ~1.97m (~1.09x Hero!)
+    moveClip: 'Combat_Walk',
+    patrolClip: 'Patrol_Walk',
+    idleClip: 'Idle',
+    atkClip: 'Attack_Thrust_1',
+    weapon: null,
+    tint: null,
+    eye: null,
+    isRiftTripo: true,
+    physicsType: 'cursed_footman',
+    moveSpeedAnim: 1.0,
+    contactShadowRadius: 0.96,
+    weaponBoneSegment: {
+      hilt: [0.02, 0.06, -0.04],
+      tip: [-0.87, 0.06, -0.04]
+    }
+  },
+  rift_acolyte: {
+    key: 'rift_acolyte',
+    scale: 2.08, // ~1.91m vs Hero 1.83m (~1.05-1.14x tall hooded arbalest acolyte)
+    moveClip: 'Combat_Walk',
+    patrolClip: 'Patrol_Walk',
+    idleClip: 'Idle',
+    atkClip: 'Shot_Release',
+    weapon: null,
+    tint: null,
+    eye: null,
+    isRiftTripo: true,
+    physicsType: 'bone_archer',
+    moveSpeedAnim: 1.0,
+    contactShadowRadius: 0.88,
+    weaponBoneSegment: {
+      hilt: [0.04, 0.04, -0.06],
+      tip: [0.06, 0.62, -0.06]
+    }
+  },
   dark_cultist: {
     key: 'skel_mage',
     scale: 0.92,
     moveClip: 'Walking_A',
+    idleClip: 'Idle',
     atkClip: 'Spellcast_Shoot',
     weapon: 'cultist_skull_staff',
     tint: 0x4c1d95,
@@ -5520,6 +7345,7 @@ const ENEMY_MODEL_CFG = {
     key: 'skel_mage',
     scale: 0.94,
     moveClip: 'Walking_A',
+    idleClip: 'Idle',
     atkClip: 'Spellcast_Raise',
     weapon: 'mummy_crescent_staff',
     tint: 0xd9c79e,
@@ -5556,6 +7382,7 @@ const ENEMY_MODEL_CFG = {
     key: 'barbarian',
     scale: 0.88,
     moveClip: 'Running_A',
+    idleClip: 'Idle',
     atkClip: 'Dualwield_Melee_Attack_Chop',
     weapon: null,
     tint: 0x575a64,
@@ -5567,6 +7394,7 @@ const ENEMY_MODEL_CFG = {
     key: 'barbarian',
     scale: 0.76,
     moveClip: 'Running_B',
+    idleClip: 'Idle',
     atkClip: 'Dualwield_Melee_Attack_Slice',
     weapon: null,
     tint: 0xb91c1c,
@@ -5606,6 +7434,7 @@ const ENEMY_MODEL_CFG = {
     key: 'tree_tripo',
     scale: 2.12,
     moveClip: 'Hop_Forward',
+    idleClip: 'Idle',
     atkClip: 'Hop_Forward',
     weapon: null,
     tint: null,
@@ -5621,6 +7450,7 @@ const ENEMY_MODEL_CFG = {
     key: 'barbarian',
     scale: 1.72,
     moveClip: 'Running_B',
+    idleClip: 'Idle',
     atkClip: '2H_Melee_Attack_Slice',
     weapon: 'demon_magma_greatsword',
     tint: 0x262022,
@@ -5646,6 +7476,7 @@ const ENEMY_MODEL_CFG = {
     key: 'barbarian',
     scale: 1.92,
     moveClip: 'Walking_B',
+    idleClip: 'Idle',
     atkClip: 'Spellcast_Shoot',
     weapon: null,
     tint: 0x1b4552,
@@ -5663,7 +7494,13 @@ const ENEMY_MODEL_CFG = {
     tint: null,
     eye: null,
     isBossVisual: true,
-    moveSpeedAnim: 1.08
+    physicsType: 'boss_troll',
+    moveSpeedAnim: 1.08,
+    contactShadowRadius: 2.05,
+    weaponBoneSegment: {
+      hilt: [0.04, 0.05, 0.00],
+      tip: [0.12, 0.14, 0.45]
+    }
   },
   boss_warden: {
     key: 'troll_tripo',
@@ -5675,12 +7512,19 @@ const ENEMY_MODEL_CFG = {
     tint: null,
     eye: null,
     isBossVisual: true,
-    moveSpeedAnim: 1.08
+    physicsType: 'boss_troll',
+    moveSpeedAnim: 1.08,
+    contactShadowRadius: 2.05,
+    weaponBoneSegment: {
+      hilt: [0.04, 0.05, 0.00],
+      tip: [0.12, 0.14, 0.45]
+    }
   },
   boss_ashlord: {
     key: 'barbarian',
     scale: 2.28,
     moveClip: 'Walking_B',
+    idleClip: 'Idle',
     atkClip: 'Dualwield_Melee_Attack_Chop',
     weapon: null,
     tint: 0x1c191e,
@@ -5692,25 +7536,115 @@ const ENEMY_MODEL_CFG = {
   }
 };
 
-const enemyMeshPool = new Map();
+// Measured strike/release impact-peak fraction (t_peak / clip.duration) per enemy attack clip
+// so Souls & telegraphed windups land the visual swing/shot peak EXACTLY on `desiredImpactDur`!
+const ENEMY_CLIP_IMPACT_FRAC = {
+  '2H_Melee_Attack_Chop': 0.50,
+  '2H_Melee_Attack_Slice': 0.36,
+  '1H_Melee_Attack_Slice_Horizontal': 0.28,
+  '1H_Melee_Attack_Chop': 0.56,
+  '1H_Melee_Attack_Slice_Diagonal': 0.38,
+  'Dualwield_Melee_Attack_Slice': 0.50,
+  'Dualwield_Melee_Attack_Chop': 0.43,
+  'Spellcast_Shoot': 0.34,
+  'Spellcast_Raise': 0.25,
+  'Heavy_Cleave': 0.48,
+  // Abandoned Knight Rift AAA enemies (Executioner, Vanguard, Acolyte)
+  'Attack_Slash_1': 0.49,
+  'Attack_Slash_2': 0.48,
+  'Attack_Overhead_Crush': 0.54,
+  'Attack_Thrust_Lunge': 0.47,
+  'Attack_Thrust_1': 0.48,
+  'Attack_Sweep_2': 0.48,
+  'Attack_Shield_Bash': 0.48,
+  'Attack_Overhead_Poke': 0.50,
+  'Aim_Draw': 0.85,
+  'Shot_Release': 0.25,
+  'Quick_Retreat_Shot': 0.45,
+  // Boss Warden / Troll AAA 3-hit combo & special attacks
+  'Combo_Sweep_1': 0.53,
+  'Combo_Backhand_2': 0.48,
+  'Combo_Slam_3': 0.64,
+  'Leap_Slam': 0.56,
+  'Delayed_Crush': 0.62,
+  'Sweep_Combo': 0.46,
+  'Whirl_Spin': 0.50
+};
 
-export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, customScaleMult = 1.0) {
+const enemyMeshPool = new Map();
+let enemyInstanceSeq = 0;
+const _enemyWepHilt = new THREE.Vector3();
+const _enemyWepTip = new THREE.Vector3();
+const SOFT_HIT_FLASH_TINT = new THREE.Color(0xffdcb0);
+
+// Delicate warm steel/gold hit-flash variant for AAA Rift Tripo enemies & Tripo Bosses:
+// keeps albedo/normal/ORM/emissive maps intact (no flat white cardboard!), warms the albedo
+// and briefly lifts emissive. Cached per source material so instances share one variant.
+function getSoftHitFlashMaterial(srcMat) {
+  if (!srcMat || !(srcMat.isMeshStandardMaterial || srcMat.isMeshPhysicalMaterial)) return null;
+  return getMat(`soft_hit_flash_v1_${srcMat.uuid}`, () => {
+    const m = srcMat.clone();
+    if (m.userData && m.userData.hasSoulsRimLight) {
+      m.userData = { ...m.userData };
+      delete m.userData.hasSoulsRimLight;
+    }
+    if (m.color) m.color.lerp(SOFT_HIT_FLASH_TINT, 0.30);
+    if (m.emissive) {
+      if (m.emissiveMap) {
+        m.emissiveIntensity = Math.max(1.0, Number(m.emissiveIntensity) || 1.0) * 1.45;
+      } else {
+        m.emissive.setHex(0xff9a4a);
+        m.emissiveIntensity = Math.max(Number(m.emissiveIntensity) || 0, 0.30);
+      }
+    }
+    applySoulsRimLight(m);
+    return m;
+  });
+}
+
+function buildSoftHitFlashSlotMat(mat) {
+  if (Array.isArray(mat)) {
+    let any = false;
+    const out = mat.map((m) => {
+      const f = getSoftHitFlashMaterial(m);
+      if (f) any = true;
+      return f || m;
+    });
+    return any ? out : null;
+  }
+  return getSoftHitFlashMaterial(mat);
+}
+
+export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, customScaleMult = 1.0, extraOpts = null) {
+  let spawnOpts = extraOpts && typeof extraOpts === 'object' ? extraOpts : null;
   if (typeId && typeof typeId === 'object') {
-    const opts = typeId;
-    eliteVariant = opts.eliteVariant ?? opts.eliteType ?? opts.variant ?? null;
-    customScaleMult = opts.customScaleMult ?? opts.scaleMult ?? 1.0;
-    typeId = opts.typeId || opts.type || opts.enemyType || opts.id || 'ember_skeleton';
+    spawnOpts = typeId;
+    eliteVariant = spawnOpts.eliteVariant ?? spawnOpts.eliteType ?? spawnOpts.variant ?? null;
+    customScaleMult = spawnOpts.customScaleMult ?? spawnOpts.scaleMult ?? 1.0;
+    typeId = spawnOpts.typeId || spawnOpts.type || spawnOpts.enemyType || spawnOpts.id || 'ember_skeleton';
   }
 
   const canonicalType = ENEMY_TYPE_ALIASES[typeId] || typeId;
-  const cfg = ENEMY_MODEL_CFG[canonicalType] || ENEMY_MODEL_CFG.ember_skeleton;
+  const riftMappedType = SOULS_RIFT_ENEMY_MAP[canonicalType] || null;
+  const riftAssetKey = riftMappedType ? ENEMY_MODEL_CFG[riftMappedType]?.key : null;
+  const hasWorldArenaApi =
+    typeof window !== 'undefined' && typeof window.__grimborne?.world?.isSoulsArena === 'function';
+  const wantRiftModel = Boolean(
+    riftMappedType &&
+      riftAssetKey &&
+      gltfCache.has(riftAssetKey) &&
+      (isSoulsBiomeActive(spawnOpts) ||
+        (!hasWorldArenaApi && spawnOpts?.isSouls !== false && spawnOpts?.forceKayKit !== true))
+  );
+  const resolvedModelType = wantRiftModel ? riftMappedType : canonicalType;
+  const cfg = ENEMY_MODEL_CFG[resolvedModelType] || ENEMY_MODEL_CFG[canonicalType] || ENEMY_MODEL_CFG.ember_skeleton;
   const rawMult = Number(customScaleMult);
   const validMult = Number.isFinite(rawMult) && rawMult > 0 ? rawMult : 1.0;
   const effectiveScaleMult =
     eliteVariant === 'miniboss' && Math.abs(validMult - 1.0) < 0.001 ? 0.72 : validMult;
 
   const canPool = eliteVariant !== 'warden' && !cfg.isBossVisual;
-  const poolKey = `${canonicalType}|${eliteVariant || 'std'}|${effectiveScaleMult.toFixed(2)}`;
+  const poolKey = `${resolvedModelType}|${eliteVariant || 'std'}|${effectiveScaleMult.toFixed(2)}`;
   if (canPool) {
     const bucket = enemyMeshPool.get(poolKey);
     if (bucket && bucket.length > 0) {
@@ -5720,9 +7654,24 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
     }
   }
 
+  const enemyUid = ++enemyInstanceSeq;
   const root = new THREE.Group();
+  root.userData.canonicalType = canonicalType;
+  root.userData.resolvedModelType = resolvedModelType;
+  root.userData.modelAssetKey = cfg.key || cfg.proceduralRig || null;
+  syncSoulsRimLightFromBiome();
   let animCtrl = null;
+  let resolvedIdleClip = null;
+  let hasDedicatedIdleClip = false;
   let procRig = null;
+  let handR = null;
+  let jawBone = null;
+  let mouthOpen01 = 0;
+  let jawAdditiveApplied = false;
+  const jawPreAdditiveQ = new THREE.Quaternion();
+  let dissolveActive = false;
+  let softHitFlashMode = false;
+  let mountedEnemyWeaponProp = null;
   const instanceMats = [];
   const flashMeshSlots = [];
   const hitFlashMat = getMat('enemy_shared_hit_flash', () =>
@@ -5735,6 +7684,9 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
   );
   let flashTimer = 0;
   let spawnedInst = null;
+  let baseInstScaleX = 1;
+  let baseInstScaleY = 1;
+  let baseInstScaleZ = 1;
 
   let wingGroup = null;
   let dragonTail = null;
@@ -5749,6 +7701,9 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
   if (cfg.proceduralRig) {
     procRig = buildProceduralMonsterRig(cfg.proceduralRig, cfg.scale * effectiveScaleMult, flashMeshSlots);
     spawnedInst = procRig.root;
+    baseInstScaleX = spawnedInst.scale.x;
+    baseInstScaleY = spawnedInst.scale.y;
+    baseInstScaleZ = spawnedInst.scale.z;
     root.add(procRig.root);
   } else {
     const asset = gltfCache.get(cfg.key);
@@ -5756,15 +7711,20 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
       const inst = cloneSkinned(asset.scene);
       spawnedInst = inst;
       inst.scale.setScalar(cfg.scale * effectiveScaleMult);
+      baseInstScaleX = inst.scale.x;
+      baseInstScaleY = inst.scale.y;
+      baseInstScaleZ = inst.scale.z;
       root.add(inst);
 
-      let handR = null;
       let handL = null;
       let headBone = null;
       let chestBone = null;
       let foundEyeMesh = false;
 
-      const isTripoEnemy = /_tripo$/i.test(cfg.key || '');
+      const isRiftTripo = Boolean(cfg.isRiftTripo);
+      const isTripoEnemy = isRiftTripo || /_tripo$/i.test(cfg.key || '');
+      const useSoftHitFlash = Boolean(isRiftTripo || (cfg.isBossVisual && isTripoEnemy));
+      softHitFlashMode = useSoftHitFlash;
       const usesCustomHead =
         !isTripoEnemy && (
         canonicalType === 'goblin' ||
@@ -5778,7 +7738,7 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
         canonicalType === 'boss_ashlord');
 
       const allowEnemyShadows =
-        Boolean(cfg.isBossVisual || eliteVariant === 'miniboss' || eliteVariant === 'warden') &&
+        Boolean(cfg.isBossVisual || isRiftTripo || eliteVariant === 'miniboss' || eliteVariant === 'warden') &&
         (!isMobileRuntimeDevice() || Boolean(cfg.isBossVisual));
 
       inst.traverse((n) => {
@@ -5787,12 +7747,19 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
           n.castShadow = allowEnemyShadows;
           n.receiveShadow = false;
         }
-        if (/^handslot\.?r$/i.test(nm) || (!handR && /^hand\.?r$/i.test(nm))) handR = n;
-        if (/^handslot\.?l$/i.test(nm) || (!handL && /^hand\.?l$/i.test(nm))) handL = n;
-        if (/^head$/i.test(nm)) headBone = n;
-        if (/^chest$/i.test(nm)) chestBone = n;
+        if (
+          /^handslot\.?r$/i.test(nm) ||
+          (!handR && (/^hand\.?r$/i.test(nm) || /^mixamorig:?RightHand$/i.test(nm)))
+        ) handR = n;
+        if (
+          /^handslot\.?l$/i.test(nm) ||
+          (!handL && (/^hand\.?l$/i.test(nm) || /^mixamorig:?LeftHand$/i.test(nm)))
+        ) handL = n;
+        if (/^head$/i.test(nm) || (!headBone && /^mixamorig:?Head$/i.test(nm))) headBone = n;
+        if (/^chest$/i.test(nm) || (!chestBone && /^mixamorig:?Spine2$/i.test(nm))) chestBone = n;
+        if (!jawBone && n.isBone && /^mixamorig:?Jaw$/i.test(nm)) jawBone = n;
 
-        if (!cfg.isBossVisual) {
+        if (!cfg.isBossVisual && !isRiftTripo) {
           if (nm === 'Skeleton_Warrior_Helmet' || nm === 'Knight_Helmet') {
             stage2BreakNode = n;
           }
@@ -5802,51 +7769,74 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
         }
 
         // Hide unwanted built-in KayKit props so each archetype silhouette matches ad09b7c9.jpg!
-        if (nm === 'Mug' || nm === 'Spellbook' || nm === 'Spellbook_open' || nm === '1H_Wand') {
-          n.visible = false;
-        }
-        if (usesCustomHead && /^(Barbarian_Head|Barbarian_Hat|Mage_Head|Mage_Hat)$/i.test(nm)) {
-          n.visible = false;
-        }
-        if (canonicalType === 'ember_skeleton' && nm === 'Skeleton_Minion_Cloak') {
-          n.visible = false;
-        }
-        if ((canonicalType === 'dark_cultist' || canonicalType === 'mummy' || canonicalType === 'boss_archlich') && nm === 'Skeleton_Mage_Hat') {
-          n.visible = false;
-        }
-        if (canonicalType === 'vampire_lord' && nm === '2H_Staff') {
-          n.visible = false;
-        }
-        if (cfg.key === 'barbarian') {
-          if (nm === '2H_Axe' || nm === 'Barbarian_Round_Shield' || nm === '1H_Axe' || nm === '1H_Axe_Offhand' || nm === 'Barbarian_Hat') {
+        if (!isRiftTripo) {
+          if (nm === 'Mug' || nm === 'Spellbook' || nm === 'Spellbook_open' || nm === '1H_Wand') {
             n.visible = false;
           }
-          if (
-            (canonicalType === 'gargoyle' ||
-              canonicalType === 'hell_imp' ||
-              canonicalType === 'werewolf' ||
-              canonicalType === 'boss_ashlord' ||
-              canonicalType === 'boss_cthulhu' ||
-              canonicalType === 'boss_warden') &&
-            nm === 'Barbarian_Cape'
-          ) {
+          if (usesCustomHead && /^(Barbarian_Head|Barbarian_Hat|Mage_Head|Mage_Hat)$/i.test(nm)) {
             n.visible = false;
           }
-        }
-        if (canonicalType === 'iron_knight') {
-          if (
-            nm === '1H_Sword' ||
-            nm === '1H_Sword_Offhand' ||
-            nm === 'Round_Shield' ||
-            nm === 'Badge_Shield' ||
-            nm === 'Rectangle_Shield' ||
-            nm === 'Spike_Shield'
-          ) {
+          if (canonicalType === 'ember_skeleton' && nm === 'Skeleton_Minion_Cloak') {
             n.visible = false;
+          }
+          if ((canonicalType === 'dark_cultist' || canonicalType === 'mummy' || canonicalType === 'boss_archlich') && nm === 'Skeleton_Mage_Hat') {
+            n.visible = false;
+          }
+          if (canonicalType === 'vampire_lord' && nm === '2H_Staff') {
+            n.visible = false;
+          }
+          if (cfg.key === 'barbarian') {
+            if (nm === '2H_Axe' || nm === 'Barbarian_Round_Shield' || nm === '1H_Axe' || nm === '1H_Axe_Offhand' || nm === 'Barbarian_Hat') {
+              n.visible = false;
+            }
+            if (
+              (canonicalType === 'gargoyle' ||
+                canonicalType === 'hell_imp' ||
+                canonicalType === 'werewolf' ||
+                canonicalType === 'boss_ashlord' ||
+                canonicalType === 'boss_cthulhu' ||
+                canonicalType === 'boss_warden') &&
+              nm === 'Barbarian_Cape'
+            ) {
+              n.visible = false;
+            }
+          }
+          if (canonicalType === 'iron_knight') {
+            if (
+              nm === '1H_Sword' ||
+              nm === '1H_Sword_Offhand' ||
+              nm === 'Round_Shield' ||
+              nm === 'Badge_Shield' ||
+              nm === 'Rectangle_Shield' ||
+              nm === 'Spike_Shield'
+            ) {
+              n.visible = false;
+            }
           }
         }
 
         if (n.isMesh && n.material) {
+          if (isRiftTripo) {
+            // Preserve Cycles PBR materials (albedo + ORM + normal + emissiveMap + emissiveStrength) intact!
+            if (eliteVariant === 'purple' || eliteVariant === 'blue') {
+              const eliteEm = eliteVariant === 'purple' ? 0x6b21a8 : 0x0369a1;
+              const mapElite = (srcMat) =>
+                getMat(`rift_elite_${resolvedModelType}_${eliteVariant}_${srcMat.uuid}`, () => {
+                  const m = srcMat.clone();
+                  if (m.emissive && !m.emissiveMap) {
+                    m.emissive.setHex(eliteEm);
+                    m.emissiveIntensity = Math.max(m.emissiveIntensity || 0, 0.28);
+                  }
+                  if (!/Eyes/i.test(nm)) applySoulsRimLight(m);
+                  return m;
+                });
+              n.material = Array.isArray(n.material) ? n.material.map(mapElite) : mapElite(n.material);
+            }
+            if (n.visible) {
+              flashMeshSlots.push({ mesh: n, origMat: n.material, flashMat: buildSoftHitFlashSlotMat(n.material) });
+            }
+            return;
+          }
           if (/Eyes/i.test(nm)) {
             foundEyeMesh = true;
             n.material = getMat(`eye_mat_${cfg.eye}_${cfg.isBossVisual ? 'b' : 'n'}`, () =>
@@ -5881,6 +7871,9 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
                 m.emissive.setHex(baseEm);
                 m.emissiveIntensity = baseEmInt;
               }
+              if (SOULS_RIM_ENEMY_TYPES.has(resolvedModelType) || SOULS_RIM_ENEMY_TYPES.has(canonicalType)) {
+                applySoulsRimLight(m);
+              }
               return m;
             };
             if (needsUniqueInstanceMat) {
@@ -5888,26 +7881,32 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
               instanceMats.push({ mat: uniqueMat, baseEmissive: baseEm, baseEmissiveInt: baseEmInt, owned: true });
               return uniqueMat;
             }
-            return getMat(`enemy_tint_v3_${canonicalType}_${isVampireCape ? 'cape' : 'b'}_${eliteVariant || 'std'}_${srcMat.uuid}`, buildTinted);
+            return getMat(`enemy_tint_v3_${resolvedModelType}_${isVampireCape ? 'cape' : 'b'}_${eliteVariant || 'std'}_${srcMat.uuid}`, buildTinted);
           };
           const mapped = Array.isArray(n.material) ? n.material.map(mapOneMat) : mapOneMat(n.material);
           n.material = mapped;
           if (!needsUniqueInstanceMat && n.visible) {
-            flashMeshSlots.push({ mesh: n, origMat: mapped });
+            const softFlash = useSoftHitFlash ? buildSoftHitFlashSlotMat(mapped) : null;
+            flashMeshSlots.push({ mesh: n, origMat: mapped, flashMat: softFlash });
           }
         }
       });
 
-      if (!foundEyeMesh && !usesCustomHead && headBone && cfg.eye) {
+      if (!isRiftTripo && !foundEyeMesh && !usesCustomHead && headBone && cfg.eye) {
         const visorForward = cfg.key === 'knight';
         headBone.add(createGlowingEyePair(cfg.eye, 0.155, visorForward ? 0.38 : 0.40, visorForward ? 0.52 : 0.45));
       }
 
-      if (handR && cfg.weapon) {
-        handR.add(makeEnemyWeaponProp(cfg.weapon));
+      if (!isRiftTripo && handR && cfg.weapon) {
+        mountedEnemyWeaponProp = makeEnemyWeaponProp(cfg.weapon);
+        if (SOULS_RIM_ENEMY_TYPES.has(canonicalType)) {
+          applySoulsRimLightToObject(mountedEnemyWeaponProp);
+        }
+        handR.add(mountedEnemyWeaponProp);
       }
 
-      // === Archetype & Act Boss Signature 3D Sculpted Attachments ===
+      // === Archetype & Act Boss Signature 3D Sculpted Attachments (KayKit only — never attach to AAA Rift Tripo!) ===
+      if (!isRiftTripo) {
       if (canonicalType === 'ember_skeleton') {
         if (chestBone) {
           emberCoreGrp = createMoltenRibcageAndSkullPads();
@@ -6065,8 +8064,16 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
           chestBone.add(wingGroup, dragonTail, createSpikedPauldronsAndMoltenCore(true));
         }
       }
+      } // end if (!isRiftTripo)
 
-      animCtrl = createAnimController(inst, asset.clips, 'Idle', cfg.moveClip);
+      resolvedIdleClip =
+        (cfg.idleClip && asset.clips?.has(cfg.idleClip) ? cfg.idleClip : null) ||
+        (asset.clips?.has('Idle') ? 'Idle' : null) ||
+        (asset.clips?.has('Idle_Combat') ? 'Idle_Combat' : null) ||
+        (asset.clips?.has('Idle_B') ? 'Idle_B' : null);
+      hasDedicatedIdleClip = Boolean(resolvedIdleClip && resolvedIdleClip !== cfg.moveClip);
+
+      animCtrl = createAnimController(inst, asset.clips, resolvedIdleClip || 'Idle', cfg.moveClip);
       if (canonicalType === 'corrupted_treant' || canonicalType === 'mimic_chest') {
         animCtrl.syncPhase(cfg.moveClip, 0);
       } else {
@@ -6188,28 +8195,684 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
     root.add(eliteCrest);
   }
 
+  // Soft Grounded Contact AO Shadow Disk under every enemy & Boss (on root so it stays flat during posture pitch/roll!)
+  const contactShadowRadius =
+    (cfg.contactShadowRadius || (cfg.isBossVisual ? 1.92 : Math.max(0.66, (cfg.scale || 1.0) * 0.72))) *
+    effectiveScaleMult;
+  const contactShadow = createActorContactShadowMesh({
+    radius: contactShadowRadius,
+    isBoss: Boolean(cfg.isBossVisual),
+    opacity: cfg.isBossVisual ? 0.74 : 0.62,
+    yOffset: 0.015
+  });
+  root.add(contactShadow);
+
   let inPool = false;
   let isDying = false;
   let proceduralFall = false;
   let hitJoltTimer = 0;
+  let hitJoltAmp = 1.0;
   let hitReactCooldown = 0;
   let hitTwistDir = 1;
   let baseClipOverride = null;
+  let baseClipOverrideSpeed = null;
+  let activeClampedAction = null;
+  let prevClampedFromAction = null;
+  let activeClampedDuration = 0;
+  let activeClampedElapsed = 0;
+  let activeClampedBlendSec = 0.08;
+  const CLAMPED_BLEND_IN_SEC = 0.08;
+  let activeCutsceneAction = null;
+  let prevCutsceneFromAction = null;
+  let cutsceneBlendElapsed = 0;
+  let cutsceneBlendDur = 0.22;
+  let cutsceneLastPerfMs = 0;
+
+  // Zero-alloc locomotion, ground-displacement & dynamic combat posture state (soulsPhysicsFeel.js)
+  let prevRootX = root.position.x;
+  let prevRootZ = root.position.z;
+  let prevRootYaw = root.rotation.y;
+  let hasPrevRootPose = false;
+  let hasEverMovedRoot = false;
+  let zeroDispSec = 0;
+  let lastExplicitMode = null;
+  let lastExplicitVx = null;
+  let lastExplicitVz = null;
+  let lastExplicitLocalX = null;
+  let lastExplicitLocalZ = null;
+  let lastExplicitIsMoving = null;
+  let lastExplicitSpeedMult = null;
+  let lastExplicitActualSpeed = null;
+  let lastExplicitTurnDelta = null;
+  let lastPosturePhase = null;
+  let lastPosturePhase01 = null;
+  let lastPostureMoveType = null;
+  let lastPostureBlocking = false;
+  let lastPostureInCombat = false;
+  let lastPostureStaggered = false;
+  let lastPostureDead = false;
+  let lastAttackClipPlayed = cfg.atkClip || 'Attack_Slash_1';
+
+  const isColossalBossPhysics = Boolean(cfg.isBossVisual && (cfg.physicsType === 'boss_troll' || cfg.key === 'troll_tripo'));
+  const physicsActorState = {
+    uid: enemyUid,
+    type: cfg.physicsType || canonicalType,
+    x: 0,
+    z: 0,
+    vx: 0,
+    vz: 0,
+    facing: 0,
+    scale: (cfg.scale || 1.0) * effectiveScaleMult,
+    soulsAwake: false,
+    isSoulsBoss: isColossalBossPhysics,
+    isDying: false,
+    soulsThronePhase: null,
+    soulsState: null
+  };
+  const footSyncOpts = {
+    type: cfg.physicsType || canonicalType,
+    strafeAnimMode: 'combat_walk',
+    clipDuration: 1.0,
+    scale: (cfg.scale || 1.0) * effectiveScaleMult,
+    smoothDt: 0.016
+  };
+  const postureOpts = {
+    vx: 0,
+    vz: 0,
+    facing: 0,
+    turnRate: 0,
+    scale: (cfg.scale || 1.0) * effectiveScaleMult,
+    combatPhase: 'neutral',
+    combatPhase01: 0,
+    moveType: 'slash',
+    isBlocking: false,
+    inCombat: false,
+    isDead: false,
+    elapsedTime: 0,
+    timeSec: 0
+  };
+  const postureApplyOpts = {
+    isLocalChild: true,
+    baseY: 0,
+    applyForwardLean: true
+  };
+
+  function resolveEnemyLocomotionClip(mode, isMovingFlag, speedMultVal, localX, localZ, yawRateVal) {
+    const has = (name) => Boolean(name && animCtrl?.getAction?.(name));
+    const pick = (...names) => {
+      for (let i = 0; i < names.length; i++) {
+        if (has(names[i])) return names[i];
+      }
+      return cfg.moveClip;
+    };
+    let m = typeof mode === 'string' && mode ? mode.toLowerCase() : null;
+    if (!m) {
+      if (!isMovingFlag) {
+        if (Math.abs(yawRateVal) > 1.35 && (has('Turn_Left') || has('Turn_Right'))) {
+          m = yawRateVal > 0 ? 'turn_left' : 'turn_right';
+        } else {
+          m = 'idle';
+        }
+      } else if (Math.abs(localX) > Math.abs(localZ) * 0.85 && Math.abs(localX) > 0.25) {
+        m = localX > 0 ? 'strafe_left' : 'strafe_right';
+      } else if (localZ < -0.45 && has('Backstep_Evade')) {
+        m = 'backstep';
+      } else if (speedMultVal < 0.62 && has(cfg.patrolClip || 'Patrol_Walk')) {
+        m = 'patrol';
+      } else {
+        m = 'combat_walk';
+      }
+    }
+    switch (m) {
+      case 'idle':
+        return { mode: 'idle', clip: resolvedIdleClip || cfg.idleClip || 'Idle', isIdle: true };
+      case 'patrol':
+        return { mode: 'patrol', clip: pick(cfg.patrolClip, 'Patrol_Walk', cfg.moveClip), isIdle: false };
+      case 'combat_walk':
+        return { mode: 'combat_walk', clip: pick('Combat_Walk', cfg.moveClip), isIdle: false };
+      case 'strafe_left':
+        return { mode: 'strafe_left', clip: pick('Strafe_Left', 'Combat_Walk', cfg.moveClip), isIdle: false };
+      case 'strafe_right':
+        return { mode: 'strafe_right', clip: pick('Strafe_Right', 'Combat_Walk', cfg.moveClip), isIdle: false };
+      case 'turn_left': {
+        const turnClip = pick('Turn_Left', 'Strafe_Left', resolvedIdleClip || 'Idle');
+        return { mode: 'turn_left', clip: turnClip, isIdle: turnClip === (resolvedIdleClip || 'Idle') };
+      }
+      case 'turn_right': {
+        const turnClip = pick('Turn_Right', 'Strafe_Right', resolvedIdleClip || 'Idle');
+        return { mode: 'turn_right', clip: turnClip, isIdle: turnClip === (resolvedIdleClip || 'Idle') };
+      }
+      case 'backstep':
+        return { mode: 'backstep', clip: pick('Backstep_Evade', 'Combat_Walk', cfg.moveClip), isIdle: false };
+      default:
+        return isMovingFlag
+          ? { mode: 'combat_walk', clip: pick(cfg.moveClip, 'Combat_Walk'), isIdle: false }
+          : { mode: 'idle', clip: resolvedIdleClip || cfg.idleClip || 'Idle', isIdle: true };
+    }
+  }
+
+  function getWeaponSegmentWorld() {
+    root.updateMatrixWorld(true);
+    if (handR && cfg.weaponBoneSegment) {
+      const seg = cfg.weaponBoneSegment;
+      _enemyWepHilt.set(seg.hilt[0], seg.hilt[1], seg.hilt[2]).applyMatrix4(handR.matrixWorld);
+      _enemyWepTip.set(seg.tip[0], seg.tip[1], seg.tip[2]).applyMatrix4(handR.matrixWorld);
+      if (
+        Number.isFinite(_enemyWepHilt.x) &&
+        Number.isFinite(_enemyWepHilt.y) &&
+        Number.isFinite(_enemyWepHilt.z) &&
+        Number.isFinite(_enemyWepTip.x) &&
+        Number.isFinite(_enemyWepTip.y) &&
+        Number.isFinite(_enemyWepTip.z) &&
+        _enemyWepHilt.distanceToSquared(_enemyWepTip) >= 0.04
+      ) {
+        return {
+          hiltX: _enemyWepHilt.x,
+          hiltY: _enemyWepHilt.y,
+          hiltZ: _enemyWepHilt.z,
+          tipX: _enemyWepTip.x,
+          tipY: _enemyWepTip.y,
+          tipZ: _enemyWepTip.z
+        };
+      }
+    }
+    if (mountedEnemyWeaponProp) {
+      _enemyWepHilt.set(0, 0.05, 0).applyMatrix4(mountedEnemyWeaponProp.matrixWorld);
+      _enemyWepTip.set(0, 1.05, 0).applyMatrix4(mountedEnemyWeaponProp.matrixWorld);
+      if (
+        Number.isFinite(_enemyWepHilt.x) &&
+        Number.isFinite(_enemyWepTip.x) &&
+        _enemyWepHilt.distanceToSquared(_enemyWepTip) >= 0.04
+      ) {
+        return {
+          hiltX: _enemyWepHilt.x,
+          hiltY: _enemyWepHilt.y,
+          hiltZ: _enemyWepHilt.z,
+          tipX: _enemyWepTip.x,
+          tipY: _enemyWepTip.y,
+          tipZ: _enemyWepTip.z
+        };
+      }
+    }
+    const yaw = root.rotation?.y || 0;
+    const fwdX = Math.sin(yaw);
+    const fwdZ = Math.cos(yaw);
+    let hx = root.position.x + fwdX * 0.25;
+    let hy = root.position.y + (cfg.isBossVisual ? 1.9 : 1.05);
+    let hz = root.position.z + fwdZ * 0.25;
+    if (handR) {
+      handR.getWorldPosition(_enemyWepHilt);
+      if (Number.isFinite(_enemyWepHilt.x) && Number.isFinite(_enemyWepHilt.y) && Number.isFinite(_enemyWepHilt.z)) {
+        hx = _enemyWepHilt.x;
+        hy = _enemyWepHilt.y;
+        hz = _enemyWepHilt.z;
+      }
+    }
+    const reach = cfg.isBossVisual ? 2.4 : 1.45;
+    return {
+      hiltX: hx,
+      hiltY: hy,
+      hiltZ: hz,
+      tipX: hx + fwdX * reach,
+      tipY: hy,
+      tipZ: hz + fwdZ * reach
+    };
+  }
+
+  // Additive live Boss jaw lip-sync (mixamorig:Jaw local +X): undone before every mixer evaluation and
+  // re-applied after it, so the jaw NEVER accumulates drift (even on clips without a Jaw track).
+  function restoreJawAdditive() {
+    if (jawAdditiveApplied && jawBone) {
+      jawBone.quaternion.copy(jawPreAdditiveQ);
+    }
+    jawAdditiveApplied = false;
+  }
+
+  function applyJawAdditive() {
+    if (!jawBone || isDying || mouthOpen01 <= 0.001) return;
+    jawPreAdditiveQ.copy(jawBone.quaternion);
+    jawBone.rotateX(mouthOpen01 * 0.32);
+    jawAdditiveApplied = true;
+  }
+
+  function stopCutsceneInternal() {
+    if (prevCutsceneFromAction) {
+      prevCutsceneFromAction.stopFading();
+      prevCutsceneFromAction.setEffectiveWeight(0);
+      prevCutsceneFromAction.stop();
+      prevCutsceneFromAction = null;
+    }
+    if (activeCutsceneAction) {
+      activeCutsceneAction.stopFading();
+      activeCutsceneAction.setEffectiveWeight(0);
+      activeCutsceneAction.stop();
+      activeCutsceneAction = null;
+    }
+    cutsceneBlendElapsed = 0;
+    cutsceneBlendDur = 0.22;
+    cutsceneLastPerfMs = 0;
+  }
+
+  function advanceCutsceneBlend(dtSec) {
+    if (!activeCutsceneAction) return;
+    if (prevCutsceneFromAction) {
+      if (dtSec > 0) cutsceneBlendElapsed += dtSec;
+      const rawW = cutsceneBlendDur > 1e-4 ? Math.min(1, cutsceneBlendElapsed / cutsceneBlendDur) : 1.0;
+      const wIn = smoothstep01(0, 1, rawW);
+      if (rawW >= 1.0) {
+        prevCutsceneFromAction.stopFading();
+        prevCutsceneFromAction.setEffectiveWeight(0);
+        prevCutsceneFromAction.stop();
+        prevCutsceneFromAction = null;
+        activeCutsceneAction.setEffectiveWeight(1.0);
+      } else {
+        prevCutsceneFromAction.enabled = true;
+        prevCutsceneFromAction.setEffectiveWeight(1.0 - wIn);
+        activeCutsceneAction.setEffectiveWeight(wIn);
+      }
+    } else {
+      activeCutsceneAction.setEffectiveWeight(1.0);
+    }
+  }
+
+  function stopClampedInternal() {
+    if (prevClampedFromAction) {
+      prevClampedFromAction.stopFading();
+      prevClampedFromAction.setEffectiveWeight(0);
+      prevClampedFromAction.stop();
+      prevClampedFromAction = null;
+    }
+    if (activeClampedAction) {
+      activeClampedAction.stopFading();
+      activeClampedAction.setEffectiveWeight(0);
+      activeClampedAction.stop();
+      activeClampedAction = null;
+    }
+    activeClampedDuration = 0;
+    activeClampedElapsed = 0;
+  }
 
   const handle = {
     root,
-    setClipOverride(clipName = null) {
+    modelType: resolvedModelType,
+    contactShadow,
+    getWeaponSegmentWorld,
+    hasJawBone: Boolean(jawBone),
+    // Real-time Boss lip-sync: open01 (0..1) -> mixamorig:Jaw.rotateX(+open01 * 0.32 rad) layered after the mixer.
+    setBossMouthOpen(open01 = 0) {
+      const v = Number(open01);
+      mouthOpen01 = Number.isFinite(v) ? (v < 0 ? 0 : v > 1 ? 1 : v) : 0;
+      if (!jawBone) return false;
+      restoreJawAdditive();
+      applyJawAdditive();
+      return true;
+    },
+    getBossMouthOpen() {
+      return mouthOpen01;
+    },
+    setLocomotionState(opts = null) {
+      if (!opts || typeof opts !== 'object') {
+        lastExplicitMode = null;
+        lastExplicitVx = null;
+        lastExplicitVz = null;
+        lastExplicitLocalX = null;
+        lastExplicitLocalZ = null;
+        lastExplicitIsMoving = null;
+        lastExplicitSpeedMult = null;
+        lastExplicitActualSpeed = null;
+        lastExplicitTurnDelta = null;
+        return;
+      }
+      if (opts.strafeAnimMode !== undefined || opts.mode !== undefined) {
+        const m = opts.strafeAnimMode ?? opts.mode;
+        lastExplicitMode = typeof m === 'string' && m ? m : null;
+      }
+      if (opts.vx !== undefined) lastExplicitVx = Number.isFinite(Number(opts.vx)) ? Number(opts.vx) : null;
+      if (opts.vz !== undefined) lastExplicitVz = Number.isFinite(Number(opts.vz)) ? Number(opts.vz) : null;
+      if (opts.moveLocalX !== undefined) lastExplicitLocalX = Number.isFinite(Number(opts.moveLocalX)) ? Number(opts.moveLocalX) : null;
+      if (opts.moveLocalZ !== undefined) lastExplicitLocalZ = Number.isFinite(Number(opts.moveLocalZ)) ? Number(opts.moveLocalZ) : null;
+      if (opts.isMoving !== undefined) lastExplicitIsMoving = Boolean(opts.isMoving);
+      if (opts.speedMult !== undefined) lastExplicitSpeedMult = Number.isFinite(Number(opts.speedMult)) ? Number(opts.speedMult) : null;
+      if (opts.actualSpeed !== undefined) lastExplicitActualSpeed = Number.isFinite(Number(opts.actualSpeed)) ? Math.max(0, Number(opts.actualSpeed)) : null;
+      if (opts.turnDelta !== undefined) lastExplicitTurnDelta = Number.isFinite(Number(opts.turnDelta)) ? Number(opts.turnDelta) : null;
+    },
+    setCombatPostureState(opts = null) {
+      if (!opts || typeof opts !== 'object') {
+        lastPosturePhase = null;
+        lastPosturePhase01 = null;
+        lastPostureMoveType = null;
+        lastPostureBlocking = false;
+        lastPostureStaggered = false;
+        lastPostureDead = false;
+        physicsActorState.soulsThronePhase = null;
+        physicsActorState.soulsState = null;
+        return;
+      }
+      if (opts.isDead !== undefined) lastPostureDead = Boolean(opts.isDead);
+      if (opts.soulsThronePhase !== undefined) {
+        physicsActorState.soulsThronePhase = typeof opts.soulsThronePhase === 'string' ? opts.soulsThronePhase : null;
+      }
+      if (opts.soulsState !== undefined) {
+        physicsActorState.soulsState = typeof opts.soulsState === 'string' ? opts.soulsState : null;
+      }
+      if (opts.combatPhase !== undefined || opts.phase !== undefined || opts.bossPosture !== undefined) {
+        const ph = opts.combatPhase ?? opts.phase ?? opts.bossPosture;
+        lastPosturePhase = typeof ph === 'string' && ph ? ph : null;
+      } else if (opts.isStaggered) {
+        lastPosturePhase = 'stagger';
+      } else if (opts.isWindup) {
+        lastPosturePhase = 'windup';
+      } else if (opts.isSwingActive) {
+        lastPosturePhase = 'active';
+      } else if (opts.isRecovering) {
+        lastPosturePhase = 'recover';
+      } else if (opts.isWindup === false && opts.isSwingActive === false && opts.isRecovering === false) {
+        lastPosturePhase = null;
+      }
+      if (opts.combatPhase01 !== undefined || opts.phase01 !== undefined || opts.windupProgress !== undefined) {
+        const p01 = opts.combatPhase01 ?? opts.phase01 ?? opts.windupProgress;
+        lastPosturePhase01 = Number.isFinite(Number(p01)) ? Number(p01) : null;
+      }
+      if (opts.moveType !== undefined || opts.attackKey !== undefined) {
+        const mt = opts.moveType ?? opts.attackKey;
+        lastPostureMoveType = typeof mt === 'string' && mt ? mt : null;
+      }
+      if (opts.isBlocking !== undefined) lastPostureBlocking = Boolean(opts.isBlocking);
+      if (opts.inCombat !== undefined || opts.isAlerted !== undefined) {
+        lastPostureInCombat = Boolean(opts.inCombat ?? opts.isAlerted);
+      }
+      if (opts.isStaggered !== undefined) lastPostureStaggered = Boolean(opts.isStaggered);
+    },
+    applyRecoilImpulse(opts = null) {
+      if (isDying) return;
+      applyCombatRecoilImpulse(physicsActorState, opts || { kind: 'hitRecoil', intensity: 1.0 });
+    },
+    setClipOverride(clipName = null, speed = null, snap = false) {
       baseClipOverride = typeof clipName === 'string' && clipName ? clipName : null;
+      baseClipOverrideSpeed =
+        baseClipOverride && Number.isFinite(Number(speed)) && Number(speed) > 0 ? Number(speed) : null;
+      if (snap && baseClipOverride && animCtrl && !isDying) {
+        stopCutsceneInternal();
+        stopClampedInternal();
+        const spd = baseClipOverrideSpeed ?? 1.0;
+        animCtrl.setBaseState(baseClipOverride, spd);
+        animCtrl.updateOneShotFade?.(0.25);
+        const act = animCtrl.getAction?.(baseClipOverride);
+        if (act) {
+          act.time = 0;
+          act.setEffectiveWeight(1.0);
+        }
+        animCtrl.mixer.update(0);
+      }
+    },
+    // FPS-independent normalized cutscene scrubber for Boss intro acting (Throne_Intro_Dialogue / Throne_Intro_StandUp).
+    // Smoothly cross-fades into `clipName` over `blendSec`, freezes `act.paused = true`, and pins
+    // `act.time = clamp01(u01) * clip.duration` with strict wSum === 1.000 on every frame!
+    setCutsceneClipNormalized(clipName, u01 = 0, blendSec = 0.22) {
+      if (isDying || !animCtrl || typeof clipName !== 'string' || !clipName) {
+        return false;
+      }
+      const act = animCtrl.getAction?.(clipName);
+      if (!act) return false;
+      const clip = act.getClip?.();
+      const dur = clip?.duration > 0 ? clip.duration : 1.0;
+      const clampedU = Math.max(0, Math.min(1, Number.isFinite(Number(u01)) ? Number(u01) : 0));
+      const safeBlend = Number.isFinite(Number(blendSec)) ? Math.max(0, Math.min(0.8, Number(blendSec))) : 0.22;
+      const nowMs = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+
+      if (activeCutsceneAction !== act) {
+        const preferredOutgoing =
+          (activeCutsceneAction && activeCutsceneAction !== act ? activeCutsceneAction : null) ||
+          (activeClampedAction && activeClampedAction !== act ? activeClampedAction : null);
+        // Clear clamped pointers without stopping preferredOutgoing if it will be handed off
+        if (prevClampedFromAction && prevClampedFromAction !== preferredOutgoing) {
+          prevClampedFromAction.stopFading();
+          prevClampedFromAction.setEffectiveWeight(0);
+          prevClampedFromAction.stop();
+        }
+        prevClampedFromAction = null;
+        activeClampedAction = null;
+        activeClampedDuration = 0;
+        activeClampedElapsed = 0;
+        baseClipOverride = null;
+        baseClipOverrideSpeed = null;
+
+        const fromAct =
+          safeBlend > 0.005 && animCtrl.prepareExternalClip
+            ? animCtrl.prepareExternalClip(act, preferredOutgoing)
+            : (animCtrl.prepareExternalClip?.(act, null), null);
+        if (prevCutsceneFromAction && prevCutsceneFromAction !== fromAct) {
+          prevCutsceneFromAction.stopFading();
+          prevCutsceneFromAction.setEffectiveWeight(0);
+          prevCutsceneFromAction.stop();
+        }
+        prevCutsceneFromAction = safeBlend > 0.005 ? (fromAct || null) : null;
+        if (prevCutsceneFromAction) {
+          prevCutsceneFromAction.paused = true;
+          prevCutsceneFromAction.enabled = true;
+          prevCutsceneFromAction.setEffectiveWeight(1.0);
+        }
+        if (activeCutsceneAction && activeCutsceneAction !== fromAct) {
+          activeCutsceneAction.stopFading();
+          activeCutsceneAction.setEffectiveWeight(0);
+          activeCutsceneAction.stop();
+        }
+
+        act.stopFading();
+        act.reset();
+        act.setLoop(THREE.LoopOnce, 1);
+        act.clampWhenFinished = true;
+        act.timeScale = 1.0;
+        act.enabled = true;
+        act.play();
+        act.paused = true;
+        act.time = clampedU * dur;
+        activeCutsceneAction = act;
+        cutsceneBlendDur = safeBlend;
+        cutsceneBlendElapsed = prevCutsceneFromAction ? 0 : safeBlend;
+        cutsceneLastPerfMs = nowMs;
+        advanceCutsceneBlend(0);
+      } else {
+        act.enabled = true;
+        act.paused = true;
+        act.time = clampedU * dur;
+        if (prevCutsceneFromAction) {
+          const dtWall = cutsceneLastPerfMs > 0 ? Math.max(0, Math.min(0.05, (nowMs - cutsceneLastPerfMs) * 0.001)) : 0.016;
+          cutsceneLastPerfMs = nowMs;
+          advanceCutsceneBlend(dtWall > 0.0005 ? dtWall : 0.016);
+        } else {
+          act.setEffectiveWeight(1.0);
+          cutsceneLastPerfMs = nowMs;
+        }
+      }
+
+      if (spawnedInst) {
+        spawnedInst.rotation.set(0, 0, 0);
+        spawnedInst.position.set(0, 0, 0);
+      }
+      restoreJawAdditive();
+      animCtrl.mixer.update(0);
+      applyJawAdditive();
+      return true;
+    },
+    clearCutsceneClip(blendOutSec = 0.18) {
+      const outgoing = activeCutsceneAction;
+      if (prevCutsceneFromAction) {
+        prevCutsceneFromAction.stopFading();
+        prevCutsceneFromAction.setEffectiveWeight(0);
+        prevCutsceneFromAction.stop();
+        prevCutsceneFromAction = null;
+      }
+      activeCutsceneAction = null;
+      cutsceneBlendElapsed = 0;
+      cutsceneBlendDur = 0.22;
+      cutsceneLastPerfMs = 0;
+      baseClipOverride = null;
+      baseClipOverrideSpeed = null;
+      if (animCtrl && !isDying) {
+        const idleName = resolvedIdleClip || cfg.idleClip || 'Idle';
+        const safeBlend = Number.isFinite(Number(blendOutSec)) ? Number(blendOutSec) : 0.18;
+        if (outgoing && safeBlend > 0.01 && typeof animCtrl.handoffExternalClipToBase === 'function') {
+          animCtrl.handoffExternalClipToBase(outgoing, idleName, 1.0, safeBlend);
+        } else {
+          if (outgoing) {
+            outgoing.stopFading();
+            outgoing.setEffectiveWeight(0);
+            outgoing.stop();
+          }
+          animCtrl.setBaseState(idleName, 1.0);
+          animCtrl.updateOneShotFade?.(0.25);
+        }
+        animCtrl.mixer.update(0);
+      } else if (outgoing) {
+        outgoing.stopFading();
+        outgoing.setEffectiveWeight(0);
+        outgoing.stop();
+      }
+    },
+    playClampedClip(clipName, speed = 1.0, blendInSec = CLAMPED_BLEND_IN_SEC) {
+      if (isDying || !animCtrl || typeof clipName !== 'string' || !clipName) {
+        return { ok: false, duration: 0 };
+      }
+      const act = animCtrl.getAction?.(clipName);
+      if (!act) return { ok: false, duration: 0 };
+      const safeSpeed = Math.max(0.1, Number(speed) || 1.0);
+      const safeBlend =
+        Number.isFinite(Number(blendInSec)) && Number(blendInSec) >= 0.01
+          ? Number(blendInSec)
+          : CLAMPED_BLEND_IN_SEC;
+      // Preserve outgoing clamped clip (e.g. Stagger_Kneel -> Stagger_Recover, Throne_StandUp -> Roar_Taunt)
+      // or dominant live action (e.g. Walking / Heavy_Cleave -> Stagger_Kneel) and stop every other layer
+      // so clamped & clamped->clamped transitions strictly keep wSum === 1.000 with zero leftover weights!
+      const outgoingCutscene = activeCutsceneAction && activeCutsceneAction !== act ? activeCutsceneAction : null;
+      if (activeCutsceneAction || prevCutsceneFromAction) {
+        if (prevCutsceneFromAction && prevCutsceneFromAction !== outgoingCutscene) {
+          prevCutsceneFromAction.stopFading();
+          prevCutsceneFromAction.setEffectiveWeight(0);
+          prevCutsceneFromAction.stop();
+        }
+        prevCutsceneFromAction = null;
+        activeCutsceneAction = null;
+        cutsceneBlendElapsed = 0;
+        cutsceneLastPerfMs = 0;
+        if (outgoingCutscene) outgoingCutscene.paused = false;
+      }
+      const outgoingClamped =
+        (activeClampedAction && activeClampedAction !== act ? activeClampedAction : null) || outgoingCutscene;
+      const fromAct = animCtrl.prepareExternalClip
+        ? animCtrl.prepareExternalClip(act, outgoingClamped)
+        : outgoingClamped;
+      if (prevClampedFromAction && prevClampedFromAction !== fromAct) {
+        prevClampedFromAction.stopFading();
+        prevClampedFromAction.setEffectiveWeight(0);
+        prevClampedFromAction.stop();
+      }
+      prevClampedFromAction = fromAct || null;
+      if (activeClampedAction && activeClampedAction !== fromAct) {
+        activeClampedAction.stopFading();
+        activeClampedAction.setEffectiveWeight(0);
+        activeClampedAction.stop();
+      }
+      activeClampedAction = null;
+      activeClampedDuration = 0;
+      activeClampedElapsed = 0;
+      activeClampedBlendSec = safeBlend;
+
+      const clip = act.getClip?.();
+      activeClampedDuration = clip?.duration ? clip.duration / safeSpeed : 2.0 / safeSpeed;
+      activeClampedElapsed = 0;
+      act.stopFading();
+      act.reset();
+      act.setLoop(THREE.LoopOnce, 1);
+      act.clampWhenFinished = true;
+      act.timeScale = safeSpeed;
+      act.enabled = true;
+      act.paused = false;
+      act.setEffectiveWeight(prevClampedFromAction ? 0.001 : 1.0);
+      act.play();
+      activeClampedAction = act;
+      restoreJawAdditive();
+      animCtrl.mixer.update(0);
+      applyJawAdditive();
+      return { ok: true, duration: activeClampedDuration };
+    },
+    isClampedClipDone() {
+      if (!activeClampedAction) return true;
+      return activeClampedElapsed >= Math.max(0.01, activeClampedDuration - 0.008);
+    },
+    clearClampedClip(snapToIdle = true, blendOutSec = 0.16) {
+      const outgoing = activeClampedAction;
+      if (prevClampedFromAction) {
+        prevClampedFromAction.stopFading();
+        prevClampedFromAction.setEffectiveWeight(0);
+        prevClampedFromAction.stop();
+        prevClampedFromAction = null;
+      }
+      activeClampedAction = null;
+      activeClampedDuration = 0;
+      activeClampedElapsed = 0;
+      baseClipOverride = null;
+      baseClipOverrideSpeed = null;
+      if (snapToIdle && animCtrl && !isDying) {
+        const idleName = resolvedIdleClip || cfg.idleClip || 'Idle';
+        const safeBlend = Number.isFinite(Number(blendOutSec)) ? Number(blendOutSec) : 0.16;
+        if (outgoing && safeBlend > 0.01 && typeof animCtrl.handoffExternalClipToBase === 'function') {
+          animCtrl.handoffExternalClipToBase(outgoing, idleName, 1.0, safeBlend);
+        } else {
+          if (outgoing) {
+            outgoing.stopFading();
+            outgoing.setEffectiveWeight(0);
+            outgoing.stop();
+          }
+          animCtrl.setBaseState(idleName, 1.0);
+          animCtrl.updateOneShotFade?.(0.25);
+        }
+        animCtrl.mixer.update(0);
+      } else if (outgoing) {
+        outgoing.stopFading();
+        outgoing.setEffectiveWeight(0);
+        outgoing.stop();
+      }
     },
     _markActive() {
+      stopCutsceneInternal();
+      stopClampedInternal();
+      restoreJawAdditive();
+      mouthOpen01 = 0;
+      resetEldenDissolveFromModel(spawnedInst || root);
+      dissolveActive = false;
+      physicsActorState.isDying = false;
+      physicsActorState.soulsThronePhase = null;
+      physicsActorState.soulsState = null;
+      lastPostureDead = false;
       baseClipOverride = null;
+      baseClipOverrideSpeed = null;
       inPool = false;
       isDying = false;
       proceduralFall = false;
       hitJoltTimer = 0;
+      hitJoltAmp = 1.0;
       hitReactCooldown = 0;
       hitTwistDir = 1;
       flashTimer = 0;
+      hasPrevRootPose = false;
+      hasEverMovedRoot = false;
+      zeroDispSec = 0;
+      lastExplicitMode = null;
+      lastExplicitVx = null;
+      lastExplicitVz = null;
+      lastExplicitLocalX = null;
+      lastExplicitLocalZ = null;
+      lastExplicitIsMoving = null;
+      lastExplicitSpeedMult = null;
+      lastExplicitActualSpeed = null;
+      lastExplicitTurnDelta = null;
+      lastPosturePhase = null;
+      lastPosturePhase01 = null;
+      lastPostureMoveType = null;
+      lastPostureBlocking = false;
+      lastPostureInCombat = false;
+      lastPostureStaggered = false;
       root.visible = true;
       root.position.y = 0;
       root.scale.set(1, 1, 1);
@@ -6217,6 +8880,13 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
       if (spawnedInst) {
         spawnedInst.rotation.set(0, 0, 0);
         spawnedInst.position.set(0, 0, 0);
+        spawnedInst.scale.set(baseInstScaleX, baseInstScaleY, baseInstScaleZ);
+      }
+      if (contactShadow) {
+        contactShadow.visible = true;
+        contactShadow.position.y = contactShadow.userData?.baseYOffset ?? 0.015;
+        contactShadow.userData?.setShadowOpacity?.(contactShadow.userData?.baseOpacity ?? 0.62);
+        contactShadow.userData?.setShadowScale?.(contactShadowRadius, contactShadowRadius);
       }
       if (stage1BreakNode) stage1BreakNode.visible = true;
       if (stage2BreakNode) stage2BreakNode.visible = true;
@@ -6239,60 +8909,208 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
       }
       return null;
     },
-    triggerHitReact() {
-      if (isDying) return;
-      hitJoltTimer = 0.17;
-      hitTwistDir = -hitTwistDir;
-      if (hitReactCooldown <= 0) {
-        const playedClip = animCtrl?.triggerHit?.(1.9);
-        hitReactCooldown = playedClip ? 0.18 : 0.08;
+    triggerHitReact(opts = null) {
+      if (isDying) return false;
+      const isObj = Boolean(opts && typeof opts === 'object');
+      const playClip = isObj && opts.playClip !== undefined ? Boolean(opts.playClip) : true;
+      const joltScale =
+        isObj && Number.isFinite(Number(opts.joltScale))
+          ? Math.max(0, Math.min(1.5, Number(opts.joltScale)))
+          : 1.0;
+      if (joltScale > 0.01 && !activeClampedAction && !activeCutsceneAction) {
+        // Colossal Boss: zero procedural tilt/squash wobble — only the strictly capped physics recoil spring.
+        if (!isColossalBossPhysics) {
+          hitJoltTimer = 0.17;
+          hitJoltAmp = joltScale;
+          hitTwistDir = -hitTwistDir;
+        }
+        applyCombatRecoilImpulse(physicsActorState, {
+          kind: 'hitRecoil',
+          dirX: isObj ? opts.dirX : undefined,
+          dirZ: isObj ? opts.dirZ : undefined,
+          intensity: joltScale,
+          isHeavy: Boolean(isObj && opts.isHeavy)
+        });
       }
+      if (!playClip || activeClampedAction || activeCutsceneAction || hitReactCooldown > 0) {
+        return false;
+      }
+      const clipName = isObj && typeof opts.clipName === 'string' && opts.clipName ? opts.clipName : null;
+      const speed = isObj && Number.isFinite(Number(opts.speed)) ? Number(opts.speed) : 1.85;
+      const playedClip = animCtrl?.triggerHit?.(speed, clipName, {
+        interruptAttack: Boolean(isObj && opts.interruptAttack),
+        blockGuard: false,
+        blendInSec: isObj && Number.isFinite(Number(opts.blendInSec)) ? Number(opts.blendInSec) : 0.04,
+        blendOutSec: isObj && Number.isFinite(Number(opts.blendOutSec)) ? Number(opts.blendOutSec) : 0.09,
+        maxWeight: isObj && Number.isFinite(Number(opts.maxWeight)) ? Number(opts.maxWeight) : 1.0
+      });
+      hitReactCooldown = playedClip ? 0.18 : 0.08;
+      return Boolean(playedClip);
     },
-    playHitFlinch() {
-      handle.triggerHitReact();
+    cancelHitReact() {
+      animCtrl?.cancelHit?.();
+    },
+    playHitFlinch(opts = null) {
+      return handle.triggerHitReact(opts);
     },
     playDeathCollapse() {
       if (isDying) return;
+      stopCutsceneInternal();
+      stopClampedInternal();
+      restoreJawAdditive();
+      baseClipOverride = null;
+      baseClipOverrideSpeed = null;
       isDying = true;
+      physicsActorState.isDying = true;
       hitJoltTimer = 0;
+      if (spawnedInst) {
+        spawnedInst.position.set(0, 0, 0);
+        spawnedInst.rotation.set(0, 0, 0);
+      }
       if (halo) halo.visible = false;
       if (innerBossHalo) innerBossHalo.visible = false;
       if (eliteCrest) eliteCrest.visible = false;
-      const hasClip = animCtrl?.triggerDeath?.(1.52);
+      const hasClip = animCtrl?.triggerDeath?.(1.38);
       proceduralFall = !hasClip;
     },
-    updateDying(dt, sinkRatio = 0) {
+    // updateDying(dt, sinkRatio, dissolve01):
+    //   - dissolve01 > 0 -> Elden Ring ash/ember dissolution IN PLACE on the stone floor (no sinking!)
+    //   - otherwise legacy sinkRatio floor-sink fallback (PvE Chapters 1-25 untouched).
+    updateDying(dt, sinkRatio = 0, dissolve01 = 0) {
       const safeDt = Math.min(Math.max(dt || 0.016, 0), 0.1);
+      restoreJawAdditive();
       if (animCtrl) {
         animCtrl.mixer.update(safeDt);
       }
       if (proceduralFall && spawnedInst) {
         spawnedInst.rotation.x = Math.max(-Math.PI * 0.48, spawnedInst.rotation.x - safeDt * 4.2);
       }
-      if (sinkRatio > 0) {
-        root.position.y = -sinkRatio * 0.45;
-      }
+      // Hit-flash restore runs BEFORE dissolve so the dissolve clones always stay bound this frame.
       if (flashTimer > 0) {
         flashTimer = Math.max(0, flashTimer - safeDt);
-        if (flashTimer <= 0) {
+        if (flashTimer <= 0 || dissolveActive) {
+          flashTimer = 0;
           for (let i = 0; i < flashMeshSlots.length; i++) {
             flashMeshSlots[i].mesh.material = flashMeshSlots[i].origMat;
           }
         }
       }
+      const rawDissolve = Number(dissolve01);
+      const d01 = Number.isFinite(rawDissolve) ? (rawDissolve < 0 ? 0 : rawDissolve > 1 ? 1 : rawDissolve) : 0;
+      let shadowFade = 1;
+      if (d01 > 0) {
+        if (flashTimer > 0) {
+          flashTimer = 0;
+          for (let i = 0; i < flashMeshSlots.length; i++) {
+            flashMeshSlots[i].mesh.material = flashMeshSlots[i].origMat;
+          }
+        }
+        root.position.y = 0;
+        dissolveActive = applyEldenDissolveToModel(spawnedInst || root, d01, { dt: safeDt });
+        if (!dissolveActive && d01 > 0.5) {
+          // Graceful fallback for non-patchable materials: gentle sink once past the halfway point
+          root.position.y = -(d01 - 0.5) * 0.9;
+        }
+        const t = d01 <= 0.08 ? 0 : d01 >= 0.85 ? 1 : (d01 - 0.08) / 0.77;
+        shadowFade = 1 - t * t * (3 - 2 * t);
+      } else {
+        if (dissolveActive) {
+          resetEldenDissolveFromModel(spawnedInst || root);
+          dissolveActive = false;
+        }
+        if (sinkRatio > 0) {
+          root.position.y = -sinkRatio * 0.45;
+        }
+        shadowFade = Math.max(0, 1 - sinkRatio * 1.4);
+      }
+      if (contactShadow) {
+        const baseOp = contactShadow.userData?.baseOpacity ?? 0.62;
+        contactShadow.userData?.setShadowOpacity?.(baseOp * shadowFade);
+      }
     },
-    playAttackAnim(overrideClip = null) {
+    playAttackAnim(overrideClip = null, desiredImpactDur = 0, explicitSpeed = 0, blendInSec = null) {
       if (isDying) return;
+      // A live combat attack always ends any lingering normalized cutscene scrub smoothly.
+      if (activeCutsceneAction) {
+        handle.clearCutsceneClip(0.12);
+      }
+      // Never freeze Boss or enemy if a preceding clamped clip already reached its end frame!
+      if (activeClampedAction) {
+        if (activeClampedElapsed >= Math.max(0.01, activeClampedDuration - 0.012)) {
+          handle.clearClampedClip(true, 0.12);
+        } else {
+          return;
+        }
+      }
       procRig?.triggerAttack?.();
       const targetClip = typeof overrideClip === 'string' && overrideClip ? overrideClip : cfg.atkClip;
       if (animCtrl && targetClip) {
-        animCtrl.triggerOneShot(targetClip, cfg.isBossVisual ? 1.42 : 1.55);
+        lastAttackClipPlayed = targetClip;
+        const impactSec = Number(desiredImpactDur);
+        const hasDesiredImpact = Number.isFinite(impactSec) && impactSec > 0.10;
+        const rawExplicit = Number(explicitSpeed);
+        // combat/bridge.js triggerModelAttack() passes default `comboStep = 1` as 3rd arg (blendInSec === undefined).
+        // Treat `explicitSpeed` as a direct speed override only when NOT windup-synced and either `blendInSec` is supplied
+        // (direct bossAi call) or `explicitSpeed` is a non-default speed (!== 1).
+        const hasExplicitSpeed =
+          !hasDesiredImpact &&
+          Number.isFinite(rawExplicit) &&
+          rawExplicit > 0 &&
+          ((blendInSec !== null && blendInSec !== undefined) || Math.abs(rawExplicit - 1) > 1e-4);
+
+        let spd = hasExplicitSpeed ? rawExplicit : cfg.isBossVisual ? 1.42 : 1.55;
+        if (hasDesiredImpact) {
+          if (targetClip === 'Heavy_Cleave') {
+            spd = Math.max(0.62, Math.min(2.1, 1.033 / impactSec));
+          } else {
+            const act = animCtrl.getAction?.(targetClip);
+            const clipDur = act?.getClip?.()?.duration || 0;
+            if (clipDur > 0.05) {
+              const impactFrac = ENEMY_CLIP_IMPACT_FRAC[targetClip] ?? 0.45;
+              const impactTimeAt1x = clipDur * impactFrac;
+              spd = Math.max(0.45, Math.min(2.5, impactTimeAt1x / impactSec));
+            }
+          }
+        }
+        const safeBlendIn =
+          Number.isFinite(Number(blendInSec)) && Number(blendInSec) >= 0.01 ? Number(blendInSec) : null;
+        animCtrl.triggerOneShot(targetClip, spd, safeBlendIn);
       }
     },
+    playBossClip(clipName, speed = 1.0, blendInSec = 0.14) {
+      if (isDying || !animCtrl || typeof clipName !== 'string' || !clipName) {
+        return { ok: false, duration: 0 };
+      }
+      if (activeCutsceneAction) {
+        handle.clearCutsceneClip(0.12);
+      }
+      if (activeClampedAction) {
+        if (activeClampedElapsed >= Math.max(0.01, activeClampedDuration - 0.012)) {
+          handle.clearClampedClip(true, 0.12);
+        } else {
+          return { ok: false, duration: 0 };
+        }
+      }
+      const act = animCtrl.getAction?.(clipName);
+      if (!act) return { ok: false, duration: 0 };
+      lastAttackClipPlayed = clipName;
+      const safeSpeed = Math.max(0.1, Number(speed) || 1.0);
+      const safeBlend =
+        Number.isFinite(Number(blendInSec)) && Number(blendInSec) >= 0.01 ? Number(blendInSec) : 0.14;
+      animCtrl.triggerOneShot(clipName, safeSpeed, safeBlend);
+      const clip = act.getClip?.();
+      return { ok: true, duration: clip?.duration ? clip.duration / safeSpeed : 1.0 / safeSpeed };
+    },
+    cancelAttackAnim() {
+      animCtrl?.cancelOneShot?.();
+    },
     flashHit() {
-      flashTimer = 0.10;
+      // Never flash a dissolving corpse (keeps the Elden ember-edge dissolve shader bound!)
+      if (dissolveActive) return;
+      flashTimer = softHitFlashMode ? 0.09 : 0.10;
       for (let i = 0; i < flashMeshSlots.length; i++) {
-        flashMeshSlots[i].mesh.material = hitFlashMat;
+        const slot = flashMeshSlots[i];
+        slot.mesh.material = slot.flashMat || hitFlashMat;
       }
       for (const item of instanceMats) {
         if (item.mat.emissive) {
@@ -6307,6 +9125,10 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
       for (let i = 0; i < flashMeshSlots.length; i++) {
         flashMeshSlots[i].mesh.material = flashMeshSlots[i].origMat;
       }
+      // Always free per-corpse dissolve material clones (restores shared originals before pooling!)
+      restoreJawAdditive();
+      resetEldenDissolveFromModel(spawnedInst || root);
+      dissolveActive = false;
       if (canPool) {
         let bucket = enemyMeshPool.get(poolKey);
         if (!bucket) {
@@ -6319,6 +9141,10 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
           bucket.push(handle);
           return;
         }
+      }
+      if (contactShadow) {
+        if (contactShadow.parent) contactShadow.parent.remove(contactShadow);
+        contactShadow.userData?.dispose?.();
       }
       if (animCtrl?.mixer && spawnedInst) {
         animCtrl.mixer.stopAllAction();
@@ -6342,18 +9168,249 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
         animCtrl.syncPhase(cfg.moveClip, phase01);
       }
     },
-    update(dt, arg2, arg3) {
+    // Signature `(dt, isMovingArg, speedMultArg, elapsedTimeArg, moveLocalXArg, moveLocalZArg, extraStateArg)`
+    // is matched by combat/bridge.js (`params.length >= 4 && params[2].includes('speed')`),
+    // while also supporting `(dt, { isMoving, speedMult, elapsedTime, strafeAnimMode, vx, vz, ... })` and `(dt, elapsedTime)`.
+    update(dt, isMovingArg = true, speedMultArg = 1, elapsedTimeArg = 0, moveLocalXArg = 0, moveLocalZArg = 1, extraStateArg = null) {
       const safeDt = Math.min(Math.max(dt || 0.016, 0), 0.1);
-      const isMoving = typeof arg2 === 'boolean' ? arg2 : true;
-      const elapsedTime = typeof arg2 === 'boolean' ? (arg3 || 0) : (arg2 || 0);
+      // Undo last frame's additive jaw lip-sync BEFORE the mixer evaluates (0 drift)
+      restoreJawAdditive();
+      let isMoving = true;
+      let rawSpeedMult = 1;
+      let elapsedTime = 0;
+      let localX = Number.isFinite(Number(moveLocalXArg)) ? Number(moveLocalXArg) : 0;
+      let localZ = Number.isFinite(Number(moveLocalZArg)) ? Number(moveLocalZArg) : 1;
+      let optsObj = extraStateArg && typeof extraStateArg === 'object' ? extraStateArg : null;
+
+      if (isMovingArg && typeof isMovingArg === 'object') {
+        optsObj = isMovingArg;
+        isMoving =
+          optsObj.isMoving !== undefined
+            ? Boolean(optsObj.isMoving)
+            : optsObj.moving !== undefined
+              ? Boolean(optsObj.moving)
+              : true;
+        rawSpeedMult = Number(
+          optsObj.speedMult ??
+            optsObj.animSpeedMult ??
+            optsObj.speed ??
+            optsObj.moveRatio ??
+            1
+        );
+        elapsedTime = Number(optsObj.elapsedTime ?? optsObj.time ?? 0) || 0;
+        if (optsObj.moveLocalX !== undefined) localX = Number(optsObj.moveLocalX) || 0;
+        if (optsObj.moveLocalZ !== undefined) localZ = Number(optsObj.moveLocalZ) || 0;
+      } else if (typeof isMovingArg === 'number') {
+        isMoving = true;
+        rawSpeedMult = 1;
+        elapsedTime = isMovingArg;
+      } else {
+        isMoving = typeof isMovingArg === 'boolean' ? isMovingArg : true;
+        rawSpeedMult = Number.isFinite(Number(speedMultArg)) ? Number(speedMultArg) : 1;
+        elapsedTime = Number.isFinite(Number(elapsedTimeArg)) ? Number(elapsedTimeArg) : 0;
+      }
+
+      if (lastExplicitIsMoving !== null && !(optsObj && (optsObj.isMoving !== undefined || optsObj.moving !== undefined))) {
+        isMoving = lastExplicitIsMoving;
+      }
+      if (lastExplicitSpeedMult !== null && !(optsObj && optsObj.speedMult !== undefined)) {
+        rawSpeedMult = lastExplicitSpeedMult;
+      }
+      if (lastExplicitLocalX !== null && !(optsObj && optsObj.moveLocalX !== undefined)) {
+        localX = lastExplicitLocalX;
+      }
+      if (lastExplicitLocalZ !== null && !(optsObj && optsObj.moveLocalZ !== undefined)) {
+        localZ = lastExplicitLocalZ;
+      }
+
+      // Measure real post-collision ground displacement & yaw turn rate (kills wall-pushing treadmill!)
+      let realVx = 0;
+      let realVz = 0;
+      let realSpeed = 0;
+      let yawRate = 0;
+      if (hasPrevRootPose && safeDt > 1e-4) {
+        const dx = root.position.x - prevRootX;
+        const dz = root.position.z - prevRootZ;
+        const disp = Math.hypot(dx, dz);
+        realVx = dx / safeDt;
+        realVz = dz / safeDt;
+        realSpeed = disp / safeDt;
+        let dyaw = root.rotation.y - prevRootYaw;
+        while (dyaw > Math.PI) dyaw -= Math.PI * 2;
+        while (dyaw < -Math.PI) dyaw += Math.PI * 2;
+        yawRate = dyaw / safeDt;
+        if (disp > 0.002) {
+          hasEverMovedRoot = true;
+          zeroDispSec = 0;
+        } else {
+          zeroDispSec += safeDt;
+        }
+      }
+      prevRootX = root.position.x;
+      prevRootZ = root.position.z;
+      prevRootYaw = root.rotation.y;
+      hasPrevRootPose = true;
+
+      const optVx = optsObj && Number.isFinite(Number(optsObj.vx)) ? Number(optsObj.vx) : lastExplicitVx;
+      const optVz = optsObj && Number.isFinite(Number(optsObj.vz)) ? Number(optsObj.vz) : lastExplicitVz;
+      const optActualSpd =
+        optsObj && Number.isFinite(Number(optsObj.actualSpeed))
+          ? Math.max(0, Number(optsObj.actualSpeed))
+          : lastExplicitActualSpeed;
+      const optTurnDelta =
+        optsObj && Number.isFinite(Number(optsObj.turnDelta))
+          ? Number(optsObj.turnDelta)
+          : lastExplicitTurnDelta;
+      if (Math.abs(yawRate) < 0.05 && optTurnDelta !== null && Math.abs(optTurnDelta) > 0.02 && safeDt > 1e-4) {
+        yawRate = optTurnDelta / safeDt;
+      }
+      const hasCallerVel = optVx !== null && optVz !== null;
+      const stalledAgainstWall = hasEverMovedRoot && realSpeed < 0.08 && zeroDispSec > 0.14;
+      const explicitMode =
+        (optsObj && typeof (optsObj.strafeAnimMode ?? optsObj.mode) === 'string' && (optsObj.strafeAnimMode ?? optsObj.mode)) ||
+        lastExplicitMode;
+
+      const clampedSpeedMult =
+        Number.isFinite(rawSpeedMult) && rawSpeedMult > 0.05
+          ? Math.max(0.28, Math.min(2.2, rawSpeedMult))
+          : 1.0;
+
+      // Resolve effective world velocity for 1:1 foot-sync cadence
+      let effVx = 0;
+      let effVz = 0;
+      if (hasCallerVel && !stalledAgainstWall) {
+        effVx = optVx;
+        effVz = optVz;
+      } else if (optActualSpd !== null && !stalledAgainstWall) {
+        const yaw = root.rotation.y || 0;
+        effVx = Math.sin(yaw) * optActualSpd;
+        effVz = Math.cos(yaw) * optActualSpd;
+      } else if (hasEverMovedRoot) {
+        effVx = realVx;
+        effVz = realVz;
+      } else if (isMoving) {
+        const nomSpd = (cfg.isBossVisual ? 3.8 : 3.2) * clampedSpeedMult;
+        const yaw = root.rotation.y || 0;
+        effVx = Math.sin(yaw) * nomSpd;
+        effVz = Math.cos(yaw) * nomSpd;
+      }
+
+      physicsActorState.x = root.position.x;
+      physicsActorState.z = root.position.z;
+      physicsActorState.vx = effVx;
+      physicsActorState.vz = effVz;
+      physicsActorState.facing = root.rotation.y || 0;
+      physicsActorState.isDying = isDying;
+      // Live in-game scale (combat.js multiplies root.scale by enc.scale / def.scale) for exact stride & posture calibration
+      const liveScale = (cfg.scale || 1.0) * effectiveScaleMult * (Math.abs(root.scale.x) > 1e-4 ? Math.abs(root.scale.x) : 1);
+      physicsActorState.scale = liveScale;
+      footSyncOpts.scale = liveScale;
+      postureOpts.scale = liveScale;
+      physicsActorState.soulsAwake = Boolean(
+        (optsObj && (optsObj.inCombat ?? optsObj.isAlerted)) ?? lastPostureInCombat ?? isMoving
+      );
+
       if (hitReactCooldown > 0) {
         hitReactCooldown = Math.max(0, hitReactCooldown - safeDt);
       }
+      let useFallbackIdleBreath = false;
       if (animCtrl && !isDying && canonicalType !== 'corrupted_treant' && canonicalType !== 'mimic_chest') {
-        const baseClip = baseClipOverride || (isMoving ? cfg.moveClip : (cfg.idleClip || cfg.moveClip));
-        animCtrl.setBaseState(baseClip, baseClipOverride ? 1.35 : isMoving ? (cfg.moveSpeedAnim || 1.1) : 1.0);
-        animCtrl.updateOneShotFade?.();
-        animCtrl.mixer.update(safeDt);
+        if (activeCutsceneAction) {
+          // Normalized FPS-independent cutscene scrub owns the skeleton — advance only crossfade weight,
+          // keeping act.paused = true and act.time strictly pinned to setCutsceneClipNormalized(clip, u01)!
+          const nowMs = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+          cutsceneLastPerfMs = nowMs;
+          advanceCutsceneBlend(safeDt);
+          activeCutsceneAction.enabled = true;
+          activeCutsceneAction.paused = true;
+          animCtrl.mixer.update(0);
+        } else if (activeClampedAction) {
+          activeClampedElapsed += safeDt;
+          const rawW = prevClampedFromAction
+            ? Math.min(1, activeClampedElapsed / Math.max(0.01, activeClampedBlendSec))
+            : 1.0;
+          const wIn = prevClampedFromAction ? smoothstep01(0, 1, rawW) : 1.0;
+          if (prevClampedFromAction) {
+            if (rawW >= 1.0) {
+              prevClampedFromAction.stopFading();
+              prevClampedFromAction.setEffectiveWeight(0);
+              prevClampedFromAction.stop();
+              prevClampedFromAction = null;
+            } else {
+              prevClampedFromAction.setEffectiveWeight(1.0 - wIn);
+            }
+          }
+          activeClampedAction.enabled = true;
+          activeClampedAction.setEffectiveWeight(wIn);
+          animCtrl.mixer.update(safeDt);
+        } else if (baseClipOverride) {
+          animCtrl.setBaseState(baseClipOverride, baseClipOverrideSpeed ?? 1.35);
+          animCtrl.updateOneShotFade?.(safeDt);
+          animCtrl.mixer.update(safeDt);
+        } else {
+          const effectiveMoving = isMoving && !stalledAgainstWall;
+          const loco = resolveEnemyLocomotionClip(
+            explicitMode,
+            effectiveMoving,
+            clampedSpeedMult,
+            localX,
+            localZ,
+            yawRate
+          );
+          const isInPlaceTurn = loco.mode === 'turn_left' || loco.mode === 'turn_right';
+          const isBackstep = loco.mode === 'backstep';
+
+          if (!loco.isIdle && isInPlaceTurn) {
+            const turnSpd = Math.max(0.75, Math.min(1.65, Math.abs(yawRate) > 0.4 ? Math.abs(yawRate) / 2.2 : 1.0));
+            animCtrl.setBaseState(loco.clip, turnSpd, 0.14);
+            animCtrl.updateOneShotFade?.(safeDt);
+            animCtrl.mixer.update(safeDt);
+          } else if (!loco.isIdle && isBackstep) {
+            animCtrl.setBaseState(loco.clip, 1.15, 0.12);
+            animCtrl.updateOneShotFade?.(safeDt);
+            animCtrl.mixer.update(safeDt);
+          } else if (!loco.isIdle) {
+            const locoAct = animCtrl.getAction?.(loco.clip);
+            footSyncOpts.strafeAnimMode = loco.mode;
+            footSyncOpts.clipDuration = locoAct?.getClip?.()?.duration || 1.0;
+            footSyncOpts.smoothDt = safeDt;
+            const syncedRate = computeFootSyncPlaybackRate(physicsActorState, effVx, effVz, footSyncOpts);
+            if (syncedRate > 0.02) {
+              const rateScale = cfg.isRiftTripo || cfg.isBossVisual ? syncedRate : Math.max(0.28, (cfg.moveSpeedAnim || 1.1) * clampedSpeedMult);
+              animCtrl.setBaseState(loco.clip, rateScale, 0.18);
+            } else if (hasDedicatedIdleClip) {
+              animCtrl.setBaseState(resolvedIdleClip, 1.0, 0.18);
+            } else {
+              animCtrl.setBaseState(cfg.moveClip, 0);
+              const moveAct = animCtrl.getAction?.(cfg.moveClip);
+              if (moveAct) {
+                moveAct.time = 0;
+                moveAct.paused = true;
+              }
+              useFallbackIdleBreath = true;
+            }
+            animCtrl.updateOneShotFade?.(safeDt);
+            animCtrl.mixer.update(safeDt);
+          } else if (hasDedicatedIdleClip) {
+            // Standing guard / unawakened / stunned: blend smoothly into real baked Idle clip (0% treadmill!)
+            animCtrl.setBaseState(resolvedIdleClip, 1.0, 0.18);
+            animCtrl.updateOneShotFade?.(safeDt);
+            animCtrl.mixer.update(safeDt);
+          } else {
+            // Defensive fallback for clip-less rigs without a dedicated Idle clip: freeze move clip at neutral stance
+            animCtrl.setBaseState(cfg.moveClip, 0);
+            const moveAct = animCtrl.getAction?.(cfg.moveClip);
+            if (moveAct) {
+              moveAct.time = 0;
+              moveAct.paused = true;
+            }
+            animCtrl.updateOneShotFade?.(safeDt);
+            animCtrl.mixer.update(safeDt);
+            useFallbackIdleBreath = true;
+          }
+        }
+        // Re-apply Boss additive jaw lip-sync strictly AFTER mixer.update so jaw tracks never fight or drift
+        applyJawAdditive();
       }
       if (procRig) {
         procRig.update(safeDt, elapsedTime, isDying);
@@ -6361,19 +9418,92 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
 
       if (hitJoltTimer > 0 && !isDying) {
         hitJoltTimer = Math.max(0, hitJoltTimer - safeDt);
-        const jolt = Math.sin((hitJoltTimer / 0.17) * Math.PI);
+        const jolt = Math.sin((hitJoltTimer / 0.17) * Math.PI) * hitJoltAmp;
         if (spawnedInst) {
           spawnedInst.rotation.x = -jolt * 0.28;
           spawnedInst.rotation.z = hitTwistDir * jolt * 0.14;
+          spawnedInst.scale.set(
+            baseInstScaleX * (1 + jolt * 0.055),
+            baseInstScaleY * (1 - jolt * 0.075),
+            baseInstScaleZ * (1 + jolt * 0.055)
+          );
         }
-        root.scale.set(1 + jolt * 0.055, 1 - jolt * 0.075, 1 + jolt * 0.055);
-      } else if (!isDying) {
-        if (spawnedInst && (spawnedInst.rotation.x !== 0 || spawnedInst.rotation.z !== 0)) {
+      } else if (!isDying && spawnedInst && !procRig) {
+        if (activeCutsceneAction || activeClampedAction) {
+          // Pure baked cutscene/stagger pose while normalized cutscene or clamped clip drives the skeleton
+          if (spawnedInst.rotation.x !== 0 || spawnedInst.rotation.y !== 0 || spawnedInst.rotation.z !== 0) {
+            spawnedInst.rotation.set(0, 0, 0);
+          }
+          if (spawnedInst.position.x !== 0 || spawnedInst.position.y !== 0 || spawnedInst.position.z !== 0) {
+            spawnedInst.position.set(0, 0, 0);
+          }
+        } else {
+          // Grounded physics posture (windup coil, strike lunge, heavy follow-through, strafe bank, turn lean & spring recoil)
+          let phase = (optsObj && (optsObj.combatPhase ?? optsObj.phase ?? optsObj.bossPosture)) || lastPosturePhase || 'neutral';
+          let phase01 =
+            optsObj && Number.isFinite(Number(optsObj.combatPhase01 ?? optsObj.phase01))
+              ? Number(optsObj.combatPhase01 ?? optsObj.phase01)
+              : lastPosturePhase01 ?? 0;
+          let moveType = (optsObj && (optsObj.moveType ?? optsObj.attackKey)) || lastPostureMoveType || lastAttackClipPlayed;
+
+          if (phase === 'neutral' && animCtrl?.isOneShotActive?.()) {
+            const activeClip = animCtrl.getActiveAttackClipName?.() || lastAttackClipPlayed;
+            const prog = animCtrl.getActiveAttackProgress01?.() ?? 0;
+            const impFrac = ENEMY_CLIP_IMPACT_FRAC[activeClip] ?? 0.48;
+            const windEnd = Math.max(0.15, impFrac * 0.82);
+            const activeEnd = Math.min(0.88, impFrac + 0.16);
+            moveType = activeClip || moveType;
+            if (prog < windEnd) {
+              phase = 'windup';
+              phase01 = prog / windEnd;
+            } else if (prog < activeEnd) {
+              phase = 'active';
+              phase01 = (prog - windEnd) / Math.max(0.05, activeEnd - windEnd);
+            } else {
+              phase = 'recover';
+              phase01 = (prog - activeEnd) / Math.max(0.05, 1.0 - activeEnd);
+            }
+          } else if (lastPostureStaggered && phase === 'neutral') {
+            phase = 'stagger';
+          }
+
+          postureOpts.vx = effVx;
+          postureOpts.vz = effVz;
+          postureOpts.facing = root.rotation.y || 0;
+          postureOpts.turnRate = yawRate;
+          postureOpts.combatPhase = phase;
+          postureOpts.combatPhase01 = phase01;
+          postureOpts.moveType = moveType;
+          postureOpts.isBlocking = Boolean((optsObj && optsObj.isBlocking) ?? lastPostureBlocking);
+          postureOpts.inCombat = physicsActorState.soulsAwake;
+          postureOpts.isDead = Boolean(isDying || lastPostureDead || (optsObj && optsObj.isDead));
+          postureOpts.elapsedTime = elapsedTime;
+          postureOpts.timeSec = elapsedTime;
+
+          const posture = computeCombatPostureDynamics(physicsActorState, postureOpts, safeDt);
+          applyCombatPostureToObject3D(spawnedInst, posture, postureApplyOpts);
+        }
+
+        const breathY = useFallbackIdleBreath ? 1 + Math.sin(elapsedTime * 2.2) * 0.014 : 1;
+        const targetSY = baseInstScaleY * breathY;
+        if (
+          spawnedInst.scale.x !== baseInstScaleX ||
+          Math.abs(spawnedInst.scale.y - targetSY) > 1e-5 ||
+          spawnedInst.scale.z !== baseInstScaleZ
+        ) {
+          spawnedInst.scale.set(baseInstScaleX, targetSY, baseInstScaleZ);
+        }
+      } else if (!isDying && spawnedInst) {
+        if (spawnedInst.rotation.x !== 0 || spawnedInst.rotation.z !== 0) {
           spawnedInst.rotation.x = 0;
           spawnedInst.rotation.z = 0;
         }
-        if (root.scale.x !== 1 || root.scale.y !== 1 || root.scale.z !== 1) {
-          root.scale.set(1, 1, 1);
+        if (
+          spawnedInst.scale.x !== baseInstScaleX ||
+          spawnedInst.scale.y !== baseInstScaleY ||
+          spawnedInst.scale.z !== baseInstScaleZ
+        ) {
+          spawnedInst.scale.set(baseInstScaleX, baseInstScaleY, baseInstScaleZ);
         }
       }
 
@@ -6445,13 +9575,31 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
   };
   const enemyAnimFacade = {
     ...(animCtrl || {}),
-    triggerHitReact: () => handle.triggerHitReact(),
-    playHitFlinch: () => handle.playHitFlinch(),
-    playAttackAnim: (c) => handle.playAttackAnim(c),
-    playDeathCollapse: () => handle.playDeathCollapse()
+    triggerHitReact: (opts) => handle.triggerHitReact(opts),
+    cancelHitReact: () => handle.cancelHitReact(),
+    playHitFlinch: (opts) => handle.playHitFlinch(opts),
+    playAttackAnim: (c, d, s, b) => handle.playAttackAnim(c, d, s, b),
+    playDeathCollapse: () => handle.playDeathCollapse(),
+    getWeaponSegmentWorld: () => handle.getWeaponSegmentWorld(),
+    setLocomotionState: (opts) => handle.setLocomotionState(opts),
+    setCombatPostureState: (opts) => handle.setCombatPostureState(opts),
+    applyRecoilImpulse: (opts) => handle.applyRecoilImpulse(opts),
+    setCutsceneClipNormalized: (c, u, b) => handle.setCutsceneClipNormalized(c, u, b),
+    clearCutsceneClip: (b) => handle.clearCutsceneClip(b),
+    setBossMouthOpen: (v) => handle.setBossMouthOpen(v),
+    getBossMouthOpen: () => handle.getBossMouthOpen()
   };
   root.userData.animCtrl = enemyAnimFacade;
   root.userData.triggerHitReact = enemyAnimFacade.triggerHitReact;
+  root.userData.getWeaponSegmentWorld = enemyAnimFacade.getWeaponSegmentWorld;
+  root.userData.setLocomotionState = enemyAnimFacade.setLocomotionState;
+  root.userData.setCombatPostureState = enemyAnimFacade.setCombatPostureState;
+  root.userData.applyRecoilImpulse = enemyAnimFacade.applyRecoilImpulse;
+  root.userData.setCutsceneClipNormalized = enemyAnimFacade.setCutsceneClipNormalized;
+  root.userData.clearCutsceneClip = enemyAnimFacade.clearCutsceneClip;
+  root.userData.setBossMouthOpen = enemyAnimFacade.setBossMouthOpen;
+  root.userData.getBossMouthOpen = enemyAnimFacade.getBossMouthOpen;
+  root.userData.contactShadow = contactShadow;
   return handle;
 }
 

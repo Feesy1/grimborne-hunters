@@ -3,6 +3,7 @@ import {
   CLASSES,
   WEAPONS,
   LEVELS,
+  SOULS_LEVEL_DEF,
   RUN_UPGRADES,
   WEAPON_MAX_LEVEL,
   MAGE_ELEMENTS,
@@ -11,7 +12,7 @@ import {
   MAGE_TALENT_TREE,
   CLASS_TALENT_TREES,
   DAILY_QUEST_TEMPLATES
-} from './config.js?v=20261120z35';
+} from './config.js?v=20261121z64';
 
 export const WEAPON_MAX_SHOP_LEVEL = WEAPON_MAX_LEVEL || 12;
 
@@ -277,6 +278,7 @@ function createDefaultState(zeroGold = false) {
   const todayKey = getTodayDateKey();
   return {
     gold: zeroGold ? 0 : 0,
+    riftGold: 0,
     selectedClass: 'warrior',
     maxUnlockedLevel: 1,
     heroLevel: 1,
@@ -390,7 +392,14 @@ export function mergeCloudState(localState, cloudState) {
   unlockedWeapons.spark_staff = true;
 
   const weaponShopLevels = mergeMaxNumMap(localState.weaponShopLevels, cloudState.weaponShopLevels, 1);
-  const levelStars = mergeMaxNumMap(localState.levelStars, cloudState.levelStars, 0);
+  const rawLevelStars = mergeMaxNumMap(localState.levelStars, cloudState.levelStars, 0);
+  const levelStars = {};
+  for (let lvl = 1; lvl <= LEVELS.length; lvl++) {
+    const s = rawLevelStars[lvl] ?? rawLevelStars[String(lvl)];
+    if (s !== undefined) {
+      levelStars[lvl] = clampInt(s, 0, 3, 0);
+    }
+  }
   const unlockedBlueprints = mergeTruthyMap(localState.unlockedBlueprints, cloudState.unlockedBlueprints);
   const bossHammerAttemptedStages = mergeTruthyMap(localState.bossHammerAttemptedStages, cloudState.bossHammerAttemptedStages);
   const unlockedMageElements = mergeTruthyMap(localState.unlockedMageElements, cloudState.unlockedMageElements);
@@ -432,6 +441,7 @@ export function mergeCloudState(localState, cloudState) {
     ...secondary,
     ...primary,
     gold: Math.max(clampInt(localState.gold, 0, 99999999, 0), clampInt(cloudState.gold, 0, 99999999, 0)),
+    riftGold: Math.max(clampInt(localState.riftGold, 0, 99999999, 0), clampInt(cloudState.riftGold, 0, 99999999, 0)),
     maxUnlockedLevel: Math.max(
       clampInt(localState.maxUnlockedLevel, 1, LEVELS.length, 1),
       clampInt(cloudState.maxUnlockedLevel, 1, LEVELS.length, 1)
@@ -529,8 +539,9 @@ export function createProgressionStore(initialSave = null) {
     }
     return {
       gold: state.gold,
+      riftGold: clampInt(state.riftGold, 0, 99999999, 0),
       selectedClass: activeCls,
-      maxUnlockedLevel: state.maxUnlockedLevel,
+      maxUnlockedLevel: clampInt(state.maxUnlockedLevel, 1, LEVELS.length, 1),
       heroLevel,
       heroXp,
       heroXpNext,
@@ -568,6 +579,7 @@ export function createProgressionStore(initialSave = null) {
     }
 
     base.gold = clampInt(savedObj.gold, 0, 99999999, base.gold);
+    base.riftGold = clampInt(savedObj.riftGold, 0, 99999999, base.riftGold);
     if (savedObj.selectedClass && CLASSES[savedObj.selectedClass]) {
       base.selectedClass = savedObj.selectedClass;
     }
@@ -726,6 +738,17 @@ export function createProgressionStore(initialSave = null) {
     if (!Number.isFinite(delta)) return state.gold;
     state.gold = Math.max(0, Math.round(state.gold + delta));
     return state.gold;
+  }
+
+  function getRiftGold() {
+    return clampInt(state.riftGold, 0, 99999999, 0);
+  }
+
+  function addRiftGold(amount) {
+    const delta = Number(amount);
+    if (!Number.isFinite(delta)) return getRiftGold();
+    state.riftGold = Math.max(0, Math.min(99999999, Math.round(getRiftGold() + delta)));
+    return state.riftGold;
   }
 
   function selectClass(classId) {
@@ -902,11 +925,26 @@ export function createProgressionStore(initialSave = null) {
     return true;
   }
 
+  function isCampaignLevel(levelNum) {
+    if (levelNum === SOULS_LEVEL_DEF.id) return false;
+    const num = Number(levelNum);
+    if (!Number.isFinite(num)) return false;
+    const lvl = Math.floor(num);
+    return lvl >= 1 && lvl <= LEVELS.length && lvl !== SOULS_LEVEL_DEF.level;
+  }
+
   function unlockNextLevel(clearedLevel) {
-    const baseLevel = Number.isFinite(Number(clearedLevel))
+    const hasExplicit = clearedLevel !== undefined && clearedLevel !== null;
+    if (hasExplicit && !isCampaignLevel(clearedLevel)) {
+      return false;
+    }
+    const baseLevel = hasExplicit
       ? Math.floor(Number(clearedLevel))
-      : state.maxUnlockedLevel;
-    const targetLevel = Math.min(LEVELS.length, Math.max(1, baseLevel + 1));
+      : clampInt(state.maxUnlockedLevel, 1, LEVELS.length, 1);
+    if (baseLevel < 1 || baseLevel >= LEVELS.length) {
+      return false;
+    }
+    const targetLevel = Math.min(LEVELS.length, baseLevel + 1);
     if (targetLevel > state.maxUnlockedLevel) {
       state.maxUnlockedLevel = targetLevel;
       return true;
@@ -915,7 +953,8 @@ export function createProgressionStore(initialSave = null) {
   }
 
   function recordLevelStars(levelNum, starsCount) {
-    const lvl = clampInt(levelNum, 1, LEVELS.length, 1);
+    if (!isCampaignLevel(levelNum)) return false;
+    const lvl = Math.floor(Number(levelNum));
     const stars = clampInt(starsCount, 0, 3, 0);
     if (!state.levelStars || typeof state.levelStars !== 'object') {
       state.levelStars = {};
@@ -1576,6 +1615,8 @@ export function createProgressionStore(initialSave = null) {
         : mergeCloudState(cloneState(), localOrCloud),
     resetAllProgress,
     addGold,
+    getRiftGold,
+    addRiftGold,
     selectClass,
     ensureDailyQuests,
     recordDailyProgress,

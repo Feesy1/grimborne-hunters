@@ -9,18 +9,19 @@
 
 import {
   LEVELS,
+  getLevelDef,
   WEAPONS,
   RUN_UPGRADES,
   MAGE_ELEMENTS,
   MAGE_ELEMENT_ORDER
-} from '../config.js?v=20261120z35';
+} from '../config.js?v=20261121z64';
 import {
   RANK_ROMAN,
   el,
   formatTimeMMSS,
   hexNumToCss,
   isWeaponHighlightChoice
-} from './resolvers.js?v=20261120z35';
+} from './resolvers.js?v=20261121z64';
 import {
   makeSvgNode,
   createWeaponSvg,
@@ -29,7 +30,7 @@ import {
   createMandalaSvg,
   createRuneHaloSvg,
   createBlessingRelicSvg
-} from './svgIcons.js?v=20261120z35';
+} from './svgIcons.js?v=20261121z64';
 
 export function createModalsController({
   root,
@@ -507,6 +508,7 @@ export function createModalsController({
       unlockedWeapon = null,
       canRevive = false,
       canDoubleGold = true,
+      canBossRematch = false,
       stars = 0,
       elapsedSec = 0,
       isEndless = false,
@@ -521,7 +523,7 @@ export function createModalsController({
     resultPanel.classList.toggle('is-victory', Boolean(victory));
     resultPanel.classList.toggle('is-defeat', !victory);
 
-    const lvlDef = LEVELS[(Number(level) || 1) - 1];
+    const lvlDef = getLevelDef(Number(level) || 1);
     resultCrest.innerHTML = '';
     if (victory) {
       resultCrest.appendChild(
@@ -615,6 +617,18 @@ export function createModalsController({
     resultActionsCol.innerHTML = '';
 
     if (!victory) {
+      if (canBossRematch) {
+        const rematchBtn = el('button', 'result-btn btn-boss-rematch');
+        rematchBtn.type = 'button';
+        rematchBtn.appendChild(el('span', 'result-btn-label', '⚔️ Снова к боссу (Арена)'));
+        rematchBtn.addEventListener('click', async () => {
+          rematchBtn.disabled = true;
+          hideResultModal();
+          await (actions.onBossRematch || callbacks.onBossRematch)?.();
+        });
+        resultActionsCol.appendChild(rematchBtn);
+      }
+
       if (canRevive) {
         const reviveBtn = el('button', 'result-btn btn-revive');
         reviveBtn.type = 'button';
@@ -643,7 +657,11 @@ export function createModalsController({
 
       const retryBtn = el('button', 'result-btn btn-retry');
       retryBtn.type = 'button';
-      setModalButtonContent(retryBtn, 'retry', isEndless ? 'Повторить Орду' : 'Повторить главу');
+      setModalButtonContent(
+        retryBtn,
+        'retry',
+        canBossRematch ? 'С начала главы (Костёр)' : isEndless ? 'Повторить Орду' : 'Повторить главу'
+      );
       retryBtn.addEventListener('click', () => {
         hideResultModal();
         (actions.onRetry || actions.onRestart || callbacks.onRetry)?.();
@@ -870,20 +888,32 @@ export function createModalsController({
     const lang = getLang();
     activePauseHandlers = handlers || {};
     syncPauseToggles?.();
-    const isEndlessPause = Boolean(info.isEndless);
-    const chName = isEndlessPause
-      ? (lang === 'en' ? 'Endless Horde' : 'Бесконечная Орда')
-      : (info.levelNameRu || `Глава ${info.level || 1}`);
-    const phaseStr = isEndlessPause
-      ? `${lang === 'en' ? 'Wave' : 'Волна'} ${Math.max(1, Number(info.endlessWave) || 1)} • ${formatTimeMMSS(info.elapsedSec ?? info.elapsedTime ?? 0)}`
-      : (info.phaseText || '');
-    const goldEarned = Math.floor(Number(info.goldRun) || 0);
+    const isSoulsPause = Boolean(info.isSoulslike || Number(info.level) === 26);
+    const isEndlessPause = !isSoulsPause && Boolean(info.isEndless);
     pauseSub.innerHTML = '';
-    const prefix = `${chName}${phaseStr ? ` • ${phaseStr}` : ''} • Добыто: `;
-    pauseSub.append(
-      document.createTextNode(prefix),
-      el('span', 'pause-gold-nowrap', `+${goldEarned}\u00A0зол.`)
-    );
+    if (isSoulsPause) {
+      const zoneTitle = info.souls?.zoneTitleRu || '';
+      pauseSub.textContent = zoneTitle ? `Abandoned Knight Rift • ${zoneTitle}` : 'Abandoned Knight Rift';
+      setModalButtonContent(pauseResumeBtn, 'play', 'Продолжить');
+      setModalButtonContent(pauseRestartBtn, 'retry', 'Сразиться заново (Костёр)');
+      setModalButtonContent(pauseExitBtn, 'camp', 'Вернуться в Хаб');
+    } else {
+      setModalButtonContent(pauseResumeBtn, 'play', 'Продолжить бой');
+      setModalButtonContent(pauseRestartBtn, 'retry', 'Начать главу заново');
+      setModalButtonContent(pauseExitBtn, 'camp', 'Выйти в главное меню');
+      const chName = isEndlessPause
+        ? (lang === 'en' ? 'Endless Horde' : 'Бесконечная Орда')
+        : (info.levelNameRu || `Глава ${info.level || 1}`);
+      const phaseStr = isEndlessPause
+        ? `${lang === 'en' ? 'Wave' : 'Волна'} ${Math.max(1, Number(info.endlessWave) || 1)} • ${formatTimeMMSS(info.elapsedSec ?? info.elapsedTime ?? 0)}`
+        : (info.phaseText || '');
+      const goldEarned = Math.floor(Number(info.goldRun) || 0);
+      const prefix = `${chName}${phaseStr ? ` • ${phaseStr}` : ''} • Добыто: `;
+      pauseSub.append(
+        document.createTextNode(prefix),
+        el('span', 'pause-gold-nowrap', `+${goldEarned}\u00A0зол.`)
+      );
+    }
     pauseModal.classList.remove('hidden');
   }
 
