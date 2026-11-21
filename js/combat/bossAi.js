@@ -7,8 +7,8 @@ import {
   clamp,
   normalizeAngle,
   lerpAngle
-} from './bridge.js?v=20261121z64';
-import { SOULS_CASTLE_CONSTANTS } from '../souls/soulsCastleLayout.js?v=20261121z64';
+} from './bridge.js?v=20261121z68';
+import { SOULS_CASTLE_CONSTANTS } from '../souls/soulsCastleLayout.js?v=20261121z68';
 
 export function updateBossAI(boss, dt, elapsedTime, ctx) {
   const {
@@ -609,24 +609,25 @@ export function updateBossAI(boss, dt, elapsedTime, ctx) {
 // Neutral Spacing/Circling, Combo Branching, Flask Punish w/ LOS, Multi-Parry
 // ============================================================================
 export const SOULS_BOSS_CLIP_TIMINGS = Object.freeze({
-  Heavy_Cleave: Object.freeze({ duration: 3.200, endAt: 1.80, impactAt: 1.033, speed: 1.75, trackingCutoff01: 0.66 }),
-  Sweep_Combo: Object.freeze({ duration: 4.700, endAt: 3.85, hit1At: 1.967, hit2At: 2.967, speed: 1.50, trackingCutoff01: 0.68 }),
-  Delayed_Crush: Object.freeze({ duration: 4.233, endAt: 3.48, hit1At: 1.033, hit2At: 1.633, lockAt: 2.48, impactAt: 2.700, speed: 1.42, trackingCutoff01: 0.68 }),
-  Combo_Sweep_1: Object.freeze({ duration: 1.250, endAt: 1.12, impactAt: 0.60, speed: 1.15, trackingCutoff01: 0.68 }),
-  Combo_Backhand_2: Object.freeze({ duration: 1.150, endAt: 1.04, impactAt: 0.54, speed: 1.18, trackingCutoff01: 0.68 }),
-  Combo_Slam_3: Object.freeze({ duration: 1.450, endAt: 1.32, impactAt: 0.82, speed: 1.12, trackingCutoff01: 0.70 }),
-  Leap_Slam: Object.freeze({ duration: 3.700, endAt: 2.55, takeoffAt: 0.433, flightStartAt: 0.70, apexAt: 1.233, landMoveEndAt: 1.633, impactAt: 1.767, speed: 1.55, trackingCutoff01: 0.65 }),
-  Whirl_Spin: Object.freeze({ duration: 1.100, windupSec: 0.48, p1SpinSec: 0.85, p2SpinSec: 1.38, trackingCutoff01: 0.68 }),
-  Recover_Heft: Object.freeze({ duration: 0.950, speed: 1.0 }),
+  Heavy_Cleave: Object.freeze({ duration: 3.200, endAt: 1.80, impactAt: 1.033, speed: 1.22, trackingCutoff01: 0.66 }),
+  Sweep_Combo: Object.freeze({ duration: 4.700, endAt: 3.85, hit1At: 1.967, hit2At: 2.967, speed: 1.20, trackingCutoff01: 0.68 }),
+  Delayed_Crush: Object.freeze({ duration: 4.233, endAt: 3.48, hit1At: 1.033, hit2At: 1.633, lockAt: 2.48, impactAt: 2.700, speed: 1.18, trackingCutoff01: 0.68 }),
+  Combo_Sweep_1: Object.freeze({ duration: 1.250, endAt: 1.14, impactAt: 0.60, speed: 1.14, trackingCutoff01: 0.68 }),
+  Combo_Backhand_2: Object.freeze({ duration: 1.150, endAt: 1.05, impactAt: 0.54, speed: 1.16, trackingCutoff01: 0.68 }),
+  Combo_Slam_3: Object.freeze({ duration: 1.450, endAt: 1.34, impactAt: 0.82, speed: 1.12, trackingCutoff01: 0.70 }),
+  Leap_Slam: Object.freeze({ duration: 3.700, endAt: 2.55, takeoffAt: 0.433, flightStartAt: 0.70, apexAt: 1.233, landMoveEndAt: 1.633, impactAt: 1.767, speed: 1.22, trackingCutoff01: 0.65 }),
+  Whirl_Spin: Object.freeze({ duration: 1.100, windupSec: 0.52, p1SpinSec: 0.92, p2SpinSec: 1.42, speed: 1.15, trackingCutoff01: 0.68 }),
+  Recover_Heft: Object.freeze({ duration: 0.950, speed: 1.05 }),
+  Walk_Backward: Object.freeze({ duration: 1.000, speed: 1.0 }),
   Strafe_Left: Object.freeze({ duration: 1.000, speed: 1.0 }),
   Strafe_Right: Object.freeze({ duration: 1.000, speed: 1.0 }),
   Cutscene_Rise_Roar: Object.freeze({ duration: 2.400, peakAt: 1.15, speed: 1.0 }),
-  Roar_Taunt: Object.freeze({ duration: 2.070, peakAt: 0.50, speedOpening: 1.30, speedPhase2: 1.55 }),
+  Roar_Taunt: Object.freeze({ duration: 2.070, peakAt: 0.50, speedOpening: 1.14, speedPhase2: 1.22 }),
   Stagger_Kneel: Object.freeze({ duration: 1.033, kneelSec: 4.20, speed: 1.0 }),
   Stagger_Recover: Object.freeze({ duration: 0.933, speed: 1.0 }),
-  Riposte_Victim_Fall: Object.freeze({ duration: 3.600, fallImpactAt: 1.55, riseStartAt: 2.55, speed: 1.0 }),
-  Hit_React_Gut: Object.freeze({ duration: 1.633, speed: 2.15 }),
-  Block_React: Object.freeze({ duration: 1.367, speed: 1.25 })
+  Riposte_Victim_Fall: Object.freeze({ duration: 3.600, impaleAt: 0.56, yankAt: 1.48, fallImpactAt: 1.72, riseStartAt: 1.95, speed: 1.0 }),
+  Hit_React_Gut: Object.freeze({ duration: 1.633, speed: 1.24 }),
+  Block_React: Object.freeze({ duration: 1.367, speed: 1.18 })
 });
 
 export const SOULS_BOSS_ATTACK_META = Object.freeze({
@@ -741,16 +742,16 @@ export const SOULS_BOSS_ATTACK_META = Object.freeze({
 });
 
 export const SOULS_BOSS_MULTI_PARRY = Object.freeze({
-  staggerMax: 110,
-  parryStaggerGain: 55,
-  parriesToKneel: 2,
+  staggerMax: 220,
+  parryStaggerGain: 75,
+  parriesToKneel: 3,
   blockReactStunSec: 1.35,
-  blockReactSpeed: 1.25
+  blockReactSpeed: 1.18
 });
 
 export const SOULS_BOSS_GOAL_CFG = Object.freeze({
-  neutralMinDist: 4.5,
-  neutralMaxDist: 7.5,
+  neutralMinDist: 3.0,
+  neutralMaxDist: 4.8,
   closeBackstepDist: 2.3,
   shieldBreakHoldSec: 1.5,
   flaskPunishCooldownSec: 4.8,
@@ -762,27 +763,27 @@ export const SOULS_BOSS_GOAL_CFG = Object.freeze({
   nominalWalkSpeed: 3.05
 });
 
-const SOULS_BOSS_CROSSFADE_SEC = 0.14;
+export const SOULS_BOSS_CROSSFADE_SEC = 0.22;
 
-// Dark Souls 3 / Elden Ring Punish Windows & Anti-Greed traps for all 5 `boss_warden` attacks.
-//   tier 'heavy' -> long open recover (2-3 player hits, x1.25 dmg, x1.45 stagger, golden tell)
+// Dark Souls 3 / Elden Ring Punish Windows & Anti-Greed traps (`Recover_Heft` 0.75-1.05s smooth breather).
+//   tier 'heavy' -> open recover (2-3 player hits, x1.25 dmg, x1.45 stagger, golden tell)
 //   tier 'light' -> short open recover (1-2 hits, x1.15 dmg, x1.25 stagger)
-//   tier 'none'  -> NOT punishable: fast guard return + anti-greed counter-chain (max 1 chain link)
+//   tier 'none'  -> NOT punishable: fast guard return + anti-greed counter-chain
 export const SOULS_BOSS_PUNISH_PROFILES = Object.freeze({
   overhead_cleave: Object.freeze({
-    tier: 'none', recoverP1: 0.28, recoverP2: 0.22, dmgMult: 1.0, staggerMult: 1.0,
+    tier: 'none', recoverP1: 0.26, recoverP2: 0.20, dmgMult: 1.0, staggerMult: 1.0,
     antiGreedDelay: 0.22, antiGreedRange: 4.7, hugRange: 4.1, recentHitSec: 0.65,
     recentHitChance: 0.90, hugChanceP1: 0.65, hugChanceP2: 0.85, counterWhirlWindup: 0.38
   }),
   sweep_combo_hit1: Object.freeze({ tier: 'none', hyperArmorUntilHit2: true }),
   sweep_combo: Object.freeze({
-    tier: 'light', recoverP1: 0.90, recoverP2: 0.78, dmgMult: 1.15, staggerMult: 1.25,
+    tier: 'light', recoverP1: 0.82, recoverP2: 0.75, dmgMult: 1.15, staggerMult: 1.25,
     chainRange: 4.1, greedSec: 0.55, greedChance: 0.75, baseChance: 0.45
   }),
-  delayed_crush: Object.freeze({ tier: 'heavy', recoverP1: 1.28, recoverP2: 1.12, dmgMult: 1.25, staggerMult: 1.45 }),
-  aaa_combo: Object.freeze({ tier: 'heavy', recoverP1: 1.26, recoverP2: 1.10, dmgMult: 1.25, staggerMult: 1.45 }),
-  leap_slam: Object.freeze({ tier: 'heavy', recoverP1: 1.24, recoverP2: 1.08, dmgMult: 1.25, staggerMult: 1.45 }),
-  whirl_spin: Object.freeze({ tier: 'heavy', recoverP1: 1.28, recoverP2: 1.12, dmgMult: 1.25, staggerMult: 1.45 })
+  delayed_crush: Object.freeze({ tier: 'heavy', recoverP1: 1.05, recoverP2: 0.94, dmgMult: 1.25, staggerMult: 1.45 }),
+  aaa_combo: Object.freeze({ tier: 'heavy', recoverP1: 1.02, recoverP2: 0.90, dmgMult: 1.25, staggerMult: 1.45 }),
+  leap_slam: Object.freeze({ tier: 'heavy', recoverP1: 1.00, recoverP2: 0.88, dmgMult: 1.25, staggerMult: 1.45 }),
+  whirl_spin: Object.freeze({ tier: 'heavy', recoverP1: 1.04, recoverP2: 0.92, dmgMult: 1.25, staggerMult: 1.45 })
 });
 
 const PUNISH_DMG_MULT = Object.freeze({ heavy: 1.25, light: 1.15 });
@@ -810,10 +811,11 @@ export function getSoulsBossPunishState(boss) {
   };
 }
 
+// Retained as a safe backward-compatible no-op export for callers (`combat.js`):
+// Souls Boss no longer spawns any red danger circles or floor telegraph rings —
+// players read pure 3D windup animations + physical dust/spark shockwaves on hammer impact!
 export function cancelSoulsBossTelegraph(boss, elapsedTime = 0) {
   if (!boss) return;
-  // Always compare on the boss AI clock (same scale used when the telegraph was created),
-  // so pooled telegraph entries reused by other effects are never cancelled by mistake.
   const clock = Number.isFinite(boss._aiClock) ? boss._aiClock : elapsedTime;
   if (boss._activeTelegraph && typeof boss._activeTelegraph.cancel === 'function') {
     if (!Number.isFinite(boss._activeTelegraphExpireAt) || clock < boss._activeTelegraphExpireAt - 0.02) {
@@ -822,16 +824,6 @@ export function cancelSoulsBossTelegraph(boss, elapsedTime = 0) {
   }
   boss._activeTelegraph = null;
   boss._activeTelegraphExpireAt = 0;
-}
-
-function setSoulsBossTelegraph(boss, emitTelegraphZone, x, z, radius, duration, color, elapsedTime) {
-  const clock = Number.isFinite(boss._aiClock) ? boss._aiClock : elapsedTime;
-  cancelSoulsBossTelegraph(boss, clock);
-  const handle = emitTelegraphZone(x, z, radius, duration, color);
-  if (handle && typeof handle.cancel === 'function') {
-    boss._activeTelegraph = handle;
-    boss._activeTelegraphExpireAt = clock + duration;
-  }
 }
 
 function playBossAttackClip(boss, clipName, speed = 1.0, blendInSec = SOULS_BOSS_CROSSFADE_SEC) {
@@ -1228,9 +1220,9 @@ export function startSoulsBossOpeningRoar(boss, elapsedTime, ctx) {
   boss.soulsParryCount = 0;
   boss.soulsFlaskPunishCd = 1.5;
   boss.strafeDir = Math.random() < 0.5 ? 1 : -1;
-  boss.soulsStrafeTimer = 1.5 + Math.random() * 0.9;
-  boss.soulsRhythmMode = 'predatory_circle';
-  boss.soulsRhythmTimer = 1.1 + Math.random() * 0.6;
+  boss.soulsStrafeTimer = 2.4 + Math.random() * 0.8;
+  boss.soulsRhythmMode = 'stalk_advance';
+  boss.soulsRhythmTimer = 1.6 + Math.random() * 0.8;
   boss.soulsMoveCd = { leap_slam: 1.2, whirl_spin: 2.0, delayed_crush: 1.5, aaa_combo: 0.6, sweep_combo: 0 };
   const res = boss.model?.handle?.playClampedClip?.(clipName, spd, SOULS_BOSS_CROSSFADE_SEC);
   boss.soulsAttackDur = res?.ok && res.duration > 0.2 ? res.duration : cfg.duration / spd;
@@ -1272,8 +1264,9 @@ export function startSoulsBossStaggerKneel(boss, elapsedTime, ctx) {
   boss._soulsPrevState = 'stagger_kneel';
   triggerSoulsBossRecoil(boss, ctx?.player, 0.52, 0.24);
 
+  boss.model?.handle?.setLocomotionState?.(null);
   boss.model?.handle?.setClipOverride?.(null);
-  boss.model?.handle?.playClampedClip?.('Stagger_Kneel', cfg.speed, 0.10);
+  boss.model?.handle?.playClampedClip?.('Stagger_Kneel', cfg.speed, 0.16);
   if (boss.model?.obj && boss.model.obj.position.y > 0) {
     boss.model.obj.position.y = 0;
   }
@@ -1298,11 +1291,8 @@ export function startSoulsBossRiposteVictim(boss, elapsedTime, ctx = {}) {
   clearSoulsBossPunishWindow(boss);
   boss._soulsSmoothSpeed = 0;
   boss._soulsActiveStrafeClip = null;
-  if (boss._soulsWalkOverrideActive) {
-    boss._soulsWalkOverrideActive = false;
-    boss.model?.handle?.setClipOverride?.(null);
-  }
-  boss.model?.handle?.cancelAttackAnim?.();
+  boss._soulsWalkOverrideActive = false;
+  boss.model?.handle?.setLocomotionState?.(null);
   boss.model?.handle?.setClipOverride?.(null);
 
   boss.soulsState = 'riposte_victim';
@@ -1323,7 +1313,7 @@ export function startSoulsBossRiposteVictim(boss, elapsedTime, ctx = {}) {
   boss._soulsPrevState = 'riposte_victim';
 
   const clipName = bossHasClip(boss, 'Riposte_Victim_Fall') ? 'Riposte_Victim_Fall' : 'Stagger_Recover';
-  const res = boss.model?.handle?.playClampedClip?.(clipName, cfg.speed, 0.08);
+  const res = boss.model?.handle?.playClampedClip?.(clipName, cfg.speed, 0.16);
   const dur =
     clipName === 'Riposte_Victim_Fall'
       ? (res?.ok && res.duration > 0.5 ? res.duration : cfg.duration / cfg.speed)
@@ -1354,7 +1344,7 @@ export function applySoulsBossParry(boss, elapsedTime, ctx = {}) {
   boss.soulsParryCount = (boss.soulsParryCount || 0) + 1;
   boss.stagger = Math.min(boss.staggerMax, (boss.stagger || 0) + mp.parryStaggerGain);
 
-  // 2nd parry (110/110) -> full Stagger_Kneel for Critical Riposte!
+  // 3rd parry (220/220) -> full Stagger_Kneel for Critical Riposte!
   if (boss.stagger >= boss.staggerMax) {
     startSoulsBossStaggerKneel(boss, elapsedTime, ctx);
     return {
@@ -1365,30 +1355,32 @@ export function applySoulsBossParry(boss, elapsedTime, ctx = {}) {
     };
   }
 
-  // 1st parry (+55/110) -> Block_React + combo cancel + recoil!
+  // Partial stance parry (+75/220) -> smooth Block_React + combo cancel + recoil!
   boss.soulsState = 'stalk';
   boss.soulsGoal = 'recover';
   boss.soulsTimer = 0.25;
   boss.stunTimer = Math.max(boss.stunTimer || 0, mp.blockReactStunSec);
   boss._soulsParryRecoilActive = true;
   triggerSoulsBossRecoil(boss, ctx?.player, 0.50, 0.24);
+  boss.model?.handle?.setLocomotionState?.(null);
   boss.model?.handle?.setClipOverride?.(null);
   if (typeof boss.model?.handle?.playHitReact === 'function') {
     boss.model.handle.playHitReact({
       clipName: 'Block_React',
       speed: mp.blockReactSpeed,
       interruptAttack: true,
-      blendInSec: 0.04,
-      blendOutSec: 0.10
+      blendInSec: 0.12,
+      blendOutSec: 0.16
     });
   } else {
-    boss.model?.handle?.playBossClip?.('Block_React', mp.blockReactSpeed, 0.04);
+    boss.model?.handle?.playBossClip?.('Block_React', mp.blockReactSpeed, 0.12);
   }
   audio?.playBossRecoil?.();
   world?.addScreenShake?.(0.30, 0.16);
   emitShockwave?.(boss.x, boss.z, 3.8, 0xfbbf24, 0.30);
   emitParticles?.(boss.x, 1.8, boss.z, 0xfde047, 16, 6.2, 0.15);
-  floatText?.('🛡️ ПАРИРОВАНИЕ (1/2)!', boss.x, boss.z - 0.9, '#fde047');
+  const shownParryIdx = Math.min(mp.parriesToKneel - 1, boss.soulsParryCount);
+  floatText?.(`🛡️ ПАРИРОВАНИЕ (${shownParryIdx}/${mp.parriesToKneel})!`, boss.x, boss.z - 0.9, '#fde047');
   return {
     staggered: false,
     parryCount: boss.soulsParryCount,
@@ -1435,10 +1427,8 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
   const sinceLastHit = elapsedTime - lastHitAt;
   const playerHealing = Boolean(ctx.playerHealing || (souls?.flaskDrinkTimer || 0) > 0);
   const playerBlockingClose = Boolean((ctx.playerBlocking || souls?.isBlocking) && dist <= 5.6);
-  const showTelegraphHints = ctx.world?.getTelegraphsVisible?.() !== false;
-  const floatAttackHint = (text, x, z, color) => {
-    if (showTelegraphHints) floatText(text, x, z, color);
-  };
+  // Pure Elden Ring combat readability: zero red circles or warning popups before boss attacks!
+  const floatAttackHint = () => {};
 
   if (!boss.soulsMoveCd) {
     boss.soulsMoveCd = { leap_slam: 0, whirl_spin: 0, delayed_crush: 0, aaa_combo: 0, sweep_combo: 0 };
@@ -1495,10 +1485,14 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
   }
 
   // IMPORTANT: pass resetSpeed=false while still in `stalk` so 60/120/144Hz speed ramp NEVER resets to 0!
+  // Also keep `setClipOverride(null)` clear so `models.js` 4-way locomotion works with 100% smoothness!
   const clearWalkOverride = (resetSpeed = true) => {
     if (resetSpeed) {
       boss._soulsSmoothSpeed = 0;
+      boss._soulsSmoothVx = 0;
+      boss._soulsSmoothVz = 0;
       boss._soulsActiveStrafeClip = null;
+      boss.model?.handle?.setLocomotionState?.(null);
     }
     if (boss._soulsWalkOverrideActive) {
       boss._soulsWalkOverrideActive = false;
@@ -1567,9 +1561,9 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
       );
     }
     if ((boss.staggeredTimer || 0) <= 0) {
-      // Transition cleanly from clamped Stagger_Kneel f31 -> Stagger_Recover f1 (rot_err = 0.000000)
+      // Transition cleanly from clamped Stagger_Kneel -> Stagger_Recover
       const cfgRec = SOULS_BOSS_CLIP_TIMINGS.Stagger_Recover;
-      const res = boss.model?.handle?.playClampedClip?.('Stagger_Recover', cfgRec.speed, 0.08);
+      const res = boss.model?.handle?.playClampedClip?.('Stagger_Recover', cfgRec.speed, 0.16);
       boss.soulsState = 'stagger_recover';
       boss.soulsTimer = res?.ok && res.duration > 0.15 ? res.duration : cfgRec.duration;
       boss.stagger = 0;
@@ -1754,7 +1748,7 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
     if (moveId === 'overhead_cleave') {
       const cfg = SOULS_BOSS_CLIP_TIMINGS.Heavy_Cleave;
       const isQuickTurn = Boolean(launchOpts?.quickTurnaround);
-      const clipSpeed = isQuickTurn ? cfg.speed * 1.08 : cfg.speed;
+      const clipSpeed = isQuickTurn ? 1.24 : cfg.speed;
       boss.soulsState = 'overhead_cleave';
       boss.soulsChained = false;
       boss.soulsClipSpeed = clipSpeed;
@@ -1767,12 +1761,7 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
       boss.soulsStrikeDirZ = Math.cos(boss.facing);
       playBossAttackClip(boss, 'Heavy_Cleave', clipSpeed, SOULS_BOSS_CROSSFADE_SEC);
       audio?.playBossFootstep?.();
-      const tx = boss.x + boss.soulsStrikeDirX * 1.95;
-      const tz = boss.z + boss.soulsStrikeDirZ * 1.95;
-      boss.soulsTelegraphX = tx;
-      boss.soulsTelegraphZ = tz;
-      setSoulsBossTelegraph(boss, emitTelegraphZone, tx, tz, 3.05, boss.soulsImpactAt, 0xef4444, elapsedTime);
-      emitParticles(boss.x, 2.35, boss.z, 0xf97316, 8, 3.5, 0.14);
+      emitParticles(boss.x, 0.30, boss.z, 0xd6d3d1, 8, 3.2, 0.13);
       return;
     }
 
@@ -1790,16 +1779,12 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
       boss.soulsStrikeDirZ = Math.cos(boss.facing);
       playBossAttackClip(boss, 'Sweep_Combo', cfg.speed, SOULS_BOSS_CROSSFADE_SEC);
       audio?.playBossFootstep?.();
-      const tx = boss.x + boss.soulsStrikeDirX * 1.80;
-      const tz = boss.z + boss.soulsStrikeDirZ * 1.80;
-      setSoulsBossTelegraph(boss, emitTelegraphZone, tx, tz, 3.35, boss.soulsHit1At, 0xef4444, elapsedTime);
-      emitParticles(boss.x, 1.85, boss.z, 0xef4444, 8, 3.8, 0.14);
+      emitParticles(boss.x, 0.30, boss.z, 0xd6d3d1, 8, 3.2, 0.13);
       return;
     }
 
     if (moveId === 'aaa_combo') {
       if (!bossHasClip(boss, 'Combo_Sweep_1')) {
-        // Seamless fallback if older GLB without AAA 3-hit combo clips
         return launchAttack('delayed_crush', launchOpts);
       }
       const cfg = SOULS_BOSS_CLIP_TIMINGS.Combo_Sweep_1;
@@ -1818,10 +1803,7 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
       boss.soulsComboStageDur = Math.min(realDur, (cfg.endAt || cfg.duration) / cfg.speed + 0.06);
       boss.soulsComboStageImpactAt = boss.soulsComboStageDur * (cfg.impactAt / (cfg.endAt || cfg.duration));
       audio?.playBossFootstep?.();
-      const tx = boss.x + boss.soulsStrikeDirX * 1.9;
-      const tz = boss.z + boss.soulsStrikeDirZ * 1.9;
-      setSoulsBossTelegraph(boss, emitTelegraphZone, tx, tz, 3.4, boss.soulsComboStageImpactAt, 0xef4444, elapsedTime);
-      emitParticles(boss.x, 1.85, boss.z, 0xf97316, 10, 4.2, 0.14);
+      emitParticles(boss.x, 0.30, boss.z, 0xd6d3d1, 8, 3.4, 0.13);
       return;
     }
 
@@ -1841,14 +1823,7 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
       boss.soulsStrikeDirZ = Math.cos(boss.facing);
       playBossAttackClip(boss, 'Delayed_Crush', cfg.speed, SOULS_BOSS_CROSSFADE_SEC);
       audio?.playBossFootstep?.();
-      const tx = boss.x + boss.soulsStrikeDirX * 1.95;
-      const tz = boss.z + boss.soulsStrikeDirZ * 1.95;
-      boss.soulsTelegraphX = tx;
-      boss.soulsTelegraphZ = tz;
-      setSoulsBossTelegraph(boss, emitTelegraphZone, tx, tz, 3.4, boss.soulsHit1At, 0xf59e0b, elapsedTime);
-      if (!launchOpts?.silentText) {
-        floatAttackHint('⚠️ ТРОЙНОЕ СОКРУШЕНИЕ!', boss.x, boss.z - 0.9, '#fbbf24');
-      }
+      emitParticles(boss.x, 0.30, boss.z, 0xd6d3d1, 10, 3.5, 0.13);
       return;
     }
 
@@ -1877,12 +1852,7 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
       boss.leapEndZ = safeEnd.z;
       playBossAttackClip(boss, 'Leap_Slam', cfg.speed, SOULS_BOSS_CROSSFADE_SEC);
       audio?.playBossFootstep?.();
-      // NOTE: playBossLeapSfx(audio) fires strictly on `takeoffAt` inside leap_slam state!
-      setSoulsBossTelegraph(boss, emitTelegraphZone, boss.leapEndX, boss.leapEndZ, 3.9, boss.soulsImpactAt, 0xef4444, elapsedTime);
       emitParticles(boss.x, 0.35, boss.z, 0xd6d3d1, 12, 4.4, 0.14);
-      if (!launchOpts?.silentText) {
-        floatAttackHint('💥 ПРЫЖОК СУДИИ!', boss.x, boss.z - 0.9, '#fb923c');
-      }
       return;
     }
 
@@ -1893,28 +1863,22 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
           ? Number(launchOpts.windupSec)
           : cfg.windupSec;
       boss.soulsState = 'whirl_windup';
-      boss.soulsClipSpeed = 1.0;
+      boss.soulsClipSpeed = cfg.speed;
       boss.currentAttackMeta = SOULS_BOSS_ATTACK_META.whirl_spin;
       boss.soulsTimer = windupSec;
       cd.whirl_spin = phase2 ? 4.2 : 5.4;
       boss.spinHitTimer = 0;
       boss.spinVfxTimer = 0;
-      boss.model?.handle?.cancelAttackAnim?.();
-      boss.model?.handle?.setClipOverride?.('Whirl_Spin', 0.92);
+      // Smooth crossfade without harsh cancelAttackAnim() pose reset!
+      boss.model?.handle?.setClipOverride?.('Whirl_Spin', 0.65);
       audio?.playBossFootstep?.();
-      setSoulsBossTelegraph(boss, emitTelegraphZone, boss.x, boss.z, 4.3, windupSec, 0xef4444, elapsedTime);
-      emitParticles(boss.x, 1.35, boss.z, 0xf59e0b, 14, 4.8, 0.15);
-      if (!launchOpts?.silentText) {
-        floatAttackHint('🌀 ВИХРЬ МОЛОТА!', boss.x, boss.z - 0.9, '#fbbf24');
-      }
+      emitParticles(boss.x, 0.35, boss.z, 0xd6d3d1, 10, 3.8, 0.14);
     }
   };
 
   const enterRecover = (recoverSec, punishTier = null) => {
     cancelSoulsBossTelegraph(boss, elapsedTime);
-    clearWalkOverride();
-    // CRITICAL: immediately cancel any lingering Mixamo attack tail so boss NEVER freezes for 1.5s!
-    boss.model?.handle?.cancelAttackAnim?.();
+    clearWalkOverride(true);
     boss.model?.handle?.setClipOverride?.(null);
 
     boss.soulsState = 'recover';
@@ -1934,20 +1898,19 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
       boss.soulsChainCount = 0;
     }
 
-    // Play living hammer-heft recovery animation (`Recover_Heft`) immediately; otherwise clean blend into living `Idle`
-    if (recoverSec >= 0.42 && bossHasClip(boss, 'Recover_Heft')) {
+    // Smooth 0.22s crossfade directly from outgoing attack pose into `Recover_Heft` (ZERO cancelAttackAnim snap!)
+    if (bossHasClip(boss, 'Recover_Heft')) {
       const cfgHeft = SOULS_BOSS_CLIP_TIMINGS.Recover_Heft;
-      const heftSpeed = clamp((cfgHeft.duration || 0.95) / Math.max(0.42, Math.min(recoverSec, 1.18)), 0.72, 1.48);
-      playBossAttackClip(boss, 'Recover_Heft', heftSpeed, 0.10);
+      const heftSpeed = clamp((cfgHeft.duration || 0.95) / Math.max(0.75, Math.min(recoverSec, 1.08)), 0.85, 1.22);
+      playBossAttackClip(boss, 'Recover_Heft', heftSpeed, SOULS_BOSS_CROSSFADE_SEC);
       boss._soulsRecoverHeftPlaying = true;
     } else {
       boss._soulsRecoverHeftPlaying = false;
     }
 
     if (tier === 'heavy') {
-      // Soft golden "opening" tell: the boss is exhausted & fully open for 2-3 punishing hits
-      emitShockwave(boss.x, boss.z, 3.2, 0xfde047, 0.35);
-      emitParticles(boss.x, 0.55, boss.z, 0xfde047, 10, 3.2, 0.14);
+      // Subtle warm golden ember exhale so skilled players read the breather naturally
+      emitParticles(boss.x, 0.55, boss.z, 0xfde047, 10, 3.0, 0.13);
     }
   };
 
@@ -1983,18 +1946,15 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
     // 1. Player behind or flanking -> quick turnaround Heavy_Cleave (or Whirl_Spin if rear-hugged)
     if (relAngFromFront > goalCfg.behindAngleRad && dist <= 5.4) {
       boss.soulsChainCount = (boss.soulsChainCount || 0) + 1;
-      world?.addScreenShake?.(0.18, 0.10);
-      emitShockwave(boss.x, boss.z, 3.2, 0xef4444, 0.24);
+      emitParticles(boss.x, 0.25, boss.z, 0xd6d3d1, 8, 3.6, 0.12);
       if (relAngFromFront > 1.68 && cd.whirl_spin <= 0 && Math.random() < 0.45) {
         launchAttack('whirl_spin', {
           windupSec: SOULS_BOSS_PUNISH_PROFILES.overhead_cleave.counterWhirlWindup,
           goalTag: 'combo_branch',
           silentText: true
         });
-        floatAttackHint('⚡ НЕ ОТКРЫТ! ВИХРЬ!', boss.x, boss.z - 1.0, '#f87171');
       } else {
         launchAttack('overhead_cleave', { quickTurnaround: true, goalTag: 'combo_branch' });
-        floatAttackHint('⚡ РАЗВОРОТНЫЙ УДАР!', boss.x, boss.z - 1.0, '#f87171');
       }
       return true;
     }
@@ -2002,9 +1962,8 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
     // 2. Player retreated far (> 8.5m) with clear LOS -> Leap_Slam gap-closer!
     if (dist > goalCfg.farBranchDist && dist <= maxLeapRange && cd.leap_slam <= 0 && hasBossLineOfSightToPlayer(boss, player, world, ctx.obstacles)) {
       boss.soulsChainCount = (boss.soulsChainCount || 0) + 1;
-      emitShockwave(boss.x, boss.z, 3.0, 0xf97316, 0.24);
+      emitParticles(boss.x, 0.30, boss.z, 0xd6d3d1, 10, 4.0, 0.13);
       launchAttack('leap_slam', { goalTag: 'combo_branch', silentText: true });
-      floatAttackHint('⚡ ДОГОНЯЮЩИЙ ПРЫЖОК!', boss.x, boss.z - 1.0, '#fb923c');
       return true;
     }
 
@@ -2012,23 +1971,18 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
     if (dist >= 3.2 && dist <= 7.6) {
       if (fromMove === 'overhead_cleave') {
         boss.soulsChainCount = (boss.soulsChainCount || 0) + 1;
-        world?.addScreenShake?.(0.18, 0.10);
-        emitShockwave(boss.x, boss.z, 3.4, 0xef4444, 0.26);
-        emitParticles(boss.x, 2.0, boss.z, 0xef4444, 14, 5.4, 0.14);
+        emitParticles(boss.x, 0.30, boss.z, 0xd6d3d1, 10, 4.2, 0.13);
         if ((recentRolls >= 2 || dist > 4.6 || Math.random() < (phase2 ? 0.55 : 0.35)) && cd.delayed_crush <= 0) {
           launchAttack('delayed_crush', { goalTag: 'combo_branch', silentText: true });
-          floatAttackHint('⚡ ЛОВУШКА ПЕРЕКАТА!', boss.x, boss.z - 1.0, '#f87171');
         } else {
           launchAttack('sweep_combo', { goalTag: 'combo_branch' });
-          floatAttackHint('⚡ КОНТРСЕРИЯ!', boss.x, boss.z - 1.0, '#f87171');
         }
         return true;
       }
       if (fromMove === 'sweep_combo' && cd.delayed_crush <= 0) {
         boss.soulsChainCount = (boss.soulsChainCount || 0) + 1;
-        emitShockwave(boss.x, boss.z, 3.2, 0xef4444, 0.24);
+        emitParticles(boss.x, 0.30, boss.z, 0xd6d3d1, 10, 4.2, 0.13);
         launchAttack('delayed_crush', { goalTag: 'combo_branch', silentText: true });
-        floatAttackHint('⚡ ДОБИВАНИЕ!', boss.x, boss.z - 1.0, '#f87171');
         return true;
       }
     }
@@ -2132,9 +2086,10 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
         const slamR = 4.20;
         playBossHammerGroundSfx(audio);
         world?.addScreenShake?.(0.52, 0.28);
-        emitShockwave(impX, impZ, slamR, 0xef4444, 0.42);
-        emitShockwave(impX, impZ, slamR * 0.62, 0xfbbf24, 0.30);
-        emitParticles(impX, 0.45, impZ, 0xf97316, 28, 7.8, 0.17);
+        emitShockwave(impX, impZ, slamR * 0.85, 0xd6d3d1, 0.36);
+        emitShockwave(impX, impZ, slamR * 0.55, 0xfbbf24, 0.28);
+        emitParticles(impX, 0.45, impZ, 0xf97316, 24, 7.6, 0.16);
+        emitParticles(impX, 0.25, impZ, 0xd6d3d1, 16, 5.4, 0.14);
         if (Math.hypot(player.x - impX, player.z - impZ) <= slamR + player.radius * 0.55) {
           playBossHammerHitSfx(audio);
           applyDamageToPlayer(Math.round(boss.damage * 1.32), boss, strikeHitPayload(SOULS_BOSS_ATTACK_META.combo_slam_3));
@@ -2142,13 +2097,11 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
       }
     }
 
-    // Seamless modular branching & stage chaining with 0.08s crossfade (no freeze between hits!)
+    // Seamless modular branching & stage chaining with smooth 0.20s crossfade (zero pose snaps!)
     if (st >= stageDur) {
-      // Live mid-combo tactical read: if player fled far or circled behind after Stage 1, adapt!
       if (stage === 1) {
         if (dist > 8.0 && dist <= maxLeapRange && cd.leap_slam <= 0 && hasBossLineOfSightToPlayer(boss, player, world, ctx.obstacles)) {
           launchAttack('leap_slam', { goalTag: 'combo_branch', silentText: true });
-          floatAttackHint('⚡ ДОГОНЯЮЩИЙ ПРЫЖОК!', boss.x, boss.z - 1.0, '#fb923c');
           return { isMoving: false };
         }
         if (relAngFromFront > 1.38 && dist <= 5.0 && cd.whirl_spin <= 0 && Math.random() < 0.55) {
@@ -2157,7 +2110,6 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
             goalTag: 'combo_branch',
             silentText: true
           });
-          floatAttackHint('⚡ НЕ ОТКРЫТ! ВИХРЬ!', boss.x, boss.z - 1.0, '#f87171');
           return { isMoving: false };
         }
       }
@@ -2167,12 +2119,11 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
         boss.soulsComboStageElapsed = 0;
         boss.soulsComboStageHitDone = false;
         boss.currentAttackMeta = SOULS_BOSS_ATTACK_META.combo_backhand_2;
-        const res2 = playBossAttackClip(boss, 'Combo_Backhand_2', cfg2.speed, 0.08);
+        const res2 = playBossAttackClip(boss, 'Combo_Backhand_2', cfg2.speed, 0.20);
         const realDur2 = res2?.ok && res2.duration > 0.2 ? res2.duration : (cfg2.endAt || cfg2.duration) / cfg2.speed;
         boss.soulsComboStageDur = Math.min(realDur2, (cfg2.endAt || cfg2.duration) / cfg2.speed + 0.06);
         boss.soulsComboStageImpactAt = boss.soulsComboStageDur * (cfg2.impactAt / (cfg2.endAt || cfg2.duration));
         audio?.playBossFootstep?.();
-        setSoulsBossTelegraph(boss, emitTelegraphZone, boss.x + (dx / dist) * 1.9, boss.z + (dz / dist) * 1.9, 3.5, boss.soulsComboStageImpactAt, 0xf97316, elapsedTime);
         return { isMoving: false };
       }
       // In Phase 1 occasionally break after Hit 2 (25%) for varied rhythm; Phase 2, roll-spam, or close/greedy always slams Stage 3!
@@ -2188,13 +2139,11 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
         boss.soulsComboStageElapsed = 0;
         boss.soulsComboStageHitDone = false;
         boss.currentAttackMeta = SOULS_BOSS_ATTACK_META.combo_slam_3;
-        const res3 = playBossAttackClip(boss, 'Combo_Slam_3', cfg3.speed, 0.08);
+        const res3 = playBossAttackClip(boss, 'Combo_Slam_3', cfg3.speed, 0.20);
         const realDur3 = res3?.ok && res3.duration > 0.2 ? res3.duration : (cfg3.endAt || cfg3.duration) / cfg3.speed;
         boss.soulsComboStageDur = Math.min(realDur3, (cfg3.endAt || cfg3.duration) / cfg3.speed + 0.06);
         boss.soulsComboStageImpactAt = boss.soulsComboStageDur * (cfg3.impactAt / (cfg3.endAt || cfg3.duration));
         audio?.playBossFootstep?.();
-        const leadDist = clamp(dist, 2.2, 4.1);
-        setSoulsBossTelegraph(boss, emitTelegraphZone, boss.x + (dx / dist) * leadDist, boss.z + (dz / dist) * leadDist, 4.2, boss.soulsComboStageImpactAt, 0xef4444, elapsedTime);
         return { isMoving: false };
       }
       const pAC = SOULS_BOSS_PUNISH_PROFILES.aaa_combo;
@@ -2254,9 +2203,10 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
       playBossWhooshSfx(audio, true);
       playBossHammerGroundSfx(audio);
       world?.addScreenShake?.(0.32, 0.18);
-      emitSlashArc(boss.x, boss.z, sAng, reach, Math.PI * 0.72, 0xef4444, { duration: 0.24, y: 1.35 });
-      emitShockwave(impX, impZ, 2.85, 0xf97316, 0.30);
+      emitSlashArc(boss.x, boss.z, sAng, reach, Math.PI * 0.72, 0xf97316, { duration: 0.24, y: 1.35 });
+      emitShockwave(impX, impZ, 2.75, 0xd6d3d1, 0.28);
       emitParticles(impX, 0.35, impZ, 0xf97316, 14, 5.4, 0.14);
+      emitParticles(impX, 0.20, impZ, 0xd6d3d1, 10, 4.2, 0.13);
 
       const pDx = player.x - boss.x;
       const pDz = player.z - boss.z;
@@ -2383,13 +2333,9 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
           applyDamageToPlayer(Math.round(boss.damage * 0.92), boss, strikeHitPayload(SOULS_BOSS_ATTACK_META.sweep_combo_1));
         }
 
-        // Advance active attack metadata to Hit 2 & telegraph Hit 2 immediately
+        // Advance active attack metadata to Hit 2 (pure 3D animation read — zero floor circles!)
         if (boss.soulsState === 'sweep_combo' && boss.stunTimer <= 0) {
           boss.currentAttackMeta = SOULS_BOSS_ATTACK_META.sweep_combo_2;
-          const tx2 = boss.x + (dx / dist) * 1.85;
-          const tz2 = boss.z + (dz / dist) * 1.85;
-          const rem2 = Math.max(0.25, boss.soulsHit2At - t);
-          setSoulsBossTelegraph(boss, emitTelegraphZone, tx2, tz2, 3.5, rem2, 0xf97316, elapsedTime);
         }
       }
     } else if (!boss.soulsHit2Done) {
@@ -2510,9 +2456,6 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
         }
         if (boss.soulsState === 'delayed_crush' && boss.stunTimer <= 0) {
           boss.currentAttackMeta = SOULS_BOSS_ATTACK_META.delayed_crush_2;
-          const tx2 = boss.x + (dx / dist) * 1.9;
-          const tz2 = boss.z + (dz / dist) * 1.9;
-          setSoulsBossTelegraph(boss, emitTelegraphZone, tx2, tz2, 3.5, Math.max(0.22, boss.soulsHit2At - t), 0xf97316, elapsedTime);
         }
       }
     } else if (!boss.soulsHit2Done) {
@@ -2535,24 +2478,15 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
         if (boss.soulsState === 'delayed_crush' && boss.stunTimer <= 0) {
           boss.soulsTelegraph3Done = true;
           boss.currentAttackMeta = SOULS_BOSS_ATTACK_META.delayed_crush_3;
-          const leadDist = clamp(dist, 2.35, 4.35);
-          const lockX = boss.x + (dx / dist) * leadDist;
-          const lockZ = boss.z + (dz / dist) * leadDist;
-          boss.soulsTelegraphX = lockX;
-          boss.soulsTelegraphZ = lockZ;
-          setSoulsBossTelegraph(boss, emitTelegraphZone, lockX, lockZ, 4.25, Math.max(0.28, boss.soulsImpactAt - t), 0xef4444, elapsedTime);
         }
       }
     } else if (!boss.soulsHit3Done) {
-      // Keep telegraph center aligned with the advancing hammer strike
-      boss.soulsTelegraphX = boss.x + boss.soulsStrikeDirX * 2.15;
-      boss.soulsTelegraphZ = boss.z + boss.soulsStrikeDirZ * 2.15;
-      if (Math.random() < dt * 18) {
+      if (Math.random() < dt * 16) {
         emitParticles(
           boss.x + boss.soulsStrikeDirX * 0.5 + (Math.random() - 0.5) * 0.9,
           3.45,
           boss.z + boss.soulsStrikeDirZ * 0.5 + (Math.random() - 0.5) * 0.9,
-          clipT >= hit3TrackEnd ? 0xef4444 : 0xfbbf24,
+          0xfbbf24,
           2,
           3.6,
           0.14
@@ -2566,9 +2500,10 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
         const slamR = 4.25;
         playBossHammerGroundSfx(audio);
         world?.addScreenShake?.(0.50, 0.28);
-        emitShockwave(impX, impZ, slamR, 0xef4444, 0.42);
-        emitShockwave(impX, impZ, slamR * 0.65, 0xfbbf24, 0.30);
-        emitParticles(impX, 0.45, impZ, 0xf97316, 28, 7.8, 0.17);
+        emitShockwave(impX, impZ, slamR * 0.85, 0xd6d3d1, 0.36);
+        emitShockwave(impX, impZ, slamR * 0.55, 0xfbbf24, 0.28);
+        emitParticles(impX, 0.45, impZ, 0xf97316, 26, 7.6, 0.16);
+        emitParticles(impX, 0.25, impZ, 0xd6d3d1, 18, 5.4, 0.14);
 
         if (Math.hypot(player.x - impX, player.z - impZ) <= slamR + player.radius * 0.55) {
           playBossHammerHitSfx(audio);
@@ -2625,10 +2560,10 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
       const slamR = 3.9;
       playBossHammerGroundSfx(audio);
       world?.addScreenShake?.(0.52, 0.28);
-      emitShockwave(boss.x, boss.z, slamR, 0xef4444, 0.42);
-      emitShockwave(boss.x, boss.z, slamR * 0.62, 0xf97316, 0.30);
+      emitShockwave(boss.x, boss.z, slamR * 0.85, 0xd6d3d1, 0.36);
+      emitShockwave(boss.x, boss.z, slamR * 0.55, 0xf97316, 0.28);
       emitParticles(boss.x, 0.45, boss.z, 0xf97316, 26, 7.8, 0.17);
-      emitParticles(boss.x, 0.25, boss.z, 0xd6d3d1, 12, 5.2, 0.14);
+      emitParticles(boss.x, 0.25, boss.z, 0xd6d3d1, 16, 5.4, 0.14);
 
       if (Math.hypot(player.x - boss.x, player.z - boss.z) <= slamR + player.radius * 0.55) {
         playBossHammerHitSfx(audio);
@@ -2734,10 +2669,7 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
 
     if (boss.soulsTimer <= 0) {
       clearSoulsBossPunishWindow(boss);
-      if (boss._soulsRecoverHeftPlaying) {
-        boss._soulsRecoverHeftPlaying = false;
-        boss.model?.handle?.cancelAttackAnim?.();
-      }
+      boss._soulsRecoverHeftPlaying = false;
       if (phase2 && !boss._soulsPhase2Done) {
         triggerPhase2Roar();
         return { isMoving: false };
@@ -2748,29 +2680,32 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
       }
       boss.soulsState = 'stalk';
       boss.soulsChainCount = 0;
-      // Shorter neutral cadence in Phase 2 Enraged
-      boss.soulsTimer = boss.phase2Enraged ? 0.36 + Math.random() * 0.32 : 0.68 + Math.random() * 0.52;
-      if (Math.random() < 0.55) {
-        boss.strafeDir = -boss.strafeDir;
+      // Immediate purposeful stalking pressure right out of Recover_Heft (zero empty standing pause!)
+      boss.soulsTimer = boss.phase2Enraged ? 0.26 + Math.random() * 0.24 : 0.40 + Math.random() * 0.32;
+      if ((boss.soulsStrafeTimer || 0) <= 0.4) {
+        if (Math.random() < 0.45) boss.strafeDir = -boss.strafeDir;
+        boss.soulsStrafeTimer = 2.4 + Math.random() * 0.8;
       }
-      boss.soulsStrafeTimer = 1.2 + Math.random() * 1.0;
-      // If nose-to-nose after a prolonged exchange, immediately choose tactical backstep!
       if (dist < SOULS_BOSS_GOAL_CFG.closeBackstepDist || (boss.soulsCloseExchangeTimer || 0) >= 1.45) {
         boss.soulsRhythmMode = 'tactical_backstep';
-        boss.soulsRhythmTimer = 0.68 + Math.random() * 0.32;
+        boss.soulsRhythmTimer = 0.62 + Math.random() * 0.25;
         boss.soulsCloseExchangeTimer = 0;
         boss.soulsGoal = 'tactical_backstep';
+      } else if (dist > SOULS_BOSS_GOAL_CFG.neutralMaxDist) {
+        boss.soulsRhythmMode = 'stalk_advance';
+        boss.soulsRhythmTimer = 1.6 + Math.random() * 0.8;
+        boss.soulsGoal = 'stalk_advance';
       } else {
-        boss.soulsRhythmMode = Math.random() < 0.58 ? 'predatory_circle' : 'menacing_advance';
-        boss.soulsRhythmTimer = 0.85 + Math.random() * 0.65;
-        boss.soulsGoal = boss.soulsRhythmMode;
+        boss.soulsRhythmMode = 'circle_strafe';
+        boss.soulsRhythmTimer = 2.4 + Math.random() * 0.8;
+        boss.soulsGoal = 'circle_strafe';
       }
     }
     return { isMoving: false };
   }
 
   // ------------------------------------------------------------------------
-  // J. GOAL STACK NEUTRAL — OBSTACLE STEERING, 3 RHYTHMS, SHIELD-BREAK & ANTI-REPEAT
+  // J. GOAL STACK NEUTRAL — SMOOTH 4-WAY LOCOMOTION, OBSTACLE STEERING & PRESSURE
   // ------------------------------------------------------------------------
   if (phase2 && !boss._soulsPhase2Done) {
     triggerPhase2Roar();
@@ -2781,6 +2716,11 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
   boss.currentAttackMeta = null;
   boss.soulsChainCount = 0;
   if (boss.soulsPunishWindow) clearSoulsBossPunishWindow(boss);
+  // Ensure `setClipOverride` stays 100% clear in neutral so `models.js` 4-way locomotion runs conflict-free!
+  if (boss._soulsWalkOverrideActive) {
+    boss._soulsWalkOverrideActive = false;
+  }
+  boss.model?.handle?.setClipOverride?.(null);
   boss.soulsTimer = Math.max(0, (boss.soulsTimer || 0) - dt);
   // Heavy, commanding neutral turn inertia (3.2 rad/s — zero jitter!)
   stepBossTurn(boss, angToPlayer, SOULS_BOSS_GOAL_CFG.turnRateStalkRad, dt);
@@ -2833,39 +2773,36 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
     } else {
       launchAttack('sweep_combo', { goalTag: 'roll_catch_punish' });
     }
-    floatAttackHint('⚡ ЛОВУШКА ПЕРЕКАТА!', boss.x, boss.z - 1.0, '#f87171');
     return { isMoving: false };
   }
 
-  // Goal Priority 3: 3 Living Neutral Rhythms + Obstacle Steering around columns/braziers
+  // Goal Priority 3: Smooth, Deliberate Pressure (no direction flip faster than 2.4–3.2s, zero standing stalls!)
   boss.soulsStrafeTimer = (boss.soulsStrafeTimer || 0) - dt;
   if (boss.soulsStrafeTimer <= 0) {
     boss.strafeDir = -boss.strafeDir;
-    boss.soulsStrafeTimer = 1.45 + Math.random() * 1.15;
+    boss.soulsStrafeTimer = 2.4 + Math.random() * 0.8;
   }
 
   const goalCfg = SOULS_BOSS_GOAL_CFG;
-  // Trigger tactical backstep whenever boss & player get stuck nose-to-nose (< 2.3m)
   if (
     boss.soulsRhythmMode !== 'tactical_backstep' &&
     (dist < goalCfg.closeBackstepDist || (boss.soulsCloseExchangeTimer || 0) >= 1.65)
   ) {
     boss.soulsRhythmMode = 'tactical_backstep';
-    boss.soulsRhythmTimer = 0.65 + Math.random() * 0.35;
+    boss.soulsRhythmTimer = 0.62 + Math.random() * 0.25;
     boss.soulsCloseExchangeTimer = 0;
-  } else {
+  } else if (boss.soulsRhythmMode === 'tactical_backstep') {
     boss.soulsRhythmTimer = (boss.soulsRhythmTimer || 0) - dt;
-    if (boss.soulsRhythmTimer <= 0) {
-      if (boss.soulsRhythmMode === 'tactical_backstep') {
-        boss.soulsRhythmMode = 'predatory_circle';
-        boss.soulsRhythmTimer = 0.90 + Math.random() * 0.65;
-      } else if (boss.soulsRhythmMode === 'predatory_circle') {
-        boss.soulsRhythmMode = 'menacing_advance';
-        boss.soulsRhythmTimer = 0.72 + Math.random() * 0.48;
-      } else {
-        boss.soulsRhythmMode = 'predatory_circle';
-        boss.soulsRhythmTimer = 1.00 + Math.random() * 0.70;
-      }
+    if (boss.soulsRhythmTimer <= 0 || dist >= 3.9) {
+      boss.soulsRhythmMode = dist > goalCfg.neutralMaxDist ? 'stalk_advance' : 'circle_strafe';
+      boss.soulsRhythmTimer = 2.4 + Math.random() * 0.8;
+    }
+  } else {
+    // Hysteresis between `stalk_advance` (> 4.8m) and `circle_strafe` ([3.0, 4.8m]) so goals never chatter!
+    if (dist > goalCfg.neutralMaxDist + 0.25) {
+      boss.soulsRhythmMode = 'stalk_advance';
+    } else if (dist < goalCfg.neutralMaxDist - 0.35 && boss.soulsTimer > 0.22) {
+      boss.soulsRhythmMode = 'circle_strafe';
     }
   }
 
@@ -2873,46 +2810,41 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
   const radZ = dz / dist;
   const tanX = -radZ * boss.strafeDir;
   const tanZ = radX * boss.strafeDir;
-  const { neutralMinDist, neutralMaxDist } = goalCfg;
 
   let moveX = 0;
   let moveZ = 0;
   let desiredSpeed = 0;
 
-  if (boss.soulsRhythmMode === 'tactical_backstep' && dist < 4.6) {
-    // Rhythm (c): Tactical backstep / diagonal repositioning to break nose-to-nose crowding
+  if (boss.soulsRhythmMode === 'tactical_backstep' && dist < 4.2) {
+    // Smooth diagonal backstep to clear nose-to-nose crowding
     boss.soulsGoal = 'tactical_backstep';
-    moveX = -radX * 0.80 + tanX * 0.60;
-    moveZ = -radZ * 0.80 + tanZ * 0.60;
-    desiredSpeed = moveSpeed * (boss.phase2Enraged ? 0.78 : 0.70);
-  } else if (dist > neutralMaxDist) {
-    // Outside 7.5m combat ring -> heavy commanding march closing in smoothly
-    boss.soulsGoal = 'menacing_advance';
-    moveX = radX * 0.96 + tanX * 0.22;
-    moveZ = radZ * 0.96 + tanZ * 0.22;
-    desiredSpeed = moveSpeed * (boss.phase2Enraged ? 1.06 : 0.96);
-  } else if (boss.soulsRhythmMode === 'menacing_advance' || boss.soulsTimer <= 0.36) {
-    // Rhythm (a): Heavy ominous march straight toward the player
-    boss.soulsGoal = 'menacing_advance';
-    const radialPull = dist > 3.2 ? 0.94 : 0.35;
-    moveX = radX * radialPull + tanX * 0.22;
-    moveZ = radZ * radialPull + tanZ * 0.22;
-    desiredSpeed = moveSpeed * (boss.phase2Enraged ? 0.92 : 0.80);
+    moveX = -radX * 0.78 + tanX * 0.62;
+    moveZ = -radZ * 0.78 + tanZ * 0.62;
+    desiredSpeed = moveSpeed * (boss.phase2Enraged ? 0.82 : 0.74);
+  } else if (boss.soulsRhythmMode === 'stalk_advance' || dist > goalCfg.neutralMaxDist || boss.soulsTimer <= 0.18) {
+    // Smooth predatory stalk forward (`stalk_advance` when dist > 4.8m or closing for an imminent swing!)
+    boss.soulsGoal = 'stalk_advance';
+    const radialPull = dist > 3.1 ? 0.94 : 0.42;
+    moveX = radX * radialPull + tanX * 0.24;
+    moveZ = radZ * radialPull + tanZ * 0.24;
+    desiredSpeed = moveSpeed * (boss.phase2Enraged ? 1.02 : 0.90);
   } else {
-    // Rhythm (b): Predatory lateral circling controlling 4.5–7.5m combat distance
-    boss.soulsGoal = 'predatory_circle';
-    let radialCorr = 0.06;
-    if (dist < neutralMinDist) radialCorr = -0.22;
-    else if (dist > neutralMaxDist - 0.6) radialCorr = 0.28;
-    moveX = radX * radialCorr + tanX * 0.90;
-    moveZ = radZ * radialCorr + tanZ * 0.90;
-    desiredSpeed = moveSpeed * (boss.phase2Enraged ? 0.76 : 0.64);
+    // Continuous predatory arc circle (`circle_strafe` in [3.0, 4.8m]) — NEVER freezes at neutralMinDist!
+    boss.soulsGoal = 'circle_strafe';
+    const radialCorr = clamp((dist - 3.85) * 0.28, -0.26, 0.32);
+    moveX = radX * radialCorr + tanX * 0.94;
+    moveZ = radZ * radialCorr + tanZ * 0.94;
+    desiredSpeed = moveSpeed * (boss.phase2Enraged ? 0.80 : 0.70);
   }
 
   let isMoving = false;
   let actualSpeed = 0;
+  let actualVx = 0;
+  let actualVz = 0;
   let steerDirX = 0;
   let steerDirZ = 0;
+  const prevBossX = boss.x;
+  const prevBossZ = boss.z;
   const rawMoveLen = Math.hypot(moveX, moveZ);
   if (desiredSpeed > 0.05 && rawMoveLen > 1e-4) {
     // Apply obstacle steering around columns, braziers & lanterns so boss never headbutts walls
@@ -2937,6 +2869,7 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
     // Wall-slide fallback: if curved arena wall blocked forward step, flip strafe arc cleanly
     if (moved < desiredStep * 0.25 && desiredStep > 0.005) {
       boss.strafeDir = -boss.strafeDir;
+      boss.soulsStrafeTimer = 2.4 + Math.random() * 0.8;
       const altTanX = -radZ * boss.strafeDir;
       const altTanZ = radX * boss.strafeDir;
       const altSteer = computeBossObstacleSteering(boss, altTanX, altTanZ, world, ctx.obstacles);
@@ -2951,52 +2884,83 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
         resolveObstaclesAndBounds
       );
     }
-    actualSpeed = moved / Math.max(dt, 0.001);
+    const safeDt = Math.max(dt, 0.001);
+    actualSpeed = moved / safeDt;
+    actualVx = (boss.x - prevBossX) / safeDt;
+    actualVz = (boss.z - prevBossZ) / safeDt;
   }
 
-  // Synchronize locomotion clip (`Strafe_Left` / `Strafe_Right` / `Walking`) strictly to real ground speed!
-  // P0 FIX (#415): frame-rate invariant exponential smoothing (`1 - exp(-10*dt)`) and NEVER zero
-  // `_soulsSmoothSpeed` inside `stalk`'s `else` branch (otherwise 60/120/144Hz traps boss in Idle!).
+  // Frame-rate invariant exponential velocity smoothing (`1 - exp(-10*dt)`) — NEVER zeroed inside `stalk`!
   const prevSmoothSpd = Number.isFinite(boss._soulsSmoothSpeed) ? boss._soulsSmoothSpeed : 0;
   const smoothAlpha = 1 - Math.exp(-10.0 * Math.max(0, dt));
   boss._soulsSmoothSpeed = prevSmoothSpd + (actualSpeed - prevSmoothSpd) * smoothAlpha;
-  const walkSpeedRatio = clamp(boss._soulsSmoothSpeed / goalCfg.nominalWalkSpeed, 0.45, 1.42);
-  isMoving = boss._soulsWalkOverrideActive ? boss._soulsSmoothSpeed > 0.24 : boss._soulsSmoothSpeed > 0.35;
+  boss._soulsSmoothVx = (boss._soulsSmoothVx || 0) + (actualVx - (boss._soulsSmoothVx || 0)) * smoothAlpha;
+  boss._soulsSmoothVz = (boss._soulsSmoothVz || 0) + (actualVz - (boss._soulsSmoothVz || 0)) * smoothAlpha;
+  const walkSpeedRatio = clamp(boss._soulsSmoothSpeed / goalCfg.nominalWalkSpeed, 0.45, 1.32);
+  const wasMoving = Boolean(boss._soulsPrevMoving);
+  isMoving = wasMoving ? boss._soulsSmoothSpeed > 0.22 : boss._soulsSmoothSpeed > 0.34;
+  boss._soulsPrevMoving = isMoving;
+
+  let strafeAnimMode = 'idle';
   let locoClip = 'Idle';
 
   if (isMoving) {
-    // Character-local +X is Left when +Z is forward (right-handed Y-up)
-    // Hysteresis on |leftDot| (> 0.58 enter Strafe_*, < 0.42 return to Walking) prevents 30-50ms clip chatter!
-    const leftDot = steerDirX * Math.cos(boss.facing) - steerDirZ * Math.sin(boss.facing);
+    // Character-local +X is Left, +Z is Forward when rotation.y === boss.facing
+    const cosF = Math.cos(boss.facing);
+    const sinF = Math.sin(boss.facing);
+    const leftDot = steerDirX * cosF - steerDirZ * sinF;
+    const fwdDot = steerDirX * sinF + steerDirZ * cosF;
     const absLeftDot = Math.abs(leftDot);
+
     let activeStrafe = boss._soulsActiveStrafeClip || null;
-    if (activeStrafe) {
+    if (fwdDot < -0.52) {
+      activeStrafe = 'backstep';
+    } else if (activeStrafe && activeStrafe !== 'backstep') {
       if (absLeftDot < 0.42) {
         activeStrafe = null;
-      } else if (leftDot > 0.58 && activeStrafe !== 'Strafe_Left' && bossHasClip(boss, 'Strafe_Left')) {
-        activeStrafe = 'Strafe_Left';
-      } else if (leftDot < -0.58 && activeStrafe !== 'Strafe_Right' && bossHasClip(boss, 'Strafe_Right')) {
-        activeStrafe = 'Strafe_Right';
+      } else if (leftDot > 0.58 && activeStrafe !== 'strafe_left') {
+        activeStrafe = 'strafe_left';
+      } else if (leftDot < -0.58 && activeStrafe !== 'strafe_right') {
+        activeStrafe = 'strafe_right';
       }
     } else if (absLeftDot > 0.58) {
-      const candidateStrafe = leftDot > 0 ? 'Strafe_Left' : 'Strafe_Right';
-      if (bossHasClip(boss, candidateStrafe)) {
-        activeStrafe = candidateStrafe;
-      }
+      activeStrafe = leftDot > 0 ? 'strafe_left' : 'strafe_right';
+    } else {
+      activeStrafe = null;
     }
     boss._soulsActiveStrafeClip = activeStrafe;
-    const chosenClip = activeStrafe || 'Walking';
-    locoClip = chosenClip;
-    const clipSpeed = chosenClip === 'Walking' ? walkSpeedRatio : clamp(walkSpeedRatio * 1.08, 0.55, 1.38);
-    boss._soulsWalkOverrideActive = true;
-    boss.model?.handle?.setClipOverride?.(chosenClip, clipSpeed);
+    strafeAnimMode = activeStrafe || 'combat_walk';
+    locoClip =
+      strafeAnimMode === 'strafe_left'
+        ? 'Strafe_Left'
+        : strafeAnimMode === 'strafe_right'
+          ? 'Strafe_Right'
+          : strafeAnimMode === 'backstep'
+            ? (bossHasClip(boss, 'Walk_Backward') ? 'Walk_Backward' : 'Walking')
+            : 'Walking';
+
+    // Drive native 4-way locomotion in `models.js` with `setClipOverride` cleanly NULL!
+    boss.model?.handle?.setLocomotionState?.({
+      strafeAnimMode,
+      vx: boss._soulsSmoothVx,
+      vz: boss._soulsSmoothVz,
+      isMoving: true,
+      speedMult: walkSpeedRatio,
+      actualSpeed: boss._soulsSmoothSpeed
+    });
     if (boss._soulsFootstepTimer <= 0) {
       boss._soulsFootstepTimer = clamp(0.56 / Math.max(0.55, walkSpeedRatio), 0.36, 0.85);
       audio?.playBossFootstep?.();
     }
   } else {
-    // Only clear clip override while in `stalk` — NEVER reset `_soulsSmoothSpeed` here!
-    clearWalkOverride(false);
+    boss.model?.handle?.setLocomotionState?.({
+      strafeAnimMode: 'idle',
+      vx: 0,
+      vz: 0,
+      isMoving: false,
+      speedMult: 0,
+      actualSpeed: 0
+    });
   }
 
   // Goal Priority 4: Varied Tactical Move Selection w/ `lastTwoMoves` anti-repeat
@@ -3043,13 +3007,11 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
       if (dist <= 6.2 && cd.delayed_crush <= 0) rawPool.push({ id: 'delayed_crush', weight: dist > 4.2 ? 38 : 26 });
       if (boss.phase2Enraged && dist <= 4.6 && cd.whirl_spin <= 0) rawPool.push({ id: 'whirl_spin', weight: 24 });
 
-      // Hard-exclude immediately repeated move whenever alternatives exist
       let filtered = rawPool.filter((c) => c.id !== prevMove1);
       if (filtered.length === 0) {
         filtered = rawPool.length > 0 ? rawPool : [{ id: 'overhead_cleave', weight: 1 }];
       }
 
-      // Soft-penalize move used 2 attacks ago so all attacks rotate smoothly
       const candidates = filtered.map((c) => ({
         id: c.id,
         weight: c.weight * (c.id === prevMove2 ? 0.40 : 1.0)
@@ -3071,5 +3033,11 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
     }
   }
 
-  return { isMoving, moveSpeedRatio: walkSpeedRatio, actualSpeed: boss._soulsSmoothSpeed, locoClip };
+  return {
+    isMoving,
+    moveSpeedRatio: walkSpeedRatio,
+    actualSpeed: boss._soulsSmoothSpeed,
+    locoClip,
+    strafeAnimMode
+  };
 }

@@ -1,6 +1,11 @@
-// Souls-like Combat Game Feel Controller (Hitstop, Damped Camera Kick, Gate & Cutscene Rumble,
-// Impact Steel Spark Presets, and AAA Mob Combo Micro-Shake Feedback)
-// Pure Vanilla ES Module (zero external dependencies) for PC & Mobile (Yandex Games).
+// Souls-like Combat Game Feel & Physical Impact VFX Controller (Wave 2 — z65)
+// - Framerate-independent Hitstop (0.06x slow-mo, anti-sticky cooldown, anti-hang guarantee)
+// - Near-critically damped 3D camera spring kicks + castle gate & cutscene seismic rumble (0 GC/frame)
+// - Physical Cathedral Stone Dust (heavy footsteps & Boss hammer ground shockwave) +
+//   Directional Planck-Blackbody Steel Spark Sheaves on Parry / Block (1 Draw Call GPU InstancedMesh,
+//   0 Draw Calls when idle, Premultiplied Dual-Mode Blending, 0 WebGL leaks, replaces arcade circles!)
+
+import * as THREE from '../../vendor/three.module.js';
 
 export const SOULS_HITSTOP_PRESETS = Object.freeze({
   r1: 0.042,
@@ -53,30 +58,36 @@ export const SOULS_GAMEFEEL_CFG = Object.freeze({
   RUMBLE_AMP_Y: 0.042,
 
   // Mobile low-spec particle multiplier
-  LOW_SPEC_PARTICLE_SCALE: 0.55
+  LOW_SPEC_PARTICLE_SCALE: 0.55,
+  PC_MAX_IMPACT_PARTICLES: 280,
+  MOBILE_MAX_IMPACT_PARTICLES: 140
 });
 
 export const SOULS_SPARK_KINDS = Object.freeze([
   'sword_armor',
   'parry',
+  'parry_steel_sheaf',
   'guard_block',
+  'block_steel_sheaf',
   'guard_counter',
   'stance_break',
   'heavy_thrust',
   'wall_slam',
   'boss_slam',
   'boss_hammer_ground',
+  'hammer_ground_wave',
+  'heavy_footstep_dust',
+  'boss_footstep_dust',
   'door_dust',
   'cutscene_door_dust'
 ]);
 
 /**
- * Heavy cinematic tremor & impact kick presets synced to the 7.2s 4-Act Boss Door Cutscene
- * (`soulsCutsceneChoreography.js`):
- * - Act 1 (0.00–2.05s): iron crossbar unlatch (`act1_bolt`) & first agonizing gate heave (`act1_door_shift`)
- * - Act 2 (2.05–4.35s): massive 6.4m oak leaves creaking open (`act2_door_creak`)
- * - Act 3 (4.35–6.45s): Ash Knight rising footsteps (`act3_boss_step`) & visceral Boss Roar (`act3_boss_roar`)
- * - Act 4 (6.45–7.20s): massive gates slamming shut behind the hero (`act4_door_slam`)
+ * Heavy cinematic tremor & impact kick presets synced to the Boss Door Cutscene:
+ * - Act 1: iron crossbar unlatch (`act1_bolt`) & first agonizing gate heave (`act1_door_shift`)
+ * - Act 2: massive 6.4m oak leaves creaking open (`act2_door_creak`)
+ * - Act 3: Ash Knight rising footsteps (`act3_boss_step`) & visceral Boss Roar (`act3_boss_roar`)
+ * - Act 4: massive gates slamming shut behind the hero (`act4_door_slam`)
  */
 export const SOULS_CUTSCENE_RUMBLE_PRESETS = Object.freeze({
   act1_bolt: Object.freeze({
@@ -129,7 +140,7 @@ export const SOULS_CUTSCENE_RUMBLE_PRESETS = Object.freeze({
     kickDirY: -0.88,
     kickDirZ: 0.25,
     envelope: 'decay',
-    sparkKind: 'door_dust'
+    sparkKind: 'boss_footstep_dust'
   }),
   act3_boss_roar: Object.freeze({
     id: 'act3_boss_roar',
@@ -176,9 +187,8 @@ const CUTSCENE_PRESET_ALIASES = Object.freeze({
 });
 
 /**
- * Micro-shake, hitstop, and steel-spark feedback profiles matched 1:1 with the AAA mob
- * combat moves in `soulsMobAi.js` (`slash_1`, `slash_2`, `overhead_crush`, `thrust_lunge`,
- * `thrust_1`, `sweep_2`, `shield_bash`, `overhead_poke`) plus Boss & ranged strikes.
+ * Micro-shake, hitstop, and directional steel-sheaf / physical stone-dust feedback profiles
+ * matched 1:1 with the AAA mob combat moves in `soulsMobAi.js` + Boss Executioner moves.
  */
 export const SOULS_MOB_COMBO_SHAKE_PRESETS = Object.freeze({
   slash_1: Object.freeze({
@@ -208,7 +218,7 @@ export const SOULS_MOB_COMBO_SHAKE_PRESETS = Object.freeze({
     hitstopSec: SOULS_HITSTOP_PRESETS.mob_heavy,
     blockedKickScale: 0.82,
     blockedHitstopSec: 0.044,
-    sparkKind: 'boss_slam',
+    sparkKind: 'hammer_ground_wave',
     blockedSparkKind: 'guard_block'
   }),
   thrust_lunge: Object.freeze({
@@ -288,7 +298,7 @@ export const SOULS_MOB_COMBO_SHAKE_PRESETS = Object.freeze({
     hitstopSec: 0.056,
     blockedKickScale: 0.88,
     blockedHitstopSec: 0.050,
-    sparkKind: 'boss_slam',
+    sparkKind: 'hammer_ground_wave',
     blockedSparkKind: 'guard_block'
   }),
   boss_overhead_slam: Object.freeze({
@@ -308,7 +318,7 @@ export const SOULS_MOB_COMBO_SHAKE_PRESETS = Object.freeze({
     hitstopSec: 0.060,
     blockedKickScale: 0.86,
     blockedHitstopSec: 0.052,
-    sparkKind: 'boss_slam',
+    sparkKind: 'hammer_ground_wave',
     blockedSparkKind: 'guard_block'
   })
 });
@@ -316,6 +326,7 @@ export const SOULS_MOB_COMBO_SHAKE_PRESETS = Object.freeze({
 const EPSILON = 1e-6;
 const SETTLE_POS_EPS = 1e-5;
 const SETTLE_VEL_EPS = 1e-4;
+const TWO_PI = Math.PI * 2;
 
 function clamp(v, lo, hi) {
   return v < lo ? lo : v > hi ? hi : v;
@@ -329,6 +340,18 @@ function sanitizeNonNegative(value, fallback = 0) {
 function sanitizePositive(value, fallback = 0) {
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+function detectMobileDevice() {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  if (/iPhone|iPod|iPad|Android/i.test(ua)) return true;
+  if (typeof window !== 'undefined') {
+    const touch = navigator.maxTouchPoints || 0;
+    const minDim = Math.min(window.innerWidth || 1280, window.innerHeight || 720);
+    if (touch > 1 && minDim <= 1024) return true;
+  }
+  return false;
 }
 
 function buildSparkPreset(spec, lowSpec = false) {
@@ -374,8 +397,32 @@ function buildSparkPreset(spec, lowSpec = false) {
     dirZ: 1
   });
 
+  const sheaf = spec.sheaf
+    ? Object.freeze({
+        sparkCount: Math.max(4, Math.round(spec.sheaf.sparkCount * scale)),
+        smokeCount: Math.max(1, Math.round(spec.sheaf.smokeCount * scale)),
+        coneHalfRad: spec.sheaf.coneHalfRad,
+        jetSpeedMin: spec.sheaf.jetSpeedMin,
+        jetSpeedMax: spec.sheaf.jetSpeedMax,
+        bounceRestitution: spec.sheaf.bounceRestitution,
+        initialHeat: spec.sheaf.initialHeat
+      })
+    : null;
+
+  const stoneDust = spec.stoneDust
+    ? Object.freeze({
+        puffCount: Math.max(3, Math.round(spec.stoneDust.puffCount * scale)),
+        gritCount: Math.max(2, Math.round(spec.stoneDust.gritCount * scale)),
+        slagSparkCount: Math.round((spec.stoneDust.slagSparkCount || 0) * scale),
+        ringRadius: spec.stoneDust.ringRadius,
+        outwardSpeed: spec.stoneDust.outwardSpeed,
+        drag: spec.stoneDust.drag
+      })
+    : null;
+
   return Object.freeze({
     kind: spec.kind,
+    vfxMode: spec.vfxMode || 'steel_sheaf',
     // Top-level fields directly usable with emitParticles(...) / world.spawnParticles({...})
     color: primaryLayer.color,
     secondaryColor: secondaryLayer.color,
@@ -386,12 +433,14 @@ function buildSparkPreset(spec, lowSpec = false) {
     life: primaryLayer.life,
     gravity: primaryLayer.gravity,
     yOffset: primaryLayer.yOffset,
-    // Structured layers & directional spark cone metadata
+    // Structured layers & directional spark sheaf / physical stone dust descriptors
     primary: primaryLayer,
     secondary: secondaryLayer,
     layers: Object.freeze([primaryLayer, secondaryLayer]),
     directional,
-    // Optional world.spawnShockwaveRing({...}) preset
+    sheaf,
+    stoneDust,
+    // Replaces arcade red/neon telegraph circles (null on ground dust & physical hammer waves)
     shockwave,
     // Paired impact game-feel cues
     hitstopSec: spec.hitstopSec,
@@ -399,320 +448,581 @@ function buildSparkPreset(spec, lowSpec = false) {
   });
 }
 
+// Noble Planck-blackbody steel & weathered gothic limestone palette (zero acid/neon overexposure!)
 const RAW_SPARK_SPECS = Object.freeze({
   sword_armor: {
     kind: 'sword_armor',
-    color: 0xfef08a, // bright steel-gold spark
-    count: 12,
-    speed: 7.4,
-    size: 0.11,
-    life: 0.30,
-    gravity: 15.5,
+    vfxMode: 'steel_sheaf',
+    color: 0xffefc2, // forged steel white-amber spark
+    count: 14,
+    speed: 8.2,
+    size: 0.10,
+    life: 0.32,
+    gravity: 16.5,
     yOffset: 1.05,
     secondary: {
-      color: 0xf59e0b, // hot amber trailing steel chips
-      count: 6,
-      speed: 5.2,
-      size: 0.085,
-      life: 0.36,
-      gravity: 17.0,
+      color: 0xd97724, // cooling forged iron chips
+      count: 7,
+      speed: 5.6,
+      size: 0.08,
+      life: 0.38,
+      gravity: 17.5,
       yOffset: 1.02
     },
     directional: {
-      spreadAngle: 0.68,
-      upwardBias: 0.42,
+      spreadAngle: 0.48,
+      upwardBias: 0.36,
       forwardOffset: 0.18
     },
+    sheaf: {
+      sparkCount: 16,
+      smokeCount: 2,
+      coneHalfRad: 0.42,
+      jetSpeedMin: 6.2,
+      jetSpeedMax: 11.4,
+      bounceRestitution: 0.36,
+      initialHeat: 0.88
+    },
+    stoneDust: null,
     shockwave: null,
     hitstopSec: SOULS_HITSTOP_PRESETS.r1,
     kickIntensity: 0.24
   },
   parry: {
     kind: 'parry',
-    color: 0xfffbeb, // incandescent white-gold deflection flash
-    count: 24,
-    speed: 9.8,
-    size: 0.155,
-    life: 0.42,
-    gravity: 12.2,
+    vfxMode: 'steel_sheaf',
+    color: 0xfff6dc, // white-hot forged deflection sheaf
+    count: 26,
+    speed: 10.6,
+    size: 0.135,
+    life: 0.44,
+    gravity: 15.0,
     yOffset: 1.12,
     secondary: {
-      color: 0xfde047, // blazing golden steel arc sparks
+      color: 0xeb9834, // rich blackbody amber steel streaks
       count: 16,
-      speed: 7.4,
-      size: 0.125,
-      life: 0.48,
-      gravity: 14.5,
+      speed: 7.8,
+      size: 0.105,
+      life: 0.50,
+      gravity: 16.5,
       yOffset: 1.08
     },
     directional: {
-      spreadAngle: 1.18,
-      upwardBias: 0.60,
+      spreadAngle: 0.58,
+      upwardBias: 0.48,
       forwardOffset: 0.24
     },
-    shockwave: {
-      radius: 4.0,
-      color: 0xfde047,
-      duration: 0.32,
-      withBloom: true,
-      yOffset: 0.95
+    sheaf: {
+      sparkCount: 34,
+      smokeCount: 4,
+      coneHalfRad: 0.52,
+      jetSpeedMin: 8.5,
+      jetSpeedMax: 15.8,
+      bounceRestitution: 0.42,
+      initialHeat: 1.0
     },
+    stoneDust: null,
+    shockwave: null, // Pure directional steel spark sheaf instead of flat arcade circle!
+    hitstopSec: SOULS_HITSTOP_PRESETS.parry,
+    kickIntensity: 0.76
+  },
+  parry_steel_sheaf: {
+    kind: 'parry_steel_sheaf',
+    vfxMode: 'steel_sheaf',
+    color: 0xfff6dc,
+    count: 28,
+    speed: 11.2,
+    size: 0.13,
+    life: 0.46,
+    gravity: 15.5,
+    yOffset: 1.12,
+    secondary: {
+      color: 0xe68a2e,
+      count: 18,
+      speed: 8.2,
+      size: 0.10,
+      life: 0.52,
+      gravity: 16.8,
+      yOffset: 1.06
+    },
+    directional: {
+      spreadAngle: 0.50,
+      upwardBias: 0.46,
+      forwardOffset: 0.24
+    },
+    sheaf: {
+      sparkCount: 38,
+      smokeCount: 4,
+      coneHalfRad: 0.48,
+      jetSpeedMin: 9.0,
+      jetSpeedMax: 16.4,
+      bounceRestitution: 0.44,
+      initialHeat: 1.0
+    },
+    stoneDust: null,
+    shockwave: null,
     hitstopSec: SOULS_HITSTOP_PRESETS.parry,
     kickIntensity: 0.76
   },
   guard_block: {
     kind: 'guard_block',
-    color: 0xfef3c7, // crisp white-amber shield clash sparks
-    count: 15,
-    speed: 8.2,
-    size: 0.12,
-    life: 0.30,
-    gravity: 15.2,
+    vfxMode: 'steel_sheaf',
+    color: 0xfff0c4, // tight shield-rim deflection spark sheaf
+    count: 18,
+    speed: 8.8,
+    size: 0.11,
+    life: 0.32,
+    gravity: 16.2,
     yOffset: 1.06,
     secondary: {
-      color: 0xf59e0b, // ricocheting heated steel filings
-      count: 9,
-      speed: 5.8,
-      size: 0.095,
-      life: 0.36,
-      gravity: 16.8,
+      color: 0xd97b24, // ricocheting heated iron filings
+      count: 10,
+      speed: 6.2,
+      size: 0.085,
+      life: 0.38,
+      gravity: 17.5,
       yOffset: 1.00
     },
     directional: {
-      spreadAngle: 0.76,
-      upwardBias: 0.44,
+      spreadAngle: 0.54,
+      upwardBias: 0.38,
       forwardOffset: 0.22
     },
-    shockwave: {
-      radius: 2.0,
-      color: 0xfef08a,
-      duration: 0.22,
-      withBloom: false,
-      yOffset: 0.92
+    sheaf: {
+      sparkCount: 24,
+      smokeCount: 3,
+      coneHalfRad: 0.46,
+      jetSpeedMin: 7.0,
+      jetSpeedMax: 13.2,
+      bounceRestitution: 0.38,
+      initialHeat: 0.92
     },
+    stoneDust: null,
+    shockwave: null, // Pure directional shield spark sheaf, 0 arcade rings
+    hitstopSec: SOULS_HITSTOP_PRESETS.guard_block,
+    kickIntensity: 0.34
+  },
+  block_steel_sheaf: {
+    kind: 'block_steel_sheaf',
+    vfxMode: 'steel_sheaf',
+    color: 0xfff0c4,
+    count: 20,
+    speed: 9.2,
+    size: 0.11,
+    life: 0.34,
+    gravity: 16.2,
+    yOffset: 1.06,
+    secondary: {
+      color: 0xd97b24,
+      count: 12,
+      speed: 6.4,
+      size: 0.085,
+      life: 0.40,
+      gravity: 17.5,
+      yOffset: 1.00
+    },
+    directional: {
+      spreadAngle: 0.50,
+      upwardBias: 0.36,
+      forwardOffset: 0.22
+    },
+    sheaf: {
+      sparkCount: 26,
+      smokeCount: 3,
+      coneHalfRad: 0.44,
+      jetSpeedMin: 7.2,
+      jetSpeedMax: 13.6,
+      bounceRestitution: 0.38,
+      initialHeat: 0.92
+    },
+    stoneDust: null,
+    shockwave: null,
     hitstopSec: SOULS_HITSTOP_PRESETS.guard_block,
     kickIntensity: 0.34
   },
   guard_counter: {
     kind: 'guard_counter',
-    color: 0xfbbf24, // radiant retaliatory amber-gold
-    count: 18,
-    speed: 8.4,
-    size: 0.15,
+    vfxMode: 'steel_sheaf',
+    color: 0xffe8ad, // heavy retaliatory forged-steel cleave sparks
+    count: 20,
+    speed: 9.2,
+    size: 0.13,
     life: 0.38,
-    gravity: 13.5,
+    gravity: 15.2,
     yOffset: 1.08,
     secondary: {
-      color: 0xfff7ed, // bright steel edge glint
-      count: 10,
-      speed: 6.6,
-      size: 0.11,
-      life: 0.32,
-      gravity: 15.0,
+      color: 0xe07b22,
+      count: 12,
+      speed: 6.8,
+      size: 0.10,
+      life: 0.42,
+      gravity: 16.5,
       yOffset: 1.04
     },
     directional: {
-      spreadAngle: 0.82,
-      upwardBias: 0.46,
+      spreadAngle: 0.62,
+      upwardBias: 0.44,
       forwardOffset: 0.25
     },
-    shockwave: {
-      radius: 3.1,
-      color: 0xfbbf24,
-      duration: 0.30,
-      withBloom: true,
-      yOffset: 0.65
+    sheaf: {
+      sparkCount: 28,
+      smokeCount: 3,
+      coneHalfRad: 0.55,
+      jetSpeedMin: 7.8,
+      jetSpeedMax: 14.2,
+      bounceRestitution: 0.40,
+      initialHeat: 0.96
     },
+    stoneDust: null,
+    shockwave: null,
     hitstopSec: SOULS_HITSTOP_PRESETS.guard_counter,
     kickIntensity: 0.56
   },
   stance_break: {
     kind: 'stance_break',
-    color: 0xfde047, // posture shatter gold
+    vfxMode: 'steel_sheaf',
+    color: 0xfff2c6, // posture shatter steel & stone burst
     count: 26,
-    speed: 8.8,
-    size: 0.17,
+    speed: 9.0,
+    size: 0.15,
     life: 0.48,
-    gravity: 10.5,
-    yOffset: 1.15,
+    gravity: 13.5,
+    yOffset: 1.10,
     secondary: {
-      color: 0xf97316, // incandescent ember burst
+      color: 0x948b7e, // shaken armor & flagstone dust puff
       count: 14,
-      speed: 6.4,
-      size: 0.14,
-      life: 0.52,
-      gravity: 13.0,
-      yOffset: 0.95
+      speed: 4.8,
+      size: 0.18,
+      life: 0.58,
+      gravity: 4.5,
+      yOffset: 0.32
     },
     directional: {
-      spreadAngle: Math.PI,
-      upwardBias: 0.65,
-      forwardOffset: 0.12
+      spreadAngle: 1.25,
+      upwardBias: 0.56,
+      forwardOffset: 0.14
     },
-    shockwave: {
-      radius: 4.4,
-      color: 0xfde047,
-      duration: 0.40,
-      withBloom: true,
-      yOffset: 0.20
+    sheaf: {
+      sparkCount: 32,
+      smokeCount: 6,
+      coneHalfRad: 1.15,
+      jetSpeedMin: 7.2,
+      jetSpeedMax: 14.5,
+      bounceRestitution: 0.40,
+      initialHeat: 0.98
     },
+    stoneDust: {
+      puffCount: 10,
+      gritCount: 6,
+      slagSparkCount: 8,
+      ringRadius: 2.2,
+      outwardSpeed: 4.6,
+      drag: 4.2
+    },
+    shockwave: null,
     hitstopSec: SOULS_HITSTOP_PRESETS.stance_break,
     kickIntensity: 0.80
   },
   heavy_thrust: {
     kind: 'heavy_thrust',
-    color: 0xfef3c7, // piercing steel spark jet
-    count: 16,
-    speed: 10.2,
-    size: 0.13,
-    life: 0.34,
-    gravity: 14.0,
+    vfxMode: 'steel_sheaf',
+    color: 0xfff3cf, // narrow high-velocity piercing steel jet
+    count: 18,
+    speed: 10.8,
+    size: 0.115,
+    life: 0.35,
+    gravity: 15.5,
     yOffset: 1.08,
     secondary: {
-      color: 0xf97316, // heated iron trail
-      count: 8,
-      speed: 7.6,
-      size: 0.11,
-      life: 0.40,
-      gravity: 15.5,
+      color: 0xd97320,
+      count: 9,
+      speed: 7.8,
+      size: 0.095,
+      life: 0.42,
+      gravity: 16.8,
       yOffset: 1.04
     },
     directional: {
-      spreadAngle: 0.42,
-      upwardBias: 0.30,
+      spreadAngle: 0.34,
+      upwardBias: 0.28,
       forwardOffset: 0.32
     },
-    shockwave: {
-      radius: 2.3,
-      color: 0xf59e0b,
-      duration: 0.26,
-      withBloom: false,
-      yOffset: 0.90
+    sheaf: {
+      sparkCount: 24,
+      smokeCount: 2,
+      coneHalfRad: 0.30,
+      jetSpeedMin: 9.2,
+      jetSpeedMax: 16.0,
+      bounceRestitution: 0.38,
+      initialHeat: 0.95
     },
+    stoneDust: null,
+    shockwave: null,
     hitstopSec: SOULS_HITSTOP_PRESETS.heavy,
     kickIntensity: 0.48
   },
   wall_slam: {
     kind: 'wall_slam',
-    color: 0xc8c0b4, // fractured cathedral stone dust & chips
+    vfxMode: 'stone_and_sparks',
+    color: 0x8f877b, // fractured gothic ashlar dust cloud
     count: 16,
-    speed: 5.4,
+    speed: 4.6,
     size: 0.19,
-    life: 0.54,
-    gravity: 9.2,
-    yOffset: 0.95,
+    life: 0.62,
+    gravity: 4.2,
+    yOffset: 0.92,
     secondary: {
-      color: 0xfbbf24, // armor scraping sparks against gothic stone
-      count: 10,
-      speed: 7.8,
-      size: 0.11,
+      color: 0xffdfa0, // steel plate scraping stone sparks
+      count: 12,
+      speed: 8.2,
+      size: 0.10,
       life: 0.34,
-      gravity: 16.0,
+      gravity: 16.5,
       yOffset: 1.02
     },
     directional: {
-      spreadAngle: 1.05,
-      upwardBias: 0.48,
+      spreadAngle: 0.92,
+      upwardBias: 0.42,
       forwardOffset: 0.20
     },
-    shockwave: {
-      radius: 2.6,
-      color: 0xd6cfc2,
-      duration: 0.30,
-      withBloom: false,
-      yOffset: 0.72
+    sheaf: {
+      sparkCount: 16,
+      smokeCount: 5,
+      coneHalfRad: 0.78,
+      jetSpeedMin: 5.8,
+      jetSpeedMax: 11.2,
+      bounceRestitution: 0.34,
+      initialHeat: 0.86
     },
+    stoneDust: {
+      puffCount: 10,
+      gritCount: 8,
+      slagSparkCount: 6,
+      ringRadius: 1.6,
+      outwardSpeed: 3.8,
+      drag: 4.5
+    },
+    shockwave: null,
     hitstopSec: SOULS_HITSTOP_PRESETS.wall_slam,
     kickIntensity: 0.44
   },
   boss_slam: {
     kind: 'boss_slam',
-    color: 0xf97316, // molten hammer embers
-    count: 28,
-    speed: 9.6,
-    size: 0.21,
-    life: 0.56,
-    gravity: 16.5,
-    yOffset: 0.24,
+    vfxMode: 'hammer_dust_wave',
+    color: 0x8c8377, // physical pulverized flagstone dust wave (replaces red circles!)
+    count: 26,
+    speed: 7.4,
+    size: 0.23,
+    life: 0.68,
+    gravity: 3.6,
+    yOffset: 0.18,
     secondary: {
-      color: 0xd6cfc2, // pulverized cathedral stone dust
-      count: 16,
-      speed: 5.8,
-      size: 0.24,
-      life: 0.68,
-      gravity: 7.5,
-      yOffset: 0.18
+      color: 0xf29438, // forged-iron & ember slag sparks skimming floor
+      count: 18,
+      speed: 9.4,
+      size: 0.13,
+      life: 0.48,
+      gravity: 16.8,
+      yOffset: 0.22
     },
     directional: {
       spreadAngle: Math.PI,
-      upwardBias: 0.78,
+      upwardBias: 0.42,
       forwardOffset: 0.0
     },
-    shockwave: {
-      radius: 5.8,
-      color: 0xf97316,
-      duration: 0.46,
-      withBloom: true,
-      yOffset: 0.12
+    sheaf: null,
+    stoneDust: {
+      puffCount: 22,
+      gritCount: 12,
+      slagSparkCount: 18,
+      ringRadius: 4.2,
+      outwardSpeed: 8.6,
+      drag: 3.8
     },
+    shockwave: null,
     hitstopSec: SOULS_HITSTOP_PRESETS.boss_slam,
     kickIntensity: 1.0
   },
   boss_hammer_ground: {
     kind: 'boss_hammer_ground',
-    color: 0xff7a18, // incandescent furnace slag & white-hot floor sparks
-    count: 34,
-    speed: 10.6,
-    size: 0.22,
-    life: 0.60,
-    gravity: 17.5,
-    yOffset: 0.20,
+    vfxMode: 'hammer_dust_wave',
+    color: 0x91887b, // dense radial cathedral stone dust wave
+    count: 30,
+    speed: 8.4,
+    size: 0.25,
+    life: 0.76,
+    gravity: 3.2,
+    yOffset: 0.16,
     secondary: {
-      color: 0xd6cfc2, // heavy shattered flagstone dust plume
-      count: 20,
-      speed: 6.4,
-      size: 0.25,
-      life: 0.76,
-      gravity: 6.8,
-      yOffset: 0.16
+      color: 0xffb35c, // white-amber forged hammer impact sparks + stone chips
+      count: 22,
+      speed: 10.6,
+      size: 0.14,
+      life: 0.54,
+      gravity: 17.2,
+      yOffset: 0.20
     },
     directional: {
       spreadAngle: Math.PI,
-      upwardBias: 0.84,
+      upwardBias: 0.46,
       forwardOffset: 0.0
     },
-    shockwave: {
-      radius: 6.2,
-      color: 0xf97316,
-      duration: 0.50,
-      withBloom: true,
-      yOffset: 0.12
+    sheaf: null,
+    stoneDust: {
+      puffCount: 28,
+      gritCount: 16,
+      slagSparkCount: 24,
+      ringRadius: 5.2,
+      outwardSpeed: 9.8,
+      drag: 3.5
     },
+    shockwave: null,
     hitstopSec: SOULS_HITSTOP_PRESETS.boss_hammer_ground,
     kickIntensity: 1.15
   },
+  hammer_ground_wave: {
+    kind: 'hammer_ground_wave',
+    vfxMode: 'hammer_dust_wave',
+    color: 0x8a8175,
+    count: 22,
+    speed: 6.8,
+    size: 0.22,
+    life: 0.66,
+    gravity: 3.4,
+    yOffset: 0.16,
+    secondary: {
+      color: 0xeb8c34,
+      count: 14,
+      speed: 8.8,
+      size: 0.12,
+      life: 0.46,
+      gravity: 16.8,
+      yOffset: 0.20
+    },
+    directional: {
+      spreadAngle: Math.PI,
+      upwardBias: 0.40,
+      forwardOffset: 0.0
+    },
+    sheaf: null,
+    stoneDust: {
+      puffCount: 18,
+      gritCount: 10,
+      slagSparkCount: 14,
+      ringRadius: 3.4,
+      outwardSpeed: 7.4,
+      drag: 4.0
+    },
+    shockwave: null,
+    hitstopSec: SOULS_HITSTOP_PRESETS.mob_heavy,
+    kickIntensity: 0.62
+  },
+  heavy_footstep_dust: {
+    kind: 'heavy_footstep_dust',
+    vfxMode: 'footstep_dust',
+    color: 0x7d756b, // low-hugging weathered flagstone dust puff
+    count: 6,
+    speed: 1.8,
+    size: 0.16,
+    life: 0.52,
+    gravity: 1.8,
+    yOffset: 0.06,
+    secondary: {
+      color: 0x5c564e, // tiny kicked stone grit
+      count: 4,
+      speed: 2.4,
+      size: 0.07,
+      life: 0.36,
+      gravity: 13.5,
+      yOffset: 0.08
+    },
+    directional: {
+      spreadAngle: 1.40,
+      upwardBias: 0.18,
+      forwardOffset: 0.04
+    },
+    sheaf: null,
+    stoneDust: {
+      puffCount: 6,
+      gritCount: 4,
+      slagSparkCount: 0,
+      ringRadius: 0.55,
+      outwardSpeed: 1.9,
+      drag: 5.2
+    },
+    shockwave: null,
+    hitstopSec: 0,
+    kickIntensity: 0.05
+  },
+  boss_footstep_dust: {
+    kind: 'boss_footstep_dust',
+    vfxMode: 'footstep_dust',
+    color: 0x877f73, // heavy Executioner Boss boot impact stone cloud
+    count: 11,
+    speed: 2.9,
+    size: 0.22,
+    life: 0.66,
+    gravity: 2.0,
+    yOffset: 0.08,
+    secondary: {
+      color: 0x635c53, // bouncing flagstone pebbles
+      count: 6,
+      speed: 3.6,
+      size: 0.09,
+      life: 0.44,
+      gravity: 14.5,
+      yOffset: 0.10
+    },
+    directional: {
+      spreadAngle: Math.PI,
+      upwardBias: 0.22,
+      forwardOffset: 0.06
+    },
+    sheaf: null,
+    stoneDust: {
+      puffCount: 11,
+      gritCount: 6,
+      slagSparkCount: 2,
+      ringRadius: 1.15,
+      outwardSpeed: 3.1,
+      drag: 4.6
+    },
+    shockwave: null,
+    hitstopSec: 0,
+    kickIntensity: 0.18
+  },
   door_dust: {
     kind: 'door_dust',
-    color: 0xc8c0b4, // ancient limestone dust
+    vfxMode: 'footstep_dust',
+    color: 0x8a8277, // ancient limestone dust (muted gothic stone, 0 white fog!)
     count: 14,
-    speed: 2.8,
+    speed: 2.6,
     size: 0.22,
     life: 0.78,
-    gravity: 3.2,
-    yOffset: 0.22,
+    gravity: 2.6,
+    yOffset: 0.18,
     secondary: {
-      color: 0x8c8478, // heavier falling mortar grit
+      color: 0x665f56, // heavier falling mortar grit
       count: 8,
       speed: 2.1,
-      size: 0.16,
-      life: 0.64,
-      gravity: 9.5,
-      yOffset: 0.48
+      size: 0.12,
+      life: 0.60,
+      gravity: 11.0,
+      yOffset: 0.42
     },
     directional: {
       spreadAngle: 1.35,
-      upwardBias: 0.25,
+      upwardBias: 0.22,
       forwardOffset: 0.15
+    },
+    sheaf: null,
+    stoneDust: {
+      puffCount: 12,
+      gritCount: 7,
+      slagSparkCount: 0,
+      ringRadius: 1.4,
+      outwardSpeed: 2.4,
+      drag: 4.2
     },
     shockwave: null,
     hitstopSec: 0,
@@ -720,26 +1030,36 @@ const RAW_SPARK_SPECS = Object.freeze({
   },
   cutscene_door_dust: {
     kind: 'cutscene_door_dust',
-    color: 0xd2cabd, // sunlit/moonlit falling arch limestone cloud
+    vfxMode: 'footstep_dust',
+    color: 0x91887c, // falling arch limestone cloud
     count: 20,
-    speed: 3.4,
-    size: 0.25,
-    life: 0.92,
-    gravity: 2.8,
+    speed: 3.2,
+    size: 0.24,
+    life: 0.90,
+    gravity: 2.4,
     yOffset: 1.85,
     secondary: {
-      color: 0x9c9284, // crumbling mortar pebbles & rust flakes
+      color: 0x6b6359, // crumbling mortar pebbles & rust flakes
       count: 12,
-      speed: 2.9,
-      size: 0.16,
-      life: 0.72,
-      gravity: 11.2,
+      speed: 2.8,
+      size: 0.13,
+      life: 0.70,
+      gravity: 11.8,
       yOffset: 2.60
     },
     directional: {
       spreadAngle: 1.45,
       upwardBias: 0.12,
       forwardOffset: 0.22
+    },
+    sheaf: null,
+    stoneDust: {
+      puffCount: 16,
+      gritCount: 10,
+      slagSparkCount: 3,
+      ringRadius: 1.8,
+      outwardSpeed: 3.0,
+      drag: 3.8
     },
     shockwave: null,
     hitstopSec: 0,
@@ -789,7 +1109,7 @@ export function getMobComboShakePreset(attackId) {
 }
 
 /**
- * Returns a combat impact spark & shockwave preset for emitParticles / world.spawnShockwaveRing.
+ * Returns a combat impact spark & physical stone dust preset.
  * Zero-allocation when called without directional overrides.
  *
  * @param {string} kind
@@ -832,18 +1152,867 @@ export function getImpactSparkBurst(kind, opts = null) {
   });
 }
 
+// ============================================================================
+// 1-Draw-Call Physical Cathedral Stone Dust & Directional Steel Spark Sheaf VFX
+// (Premultiplied Dual-Mode Blending: Opaque/Translucent Stone Dust + Additive
+//  Planck-Blackbody Steel Sparks in ONE single InstancedMesh draw call; 0 when idle)
+// ============================================================================
+
+const IMPACT_VFX_VERT_GLSL = /* glsl */ `
+attribute vec2 aQuad;
+attribute vec4 aPosSize;
+attribute vec4 aVelKind;
+attribute vec4 aLifeSeed;
+attribute vec3 aTint;
+
+varying vec2 vUv;
+varying float vKind;
+varying float vAge;
+varying float vAlpha;
+varying float vHeat;
+varying float vSeed;
+varying vec3 vTint;
+
+void main() {
+  vec4 mvCenter = modelViewMatrix * vec4(aPosSize.xyz, 1.0);
+  float kind = aVelKind.w;
+  float size = aPosSize.w;
+
+  if (kind >= 1.5) {
+    // Velocity-stretched forged steel spark streak in camera space
+    vec3 mvVel = mat3(modelViewMatrix) * aVelKind.xyz;
+    float spd2D = length(mvVel.xy);
+    vec2 dir2D = spd2D > 0.001 ? (mvVel.xy / spd2D) : vec2(0.0, 1.0);
+    vec2 perp2D = vec2(-dir2D.y, dir2D.x);
+    float worldSpd = length(aVelKind.xyz);
+    float stretch = clamp(1.15 + worldSpd * 0.26, 1.2, 5.2);
+    float len = size * stretch;
+    float wid = max(0.018, size * 0.38);
+    mvCenter.xy += dir2D * (aQuad.x * len) + perp2D * (aQuad.y * wid);
+  } else {
+    // Tumbling cathedral stone dust billow or fractured stone grit chip
+    float spinRate = kind < 0.5 ? 1.35 : 9.2;
+    float ang = aLifeSeed.w * 6.2831853 + aLifeSeed.x * spinRate;
+    float c = cos(ang);
+    float s = sin(ang);
+    vec2 rotQuad = vec2(aQuad.x * c - aQuad.y * s, aQuad.x * s + aQuad.y * c);
+    mvCenter.xy += rotQuad * size;
+  }
+
+  vUv = aQuad + 0.5;
+  vKind = kind;
+  vAge = aLifeSeed.x;
+  vAlpha = aLifeSeed.y;
+  vHeat = aLifeSeed.z;
+  vSeed = aLifeSeed.w;
+  vTint = aTint;
+
+  gl_Position = projectionMatrix * mvCenter;
+}
+`;
+
+const IMPACT_VFX_FRAG_GLSL = /* glsl */ `
+precision highp float;
+
+varying vec2 vUv;
+varying float vKind;
+varying float vAge;
+varying float vAlpha;
+varying float vHeat;
+varying float vSeed;
+varying vec3 vTint;
+
+float hash21(vec2 p) {
+  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+float valueNoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  float a = hash21(i);
+  float b = hash21(i + vec2(1.0, 0.0));
+  float c = hash21(i + vec2(0.0, 1.0));
+  float d = hash21(i + vec2(1.0, 1.0));
+  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+vec3 sampleSteelBlackbody(float heat) {
+  float h = clamp(heat, 0.0, 1.0);
+  vec3 darkIron = vec3(0.07, 0.025, 0.012);
+  vec3 cherryRed = vec3(0.56, 0.115, 0.028);
+  vec3 forgedAmber = vec3(0.95, 0.51, 0.135);
+  vec3 whiteGold = vec3(1.0, 0.945, 0.79);
+
+  vec3 c1 = mix(darkIron, cherryRed, smoothstep(0.0, 0.34, h));
+  vec3 c2 = mix(c1, forgedAmber, smoothstep(0.30, 0.72, h));
+  return mix(c2, whiteGold, smoothstep(0.68, 1.0, h));
+}
+
+void main() {
+  vec2 p = (vUv - 0.5) * 2.0;
+  vec4 outColor = vec4(0.0);
+
+  if (vKind < 0.5) {
+    // Archetype 0: Physical Cathedral Stone Dust Billow (muted limestone, 0 white fog!)
+    vec2 nCoord = p * 2.15 + vec2(vSeed * 11.7, vSeed * 7.3 + vAge * 0.85);
+    float n1 = valueNoise(nCoord);
+    float n2 = valueNoise(nCoord * 2.3 + 4.1);
+    float billow = n1 * 0.65 + n2 * 0.35;
+
+    float radial = length(p) + (billow - 0.5) * 0.38;
+    float shape = 1.0 - smoothstep(0.28, 0.96, radial);
+    float fadeIn = smoothstep(0.0, 0.11, vAge);
+    float fadeOut = pow(clamp(1.0 - vAge, 0.0, 1.0), 1.55);
+    // Hard physical opacity cap prevents additive/whiteout fog buildup
+    float alpha = clamp(shape * fadeIn * fadeOut * vAlpha, 0.0, 0.36);
+
+    float topShade = 0.78 + 0.26 * clamp(0.5 - p.y * 0.45, 0.0, 1.0);
+    vec3 stoneRgb = vTint * topShade * mix(0.76, 1.10, billow);
+    outColor = vec4(stoneRgb * alpha, alpha);
+  } else if (vKind < 1.5) {
+    // Archetype 1: Fractured Flagstone Grit / Pebble Chip
+    float skew = (vSeed - 0.5) * 0.35;
+    float d1 = abs(p.x + p.y * skew) * 0.92 + abs(p.y) * 0.48;
+    float d2 = abs(p.y - p.x * skew) * 0.94 + abs(p.x) * 0.42;
+    float facet = max(d1, d2);
+    float mask = 1.0 - smoothstep(0.52, 0.82, facet);
+    float fadeOut = smoothstep(1.0, 0.68, vAge);
+    float alpha = clamp(mask * fadeOut * vAlpha, 0.0, 0.88);
+
+    float bevelLight = 0.72 + 0.38 * smoothstep(-0.4, 0.5, p.x - p.y);
+    vec3 gritRgb = vTint * bevelLight;
+    outColor = vec4(gritRgb * alpha, alpha);
+  } else {
+    // Archetype 2: Directional Velocity-Stretched Steel Spark (pure additive via alpha = 0)
+    float crossCore = exp(-p.y * p.y * 18.0);
+    float crossHalo = exp(-p.y * p.y * 4.6) * 0.34;
+    // Bright forged tip at +p.x, cooling tapered streak toward -p.x
+    float headTaper = 1.0 - smoothstep(0.38, 1.0, p.x);
+    float tailTaper = smoothstep(-1.0, 0.42, p.x);
+    float along = headTaper * tailTaper;
+
+    float tailTemp = clamp(vHeat * mix(0.52, 1.06, smoothstep(-0.85, 0.65, p.x)), 0.0, 1.0);
+    vec3 bbRgb = sampleSteelBlackbody(tailTemp) * mix(vec3(1.0), vTint, 0.22);
+
+    float fade = (1.0 - smoothstep(0.72, 1.0, vAge)) * vAlpha;
+    float intensity = (crossCore * 1.32 + crossHalo) * along * fade;
+    outColor = vec4(bbRgb * intensity, 0.0);
+  }
+
+  gl_FragColor = outColor;
+}
+`;
+
+/**
+ * Creates a strictly 1-Draw-Call GPU-instanced combat impact VFX system for:
+ * - Physical cathedral stone dust billows & bouncing grit under heavy footsteps
+ * - Radial flagstone dust & cooling forged-iron spark waves on Boss hammer ground slams
+ *   (replacing arcade red/neon telegraph & shockwave circles!)
+ * - Tight directional sheaves of ricocheting steel sparks on Parry, Shield Block & Armor hits
+ *
+ * Performance & Memory Contract:
+ * - 1 draw call when active, 0 draw calls when idle (`mesh.visible = false`).
+ * - 0 heap allocations in `emit*` and `update(dt)`.
+ * - Preserves framebuffer alpha = 1.0 via premultiplied CustomBlending.
+ * - Full `.dispose()` with 0 WebGL geometry/material leaks across Hub <-> Rift transitions.
+ *
+ * @param {THREE.Scene|THREE.Object3D} scene
+ * @param {object} [opts]
+ * @param {boolean} [opts.isMobile]
+ * @param {boolean} [opts.lowSpec=false]
+ * @param {number} [opts.maxParticles]
+ */
+export function createSoulsImpactVfxSystem(scene, opts = {}) {
+  const isMobile = opts.isMobile !== undefined ? Boolean(opts.isMobile) : detectMobileDevice();
+  let lowSpec = Boolean(opts.lowSpec);
+  const defaultCap = isMobile
+    ? SOULS_GAMEFEEL_CFG.MOBILE_MAX_IMPACT_PARTICLES
+    : SOULS_GAMEFEEL_CFG.PC_MAX_IMPACT_PARTICLES;
+  const maxParticles = Math.max(32, Math.min(512, Math.floor(opts.maxParticles || defaultCap)));
+
+  // Deterministic LCG PRNG so bursts never allocate or stutter
+  let rngState = 0x51f3a9d7;
+  function nextRand() {
+    rngState = (Math.imul(rngState, 1664525) + 1013904223) >>> 0;
+    return rngState / 4294967296;
+  }
+
+  // Pre-allocated SOA physics state arrays (0 GC allocations)
+  const active = new Uint8Array(maxParticles);
+  const kindArr = new Float32Array(maxParticles); // 0 = dust, 1 = grit, 2 = steel spark
+  const px = new Float32Array(maxParticles);
+  const py = new Float32Array(maxParticles);
+  const pz = new Float32Array(maxParticles);
+  const vx = new Float32Array(maxParticles);
+  const vy = new Float32Array(maxParticles);
+  const vz = new Float32Array(maxParticles);
+  const groundYArr = new Float32Array(maxParticles);
+  const size0Arr = new Float32Array(maxParticles);
+  const size1Arr = new Float32Array(maxParticles);
+  const ageArr = new Float32Array(maxParticles);
+  const lifeArr = new Float32Array(maxParticles);
+  const dragArr = new Float32Array(maxParticles);
+  const gravArr = new Float32Array(maxParticles);
+  const liftArr = new Float32Array(maxParticles);
+  const bounceArr = new Float32Array(maxParticles);
+  const alphaArr = new Float32Array(maxParticles);
+  const heat0Arr = new Float32Array(maxParticles);
+  const heatArr = new Float32Array(maxParticles);
+  const seedArr = new Float32Array(maxParticles);
+  const crArr = new Float32Array(maxParticles);
+  const cgArr = new Float32Array(maxParticles);
+  const cbArr = new Float32Array(maxParticles);
+
+  // Compact GPU upload buffers (only activeCount instances uploaded/rendered)
+  const gpuPosSize = new Float32Array(maxParticles * 4);
+  const gpuVelKind = new Float32Array(maxParticles * 4);
+  const gpuLifeSeed = new Float32Array(maxParticles * 4);
+  const gpuTint = new Float32Array(maxParticles * 3);
+
+  const geo = new THREE.InstancedBufferGeometry();
+  const quadVerts = new Float32Array([
+    -0.5, -0.5,
+     0.5, -0.5,
+     0.5,  0.5,
+    -0.5, -0.5,
+     0.5,  0.5,
+    -0.5,  0.5
+  ]);
+  // Provide standard `position` attribute alongside `aQuad` for Three.js r160 compatibility
+  const dummyPos = new Float32Array(18);
+  geo.setAttribute('position', new THREE.BufferAttribute(dummyPos, 3));
+  geo.setAttribute('aQuad', new THREE.BufferAttribute(quadVerts, 2));
+
+  const attrPosSize = new THREE.InstancedBufferAttribute(gpuPosSize, 4);
+  const attrVelKind = new THREE.InstancedBufferAttribute(gpuVelKind, 4);
+  const attrLifeSeed = new THREE.InstancedBufferAttribute(gpuLifeSeed, 4);
+  const attrTint = new THREE.InstancedBufferAttribute(gpuTint, 3);
+  attrPosSize.setUsage(THREE.DynamicDrawUsage);
+  attrVelKind.setUsage(THREE.DynamicDrawUsage);
+  attrLifeSeed.setUsage(THREE.DynamicDrawUsage);
+  attrTint.setUsage(THREE.DynamicDrawUsage);
+
+  geo.setAttribute('aPosSize', attrPosSize);
+  geo.setAttribute('aVelKind', attrVelKind);
+  geo.setAttribute('aLifeSeed', attrLifeSeed);
+  geo.setAttribute('aTint', attrTint);
+  geo.instanceCount = 0;
+
+  const mat = new THREE.ShaderMaterial({
+    vertexShader: IMPACT_VFX_VERT_GLSL,
+    fragmentShader: IMPACT_VFX_FRAG_GLSL,
+    transparent: true,
+    depthWrite: false,
+    depthTest: true,
+    blending: THREE.CustomBlending,
+    blendEquation: THREE.AddEquation,
+    blendSrc: THREE.OneFactor,
+    blendDst: THREE.OneMinusSrcAlphaFactor,
+    blendSrcAlpha: THREE.ZeroFactor,
+    blendDstAlpha: THREE.OneFactor
+  });
+
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.name = 'SoulsImpactVfxInstanced';
+  mesh.frustumCulled = false;
+  mesh.renderOrder = 18;
+  mesh.visible = false;
+
+  if (scene && typeof scene.add === 'function') {
+    scene.add(mesh);
+  }
+
+  let cursor = 0;
+  let activeCount = 0;
+  let disposed = false;
+
+  function allocSlot() {
+    for (let probe = 0; probe < maxParticles; probe++) {
+      const idx = (cursor + probe) % maxParticles;
+      if (active[idx] === 0) {
+        cursor = (idx + 1) % maxParticles;
+        active[idx] = 1;
+        activeCount++;
+        return idx;
+      }
+    }
+    const overwrite = cursor;
+    cursor = (cursor + 1) % maxParticles;
+    return overwrite;
+  }
+
+  function setHexRgb(idx, hex, jitter = 0.06) {
+    const r0 = ((hex >> 16) & 255) / 255;
+    const g0 = ((hex >> 8) & 255) / 255;
+    const b0 = (hex & 255) / 255;
+    const shift = 1 + (nextRand() - 0.5) * jitter * 2;
+    crArr[idx] = clamp(r0 * shift, 0, 1);
+    cgArr[idx] = clamp(g0 * shift, 0, 1);
+    cbArr[idx] = clamp(b0 * shift, 0, 1);
+  }
+
+  function scaledCount(baseCount, minCount = 1) {
+    const mult = lowSpec ? SOULS_GAMEFEEL_CFG.LOW_SPEC_PARTICLE_SCALE : 1.0;
+    const mobileMult = isMobile ? 0.78 : 1.0;
+    return Math.max(minCount, Math.round(baseCount * mult * mobileMult));
+  }
+
+  /**
+   * Spawns physical cathedral stone dust puffs + kicked flagstone grit under heavy footsteps.
+   */
+  function emitFootstepDust(x, y, z, stepOpts = null) {
+    if (disposed) return 0;
+    const sx = Number.isFinite(Number(x)) ? Number(x) : 0;
+    const sy = Number.isFinite(Number(y)) ? Number(y) : 0;
+    const sz = Number.isFinite(Number(z)) ? Number(z) : 0;
+    const actorKind = (stepOpts && stepOpts.actorKind) || 'knight';
+    const isBoss = actorKind === 'boss';
+    const intensity = clamp(sanitizePositive(stepOpts && stepOpts.intensity, 1.0), 0.2, 2.0);
+    const groundY = (stepOpts && stepOpts.groundY !== undefined && stepOpts.groundY !== null && Number.isFinite(Number(stepOpts.groundY)))
+      ? Number(stepOpts.groundY)
+      : sy;
+
+    const rawDx = stepOpts && stepOpts.dirX !== undefined && stepOpts.dirX !== null ? Number(stepOpts.dirX) : 0;
+    const rawDz = stepOpts && stepOpts.dirZ !== undefined && stepOpts.dirZ !== null ? Number(stepOpts.dirZ) : 0;
+    let backX = 0;
+    let backZ = 0;
+    const dLen = Math.hypot(Number.isFinite(rawDx) ? rawDx : 0, Number.isFinite(rawDz) ? rawDz : 0);
+    if (dLen > EPSILON) {
+      backX = -(rawDx / dLen);
+      backZ = -(rawDz / dLen);
+    }
+
+    const puffCount = scaledCount((isBoss ? 10 : 5) * intensity, 2);
+    const gritCount = scaledCount((isBoss ? 6 : 3) * intensity, 1);
+    const baseOutSpeed = (isBoss ? 2.8 : 1.65) * intensity;
+    const baseSize = isBoss ? 0.22 : 0.14;
+    let spawned = 0;
+
+    // 1. Expanding low-hugging stone dust puffs
+    for (let i = 0; i < puffCount; i++) {
+      const idx = allocSlot();
+      const ang = (i / puffCount) * TWO_PI + (nextRand() - 0.5) * 0.55;
+      const spd = baseOutSpeed * (0.55 + nextRand() * 0.65);
+      const rOff = (isBoss ? 0.22 : 0.11) * (0.5 + nextRand() * 0.7);
+
+      kindArr[idx] = 0;
+      px[idx] = sx + Math.cos(ang) * rOff;
+      py[idx] = groundY + 0.05 + nextRand() * 0.06;
+      pz[idx] = sz + Math.sin(ang) * rOff;
+      vx[idx] = Math.cos(ang) * spd + backX * spd * 0.35;
+      vy[idx] = 0.22 + nextRand() * (isBoss ? 0.52 : 0.32);
+      vz[idx] = Math.sin(ang) * spd + backZ * spd * 0.35;
+      groundYArr[idx] = groundY;
+      size0Arr[idx] = baseSize * (0.75 + nextRand() * 0.45);
+      size1Arr[idx] = size0Arr[idx] * (isBoss ? 2.65 : 2.25);
+      ageArr[idx] = 0;
+      lifeArr[idx] = (isBoss ? 0.68 : 0.48) * (0.82 + nextRand() * 0.36);
+      dragArr[idx] = isBoss ? 4.4 : 5.2;
+      gravArr[idx] = 0.0;
+      liftArr[idx] = isBoss ? 0.36 : 0.24;
+      bounceArr[idx] = 0;
+      alphaArr[idx] = (isBoss ? 0.32 : 0.24) * clamp(intensity, 0.5, 1.25);
+      heat0Arr[idx] = 0;
+      heatArr[idx] = 0;
+      seedArr[idx] = nextRand();
+      setHexRgb(idx, isBoss ? 0x847b70 : 0x787066, 0.10);
+      spawned++;
+    }
+
+    // 2. Bouncing flagstone grit pebbles
+    for (let i = 0; i < gritCount; i++) {
+      const idx = allocSlot();
+      const ang = nextRand() * TWO_PI;
+      const spd = (isBoss ? 3.4 : 2.2) * (0.6 + nextRand() * 0.7) * intensity;
+
+      kindArr[idx] = 1;
+      px[idx] = sx + (nextRand() - 0.5) * 0.18;
+      py[idx] = groundY + 0.04 + nextRand() * 0.05;
+      pz[idx] = sz + (nextRand() - 0.5) * 0.18;
+      vx[idx] = Math.cos(ang) * spd + backX * 0.8;
+      vy[idx] = (isBoss ? 2.4 : 1.7) * (0.65 + nextRand() * 0.7);
+      vz[idx] = Math.sin(ang) * spd + backZ * 0.8;
+      groundYArr[idx] = groundY;
+      size0Arr[idx] = (isBoss ? 0.075 : 0.052) * (0.75 + nextRand() * 0.5);
+      size1Arr[idx] = size0Arr[idx] * 0.85;
+      ageArr[idx] = 0;
+      lifeArr[idx] = (isBoss ? 0.48 : 0.36) * (0.8 + nextRand() * 0.4);
+      dragArr[idx] = 1.4;
+      gravArr[idx] = 14.5;
+      liftArr[idx] = 0;
+      bounceArr[idx] = 0.32;
+      alphaArr[idx] = 0.82;
+      heat0Arr[idx] = 0;
+      heatArr[idx] = 0;
+      seedArr[idx] = nextRand();
+      setHexRgb(idx, 0x5e584f, 0.14);
+      spawned++;
+    }
+
+    return spawned;
+  }
+
+  /**
+   * Spawns a physical radial stone-dust wave + bouncing flagstone chips + low-skimming
+   * blackbody forged-iron sparks when a Boss / Executioner hammer slams the floor.
+   * Completely replaces flat arcade red/neon telegraph & shockwave circles!
+   */
+  function emitHammerSlamWave(x, y, z, slamOpts = null) {
+    if (disposed) return 0;
+    const sx = Number.isFinite(Number(x)) ? Number(x) : 0;
+    const sy = Number.isFinite(Number(y)) ? Number(y) : 0;
+    const sz = Number.isFinite(Number(z)) ? Number(z) : 0;
+    const groundY = (slamOpts && slamOpts.groundY !== undefined && slamOpts.groundY !== null && Number.isFinite(Number(slamOpts.groundY)))
+      ? Number(slamOpts.groundY)
+      : sy;
+    const radius = clamp(sanitizePositive(slamOpts && slamOpts.radius, 4.6), 1.4, 8.5);
+    const intensity = clamp(sanitizePositive(slamOpts && slamOpts.intensity, 1.0), 0.3, 2.0);
+    const phase2 = Boolean(slamOpts && slamOpts.phase2);
+
+    const puffCount = scaledCount(Math.round((16 + radius * 2.2) * intensity), 6);
+    const gritCount = scaledCount(Math.round(13 * intensity), 4);
+    const sparkCount = scaledCount(Math.round((phase2 ? 28 : 20) * intensity), 6);
+    const drag = 3.6;
+    const ringOutSpeed = Math.max(4.5, radius * drag * 0.62);
+    let spawned = 0;
+
+    // 1. Aerodynamic expanding ring of cathedral limestone dust billows
+    for (let i = 0; i < puffCount; i++) {
+      const idx = allocSlot();
+      const ang = (i / puffCount) * TWO_PI + (nextRand() - 0.5) * 0.24;
+      const spd = ringOutSpeed * (0.78 + nextRand() * 0.42);
+      const r0 = 0.24 + nextRand() * 0.22;
+
+      kindArr[idx] = 0;
+      px[idx] = sx + Math.cos(ang) * r0;
+      py[idx] = groundY + 0.08 + nextRand() * 0.10;
+      pz[idx] = sz + Math.sin(ang) * r0;
+      vx[idx] = Math.cos(ang) * spd;
+      vy[idx] = 0.28 + nextRand() * 0.55;
+      vz[idx] = Math.sin(ang) * spd;
+      groundYArr[idx] = groundY;
+      size0Arr[idx] = (0.24 + nextRand() * 0.12) * clamp(intensity, 0.7, 1.3);
+      size1Arr[idx] = size0Arr[idx] * 2.95;
+      ageArr[idx] = 0;
+      lifeArr[idx] = 0.68 + nextRand() * 0.28;
+      dragArr[idx] = drag;
+      gravArr[idx] = 0;
+      liftArr[idx] = 0.42;
+      bounceArr[idx] = 0;
+      alphaArr[idx] = 0.34;
+      heat0Arr[idx] = 0;
+      heatArr[idx] = 0;
+      seedArr[idx] = nextRand();
+      setHexRgb(idx, phase2 ? 0x8d8174 : 0x867e73, 0.12);
+      spawned++;
+    }
+
+    // 2. Shattered flagstone chips bouncing twice across the floor
+    for (let i = 0; i < gritCount; i++) {
+      const idx = allocSlot();
+      const ang = nextRand() * TWO_PI;
+      const spd = (4.2 + nextRand() * 4.8) * intensity;
+
+      kindArr[idx] = 1;
+      px[idx] = sx + Math.cos(ang) * 0.22;
+      py[idx] = groundY + 0.06 + nextRand() * 0.08;
+      pz[idx] = sz + Math.sin(ang) * 0.22;
+      vx[idx] = Math.cos(ang) * spd;
+      vy[idx] = (3.2 + nextRand() * 3.8) * clamp(intensity, 0.7, 1.35);
+      vz[idx] = Math.sin(ang) * spd;
+      groundYArr[idx] = groundY;
+      size0Arr[idx] = 0.075 + nextRand() * 0.065;
+      size1Arr[idx] = size0Arr[idx] * 0.88;
+      ageArr[idx] = 0;
+      lifeArr[idx] = 0.56 + nextRand() * 0.28;
+      dragArr[idx] = 1.1;
+      gravArr[idx] = 16.5;
+      liftArr[idx] = 0;
+      bounceArr[idx] = 0.36;
+      alphaArr[idx] = 0.88;
+      heat0Arr[idx] = 0;
+      heatArr[idx] = 0;
+      seedArr[idx] = nextRand();
+      setHexRgb(idx, 0x5c554c, 0.16);
+      spawned++;
+    }
+
+    // 3. Low-skimming forged-iron & ember sparks ricocheting across flagstones
+    for (let i = 0; i < sparkCount; i++) {
+      const idx = allocSlot();
+      const ang = nextRand() * TWO_PI;
+      const spd = (7.2 + nextRand() * 7.6) * clamp(intensity, 0.75, 1.4);
+
+      kindArr[idx] = 2;
+      px[idx] = sx + Math.cos(ang) * 0.18;
+      py[idx] = groundY + 0.08 + nextRand() * 0.12;
+      pz[idx] = sz + Math.sin(ang) * 0.18;
+      vx[idx] = Math.cos(ang) * spd;
+      vy[idx] = 1.6 + nextRand() * 4.4;
+      vz[idx] = Math.sin(ang) * spd;
+      groundYArr[idx] = groundY;
+      size0Arr[idx] = 0.095 + nextRand() * 0.055;
+      size1Arr[idx] = size0Arr[idx] * 0.55;
+      ageArr[idx] = 0;
+      lifeArr[idx] = 0.40 + nextRand() * 0.32;
+      dragArr[idx] = 2.1;
+      gravArr[idx] = 17.0;
+      liftArr[idx] = 0;
+      bounceArr[idx] = 0.42;
+      alphaArr[idx] = 0.95;
+      heat0Arr[idx] = phase2 ? 1.0 : 0.92;
+      heatArr[idx] = heat0Arr[idx];
+      seedArr[idx] = nextRand();
+      setHexRgb(idx, phase2 ? 0xffd296 : 0xffe6ba, 0.08);
+      spawned++;
+    }
+
+    return spawned;
+  }
+
+  /**
+   * Spawns a tight directional sheaf (сноп искр) of velocity-stretched forged-steel sparks
+   * on Parry, Shield Block, Guard Counter, or Blade-on-Armor clash, with real floor ricochet
+   * and subtle gunmetal friction smoke.
+   */
+  function emitSteelSparkSheaf(x, y, z, dirX = 0, dirY = 0.35, dirZ = 1, sheafOpts = null) {
+    if (disposed) return 0;
+    const sx = Number.isFinite(Number(x)) ? Number(x) : 0;
+    const sy = Number.isFinite(Number(y)) ? Number(y) : 1.05;
+    const sz = Number.isFinite(Number(z)) ? Number(z) : 0;
+    const kind = (sheafOpts && sheafOpts.kind) || 'parry';
+    const preset = PRESETS_NORMAL[kind] || PRESETS_NORMAL.parry;
+    const sheafSpec = preset.sheaf || PRESETS_NORMAL.parry.sheaf;
+    const intensity = clamp(sanitizePositive(sheafOpts && sheafOpts.intensity, 1.0), 0.25, 2.0);
+    const groundY = (sheafOpts && sheafOpts.groundY !== undefined && sheafOpts.groundY !== null && Number.isFinite(Number(sheafOpts.groundY)))
+      ? Number(sheafOpts.groundY)
+      : Math.max(0, sy - preset.yOffset);
+
+    let nx = Number.isFinite(Number(dirX)) ? Number(dirX) : 0;
+    let ny = Number.isFinite(Number(dirY)) ? Number(dirY) : preset.directional.upwardBias;
+    let nz = Number.isFinite(Number(dirZ)) ? Number(dirZ) : 1;
+    const dLen = Math.hypot(nx, ny, nz);
+    if (dLen > EPSILON) {
+      nx /= dLen;
+      ny /= dLen;
+      nz /= dLen;
+    } else {
+      nx = 0;
+      ny = 0.42;
+      nz = 1;
+    }
+
+    // Build orthonormal basis (u, v) perpendicular to primary sheaf axis (nx, ny, nz)
+    let upX = 0;
+    let upY = 1;
+    let upZ = 0;
+    if (Math.abs(ny) > 0.92) {
+      upX = 1;
+      upY = 0;
+    }
+    let ux = upY * nz - upZ * ny;
+    let uy = upZ * nx - upX * nz;
+    let uz = upX * ny - upY * nx;
+    const uLen = Math.hypot(ux, uy, uz) || 1;
+    ux /= uLen;
+    uy /= uLen;
+    uz /= uLen;
+    const vxBasis = ny * uz - nz * uy;
+    const vyBasis = nz * ux - nx * uz;
+    const vzBasis = nx * uy - ny * ux;
+
+    const sparkCount = scaledCount(Math.round(sheafSpec.sparkCount * intensity), 5);
+    const smokeCount = scaledCount(Math.round(sheafSpec.smokeCount * intensity), 1);
+    const coneHalf = sheafSpec.coneHalfRad;
+    let spawned = 0;
+
+    // 1. Focused directional steel spark sheaf (75% tight core jet + 25% wide ricochet spray)
+    for (let i = 0; i < sparkCount; i++) {
+      const idx = allocSlot();
+      const isWideSpray = i >= sparkCount * 0.75;
+      const spread = (isWideSpray ? coneHalf * 1.85 : coneHalf) * Math.pow(nextRand(), 0.68);
+      const phi = nextRand() * TWO_PI;
+      const sinS = Math.sin(spread);
+      const cosS = Math.cos(spread);
+      const cPhi = Math.cos(phi);
+      const sPhi = Math.sin(phi);
+
+      const rx = nx * cosS + (ux * cPhi + vxBasis * sPhi) * sinS;
+      const ry = ny * cosS + (uy * cPhi + vyBasis * sPhi) * sinS;
+      const rz = nz * cosS + (uz * cPhi + vzBasis * sPhi) * sinS;
+
+      const spd = (sheafSpec.jetSpeedMin + nextRand() * (sheafSpec.jetSpeedMax - sheafSpec.jetSpeedMin))
+        * (isWideSpray ? 0.72 : 1.0)
+        * clamp(intensity, 0.7, 1.35);
+
+      kindArr[idx] = 2;
+      px[idx] = sx + nx * 0.06 + (nextRand() - 0.5) * 0.06;
+      py[idx] = sy + (nextRand() - 0.5) * 0.06;
+      pz[idx] = sz + nz * 0.06 + (nextRand() - 0.5) * 0.06;
+      vx[idx] = rx * spd;
+      vy[idx] = ry * spd + 0.8;
+      vz[idx] = rz * spd;
+      groundYArr[idx] = groundY;
+      size0Arr[idx] = (kind === 'parry' || kind === 'parry_steel_sheaf' ? 0.105 : 0.085) * (0.75 + nextRand() * 0.5);
+      size1Arr[idx] = size0Arr[idx] * 0.52;
+      ageArr[idx] = 0;
+      lifeArr[idx] = (0.28 + nextRand() * 0.28) * (kind === 'parry' || kind === 'parry_steel_sheaf' ? 1.18 : 1.0);
+      dragArr[idx] = 2.4;
+      gravArr[idx] = 16.5;
+      liftArr[idx] = 0;
+      bounceArr[idx] = sheafSpec.bounceRestitution;
+      alphaArr[idx] = 0.96;
+      heat0Arr[idx] = clamp(sheafSpec.initialHeat * (0.86 + nextRand() * 0.18), 0.5, 1.0);
+      heatArr[idx] = heat0Arr[idx];
+      seedArr[idx] = nextRand();
+      setHexRgb(idx, 0xfff2d2, 0.06);
+      spawned++;
+    }
+
+    // 2. Subtle gunmetal steel-clash micro-smoke wisp at impact point
+    for (let i = 0; i < smokeCount; i++) {
+      const idx = allocSlot();
+      const ang = nextRand() * TWO_PI;
+      const spd = 0.8 + nextRand() * 1.4;
+
+      kindArr[idx] = 0;
+      px[idx] = sx + (nextRand() - 0.5) * 0.10;
+      py[idx] = sy + (nextRand() - 0.5) * 0.10;
+      pz[idx] = sz + (nextRand() - 0.5) * 0.10;
+      vx[idx] = nx * spd + Math.cos(ang) * 0.5;
+      vy[idx] = 0.45 + nextRand() * 0.55;
+      vz[idx] = nz * spd + Math.sin(ang) * 0.5;
+      groundYArr[idx] = groundY;
+      size0Arr[idx] = 0.13 + nextRand() * 0.07;
+      size1Arr[idx] = size0Arr[idx] * 2.2;
+      ageArr[idx] = 0;
+      lifeArr[idx] = 0.34 + nextRand() * 0.18;
+      dragArr[idx] = 5.5;
+      gravArr[idx] = 0;
+      liftArr[idx] = 0.35;
+      bounceArr[idx] = 0;
+      alphaArr[idx] = 0.18;
+      heat0Arr[idx] = 0;
+      heatArr[idx] = 0;
+      seedArr[idx] = nextRand();
+      setHexRgb(idx, 0x767980, 0.08);
+      spawned++;
+    }
+
+    return spawned;
+  }
+
+  /**
+   * Universal 1-line preset emitter: dispatches any `SOULS_SPARK_KINDS` preset to the
+   * physical stone-dust / hammer-wave / directional steel-sheaf simulation.
+   */
+  function emitFromPreset(kind, x, y, z, dirX = 0, dirZ = 1, extraOpts = null) {
+    if (disposed) return 0;
+    const preset = PRESETS_NORMAL[kind] || PRESETS_NORMAL.sword_armor;
+    const safeY = (y !== undefined && y !== null && Number.isFinite(Number(y))) ? Number(y) : 0;
+    const groundY = (extraOpts && extraOpts.groundY !== undefined && extraOpts.groundY !== null && Number.isFinite(Number(extraOpts.groundY)))
+      ? Number(extraOpts.groundY)
+      : safeY;
+
+    if (preset.vfxMode === 'hammer_dust_wave') {
+      return emitHammerSlamWave(x, groundY, z, {
+        groundY,
+        radius: (extraOpts && extraOpts.radius) || (preset.stoneDust && preset.stoneDust.ringRadius) || 4.4,
+        intensity: (extraOpts && extraOpts.intensity) || 1.0,
+        phase2: Boolean(extraOpts && extraOpts.phase2)
+      });
+    }
+
+    if (preset.vfxMode === 'footstep_dust') {
+      return emitFootstepDust(x, groundY + (preset.kind === 'cutscene_door_dust' ? 1.6 : 0), z, {
+        groundY,
+        actorKind: preset.kind === 'boss_footstep_dust' || preset.kind === 'cutscene_door_dust' ? 'boss' : 'knight',
+        dirX,
+        dirZ,
+        intensity: (extraOpts && extraOpts.intensity) || 1.0
+      });
+    }
+
+    if (preset.vfxMode === 'stone_and_sparks') {
+      const n1 = emitFootstepDust(x, groundY, z, {
+        groundY,
+        actorKind: 'boss',
+        dirX: -dirX,
+        dirZ: -dirZ,
+        intensity: 0.85
+      });
+      const n2 = emitSteelSparkSheaf(x, groundY + preset.yOffset, z, dirX, preset.directional.upwardBias, dirZ, {
+        kind: preset.kind,
+        groundY,
+        intensity: (extraOpts && extraOpts.intensity) || 1.0
+      });
+      return n1 + n2;
+    }
+
+    const clashY = (extraOpts && extraOpts.clashY !== undefined && extraOpts.clashY !== null && Number.isFinite(Number(extraOpts.clashY)))
+      ? Number(extraOpts.clashY)
+      : groundY + preset.yOffset;
+    return emitSteelSparkSheaf(x, clashY, z, dirX, preset.directional.upwardBias, dirZ, {
+      kind: preset.kind,
+      groundY,
+      intensity: (extraOpts && extraOpts.intensity) || 1.0
+    });
+  }
+
+  /**
+   * Advances physical stone dust & steel spark simulation and packs active instances (0 GC/frame).
+   *
+   * @param {number} dt
+   */
+  function update(dt) {
+    if (disposed) return;
+    const safeDt = clamp(sanitizePositive(dt, 0), 0, 0.1);
+    if (activeCount === 0) {
+      mesh.visible = false;
+      geo.instanceCount = 0;
+      return;
+    }
+
+    let outIdx = 0;
+    for (let i = 0; i < maxParticles; i++) {
+      if (active[i] === 0) continue;
+
+      if (safeDt > 0) {
+        ageArr[i] += safeDt;
+        if (ageArr[i] >= lifeArr[i]) {
+          active[i] = 0;
+          activeCount = Math.max(0, activeCount - 1);
+          continue;
+        }
+
+        const damp = Math.exp(-dragArr[i] * safeDt);
+        vx[i] *= damp;
+        vz[i] *= damp;
+        if (kindArr[i] < 0.5) {
+          vy[i] = vy[i] * damp + liftArr[i] * safeDt;
+        } else {
+          vy[i] -= gravArr[i] * safeDt;
+        }
+
+        px[i] += vx[i] * safeDt;
+        py[i] += vy[i] * safeDt;
+        pz[i] += vz[i] * safeDt;
+
+        // Real flagstone bounce & friction skid for pebbles and steel sparks
+        const floorY = groundYArr[i] + 0.018;
+        if (bounceArr[i] > 0 && py[i] <= floorY && vy[i] < 0) {
+          py[i] = floorY;
+          vy[i] = -vy[i] * bounceArr[i];
+          vx[i] *= 0.72;
+          vz[i] *= 0.72;
+          if (kindArr[i] >= 1.5) {
+            // Brief frictional spark glint on flagstone strike
+            heatArr[i] = Math.min(1.0, heatArr[i] + 0.14);
+          }
+        }
+      }
+
+      const age01 = clamp(ageArr[i] / lifeArr[i], 0, 1);
+      const curSize = size0Arr[i] + (size1Arr[i] - size0Arr[i]) * (1 - (1 - age01) * (1 - age01));
+      if (kindArr[i] >= 1.5) {
+        heatArr[i] = heat0Arr[i] * Math.pow(1 - age01, 0.78);
+      }
+
+      const b4 = outIdx * 4;
+      const b3 = outIdx * 3;
+      gpuPosSize[b4] = px[i];
+      gpuPosSize[b4 + 1] = py[i];
+      gpuPosSize[b4 + 2] = pz[i];
+      gpuPosSize[b4 + 3] = curSize;
+
+      gpuVelKind[b4] = vx[i];
+      gpuVelKind[b4 + 1] = vy[i];
+      gpuVelKind[b4 + 2] = vz[i];
+      gpuVelKind[b4 + 3] = kindArr[i];
+
+      gpuLifeSeed[b4] = age01;
+      gpuLifeSeed[b4 + 1] = alphaArr[i];
+      gpuLifeSeed[b4 + 2] = heatArr[i];
+      gpuLifeSeed[b4 + 3] = seedArr[i];
+
+      gpuTint[b3] = crArr[i];
+      gpuTint[b3 + 1] = cgArr[i];
+      gpuTint[b3 + 2] = cbArr[i];
+
+      outIdx++;
+    }
+
+    activeCount = outIdx;
+    geo.instanceCount = outIdx;
+    mesh.visible = outIdx > 0;
+
+    if (outIdx > 0) {
+      attrPosSize.needsUpdate = true;
+      attrVelKind.needsUpdate = true;
+      attrLifeSeed.needsUpdate = true;
+      attrTint.needsUpdate = true;
+    }
+  }
+
+  function clearAll() {
+    active.fill(0);
+    activeCount = 0;
+    cursor = 0;
+    geo.instanceCount = 0;
+    mesh.visible = false;
+  }
+
+  function setLowSpec(enabled) {
+    lowSpec = Boolean(enabled);
+  }
+
+  function getActiveCount() {
+    return activeCount;
+  }
+
+  function getDrawCallCount() {
+    return !disposed && mesh.visible && geo.instanceCount > 0 ? 1 : 0;
+  }
+
+  function dispose() {
+    if (disposed) return;
+    disposed = true;
+    clearAll();
+    if (mesh.parent) {
+      mesh.parent.remove(mesh);
+    }
+    geo.dispose();
+    mat.dispose();
+  }
+
+  return {
+    mesh,
+    emitFootstepDust,
+    emitHammerSlamWave,
+    emitSteelSparkSheaf,
+    emitFromPreset,
+    update,
+    clearAll,
+    setLowSpec,
+    getActiveCount,
+    getDrawCallCount,
+    dispose
+  };
+}
+
 function evalCutsceneEnvelope(envelope, u) {
   const t = clamp(u, 0, 1);
   if (envelope === 'bell') {
     return Math.sin(t * Math.PI);
   }
   if (envelope === 'surge') {
-    // Fast chest-rumble rise -> sustained roar plateau -> smooth roll-off
     if (t < 0.22) return Math.sin((t / 0.22) * (Math.PI * 0.5));
     if (t < 0.72) return 0.92 + 0.08 * Math.sin(((t - 0.22) / 0.50) * Math.PI);
     return Math.cos(((t - 0.72) / 0.28) * (Math.PI * 0.5));
   }
-  // 'decay': heavy impact shockwave settling exponentially
   const inv = 1 - t;
   return inv * inv;
 }
@@ -851,8 +2020,9 @@ function evalCutsceneEnvelope(envelope, u) {
 /**
  * Creates a Souls-like Combat Game Feel controller:
  * 1. Framerate-independent Hitstop (0.06x time scale, anti-sticky cooldown, anti-hang cap).
- * 2. Near-critically damped 3D spring camera kicks + castle gate & 7.2s cutscene seismic rumble (0 GC/frame).
- * 3. Directional steel-clash spark burst & shockwave ring presets for emitParticles / world.spawnShockwaveRing.
+ * 2. Near-critically damped 3D spring camera kicks + castle gate & cutscene seismic rumble (0 GC/frame).
+ * 3. Physical stone dust & directional Planck-blackbody steel spark sheaf presets + optional attached
+ *    1-Draw-Call GPU `createSoulsImpactVfxSystem` (`attachImpactVfxScene` / `config.scene`).
  * 4. AAA mob combo hit micro-shake & spark feedback (`triggerComboHitFeedback`).
  *
  * @param {object} [config]
@@ -893,6 +2063,13 @@ export function createSoulsGameFeel(config = {}) {
 
   let lowSpecMode = Boolean(config.lowSpec);
   let shakeScale = clamp(sanitizeNonNegative(config.shakeScale, 1.0), 0, 2.0);
+  let impactVfx = config.scene
+    ? createSoulsImpactVfxSystem(config.scene, {
+        isMobile: config.isMobile,
+        lowSpec: lowSpecMode,
+        maxParticles: config.maxParticles
+      })
+    : null;
 
   // --- Hitstop state ---
   let hitstopRemaining = 0;
@@ -914,7 +2091,7 @@ export function createSoulsGameFeel(config = {}) {
   let doorRumbleProfile = 'door';
   let rumblePhase = 0;
 
-  // --- Timed 7.2s Cutscene Seismic Tremor state ---
+  // --- Timed Cutscene Seismic Tremor state ---
   let cutsceneElapsed = 0;
   let cutsceneDuration = 0;
   let cutscenePeakIntensity = 0;
@@ -936,22 +2113,6 @@ export function createSoulsGameFeel(config = {}) {
     kickIntensity: 0
   };
 
-  /**
-   * Triggers a combat hitstop slow-down.
-   * Accepts either a duration in seconds (e.g. 0.042, 0.068, 0.085) or a preset name
-   * ('r1', 'heavy', 'guard_block', 'guard_counter', 'parry', 'stance_break', 'riposte',
-   * 'wall_slam', 'boss_slam', 'boss_hammer_ground', 'mob_light', 'mob_heavy', 'shield_bash').
-   *
-   * Anti-sticky & anti-hang guarantees:
-   * - Regular triggers respect cooldown so multi-target cleaves cannot freeze combat.
-   * - Forced triggers ({ force: true }) can upgrade an active hitstop, but are strictly
-   *   bounded by maxContinuousSlowSec + mandatory recoveryLockSec so hitstop NEVER hangs.
-   *
-   * @param {number|string} sec
-   * @param {object} [opts]
-   * @param {boolean} [opts.force=false]
-   * @returns {boolean} true if applied/extended
-   */
   function triggerHitstop(sec, opts = null) {
     let rawSec = sec;
     if (typeof sec === 'string') {
@@ -965,7 +2126,6 @@ export function createSoulsGameFeel(config = {}) {
 
     const duration = clamp(parsed, SOULS_GAMEFEEL_CFG.HITSTOP_MIN_SEC, maxHitstopSec);
 
-    // Unbypassable safety recovery window after hitting continuous slow-mo budget
     if (recoveryLockTimer > 0) {
       return false;
     }
@@ -981,7 +2141,6 @@ export function createSoulsGameFeel(config = {}) {
       return false;
     }
 
-    // Clamp new/extended remaining time strictly within the continuous safety budget
     const cappedTotal = Math.min(duration, maxContinuousSlowSec - continuousSlowTime);
     if (cappedTotal <= hitstopRemaining + EPSILON) {
       return false;
@@ -992,14 +2151,6 @@ export function createSoulsGameFeel(config = {}) {
     return true;
   }
 
-  /**
-   * Converts raw frame delta time into combat simulation dt.
-   * Framerate-independent piecewise integration: while hitstop is active, only the
-   * exact remaining hitstop slice runs at 0.06x; any remainder of rawDt runs at 1.0x.
-   *
-   * @param {number} rawDt
-   * @returns {number}
-   */
   function consumeSimulationDt(rawDt) {
     const safeDt = sanitizePositive(rawDt, 0);
     if (safeDt <= 0) {
@@ -1035,7 +2186,6 @@ export function createSoulsGameFeel(config = {}) {
 
     continuousSlowTime += slowSlice;
     if (continuousSlowTime >= maxContinuousSlowSec - EPSILON) {
-      // Budget reached: immediately clear any lingering hitstop and force breathing recovery
       hitstopRemaining = 0;
       continuousSlowTime = 0;
       recoveryLockTimer = Math.max(recoveryLockTimer, recoveryLockSec);
@@ -1046,16 +2196,6 @@ export function createSoulsGameFeel(config = {}) {
     return slowSlice * timeScale + normalSlice;
   }
 
-  /**
-   * Applies a weighty directional impulse to the damped camera spring.
-   * If (dirX, dirZ) is near zero (e.g. radial hammer slam), applies a grounded vertical thump.
-   *
-   * @param {number} dirX
-   * @param {number} dirZ
-   * @param {number} intensity
-   * @param {object} [opts]
-   * @param {number} [opts.dirY]
-   */
   function triggerKick(dirX, dirZ, intensity, opts = null) {
     const rawIntensity = Number(intensity);
     if (!Number.isFinite(rawIntensity) || rawIntensity <= 0) {
@@ -1075,7 +2215,6 @@ export function createSoulsGameFeel(config = {}) {
       nx = rx / len;
       nz = rz / len;
     } else {
-      // Radial / ground impact (e.g. Troll Boss hammer slam): pure weighty downward thud
       ny = -0.88;
     }
 
@@ -1083,7 +2222,6 @@ export function createSoulsGameFeel(config = {}) {
       ny = clamp(Number(opts.dirY), -1.0, 1.0);
     }
 
-    // Immediate subtle frame-1 offset + crisp spring velocity impulse
     posX = clamp(
       posX + nx * mag * SOULS_GAMEFEEL_CFG.KICK_POS_BIAS_XZ,
       -SOULS_GAMEFEEL_CFG.MAX_OFFSET_XZ,
@@ -1117,14 +2255,6 @@ export function createSoulsGameFeel(config = {}) {
     );
   }
 
-  /**
-   * Sets target seismic rumble intensity for massive castle gates grinding open/closed.
-   * Smoothly ramped in stepCameraShake(dt) to avoid jarring single-frame jumps.
-   *
-   * @param {number} intensity - 0 to 1.5
-   * @param {object} [opts]
-   * @param {string} [opts.profile='door'] - 'door' | 'bolt' | 'roar' | 'slam'
-   */
   function setDoorRumble(intensity, opts = null) {
     if (opts && typeof opts.profile === 'string') {
       doorRumbleProfile = opts.profile;
@@ -1137,19 +2267,6 @@ export function createSoulsGameFeel(config = {}) {
     doorRumbleTarget = clamp(n, 0, SOULS_GAMEFEEL_CFG.MAX_RUMBLE_INTENSITY);
   }
 
-  /**
-   * Triggers a heavy cinematic shake preset for the 7.2s Boss Door Cutscene:
-   * - Act 1: 'act1_bolt' ('bolt'), 'act1_door_shift' ('push')
-   * - Act 2: 'act2_door_creak' ('open')
-   * - Act 3: 'act3_boss_step' ('boss_step'), 'act3_boss_roar' ('roar')
-   * - Act 4: 'act4_door_slam' ('close' / 'door_slam')
-   *
-   * Combines a crisp damped spring impact kick with a timed zero-drift seismic tremor.
-   *
-   * @param {string} presetId
-   * @param {number} [scale=1.0]
-   * @returns {object} resolved cutscene preset
-   */
   function triggerCutsceneShake(presetId, scale = 1.0) {
     const preset = getCutsceneRumblePreset(presetId);
     const mult = clamp(sanitizePositive(scale, 1.0), 0.1, 2.0);
@@ -1174,15 +2291,6 @@ export function createSoulsGameFeel(config = {}) {
     return preset;
   }
 
-  /**
-   * Automatically synchronizes heavy Act 1 / Act 3 / Act 4 cutscene shakes with the live
-   * choreography state from `evaluateBossDoorCutscene` / `world.getBossDoorCutsceneState()`.
-   * Safe to call every frame: uses internal edge-latches so each act impact fires exactly once.
-   *
-   * @param {object|null} cutsceneState
-   * @param {number} [dt=0]
-   * @returns {{ offsetX: number, offsetY: number, offsetZ: number }}
-   */
   function syncCutsceneShake(cutsceneState, dt = 0) {
     if (!cutsceneState || cutsceneState.finished) {
       if (lastSyncedAudioStage !== null || lastSyncedRoarPeak || lastSyncedDoorSlam) {
@@ -1229,7 +2337,6 @@ export function createSoulsGameFeel(config = {}) {
       }
     }
 
-    // Continuous subtle floor tremor tracks door shudder during Act 1–2 without overriding slam/roar
     const shudder = sanitizeNonNegative(cutsceneState.doorShudder, 0);
     if (shudder > 0.02) {
       setDoorRumble(clamp(shudder * 0.85, 0, 1.0), { profile: 'door' });
@@ -1240,22 +2347,6 @@ export function createSoulsGameFeel(config = {}) {
     return stepCameraShake(dt);
   }
 
-  /**
-   * Triggers tuned micro-shake, optional hitstop, and resolves the matching steel-clash spark burst
-   * for any AAA enemy combo hit (`slash_1`, `slash_2`, `overhead_crush`, `thrust_lunge`,
-   * `thrust_1`, `sweep_2`, `shield_bash`, `overhead_poke`, `boss_overhead_slam`, etc.).
-   * Returns a reused output object (0 heap allocations in combat hot loops).
-   *
-   * @param {string} attackId
-   * @param {number} dirX
-   * @param {number} dirZ
-   * @param {object} [opts]
-   * @param {boolean} [opts.blocked=false]
-   * @param {boolean} [opts.parried=false]
-   * @param {boolean} [opts.applyHitstop=true]
-   * @param {number} [opts.scale=1.0]
-   * @returns {{ attackId: string, sparkBurst: object, hitstopTriggered: boolean, kickIntensity: number }}
-   */
   function triggerComboHitFeedback(attackId, dirX, dirZ, opts = null) {
     const preset = getMobComboShakePreset(attackId);
     const blocked = Boolean(opts && opts.blocked);
@@ -1291,12 +2382,79 @@ export function createSoulsGameFeel(config = {}) {
     const table = lowSpecMode ? PRESETS_LOW_SPEC : PRESETS_NORMAL;
     const sparkBurst = table[sparkKind] || table.sword_armor;
 
+    if (impactVfx && opts && Number.isFinite(Number(opts.x)) && Number.isFinite(Number(opts.z))) {
+      impactVfx.emitFromPreset(sparkKind, Number(opts.x), Number(opts.y) || 0, Number(opts.z), dirX, dirZ, {
+        intensity: scale
+      });
+    }
+
     comboFeedbackOutput.attackId = preset.id;
     comboFeedbackOutput.sparkBurst = sparkBurst;
     comboFeedbackOutput.hitstopTriggered = hitstopTriggered;
     comboFeedbackOutput.kickIntensity = kickIntensity;
 
     return comboFeedbackOutput;
+  }
+
+  // --- Attached GPU Impact VFX System wrappers ---
+  function attachImpactVfxScene(scene, vfxOpts = null) {
+    if (impactVfx) {
+      impactVfx.dispose();
+      impactVfx = null;
+    }
+    if (!scene) return null;
+    impactVfx = createSoulsImpactVfxSystem(scene, {
+      isMobile: vfxOpts && vfxOpts.isMobile,
+      lowSpec: vfxOpts && vfxOpts.lowSpec !== undefined ? Boolean(vfxOpts.lowSpec) : lowSpecMode,
+      maxParticles: vfxOpts && vfxOpts.maxParticles
+    });
+    return impactVfx;
+  }
+
+  function getImpactVfxSystem() {
+    return impactVfx;
+  }
+
+  function emitFootstepDust(x, y, z, stepOpts = null) {
+    const isBoss = Boolean(stepOpts && stepOpts.actorKind === 'boss');
+    if (isBoss && (!stepOpts || stepOpts.withShake !== false)) {
+      const atten = clamp(sanitizePositive(stepOpts && stepOpts.shakeScale, 1.0), 0, 1.5);
+      if (atten > 0.02) {
+        triggerKick(0, 0, 0.16 * atten, { dirY: -0.85 });
+      }
+    }
+    return impactVfx ? impactVfx.emitFootstepDust(x, y, z, stepOpts) : 0;
+  }
+
+  function emitHammerSlamWave(x, y, z, slamOpts = null) {
+    const intensity = clamp(sanitizePositive(slamOpts && slamOpts.intensity, 1.0), 0.25, 2.0);
+    if (!slamOpts || slamOpts.withShake !== false) {
+      triggerKick(0, 0, 1.05 * intensity, { dirY: -0.92 });
+    }
+    if (slamOpts && slamOpts.withHitstop) {
+      triggerHitstop('boss_hammer_ground');
+    }
+    return impactVfx ? impactVfx.emitHammerSlamWave(x, y, z, slamOpts) : 0;
+  }
+
+  function emitSteelSparkSheaf(x, y, z, dirX = 0, dirY = 0.38, dirZ = 1, sheafOpts = null) {
+    return impactVfx ? impactVfx.emitSteelSparkSheaf(x, y, z, dirX, dirY, dirZ, sheafOpts) : 0;
+  }
+
+  function updateVfx(dt) {
+    if (impactVfx) impactVfx.update(dt);
+  }
+
+  function clearVfx() {
+    if (impactVfx) impactVfx.clearAll();
+  }
+
+  function dispose() {
+    if (impactVfx) {
+      impactVfx.dispose();
+      impactVfx = null;
+    }
+    reset();
   }
 
   function sampleSeismicProfile(profile, phase, intensity, out) {
@@ -1308,7 +2466,6 @@ export function createSoulsGameFeel(config = {}) {
     }
 
     if (profile === 'bolt') {
-      // Crisp iron-on-stone metallic shudder
       const ampXZ = SOULS_GAMEFEEL_CFG.RUMBLE_AMP_XZ * 0.85 * intensity;
       const ampY = SOULS_GAMEFEEL_CFG.RUMBLE_AMP_Y * 0.95 * intensity;
       out.x = (0.58 * Math.sin(phase * 54.3) + 0.42 * Math.sin(phase * 83.7 + 0.6)) * ampXZ;
@@ -1318,7 +2475,6 @@ export function createSoulsGameFeel(config = {}) {
     }
 
     if (profile === 'roar') {
-      // Deep chest-rattling visceral Boss Roar (strong low-mid harmonics, 0 DC drift)
       const roarMod = 0.78 + 0.22 * Math.sin(phase * 11.2);
       const ampXZ = SOULS_GAMEFEEL_CFG.RUMBLE_AMP_XZ * 1.18 * intensity * roarMod;
       const ampY = SOULS_GAMEFEEL_CFG.RUMBLE_AMP_Y * 1.25 * intensity * roarMod;
@@ -1329,7 +2485,6 @@ export function createSoulsGameFeel(config = {}) {
     }
 
     if (profile === 'slam') {
-      // Tectonic stone floor shockwave aftershock (vertical-heavy thud)
       const ampXZ = SOULS_GAMEFEEL_CFG.RUMBLE_AMP_XZ * 0.95 * intensity;
       const ampY = SOULS_GAMEFEEL_CFG.RUMBLE_AMP_Y * 1.45 * intensity;
       out.x = (0.60 * Math.sin(phase * 31.3) + 0.40 * Math.sin(phase * 53.1 + 0.5)) * ampXZ;
@@ -1338,7 +2493,6 @@ export function createSoulsGameFeel(config = {}) {
       return;
     }
 
-    // Default 'door': massive ancient stone & oak gate grinding tremor
     const grindMod = 0.72 + 0.28 * Math.sin(phase * 7.4);
     const ampXZ = SOULS_GAMEFEEL_CFG.RUMBLE_AMP_XZ * intensity * grindMod;
     const ampY = SOULS_GAMEFEEL_CFG.RUMBLE_AMP_Y * intensity * grindMod;
@@ -1347,22 +2501,13 @@ export function createSoulsGameFeel(config = {}) {
     out.z = (0.62 * Math.cos(phase * 43.3 + 0.7) + 0.38 * Math.cos(phase * 67.1)) * ampXZ;
   }
 
-  // Reusable scratch vectors for zero-allocation seismic summation
   const _doorVec = { x: 0, y: 0, z: 0 };
   const _cutsceneVec = { x: 0, y: 0, z: 0 };
 
-  /**
-   * Steps the damped camera spring, castle gate rumble, and timed cutscene tremors.
-   * Returns a reused { offsetX, offsetY, offsetZ } object (0 allocations per frame).
-   *
-   * @param {number} dt
-   * @returns {{ offsetX: number, offsetY: number, offsetZ: number }}
-   */
   function stepCameraShake(dt) {
     const safeDt = sanitizePositive(dt, 0);
 
     if (safeDt > 0) {
-      // Exact closed-form damped harmonic oscillator step (unconditionally stable for any dt)
       if (posX !== 0 || velX !== 0 || posY !== 0 || velY !== 0 || posZ !== 0 || velZ !== 0) {
         const decay = Math.exp(-zetaOmega * safeDt);
         const angle = dampedFreq * safeDt;
@@ -1403,7 +2548,6 @@ export function createSoulsGameFeel(config = {}) {
         }
       }
 
-      // Smooth exponential ramp for continuous castle gate seismic rumble
       const rate = doorRumbleTarget > doorRumbleCurrent
         ? SOULS_GAMEFEEL_CFG.RUMBLE_ATTACK_RATE
         : SOULS_GAMEFEEL_CFG.RUMBLE_RELEASE_RATE;
@@ -1414,7 +2558,6 @@ export function createSoulsGameFeel(config = {}) {
         doorRumbleCurrent = 0;
       }
 
-      // Advance timed cutscene seismic tremor
       if (cutsceneDuration > 0) {
         cutsceneElapsed += safeDt;
         if (cutsceneElapsed >= cutsceneDuration) {
@@ -1426,12 +2569,10 @@ export function createSoulsGameFeel(config = {}) {
       }
 
       if (doorRumbleCurrent > 0 || cutsceneDuration > 0) {
-        // Keep phase bounded so sin/cos precision never degrades over long sessions
         rumblePhase = (rumblePhase + safeDt) % 628.3185307179586;
       }
     }
 
-    // Sample continuous door rumble & timed cutscene seismic tremor (0 allocations)
     sampleSeismicProfile(doorRumbleProfile, rumblePhase, doorRumbleCurrent, _doorVec);
 
     let cutsceneCurrent = 0;
@@ -1478,6 +2619,7 @@ export function createSoulsGameFeel(config = {}) {
 
   function setLowSpec(enabled) {
     lowSpecMode = Boolean(enabled);
+    if (impactVfx) impactVfx.setLowSpec(lowSpecMode);
   }
 
   function setShakeScale(scale) {
@@ -1511,6 +2653,7 @@ export function createSoulsGameFeel(config = {}) {
     shakeOutput.offsetX = 0;
     shakeOutput.offsetY = 0;
     shakeOutput.offsetZ = 0;
+    if (impactVfx) impactVfx.clearAll();
   }
 
   function isHitstopActive() {
@@ -1531,6 +2674,8 @@ export function createSoulsGameFeel(config = {}) {
       cutsceneRemaining: Math.max(0, cutsceneDuration - cutsceneElapsed),
       lowSpecMode,
       shakeScale,
+      vfxActiveParticles: impactVfx ? impactVfx.getActiveCount() : 0,
+      vfxDrawCalls: impactVfx ? impactVfx.getDrawCallCount() : 0,
       offsetX: shakeOutput.offsetX,
       offsetY: shakeOutput.offsetY,
       offsetZ: shakeOutput.offsetZ
@@ -1545,6 +2690,14 @@ export function createSoulsGameFeel(config = {}) {
     triggerCutsceneShake,
     syncCutsceneShake,
     triggerComboHitFeedback,
+    attachImpactVfxScene,
+    getImpactVfxSystem,
+    emitFootstepDust,
+    emitHammerSlamWave,
+    emitSteelSparkSheaf,
+    updateVfx,
+    clearVfx,
+    dispose,
     stepCameraShake,
     getImpactSparkBurst: getBurst,
     setLowSpec,

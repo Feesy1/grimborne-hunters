@@ -14,14 +14,14 @@ import {
   RUN_UPGRADES,
   MAGE_ELEMENTS,
   MAGE_ELEMENT_ORDER
-} from '../config.js?v=20261121z64';
+} from '../config.js?v=20261121z68';
 import {
   RANK_ROMAN,
   el,
   formatTimeMMSS,
   hexNumToCss,
   isWeaponHighlightChoice
-} from './resolvers.js?v=20261121z64';
+} from './resolvers.js?v=20261121z68';
 import {
   makeSvgNode,
   createWeaponSvg,
@@ -30,7 +30,7 @@ import {
   createMandalaSvg,
   createRuneHaloSvg,
   createBlessingRelicSvg
-} from './svgIcons.js?v=20261121z64';
+} from './svgIcons.js?v=20261121z68';
 
 export function createModalsController({
   root,

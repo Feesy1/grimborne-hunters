@@ -2,16 +2,16 @@
 // Arsenal Progression, Procedural Web Audio, Gothic UI, and Yandex Games SDK v2.
 
 import * as THREE from '../vendor/three.module.js';
-import { LEVELS, SOULS_LEVEL_DEF, getLevelDef, MAGE_ELEMENTS, WEAPONS } from './config.js?v=20261121z64';
-import { createArenaWorld } from './world.js?v=20261121z64';
-import * as models from './models.js?v=20261121z64';
-import { createProgressionStore, mergeCloudState } from './progression.js?v=20261121z64';
-import { createCombatController } from './combat.js?v=20261121z64';
-import { createAudioEngine } from './audio.js?v=20261121z64';
-import { initYandexSdk } from './yandexSdk.js?v=20261121z64';
-import { createUIManager } from './ui.js?v=20261121z64';
-import { createInputController } from './input.js?v=20261121z64';
-import { attachSeamlessLoop } from './ambientVideo.js?v=20261121z64';
+import { LEVELS, SOULS_LEVEL_DEF, getLevelDef, MAGE_ELEMENTS, WEAPONS } from './config.js?v=20261121z68';
+import { createArenaWorld } from './world.js?v=20261121z68';
+import * as models from './models.js?v=20261121z68';
+import { createProgressionStore, mergeCloudState } from './progression.js?v=20261121z68';
+import { createCombatController } from './combat.js?v=20261121z68';
+import { createAudioEngine } from './audio.js?v=20261121z68';
+import { initYandexSdk } from './yandexSdk.js?v=20261121z68';
+import { createUIManager } from './ui.js?v=20261121z68';
+import { createInputController } from './input.js?v=20261121z68';
+import { attachSeamlessLoop } from './ambientVideo.js?v=20261121z68';
 
 async function bootstrap() {
   const canvas = document.getElementById('game-canvas');
@@ -25,6 +25,23 @@ async function bootstrap() {
   let soulsVictoryShownThisRun = false;
   let usedReviveThisRun = false;
   let usedDoubleGoldThisRun = false;
+  let lowFpsStreak = 0;
+  let thermalLowSpecApplied = false;
+  let lastNow = performance.now();
+  let elapsedTime = 0;
+  let fpsAccumTime = 0;
+  let fpsFrameCount = 0;
+  let smoothedFps = 60;
+  let lastShownFps = -1;
+  let hudSyncAccum = 0;
+  let autoSaveAccum = 0;
+
+  function resetFrameLoopTiming() {
+    lastNow = performance.now();
+    fpsAccumTime = 0;
+    fpsFrameCount = 0;
+    lowFpsStreak = 0;
+  }
 
   // Initialize Yandex Games SDK v2 (with instant local fallback)
   const sdk = await initYandexSdk({
@@ -736,6 +753,10 @@ async function bootstrap() {
     const isFreeRoam = Boolean(combat.getFreeRoam?.());
     const chosenLevel = reqLvl === 26 ? 26 : isFreeRoam ? Math.min(LEVELS.length, Math.max(1, reqLvl)) : Math.min(maxLvl, Math.max(1, reqLvl));
     const startAtBossArena = Boolean(chosenLevel === 26 && opts?.startAtBossArena);
+    if (chosenLevel === 26) {
+      // Begin async Souls WAV fetch & decode upfront so first footsteps/hits never stutter
+      audio?.preloadSoulsAudio?.();
+    }
     const eqWpnId = progression.getEquippedWeaponId(chosenClass);
     const stageDef = getLevelDef(chosenLevel);
     const missingKeys = models.getMissingStageModelKeys(chosenClass, eqWpnId, stageDef);
@@ -761,12 +782,6 @@ async function bootstrap() {
     clearHubDiorama();
     if (hubBgPlateEl) hubBgPlateEl.classList.add('hidden');
     hubBgVideoLoop?.pause();
-    world.setCameraMode?.('combat');
-    ui.hideAllModals();
-    ui.showHub(false);
-    ui.showHud(true);
-    combat.setAttackEnabled?.(chosenLevel !== 26);
-
     const battleBiome =
       chosenLevel === 26
         ? 'souls_citadel'
@@ -778,6 +793,11 @@ async function bootstrap() {
               ? 'misty_forest'
               : 'courtyard';
     world.setArenaBiome?.(battleBiome, chosenLevel);
+    world.setCameraMode?.('combat');
+    ui.hideAllModals();
+    ui.showHub(false);
+    ui.showHud(true);
+    combat.setAttackEnabled?.(chosenLevel !== 26);
     // Standard free combat camera (RMB orbit + mouse-wheel zoom) across all chapters,
     // including Misty Forest (chapter 6+) and Path of Ash (chapter 26 Souls prototype).
     world.setCameraLock?.(false);
@@ -786,12 +806,17 @@ async function bootstrap() {
     const difficultyMode = stBeforeRun.difficultyMode || 'normal';
     ui.setOnboardingDone?.(Boolean(stBeforeRun.onboardingDone));
     combat.startRun({ classId: chosenClass, levelNumber: chosenLevel, difficultyMode, startAtBossArena });
+    if (battleBiome === 'souls_citadel') {
+      audio?.preloadSoulsAudio?.();
+      world.prewarmSoulsShaders?.();
+    }
     ui.setAutoAimState(combat.getAutoAim());
     ui.setAttackEnabledState?.(combat.getAttackEnabled ? combat.getAttackEnabled() : chosenLevel !== 26);
     ui.updateHud(combat.getHudSnapshot());
     if (chosenLevel === 1 && !stBeforeRun.onboardingDone) {
       ui.startOnboarding?.(chosenLevel, false);
     }
+    resetFrameLoopTiming();
     gameMode = 'playing';
     if (!isSoulsRunActive()) {
       exitSoulsPointerLock();
@@ -1341,22 +1366,14 @@ async function bootstrap() {
     }
   } catch {}
 
-  let lowFpsStreak = 0;
-  let thermalLowSpecApplied = false;
-
   // === Uncapped High-Refresh Render & Simulation Loop ===
   const fpsBadgeEl = document.getElementById('fps-badge');
   if (fpsBadgeEl) {
     fpsBadgeEl.classList.remove('hidden');
     fpsBadgeEl.classList.add('is-dev-visible');
   }
-  let lastNow = performance.now();
-  let elapsedTime = 0;
-  let fpsAccumTime = 0;
-  let fpsFrameCount = 0;
-  let smoothedFps = 60;
-  let hudSyncAccum = 0;
-  let autoSaveAccum = 0;
+  const FPS_BADGE_UPDATE_INTERVAL_SEC = 0.4; // 2.5x/sec (prevents DOM thrash while staying crisp)
+  resetFrameLoopTiming();
 
   function frame(now) {
     requestAnimationFrame(frame);
@@ -1366,17 +1383,23 @@ async function bootstrap() {
     if (rawDeltaSec > 0 && rawDeltaSec < 0.5) {
       fpsAccumTime += rawDeltaSec;
       fpsFrameCount += 1;
-      if (fpsAccumTime >= 0.25) {
+      if (fpsAccumTime >= FPS_BADGE_UPDATE_INTERVAL_SEC) {
         const instFps = fpsFrameCount / fpsAccumTime;
         smoothedFps = smoothedFps * 0.35 + instFps * 0.65;
         if (fpsBadgeEl) {
           const shownFps = Math.max(1, Math.round(smoothedFps));
-          fpsBadgeEl.textContent = `${shownFps} FPS`;
+          if (shownFps !== lastShownFps) {
+            lastShownFps = shownFps;
+            fpsBadgeEl.textContent = `${shownFps} FPS`;
+          }
         }
         if (gameMode === 'playing' && !externalPaused && !thermalLowSpecApplied) {
-          if (instFps < 43) {
+          // Only drop into lowSpec on genuine sustained severe slowdown (never on brief desktop 35-42 FPS dips
+          // that would cause a mid-run shadow/normalMap shader recompile stutter & graphics downgrade).
+          const lowFpsThreshold = isTouchOnlyDevice() ? 34 : 28;
+          if (instFps < lowFpsThreshold) {
             lowFpsStreak += 1;
-            if (lowFpsStreak >= 8) {
+            if (lowFpsStreak >= 10) {
               thermalLowSpecApplied = true;
               world.setLowSpecMode?.(true);
               combat.setLowSpecMode?.(true);
@@ -1401,7 +1424,8 @@ async function bootstrap() {
     }
 
     if (gameMode === 'playing') {
-      const subSteps = Math.max(1, Math.min(3, Math.ceil(dt / MAX_SIM_STEP)));
+      // Avoid spurious 2x sub-step spirals from routine 60Hz vsync jitter (16.7..21ms)
+      const subSteps = dt <= 0.022 ? 1 : Math.max(1, Math.min(3, Math.ceil(dt / MAX_SIM_STEP)));
       const stepDt = dt / subSteps;
       const frameInput = gatherInput(dt);
       const urgentHudSync = Boolean(
@@ -1412,14 +1436,19 @@ async function bootstrap() {
         frameInput.flask ||
         frameInput.interact
       );
+      let stepsExecuted = 0;
       for (let s = 0; s < subSteps; s++) {
         if (gameMode !== 'playing') break;
         elapsedTime += stepDt;
         combat.update(stepDt, frameInput, elapsedTime);
-        world.update(stepDt, elapsedTime);
+        stepsExecuted += 1;
         if (s === 0 && subSteps > 1) {
           inputCtrl.clearSubStepEdgeTriggers(frameInput);
         }
+      }
+      // Run world ambient/arena/VFX update strictly once per rendered frame (never 2-3x on sub-stepped frames!)
+      if (stepsExecuted > 0) {
+        world.update(Math.min(dt, stepDt * stepsExecuted), elapsedTime);
       }
       hudSyncAccum = (hudSyncAccum || 0) + dt;
       if (hudSyncAccum >= 0.05 || urgentHudSync) {

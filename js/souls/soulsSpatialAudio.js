@@ -9,27 +9,30 @@
 //   2. Vaulted Stone Castle Draft (deep low-frequency resonant corridor wind + cold archway draft)
 //      dynamically sculpted by castle room acoustics (Bonfire Hall, Corridor, East Alcove, Boss Hall).
 //   3. Boss Intro Cutscene Audio:
-//      A) Initial Door Sequence (`playCinematicBossDoorSequence`, NO boss roar, NO ringing/bell modes):
-//           t = 0.05s : raw heavy iron scrape `souls_env_door_bolt.wav` (+ sub-bass weight)
-//           t = 0.65s : sub-bass timber pressure + grit (no tonal layers; the scrape sample carries the groan)
-//           t = 1.45s : raw monumental hinge/stone scrape `souls_env_door_open.wav` (~4.5s, gain 0.96) + cathedral sub-bass
-//           t = 5.35s : seismic bass slam of closing gates behind the hero (`souls_env_door_close.wav` + cathedral tail)
+//      A) Initial Door Sequence (`playCinematicBossDoorSequence`, NO boss roar, NO closing door slam, ZERO ringing/bell modes):
+//           t = 0.05s : massive iron bolt unlatch `souls_env_door_bolt.wav` + deep stone sub-bass thud
+//           t = 0.42s : 3 deg heavy leaf shudder — tectonic masonry sub tremor + cascading arch dust
+//           t = 0.85s : monumental outward slide (3 -> 84 deg, 0.85..3.60s) `souls_env_door_open.wav`
+//                       + rolling sub-bass + outward stereo cold cathedral draft
+//           (Closing door SFX intentionally omitted during the Boss intro cutscene so Boss dialogue opens cleanly.)
 //      B) Edge-Triggered Voiced Boss Dialogue & Throne Foley (100% timeline-locked from combat.js):
 //           - `playBossIntroVoiceLine(cueIndex)` (1..7 -> `boss_intro_vo_01..07.mp3`, clean `voiceGain`,
 //             auto-cuts previous line, soft music ducking via optional `duckMusic(-9.0, ...)`).
 //           - `playBossArmorShift(intensity)` (`boss_intro_armor_shift.wav` + procedural steel/leather fallback).
 //           - `stopBossIntroVoice(fadeSec)` (also invoked automatically by `stopCinematicSequence()` on skip).
-//      Full Yandex Games `suspend()`/`resume()` (pauses/resumes voice & door clock) & leak-free `.dispose()`.
+//      Full Yandex Games `suspend()`/`resume()` (pauses/resumes voice, door clock & staggered preload) & leak-free `.dispose()`.
 
-import { SOULS_CASTLE_BONFIRE, SOULS_CASTLE_BRAZIERS, SOULS_CASTLE_CONSTANTS } from './soulsCastleLayout.js?v=20261121z64';
+import * as CASTLE_LAYOUT from './soulsCastleLayout.js?v=20261121z68';
 
-export const SOULS_SPATIAL_AUDIO_VERSION = '20261121z64';
+const { SOULS_CASTLE_BONFIRE, SOULS_CASTLE_BRAZIERS, SOULS_CASTLE_CONSTANTS } = CASTLE_LAYOUT;
+
+export const SOULS_SPATIAL_AUDIO_VERSION = '20261121z68';
 export const BOSS_DOOR_CINEMATIC_DURATION = 43.2;
-export const BOSS_DOOR_AUDIO_SEQUENCE_DURATION = 8.0;
+export const BOSS_DOOR_AUDIO_SEQUENCE_DURATION = 7.8;
 
 const BASE_AUDIO_PATH = './assets/audio';
 
-// Single source of truth: live castle layout (bonfire + 12 floor braziers) — never hardcoded here!
+// Single source of truth: live castle layout (all bonfires + 12 floor braziers) — never hardcoded here!
 export const DEFAULT_SOULS_BONFIRE = Object.freeze({
   id: SOULS_CASTLE_BONFIRE.id || 'bonfire_main',
   roomId: SOULS_CASTLE_BONFIRE.roomId || 'courtyard',
@@ -40,6 +43,18 @@ export const DEFAULT_SOULS_BONFIRE = Object.freeze({
   maxDist: 14.5,
   isBonfire: true
 });
+
+function collectLayoutBonfires() {
+  if (Array.isArray(CASTLE_LAYOUT.SOULS_CASTLE_BONFIRES) && CASTLE_LAYOUT.SOULS_CASTLE_BONFIRES.length > 0) {
+    return CASTLE_LAYOUT.SOULS_CASTLE_BONFIRES;
+  }
+  const list = [SOULS_CASTLE_BONFIRE];
+  const extra = CASTLE_LAYOUT.SOULS_CASTLE_BOSS_BONFIRE || CASTLE_LAYOUT.SOULS_CASTLE_CHECKPOINT_BONFIRE || null;
+  if (extra && Number.isFinite(extra.x) && Number.isFinite(extra.z)) {
+    list.push(extra);
+  }
+  return list;
+}
 
 export const DEFAULT_SOULS_BRAZIERS = Object.freeze(
   SOULS_CASTLE_BRAZIERS.map((b) => Object.freeze({
@@ -53,9 +68,8 @@ export const DEFAULT_SOULS_BRAZIERS = Object.freeze(
 
 export const BOSS_DOOR_CINEMATIC_STAGES = Object.freeze([
   Object.freeze({ id: 'bolt', atSec: 0.05, sampleKey: 'door_bolt' }),
-  Object.freeze({ id: 'push', atSec: 0.65, sampleKey: null }),
-  Object.freeze({ id: 'open', atSec: 1.45, sampleKey: 'door_open' }),
-  Object.freeze({ id: 'close', atSec: 5.35, sampleKey: 'door_close' })
+  Object.freeze({ id: 'push', atSec: 0.42, sampleKey: null }),
+  Object.freeze({ id: 'open', atSec: 0.85, sampleKey: 'door_open' })
 ]);
 
 export const BOSS_INTRO_VOICE_LINES = Object.freeze([
@@ -71,14 +85,14 @@ export const BOSS_INTRO_VOICE_LINES = Object.freeze([
 export function buildSpatialSampleManifest(basePath = BASE_AUDIO_PATH, version = SOULS_SPATIAL_AUDIO_VERSION) {
   const cleanBase = String(basePath || BASE_AUDIO_PATH).replace(/\/+$/, '');
   const q = version ? `?v=${encodeURIComponent(String(version))}` : '';
+  // Priority order for staggered non-blocking warmup:
+  //   1. Spatial Bonfire/Brazier fire crackle (immediate castle ambient)
+  //   2. Boss Door bolt & outward opening scrape (NO door_close in cutscene!)
+  //   3. Boss armor shift & 7 cutscene VO lines (pre-decoded gently before Boss Hall)
   const entries = [
     Object.freeze(['fire_crackle', `${cleanBase}/souls_env_fire_crackle.wav${q}`]),
-    Object.freeze(['bonfire_crackle_legacy', `${cleanBase}/souls_env_bonfire_crackle.wav${q}`]),
     Object.freeze(['door_bolt', `${cleanBase}/souls_env_door_bolt.wav${q}`]),
     Object.freeze(['door_open', `${cleanBase}/souls_env_door_open.wav${q}`]),
-    Object.freeze(['boss_cutscene_roar', `${cleanBase}/souls_boss_cutscene_roar.wav${q}`]),
-    Object.freeze(['boss_roar_legacy', `${cleanBase}/souls_boss_roar.wav${q}`]),
-    Object.freeze(['door_close', `${cleanBase}/souls_env_door_close.wav${q}`]),
     Object.freeze(['boss_intro_armor_shift', `${cleanBase}/boss_intro_armor_shift.wav${q}`])
   ];
   for (let i = 0; i < BOSS_INTRO_VOICE_LINES.length; i++) {
@@ -86,6 +100,17 @@ export function buildSpatialSampleManifest(basePath = BASE_AUDIO_PATH, version =
     entries.push(Object.freeze([vl.key, `${cleanBase}/${vl.file}${q}`]));
   }
   return Object.freeze(entries);
+}
+
+// Legacy/on-demand fallback URLs (never eagerly preloaded during castle warmup)
+function buildLazyFallbackManifest(basePath = BASE_AUDIO_PATH, version = SOULS_SPATIAL_AUDIO_VERSION) {
+  const cleanBase = String(basePath || BASE_AUDIO_PATH).replace(/\/+$/, '');
+  const q = version ? `?v=${encodeURIComponent(String(version))}` : '';
+  return [
+    ['bonfire_crackle_legacy', `${cleanBase}/souls_env_bonfire_crackle.wav${q}`],
+    ['boss_cutscene_roar', `${cleanBase}/souls_boss_cutscene_roar.wav${q}`],
+    ['boss_roar_legacy', `${cleanBase}/souls_boss_roar.wav${q}`]
+  ];
 }
 
 export const SOULS_SPATIAL_SAMPLE_MANIFEST = buildSpatialSampleManifest();
@@ -161,60 +186,81 @@ function setPannerValue(pannerNode, pan, t, tc = 0.04) {
 
 function decodeAudioBuffer(audioCtx, arrayBuffer) {
   return new Promise((resolve, reject) => {
+    let settled = false;
+    const onOk = (decoded) => {
+      if (settled) return;
+      settled = true;
+      resolve(decoded);
+    };
+    const onErr = (err) => {
+      if (settled) return;
+      settled = true;
+      reject(err || new Error('decodeAudioData failed'));
+    };
     try {
-      const res = audioCtx.decodeAudioData(
-        arrayBuffer,
-        (decoded) => resolve(decoded),
-        (err) => reject(err || new Error('decodeAudioData failed'))
-      );
+      const res = audioCtx.decodeAudioData(arrayBuffer, onOk, onErr);
       if (res && typeof res.then === 'function') {
-        res.then(resolve, reject);
+        res.then(onOk, onErr);
       }
     } catch (err) {
-      reject(err);
+      onErr(err);
     }
   });
-}
-
-// Deterministic PRNG for consistent Gothic cathedral impulse response & ambient noise textures
-function createSeededRng(seedInit = 0x5011A0D1) {
-  let s = seedInit >>> 0;
-  return () => {
-    s = (s * 1664525 + 1013904223) >>> 0;
-    return s / 4294967296;
-  };
 }
 
 // ============================================================================
 // Procedural Audio Buffers (Cathedral Stereo IR + Warm Sculpted Noise Loops)
 // ============================================================================
 
+const INV_2_POW_31 = 2 / 4294967296;
+
 /**
- * Generates a realistic 3.1-second stereo Gothic Cathedral Impulse Response:
- * - Asymmetric early stone nave & pillar reflections (18..135 ms)
- * - Smoothly diffused dark stone modal reverb tail (RT60 ~2.65 s)
- * - Progressive high-frequency stone absorption & sub-60 Hz clarity roll-off
+ * Generates a realistic stereo Gothic Cathedral Stone Impulse Response:
+ * - Asymmetric early stone nave, buttress & vault reflections (17..225 ms)
+ * - Smoothly diffused dark limestone decay (zero periodic/ringing coloration!)
+ * - Uses exact multiplicative exponential recurrence + inline LCG PRNG (~12x faster, 0 frame hitch!)
  */
-function buildCathedralImpulseResponse(ctx, durationSec = 3.1) {
+function buildCathedralImpulseResponse(ctx, durationSec = 3.1, deepCinemaMode = false) {
   const sr = Math.max(22050, Math.min(96000, ctx.sampleRate || 44100));
   const length = Math.max(4096, Math.floor(sr * durationSec));
   const ir = ctx.createBuffer(2, length, sr);
-  const rand = createSeededRng(0xCA7ED4A1);
+  let seed = (deepCinemaMode ? 0xCA7ED51A : 0xCA7ED4A1) >>> 0;
 
   // Early stone reflections: [delaySec, gainL, gainR]
-  const earlyTaps = [
-    [0.017, 0.36, 0.22],
-    [0.026, 0.20, 0.34],
-    [0.039, 0.28, 0.17],
-    [0.054, 0.16, 0.27],
-    [0.071, 0.22, 0.15],
-    [0.094, 0.14, 0.21],
-    [0.118, 0.17, 0.12],
-    [0.146, 0.11, 0.16]
-  ];
+  const earlyTaps = deepCinemaMode
+    ? [
+      [0.019, 0.34, 0.21],
+      [0.031, 0.19, 0.33],
+      [0.047, 0.27, 0.16],
+      [0.068, 0.15, 0.26],
+      [0.093, 0.22, 0.14],
+      [0.124, 0.13, 0.21],
+      [0.161, 0.17, 0.12],
+      [0.208, 0.11, 0.16]
+    ]
+    : [
+      [0.017, 0.36, 0.22],
+      [0.026, 0.20, 0.34],
+      [0.039, 0.28, 0.17],
+      [0.054, 0.16, 0.27],
+      [0.071, 0.22, 0.15],
+      [0.094, 0.14, 0.21],
+      [0.118, 0.17, 0.12],
+      [0.146, 0.11, 0.16]
+    ];
 
-  const preDelaySamples = Math.floor(sr * 0.016);
-  const fadeInSamples = Math.floor(sr * 0.045);
+  const preDelaySamples = Math.floor(sr * (deepCinemaMode ? 0.022 : 0.016));
+  const fadeInSamples = Math.max(1, Math.floor(sr * (deepCinemaMode ? 0.058 : 0.045)));
+  const invFadeIn = 1.0 / fadeInSamples;
+  const startLp = deepCinemaMode ? 0.27 : 0.35;
+  const lpSlope = 0.21 / (Math.max(0.1, durationSec) * sr);
+  const hpAlpha = deepCinemaMode ? 0.9945 : 0.992; // preserves warm ~42 Hz stone body
+  const w1 = deepCinemaMode ? 0.62 : 0.72;
+  const w2 = deepCinemaMode ? 0.38 : 0.28;
+  const decay1 = Math.exp((deepCinemaMode ? -1.55 : -2.15) / sr);
+  const decay2 = Math.exp((deepCinemaMode ? -0.72 : -1.15) / sr);
+  const tailFade = Math.min(length, Math.floor(sr * 0.12));
+  const invTailFade = tailFade > 0 ? 1.0 / tailFade : 1.0;
 
   for (let ch = 0; ch < 2; ch++) {
     const out = ir.getChannelData(ch);
@@ -226,53 +272,50 @@ function buildCathedralImpulseResponse(ctx, durationSec = 3.1) {
       const amp = ch === 0 ? tap[1] : tap[2];
       const sign = ((i + ch) % 2 === 0) ? 1 : -1;
       if (idx > 1 && idx + 2 < length) {
-        out[idx - 1] += sign * amp * 0.22;
-        out[idx] += sign * amp * 0.56;
-        out[idx + 1] += sign * amp * 0.22;
+        out[idx - 1] += sign * amp * 0.24;
+        out[idx] += sign * amp * 0.52;
+        out[idx + 1] += sign * amp * 0.24;
       }
     }
 
-    // Late diffused stone hall tail with progressive HF damping & HPF clarity
+    // Late diffused dark stone hall tail (100% non-tonal, zero sine/modal ringing!)
     let lpState = 0;
     let lpState2 = 0;
     let hpState = 0;
     let prevIn = 0;
-    const hpAlpha = 0.992; // gentle ~55 Hz HPF so cathedral reverb never muddies sub-bass
+    let env1 = w1;
+    let env2 = w2;
+    let lpCoeff = startLp;
 
     for (let i = preDelaySamples; i < length; i++) {
-      const tSec = (i - preDelaySamples) / sr;
-      const u = tSec / Math.max(0.1, durationSec);
+      const rel = i - preDelaySamples;
+      const attackRamp = rel < fadeInSamples ? rel * invFadeIn : 1.0;
 
-      // Dual-slope stone decay: dense vaulted mid bloom + long haunting tail
-      const env = 0.72 * Math.exp(-tSec * 2.15) + 0.28 * Math.exp(-tSec * 1.15);
-      const attackRamp = i - preDelaySamples < fadeInSamples
-        ? (i - preDelaySamples) / fadeInSamples
-        : 1.0;
+      // Stereo decorrelated white excitation (inline LCG PRNG)
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      const white = seed * INV_2_POW_31 - 1.0;
 
-      // Slight stereo decorrelated white excitation
-      const white = rand() * 2 - 1;
-
-      // Progressive air + stone HF absorption: brighter early, darker velvet stone late
-      const lpCoeff = clamp(0.36 - u * 0.24, 0.08, 0.38);
-      lpState += lpCoeff * (white - lpState);
-      lpState2 += (lpCoeff * 0.85) * (lpState - lpState2);
-
-      // Subtle stone vault modal coloring (~195 Hz & 310 Hz faint spatial shimmer)
-      const modal = 1.0 + 0.06 * Math.sin(tSec * (ch === 0 ? 1225.0 : 1248.0));
+      // Progressive air + rough limestone HF absorption: darker velvet late tail
+      const c = lpCoeff < 0.055 ? 0.055 : lpCoeff;
+      lpState += c * (white - lpState);
+      lpState2 += (c * 0.82) * (lpState - lpState2);
 
       // Gentle HPF
-      const raw = lpState2 * modal;
+      const raw = lpState2;
       hpState = hpAlpha * (hpState + raw - prevIn);
       prevIn = raw;
 
-      out[i] += hpState * env * attackRamp * 0.24;
+      out[i] += hpState * (env1 + env2) * attackRamp * 0.25;
+      env1 *= decay1;
+      env2 *= decay2;
+      lpCoeff -= lpSlope;
     }
 
-    // Smooth final 80 ms fade-out to exact zero (zero truncation click)
-    const tailFade = Math.min(length, Math.floor(sr * 0.08));
+    // Smooth final 120 ms fade-out to exact zero (zero truncation click)
+    const fadeStart = length - tailFade;
     for (let k = 0; k < tailFade; k++) {
-      const mult = 1.0 - k / tailFade;
-      out[length - tailFade + k] *= mult * mult;
+      const mult = 1.0 - k * invTailFade;
+      out[fadeStart + k] *= mult * mult;
     }
   }
 
@@ -282,7 +325,7 @@ function buildCathedralImpulseResponse(ctx, durationSec = 3.1) {
 /**
  * Transparent analog-style soft-ceiling curve for the cinematic master bus:
  * Linear up to |x| <= 0.72, smoothly saturating to strict [-0.97, +0.97] ceiling
- * so loud door slams and boss roars stay massive with ZERO digital clipping.
+ * so loud door scrapes stay massive with ZERO digital clipping.
  */
 function buildSoftLimiterCurve(samples = 1024) {
   const curve = new Float32Array(samples);
@@ -306,44 +349,57 @@ function buildSoftLimiterCurve(samples = 1024) {
 /**
  * Generates a seamless 4.5-second stereo pink/brown sculpted noise loop for
  * vaulted stone corridor wind draft and warm procedural hearth rumble.
- * Crossfaded head-to-tail for 100% click-free infinite looping.
+ * Writes directly into output channels (zero multi-MB temporary buffer allocations)
+ * and equal-power crossfades head-to-tail for 100% click-free infinite looping.
  */
 function buildSeamlessWarmNoiseLoop(ctx, durationSec = 4.5) {
   const sr = Math.max(22050, Math.min(96000, ctx.sampleRate || 44100));
   const length = Math.max(8192, Math.floor(sr * durationSec));
-  const xfade = Math.min(Math.floor(sr * 0.45), Math.floor(length * 0.2));
-  const totalGen = length + xfade;
+  const xfade = Math.max(1, Math.min(Math.floor(sr * 0.45), Math.floor(length * 0.2)));
   const buf = ctx.createBuffer(2, length, sr);
-  const rand = createSeededRng(0xF14E2026);
+  let seed = 0xF14E2026 >>> 0;
+  const dAngle = (Math.PI * 0.5) / xfade;
+  const cosD = Math.cos(dAngle);
+  const sinD = Math.sin(dAngle);
+  const invBrown = 1.0 / 1.028;
 
   for (let ch = 0; ch < 2; ch++) {
-    const tmp = new Float32Array(totalGen);
+    const out = buf.getChannelData(ch);
     // Paul Kellet pink-ish + warm brown blend (zero harsh high-frequency white hiss!)
     let b0 = 0;
     let b1 = 0;
     let b2 = 0;
     let brown = 0;
-    for (let i = 0; i < totalGen; i++) {
-      const w = rand() * 2 - 1;
+    for (let i = 0; i < length; i++) {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      const w = seed * INV_2_POW_31 - 1.0;
       b0 = 0.99765 * b0 + w * 0.0990460;
       b1 = 0.96300 * b1 + w * 0.2965164;
       b2 = 0.57000 * b2 + w * 1.0526913;
       const pink = (b0 + b1 + b2 + w * 0.1848) * 0.14;
-      brown = (brown + 0.028 * w) / 1.028;
-      tmp[i] = clamp(pink * 0.55 + brown * 1.85, -0.95, 0.95);
+      brown = (brown + 0.028 * w) * invBrown;
+      const sample = pink * 0.55 + brown * 1.85;
+      out[i] = sample < -0.95 ? -0.95 : sample > 0.95 ? 0.95 : sample;
     }
 
-    const out = buf.getChannelData(ch);
-    for (let i = 0; i < length; i++) {
-      if (i < xfade) {
-        const a = i / xfade;
-        // Equal-power seamless loop wrap
-        const fadeIn = Math.sin(a * Math.PI * 0.5);
-        const fadeOut = Math.cos(a * Math.PI * 0.5);
-        out[i] = tmp[i] * fadeIn + tmp[length + i] * fadeOut;
-      } else {
-        out[i] = tmp[i];
-      }
+    // Equal-power seamless loop wrap over the short tail continuation (zero temporary Float32Array!)
+    let fadeIn = 0.0;  // sin(0)
+    let fadeOut = 1.0; // cos(0)
+    for (let i = 0; i < xfade; i++) {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      const w = seed * INV_2_POW_31 - 1.0;
+      b0 = 0.99765 * b0 + w * 0.0990460;
+      b1 = 0.96300 * b1 + w * 0.2965164;
+      b2 = 0.57000 * b2 + w * 1.0526913;
+      const pink = (b0 + b1 + b2 + w * 0.1848) * 0.14;
+      brown = (brown + 0.028 * w) * invBrown;
+      const tailSample = pink * 0.55 + brown * 1.85;
+      const clampedTail = tailSample < -0.95 ? -0.95 : tailSample > 0.95 ? 0.95 : tailSample;
+      out[i] = out[i] * fadeIn + clampedTail * fadeOut;
+      const nextIn = fadeIn * cosD + fadeOut * sinD;
+      const nextOut = fadeOut * cosD - fadeIn * sinD;
+      fadeIn = nextIn;
+      fadeOut = nextOut;
     }
   }
   return buf;
@@ -358,9 +414,10 @@ function buildTransientNoiseBuffer(ctx, durationSec = 1.2) {
   const length = Math.max(4096, Math.floor(sr * durationSec));
   const buf = ctx.createBuffer(1, length, sr);
   const data = buf.getChannelData(0);
-  const rand = createSeededRng(0x570AE991);
+  let seed = 0x570AE991 >>> 0;
   for (let i = 0; i < length; i++) {
-    data[i] = rand() * 2 - 1;
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    data[i] = seed * INV_2_POW_31 - 1.0;
   }
   return buf;
 }
@@ -439,6 +496,11 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
   for (let i = 0; i < manifest.length; i++) {
     sampleUrls.set(manifest[i][0], manifest[i][1]);
   }
+  const lazyFallbackEntries = buildLazyFallbackManifest(basePath, assetVersion);
+  const lazyFallbackUrls = new Map();
+  for (let i = 0; i < lazyFallbackEntries.length; i++) {
+    lazyFallbackUrls.set(lazyFallbackEntries[i][0], lazyFallbackEntries[i][1]);
+  }
   let duckMusicFn = typeof opts.duckMusic === 'function' ? opts.duckMusic : null;
 
   // Fire source registry: index 0 is Hero Bonfire, 1..N are floor braziers
@@ -450,21 +512,32 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
     const z = Array.isArray(src) ? Number(src[1]) : Number(src.z);
     if (!Number.isFinite(x) || !Number.isFinite(z)) return null;
     const scale = finiteOr(Number(src.scale), 1.0);
+    const refDist = finiteOr(Number(src.refDist), isBonfire ? 1.8 : 1.35);
+    const maxDist = finiteOr(Number(src.maxDist), isBonfire ? 14.5 : 9.8);
     return {
       id: typeof src.id === 'string' ? src.id : (isBonfire ? 'bonfire_main' : `brazier_${idx}`),
       x,
       z,
       weight: finiteOr(Number(src.weight), isBonfire ? 1.28 : 0.88 * clamp(scale, 0.85, 1.25)),
-      refDist: finiteOr(Number(src.refDist), isBonfire ? 1.8 : 1.35),
-      maxDist: finiteOr(Number(src.maxDist), isBonfire ? 14.5 : 9.8),
+      refDist,
+      maxDist,
+      maxDistSq: maxDist * maxDist,
+      invDistSpan: 1.0 / Math.max(0.5, maxDist - refDist),
       isBonfire: Boolean(isBonfire)
     };
   }
 
-  function setFireSources(bonfire = DEFAULT_SOULS_BONFIRE, braziers = DEFAULT_SOULS_BRAZIERS) {
+  function setFireSources(bonfire = collectLayoutBonfires(), braziers = DEFAULT_SOULS_BRAZIERS) {
     fireSources.length = 0;
-    const bf = normalizeFireSource(bonfire, true, 0);
-    if (bf) fireSources.push(bf);
+    if (Array.isArray(bonfire) && bonfire.length > 0 && typeof bonfire[0] === 'object') {
+      for (let i = 0; i < bonfire.length; i++) {
+        const bf = normalizeFireSource(bonfire[i], true, i);
+        if (bf) fireSources.push(bf);
+      }
+    } else {
+      const bf = normalizeFireSource(bonfire, true, 0);
+      if (bf) fireSources.push(bf);
+    }
     if (Array.isArray(braziers)) {
       for (let i = 0; i < braziers.length; i++) {
         const br = normalizeFireSource(braziers[i], false, i + 1);
@@ -474,7 +547,7 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
   }
 
   setFireSources(
-    opts.bonfire !== undefined ? opts.bonfire : DEFAULT_SOULS_BONFIRE,
+    opts.bonfire !== undefined ? opts.bonfire : collectLayoutBonfires(),
     opts.braziers !== undefined ? opts.braziers : DEFAULT_SOULS_BRAZIERS
   );
 
@@ -490,13 +563,20 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
   let graphCtxRef = null;
   let graphDestRef = null;
 
-  // Decoded AudioBuffer cache
+  // Decoded AudioBuffer cache & staggered non-blocking warmup queue
   const buffers = new Map();       // key -> AudioBuffer
   const pendingLoads = new Map();  // key -> Promise<AudioBuffer|null>
+  const failedKeys = new Set();    // permanent 404 keys (never retried on footsteps)
   let preloadInitiated = false;
+  let preloadCompleted = false;
+  let preloadCtxRef = null;
+  let preloadPromise = null;
+  let warmupGeneration = 0;
+  let warmupResumeCallbacks = [];
 
   // Reusable procedural AudioBuffers
   let cathedralIRBuffer = null;
+  let cinemaCathedralIRBuffer = null;
   let warmNoiseBuffer = null;
   let transientNoiseBuffer = null;
 
@@ -506,15 +586,16 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
   let voiceGain = null;
   let voiceVolume = clamp(finiteOr(Number(opts.voiceVolume), 1.08), 0, 1.6);
 
-  // Shared Gothic Cathedral Reverb (Ambient bus)
+  // Shared Gothic Cathedral Reverb (Ambient bus — warmed off frame 0 for 0ms hitch!)
   let ambReverbIn = null;
   let ambReverbHpf = null;
   let ambReverbLpf = null;
   let ambReverbNode = null;        // ConvolverNode or delay fallback head
   let ambReverbFallbackNodes = []; // Only populated if ConvolverNode unavailable
   let ambReverbWetGain = null;
+  let ambReverbReady = false;
 
-  // Cinematic Compressor + Soft-Ceiling Limiter + Dedicated Cathedral Reverb
+  // Cinematic Compressor + Soft-Ceiling Limiter + Dedicated Cathedral Reverb (warmed off frame 0!)
   let cinemaCompressor = null;
   let cinemaSoftLimiter = null;
   let cinemaReverbIn = null;
@@ -523,6 +604,7 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
   let cinemaReverbNode = null;
   let cinemaReverbFallbackNodes = [];
   let cinemaReverbWetGain = null;
+  let cinemaReverbReady = false;
 
   // Spatial Fire Chain (WAV loop + warm procedural hearth rumble fallback)
   let fireSource = null;           // Looping AudioBufferSourceNode for WAV
@@ -530,6 +612,7 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
   let procFireSource = null;       // Looping warm hearth rumble fallback while WAV decodes
   let procFireFilter = null;
   let procFireGain = null;
+  let procFireStopTimer = null;
   let fireLpf = null;              // Distance air-absorption filter
   let firePanner = null;           // StereoPannerNode
   let fireGain = null;
@@ -547,9 +630,10 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
   let windGain = null;
   let windReverbSend = null;
 
-  // Live Ambient Telemetry & Smoothing Scalars
+  // Live Ambient Telemetry & Smoothing Scalars + Epsilon Param Caches (0 GC / 0 timeline flood!)
   let lastIsInSouls = false;
   let lastBossAwakened = false;
+  let ambientSilenced = true;
   let clockSec = 0;
   let nextEmberPopAt = 0;
   let curZoneIdx = 0;
@@ -560,16 +644,42 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
   let curFireTargetPan = 0;
   let curWindTargetGain = 0;
 
-  // Active Transient Node Tracking (procedural ember pops, etc.)
+  let lastSentFireGain = NaN;
+  let lastSentFirePan = NaN;
+  let lastSentFireCutoff = NaN;
+  let lastSentFireRev = NaN;
+  let lastSentWindGain = NaN;
+  let lastSentWindVaultFreq = NaN;
+  let lastSentWindDraftFreq = NaN;
+  let lastSentWindDraftGain = NaN;
+  let lastSentWindRev = NaN;
+  let lastSentWindPan = NaN;
+
+  function resetAmbientParamCache() {
+    ambientSilenced = false;
+    lastSentFireGain = NaN;
+    lastSentFirePan = NaN;
+    lastSentFireCutoff = NaN;
+    lastSentFireRev = NaN;
+    lastSentWindGain = NaN;
+    lastSentWindVaultFreq = NaN;
+    lastSentWindDraftFreq = NaN;
+    lastSentWindDraftGain = NaN;
+    lastSentWindRev = NaN;
+    lastSentWindPan = NaN;
+  }
+
+  // Active Transient Node, Timer & Idle-Callback Tracking (0 leaks on dispose!)
   const activeTransientNodes = new Set();
   const activeTimers = new Set();
+  const activeIdleHandles = new Set();
 
   // Active Boss Door Cutscene Session & All Live/Fading Sessions (0 leaks on dispose!)
   let cinematicSession = null;
   const activeSessions = new Set();
   let cinemaRevToken = 0;
 
-  // Dedicated Boss Intro Dialogue Voice Playback State (10 lines, zero overlap, pause/resume safe)
+  // Dedicated Boss Intro Dialogue Voice Playback State (7 lines, zero overlap, pause/resume safe)
   let activeVoice = null;          // { cueIndex, key, source, gain, startedAtCtx, offsetAtStart, duration, stopped, fadeTimer }
   const fadingVoices = new Set();  // fading-out previous voice entries tracked for 0-leak dispose
   let voicePlayToken = 0;          // monotonic token canceling stale async on-demand decodes on skip/next line
@@ -612,13 +722,14 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
     return audioCtx.destination || null;
   }
 
-  function createReverbProcessor(audioCtx, inputNode, outputNode, fallbackBucket) {
+  function createReverbProcessor(audioCtx, inputNode, outputNode, fallbackBucket, irOverride = null) {
+    const irBuf = irOverride || cathedralIRBuffer;
     // Primary: True Stereo Cathedral ConvolverNode (equal-power W3C RMS normalization -> unity wet gain!)
-    if (typeof audioCtx.createConvolver === 'function' && cathedralIRBuffer) {
+    if (typeof audioCtx.createConvolver === 'function' && irBuf) {
       try {
         const conv = audioCtx.createConvolver();
         conv.normalize = true;
-        conv.buffer = cathedralIRBuffer;
+        conv.buffer = irBuf;
         inputNode.connect(conv);
         conv.connect(outputNode);
         return conv;
@@ -659,16 +770,46 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
     return d1;
   }
 
+  function cancelWarmupHandles() {
+    if (typeof cancelIdleCallback === 'function') {
+      for (const h of activeIdleHandles) {
+        try { cancelIdleCallback(h); } catch {}
+      }
+    }
+    activeIdleHandles.clear();
+  }
+
+  function flushWarmupResumeCallbacks() {
+    if (warmupResumeCallbacks.length === 0) return;
+    const cbs = warmupResumeCallbacks;
+    warmupResumeCallbacks = [];
+    for (let i = 0; i < cbs.length; i++) {
+      try { cbs[i](); } catch {}
+    }
+  }
+
+  function stopProceduralFireFallback() {
+    if (procFireStopTimer !== null) {
+      clearTimeout(procFireStopTimer);
+      activeTimers.delete(procFireStopTimer);
+      procFireStopTimer = null;
+    }
+    safeStop(procFireSource);
+    safeDisconnect(procFireSource);
+    safeDisconnect(procFireFilter);
+    safeDisconnect(procFireGain);
+    procFireSource = null;
+    procFireFilter = null;
+    procFireGain = null;
+  }
+
   function teardownGraph() {
     safeStop(fireSource);
-    safeStop(procFireSource);
+    stopProceduralFireFallback();
     safeStop(windSource);
 
     safeDisconnect(fireSource);
     safeDisconnect(fireWavGain);
-    safeDisconnect(procFireSource);
-    safeDisconnect(procFireFilter);
-    safeDisconnect(procFireGain);
     safeDisconnect(fireLpf);
     safeDisconnect(firePanner);
     safeDisconnect(fireGain);
@@ -708,9 +849,6 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
 
     fireSource = null;
     fireWavGain = null;
-    procFireSource = null;
-    procFireFilter = null;
-    procFireGain = null;
     fireLpf = null;
     firePanner = null;
     fireGain = null;
@@ -732,12 +870,14 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
     ambReverbLpf = null;
     ambReverbNode = null;
     ambReverbWetGain = null;
+    ambReverbReady = false;
 
     cinemaReverbIn = null;
     cinemaReverbHpf = null;
     cinemaReverbLpf = null;
     cinemaReverbNode = null;
     cinemaReverbWetGain = null;
+    cinemaReverbReady = false;
 
     cinemaCompressor = null;
     cinemaSoftLimiter = null;
@@ -748,6 +888,8 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
     graphInitialized = false;
     graphCtxRef = null;
     graphDestRef = null;
+    resetAmbientParamCache();
+    ambientSilenced = true;
   }
 
   function computeEffectiveMasterGain() {
@@ -768,6 +910,63 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
     }
   }
 
+  /**
+   * Lazily initializes the 3.1s Gothic stone hall Convolver for ambient fire & wind reverb.
+   * Deferred off frame 0 into an idle slice so entering Souls Citadel never drops a frame
+   * on synchronous ConvolverNode FFT preparation, then blooms in smoothly (0 click).
+   */
+  function ensureAmbReverbReady() {
+    if (ambReverbReady) return true;
+    if (disposed || !graphInitialized || !graphCtxRef || !ambReverbLpf || !ambReverbWetGain) {
+      return false;
+    }
+    try {
+      if (!cathedralIRBuffer) {
+        cathedralIRBuffer = buildCathedralImpulseResponse(graphCtxRef, 3.1, false);
+      }
+      ambReverbNode = createReverbProcessor(
+        graphCtxRef,
+        ambReverbLpf,
+        ambReverbWetGain,
+        ambReverbFallbackNodes,
+        cathedralIRBuffer
+      );
+      ambReverbReady = true;
+      safeTargetParam(ambReverbWetGain.gain, 0.62, graphCtxRef.currentTime, 0.12);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Lazily initializes the deep 3.6s Gothic Cathedral Convolver for the Boss Door & Armor Shift bus.
+   * Deferred off frame 0 (warmed in idle slice during preload, or created synchronously on demand
+   * if a cutscene/armor-shift cue triggers before idle warmup completes).
+   */
+  function ensureCinemaReverbReady() {
+    if (cinemaReverbReady) return true;
+    if (disposed || !graphInitialized || !graphCtxRef || !cinemaReverbLpf || !cinemaReverbWetGain) {
+      return false;
+    }
+    try {
+      if (!cinemaCathedralIRBuffer) {
+        cinemaCathedralIRBuffer = buildCathedralImpulseResponse(graphCtxRef, 3.6, true);
+      }
+      cinemaReverbNode = createReverbProcessor(
+        graphCtxRef,
+        cinemaReverbLpf,
+        cinemaReverbWetGain,
+        cinemaReverbFallbackNodes,
+        cinemaCathedralIRBuffer
+      );
+      cinemaReverbReady = true;
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   function startFireWavLoopIfReady() {
     if (disposed || !graphInitialized || !graphCtxRef || !fireWavGain) return false;
     if (fireWavActive && fireSource) return true;
@@ -785,10 +984,20 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
       fireSource = src;
       fireWavActive = true;
 
-      // Crossfade seamlessly from procedural hearth fallback to real studio WAV loop
+      // Crossfade seamlessly from procedural hearth fallback to real studio WAV loop,
+      // then stop the silent procedural fallback source to free audio-thread DSP!
       safeTargetParam(fireWavGain.gain, 1.0, t, 0.25);
       if (procFireGain) {
         safeTargetParam(procFireGain.gain, 0.0001, t, 0.30);
+      }
+      if (procFireSource && procFireStopTimer === null) {
+        const tid = setTimeout(() => {
+          activeTimers.delete(tid);
+          procFireStopTimer = null;
+          if (fireWavActive) stopProceduralFireFallback();
+        }, 1600);
+        procFireStopTimer = tid;
+        activeTimers.add(tid);
       }
       return true;
     } catch {
@@ -815,11 +1024,19 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
 
     // Rebuilding on a new AudioContext
     if (graphInitialized) {
+      warmupGeneration++;
+      cancelWarmupHandles();
+      flushWarmupResumeCallbacks();
       teardownGraph();
       buffers.clear();
       pendingLoads.clear();
+      failedKeys.clear();
       preloadInitiated = false;
+      preloadCompleted = false;
+      preloadCtxRef = null;
+      preloadPromise = null;
       cathedralIRBuffer = null;
+      cinemaCathedralIRBuffer = null;
       warmNoiseBuffer = null;
       transientNoiseBuffer = null;
     }
@@ -827,9 +1044,10 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
     try {
       const t = audioCtx.currentTime;
 
-      // Generate shared procedural buffers once per AudioContext
-      cathedralIRBuffer = buildCathedralImpulseResponse(audioCtx, 3.1);
-      warmNoiseBuffer = buildSeamlessWarmNoiseLoop(audioCtx, 4.5);
+      // Generate lightweight procedural noise buffers once per AudioContext (~1-2ms total!).
+      // Both ConvolverNode cathedral IRs are deferred off frame 0 into idle warmup slices
+      // (ensureAmbReverbReady / ensureCinemaReverbReady) so entering Souls NEVER drops a frame!
+      warmNoiseBuffer = buildSeamlessWarmNoiseLoop(audioCtx, 3.2);
       transientNoiseBuffer = buildTransientNoiseBuffer(audioCtx, 1.2);
 
       // Master spatial output bus with transparent analog soft-ceiling limiter (strict <= 0.97 ceiling!)
@@ -855,7 +1073,7 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
       voiceGain.gain.setValueAtTime(voiceVolume, t);
       voiceGain.connect(spatialSumDest);
 
-      // 1. Ambient Cathedral Reverb Bus
+      // 1. Ambient Cathedral Reverb Bus (Convolver warmed off frame 0 -> blooms smoothly to 0.62)
       ambReverbIn = audioCtx.createGain();
       ambReverbIn.gain.setValueAtTime(1.0, t);
       ambReverbHpf = audioCtx.createBiquadFilter();
@@ -865,14 +1083,15 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
       ambReverbLpf.type = 'lowpass';
       ambReverbLpf.frequency.setValueAtTime(3400, t);
       ambReverbWetGain = audioCtx.createGain();
-      ambReverbWetGain.gain.setValueAtTime(0.62, t);
+      ambReverbWetGain.gain.setValueAtTime(0.0001, t);
 
       ambReverbIn.connect(ambReverbHpf);
       ambReverbHpf.connect(ambReverbLpf);
-      ambReverbNode = createReverbProcessor(audioCtx, ambReverbLpf, ambReverbWetGain, ambReverbFallbackNodes);
+      ambReverbNode = null;
+      ambReverbReady = false;
       ambReverbWetGain.connect(spatialSumDest);
 
-      // 2. Cinematic Bus Compressor + Dedicated Cathedral Reverb
+      // 2. Cinematic Bus Compressor + Dedicated Cathedral Reverb (Convolver warmed off frame 0!)
       if (typeof audioCtx.createDynamicsCompressor === 'function') {
         cinemaCompressor = audioCtx.createDynamicsCompressor();
         cinemaCompressor.threshold.setValueAtTime(-5.0, t);
@@ -890,16 +1109,17 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
       cinemaReverbIn.gain.setValueAtTime(1.0, t);
       cinemaReverbHpf = audioCtx.createBiquadFilter();
       cinemaReverbHpf.type = 'highpass';
-      cinemaReverbHpf.frequency.setValueAtTime(92, t);
+      cinemaReverbHpf.frequency.setValueAtTime(68, t);
       cinemaReverbLpf = audioCtx.createBiquadFilter();
       cinemaReverbLpf.type = 'lowpass';
-      cinemaReverbLpf.frequency.setValueAtTime(4200, t);
+      cinemaReverbLpf.frequency.setValueAtTime(2850, t);
       cinemaReverbWetGain = audioCtx.createGain();
-      cinemaReverbWetGain.gain.setValueAtTime(0.82, t);
+      cinemaReverbWetGain.gain.setValueAtTime(0.88, t);
 
       cinemaReverbIn.connect(cinemaReverbHpf);
       cinemaReverbHpf.connect(cinemaReverbLpf);
-      cinemaReverbNode = createReverbProcessor(audioCtx, cinemaReverbLpf, cinemaReverbWetGain, cinemaReverbFallbackNodes);
+      cinemaReverbNode = null;
+      cinemaReverbReady = false;
       cinemaReverbWetGain.connect(cinemaCompressor);
 
       // 3. Spatial Fire Chain (WAV loop + warm procedural hearth rumble fallback)
@@ -999,6 +1219,7 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
       graphInitialized = true;
       graphCtxRef = audioCtx;
       graphDestRef = targetDest;
+      resetAmbientParamCache();
 
       // Immediately hook up fire WAV if already decoded
       startFireWavLoopIfReady();
@@ -1010,38 +1231,94 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
   }
 
   // ==========================================================================
-  // Asset Preloader & On-Demand Decoder (graceful, idempotent, context-safe)
+  // Staggered Non-Blocking Asset Preloader & On-Demand Decoder
+  // (Strictly 1 decode in flight during warmup -> zero main-thread microfreezes!)
   // ==========================================================================
+
+  function scheduleWarmupWait(delayMs, useIdle = true) {
+    return new Promise((resolve) => {
+      if (disposed) {
+        resolve(false);
+        return;
+      }
+      const tid = setTimeout(() => {
+        activeTimers.delete(tid);
+        if (disposed) {
+          resolve(false);
+          return;
+        }
+        if (useIdle && typeof requestIdleCallback === 'function') {
+          try {
+            const handle = requestIdleCallback(() => {
+              activeIdleHandles.delete(handle);
+              resolve(!disposed);
+            }, { timeout: 220 });
+            activeIdleHandles.add(handle);
+            return;
+          } catch {}
+        }
+        resolve(true);
+      }, Math.max(0, delayMs));
+      activeTimers.add(tid);
+    });
+  }
+
+  function waitWhileSuspended(gen) {
+    if (disposed || gen !== warmupGeneration) return Promise.resolve(false);
+    if (!suspended) return Promise.resolve(true);
+    return new Promise((resolve) => {
+      warmupResumeCallbacks.push(() => resolve(!disposed && gen === warmupGeneration));
+    });
+  }
 
   function loadSampleKey(key, audioCtxOverride = null) {
     if (disposed || !key) return Promise.resolve(null);
     const cached = buffers.get(key);
     if (cached) return Promise.resolve(cached);
+    if (failedKeys.has(key)) return Promise.resolve(null);
     const inflight = pendingLoads.get(key);
     if (inflight) return inflight;
 
     const audioCtx = isAudioContextLike(audioCtxOverride) ? audioCtxOverride : resolveCtx();
-    const url = sampleUrls.get(key);
+    const url = sampleUrls.get(key) || lazyFallbackUrls.get(key);
     if (!audioCtx || !url || typeof fetch !== 'function') {
       return Promise.resolve(null);
     }
 
     const p = fetch(url)
-      .then((res) => (res && res.ok ? res.arrayBuffer() : Promise.reject(new Error(`HTTP ${res ? res.status : 0}`))))
+      .then((res) => {
+        if (!res || !res.ok) {
+          if (res && res.status === 404) failedKeys.add(key);
+          return Promise.reject(new Error(`HTTP ${res ? res.status : 0}`));
+        }
+        return res.arrayBuffer();
+      })
       .then((ab) => {
-        if (disposed) return null;
+        if (disposed || !ab) return null;
         return decodeAudioBuffer(audioCtx, ab);
       })
       .then((decoded) => {
         if (decoded && !disposed && (!graphCtxRef || graphCtxRef === audioCtx)) {
           buffers.set(key, decoded);
+          failedKeys.delete(key);
           if ((key === 'fire_crackle' || key === 'bonfire_crackle_legacy') && graphInitialized) {
             startFireWavLoopIfReady();
           }
         }
         return decoded || null;
       })
-      .catch(() => null)
+      .catch(() => {
+        // Only fall back to legacy bonfire crackle if primary fire_crackle actually fails
+        if (
+          key === 'fire_crackle' &&
+          !disposed &&
+          !buffers.has('bonfire_crackle_legacy') &&
+          !failedKeys.has('bonfire_crackle_legacy')
+        ) {
+          return loadSampleKey('bonfire_crackle_legacy', audioCtx);
+        }
+        return null;
+      })
       .finally(() => {
         pendingLoads.delete(key);
       });
@@ -1050,7 +1327,7 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
     return p;
   }
 
-  function preload(audioCtxOverride = null) {
+  function preload(audioCtxOverride = null, preloadOpts = null) {
     if (disposed) return Promise.resolve(false);
     const audioCtx = isAudioContextLike(audioCtxOverride) ? audioCtxOverride : resolveCtx();
     if (!audioCtx || typeof fetch !== 'function') {
@@ -1061,16 +1338,100 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
       ctx = audioCtxOverride;
     }
 
-    preloadInitiated = true;
-    const tasks = [];
+    const immediate = Boolean(preloadOpts && preloadOpts.immediate);
 
-    for (const key of sampleUrls.keys()) {
-      if (buffers.has(key)) continue;
-      tasks.push(loadSampleKey(key, audioCtx));
+    // O(1) zero-allocation fast path: audio.js invokes preloadSoulsAudio(ctx) on every footstep/swing!
+    if (!immediate && preloadInitiated && preloadCtxRef === audioCtx && preloadPromise) {
+      return preloadPromise;
     }
 
-    if (tasks.length === 0) return Promise.resolve(buffers.size > 0);
-    return Promise.all(tasks).then(() => buffers.size > 0);
+    preloadInitiated = true;
+    preloadCtxRef = audioCtx;
+
+    // Collect remaining un-decoded keys strictly in manifest priority order:
+    //   fire_crackle -> door_bolt -> door_open -> boss_intro_armor_shift -> boss_intro_vo_01..07
+    const queue = [];
+    for (const key of sampleUrls.keys()) {
+      if (!buffers.has(key) && !failedKeys.has(key)) {
+        queue.push(key);
+      }
+    }
+
+    if (queue.length === 0 && (!graphInitialized || (ambReverbReady && cinemaReverbReady))) {
+      preloadCompleted = true;
+      const doneP = Promise.resolve(buffers.size > 0);
+      preloadPromise = doneP;
+      return doneP;
+    }
+
+    const gen = ++warmupGeneration;
+    preloadCompleted = false;
+
+    const run = (async () => {
+      // Step 0a: Warm up ambient stone hall reverb off frame 0 (blooms in smoothly over 120ms)
+      if (graphInitialized && !ambReverbReady && graphCtxRef === audioCtx) {
+        if (!immediate) {
+          const okA = await scheduleWarmupWait(25, true);
+          if (!okA || gen !== warmupGeneration) return buffers.size > 0;
+          const unsuspA = await waitWhileSuspended(gen);
+          if (!unsuspA) return buffers.size > 0;
+        }
+        if (graphInitialized && !ambReverbReady && graphCtxRef === audioCtx) {
+          ensureAmbReverbReady();
+        }
+      }
+
+      // Step 0b: Warm up deep cinema cathedral reverb on a separate idle slice
+      if (graphInitialized && !cinemaReverbReady && graphCtxRef === audioCtx) {
+        if (!immediate) {
+          const ok0 = await scheduleWarmupWait(55, true);
+          if (!ok0 || gen !== warmupGeneration) return buffers.size > 0;
+          const unsusp0 = await waitWhileSuspended(gen);
+          if (!unsusp0) return buffers.size > 0;
+        }
+        if (graphInitialized && !cinemaReverbReady && graphCtxRef === audioCtx) {
+          ensureCinemaReverbReady();
+        }
+      }
+
+      // Steps 1..N: Gently stagger fetch + decodeAudioData 1 file at a time with idle yields
+      // so running down the castle NEVER triggers a decodeAudioData main-thread microfreeze!
+      for (let i = 0; i < queue.length; i++) {
+        if (disposed || gen !== warmupGeneration) return buffers.size > 0;
+        const key = queue[i];
+        if (buffers.has(key) || failedKeys.has(key)) continue;
+
+        if (!immediate) {
+          const unsusp = await waitWhileSuspended(gen);
+          if (!unsusp) return buffers.size > 0;
+
+          const delayMs = i === 0
+            ? 45
+            : key === 'door_open'
+              ? 105
+              : (key === 'door_bolt' || key === 'boss_intro_armor_shift')
+                ? 90
+                : 75;
+          const ok = await scheduleWarmupWait(delayMs, true);
+          if (!ok || gen !== warmupGeneration) return buffers.size > 0;
+
+          const unsuspAfter = await waitWhileSuspended(gen);
+          if (!unsuspAfter) return buffers.size > 0;
+        }
+
+        if (disposed || gen !== warmupGeneration) return buffers.size > 0;
+        if (buffers.has(key) || failedKeys.has(key)) continue;
+        await loadSampleKey(key, audioCtx);
+      }
+
+      if (!disposed && gen === warmupGeneration) {
+        preloadCompleted = true;
+      }
+      return buffers.size > 0;
+    })();
+
+    preloadPromise = run;
+    return run;
   }
 
   // ==========================================================================
@@ -1148,10 +1509,13 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
     if (!activeSouls) {
       curFireTargetGain = 0;
       curWindTargetGain = 0;
-      if (graphInitialized && graphCtxRef && fireGain && windGain) {
+      if (!ambientSilenced && graphInitialized && graphCtxRef && fireGain && windGain) {
         const t = graphCtxRef.currentTime;
         safeTargetParam(fireGain.gain, 0.0001, t, 0.14);
         safeTargetParam(windGain.gain, 0.0001, t, 0.18);
+        ambientSilenced = true;
+        lastSentFireGain = 0.0001;
+        lastSentWindGain = 0.0001;
       }
       return;
     }
@@ -1163,10 +1527,16 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
     const t = audioCtx.currentTime;
 
     if (suspended || muted) {
-      safeTargetParam(fireGain.gain, 0.0001, t, 0.04);
-      safeTargetParam(windGain.gain, 0.0001, t, 0.04);
+      if (!ambientSilenced && fireGain && windGain) {
+        safeTargetParam(fireGain.gain, 0.0001, t, 0.04);
+        safeTargetParam(windGain.gain, 0.0001, t, 0.04);
+        ambientSilenced = true;
+        lastSentFireGain = 0.0001;
+        lastSentWindGain = 0.0001;
+      }
       return;
     }
+    ambientSilenced = false;
 
     clockSec += safeDt;
 
@@ -1183,7 +1553,7 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
     const rightZ = yawConvention === 'actor_facing' ? sinY : -sinY;
 
     // ------------------------------------------------------------------------
-    // 1. Spatial Fire Field: Bonfire (0, 25) + 12 Floor Braziers
+    // 1. Spatial Fire Field: Bonfires + 12 Floor Braziers
     //    Energy-weighted stereo imaging avoids hard pan snaps between symmetric braziers!
     // ------------------------------------------------------------------------
     let bestAtten = 0;
@@ -1198,11 +1568,10 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
       const dx = f.x - lx;
       const dz = f.z - lz;
       const dSq = dx * dx + dz * dz;
-      const maxD = f.maxDist;
-      if (dSq >= maxD * maxD) continue;
+      if (dSq >= f.maxDistSq) continue;
 
       const d = Math.sqrt(dSq);
-      const norm = clamp((d - f.refDist) / Math.max(0.5, maxD - f.refDist), 0, 1);
+      const norm = clamp((d - f.refDist) * f.invDistSpan, 0, 1);
       // Warm perceptual inverse rolloff with smooth zero-slope fadeout at maxDist
       const rawAtten = Math.pow(1.0 - norm, 2.15) * f.weight;
       if (rawAtten <= 0.0005) continue;
@@ -1250,10 +1619,22 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
     const targetFireCutoff = 9400 - proxNorm * 7700;
     const targetFireRevSend = 0.18 + proxNorm * 0.34;
 
-    safeTargetParam(fireGain.gain, targetFireGain, t, 0.075);
-    setPannerValue(firePanner, stereoPan, t, 0.055);
-    safeTargetParam(fireLpf.frequency, targetFireCutoff, t, 0.08);
-    safeTargetParam(fireReverbSend.gain, targetFireRevSend, t, 0.12);
+    if (!(Math.abs(targetFireGain - lastSentFireGain) < 0.0012)) {
+      safeTargetParam(fireGain.gain, targetFireGain, t, 0.075);
+      lastSentFireGain = targetFireGain;
+    }
+    if (!(Math.abs(stereoPan - lastSentFirePan) < 0.005)) {
+      setPannerValue(firePanner, stereoPan, t, 0.055);
+      lastSentFirePan = stereoPan;
+    }
+    if (!(Math.abs(targetFireCutoff - lastSentFireCutoff) < 24)) {
+      safeTargetParam(fireLpf.frequency, targetFireCutoff, t, 0.08);
+      lastSentFireCutoff = targetFireCutoff;
+    }
+    if (!(Math.abs(targetFireRevSend - lastSentFireRev) < 0.004)) {
+      safeTargetParam(fireReverbSend.gain, targetFireRevSend, t, 0.12);
+      lastSentFireRev = targetFireRevSend;
+    }
 
     // Organic procedural ember crackles ONLY while studio fire WAV is still loading
     if (!fireWavActive && targetFireGain > 0.025 && clockSec >= nextEmberPopAt) {
@@ -1308,13 +1689,13 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
     const pitchDriftVault = baseVaultFreq + Math.sin(clockSec * 0.29) * 14.0 + Math.cos(clockSec * 0.67) * 6.0;
     const pitchDriftDraft = baseDraftFreq + Math.sin(clockSec * 0.37 + 1.3) * 42.0 + Math.sin(clockSec * 0.83) * 18.0;
 
-    // During cutscene: hush wind slightly during Act 1 push, swell as doors open (2.0..4.95s), calm for dialogue
+    // During cutscene: hush wind slightly during Act 1 bolt/push, swell as doors open (0.85..5.35s), calm for dialogue
     let cinemaWindMult = 1.0;
     if (cinematicSession && !cinematicSession.stopped) {
       const ce = cinematicSession.elapsedSec;
-      if (ce < 1.45) cinemaWindMult = 0.55;
+      if (ce < 0.85) cinemaWindMult = 0.55;
       else if (ce < 5.35) cinemaWindMult = 1.32;
-      else cinemaWindMult = 0.52;
+      else cinemaWindMult = 0.45;
     } else if (voiceActive) {
       cinemaWindMult = 0.42;
     }
@@ -1329,12 +1710,34 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
       draftPan = clamp(draftPan + archPull, -0.55, 0.55);
     }
 
-    safeTargetParam(windGain.gain, targetWindGain, t, 0.22);
-    safeTargetParam(windVaultBpf.frequency, clamp(pitchDriftVault, 70, 195), t, 0.25);
-    safeTargetParam(windDraftBpf.frequency, clamp(pitchDriftDraft, 190, 520), t, 0.22);
-    safeTargetParam(windDraftGain.gain, clamp(0.18 + curCorridorFactor * 0.16, 0.14, 0.38), t, 0.25);
-    safeTargetParam(windReverbSend.gain, wantRevSend, t, 0.22);
-    setPannerValue(windPanner, draftPan, t, 0.18);
+    const targetVaultFreq = clamp(pitchDriftVault, 70, 195);
+    const targetDraftFreq = clamp(pitchDriftDraft, 190, 520);
+    const targetDraftGain = clamp(0.18 + curCorridorFactor * 0.16, 0.14, 0.38);
+
+    if (!(Math.abs(targetWindGain - lastSentWindGain) < 0.0012)) {
+      safeTargetParam(windGain.gain, targetWindGain, t, 0.22);
+      lastSentWindGain = targetWindGain;
+    }
+    if (!(Math.abs(targetVaultFreq - lastSentWindVaultFreq) < 0.8)) {
+      safeTargetParam(windVaultBpf.frequency, targetVaultFreq, t, 0.25);
+      lastSentWindVaultFreq = targetVaultFreq;
+    }
+    if (!(Math.abs(targetDraftFreq - lastSentWindDraftFreq) < 2.0)) {
+      safeTargetParam(windDraftBpf.frequency, targetDraftFreq, t, 0.22);
+      lastSentWindDraftFreq = targetDraftFreq;
+    }
+    if (!(Math.abs(targetDraftGain - lastSentWindDraftGain) < 0.003)) {
+      safeTargetParam(windDraftGain.gain, targetDraftGain, t, 0.25);
+      lastSentWindDraftGain = targetDraftGain;
+    }
+    if (!(Math.abs(wantRevSend - lastSentWindRev) < 0.004)) {
+      safeTargetParam(windReverbSend.gain, wantRevSend, t, 0.22);
+      lastSentWindRev = wantRevSend;
+    }
+    if (!(Math.abs(draftPan - lastSentWindPan) < 0.005)) {
+      setPannerValue(windPanner, draftPan, t, 0.18);
+      lastSentWindPan = draftPan;
+    }
 
     // Record telemetry
     curNearestFireId = bestId;
@@ -1655,7 +2058,7 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
   }
 
   // --------------------------------------------------------------------------
-  // Stage 2 (t = 0.65s): Hero's straining push — pure sub-bass timber/stone pressure + dust grit.
+  // Stage 2 (t = 0.42s): Hero's straining push — pure sub-bass timber/stone pressure + dust grit.
   // No tonal/ringing layers: the raw scrape sample carries every groan and creak.
   // --------------------------------------------------------------------------
   function executeStagePush(session) {
@@ -1693,7 +2096,7 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
   }
 
   // --------------------------------------------------------------------------
-  // Stage 3 (t = 1.45s): RAW monumental hinge / stone scrape (`souls_env_door_open.wav`, ~4.5s)
+  // Stage 3 (t = 0.85s): RAW monumental hinge / stone scrape (`souls_env_door_open.wav`, ~4.45s)
   // played wide, loud and unprocessed, with a deep cathedral sub-bass. No synthetic rings.
   // --------------------------------------------------------------------------
   function executeStageOpen(session) {
@@ -1764,7 +2167,7 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
   }
 
   // --------------------------------------------------------------------------
-  // Stage 4 (t = 4.45s): Thunderous Echoing Boss Roar & Incandescent Hammer Ring
+  // Optional Stage: Echoing Boss Roar (only if explicitly invoked via triggerCinematicStage('roar'))
   // --------------------------------------------------------------------------
   function executeStageRoar(session) {
     const wav = buffers.get('boss_cutscene_roar') || buffers.get('boss_roar_legacy');
@@ -1863,58 +2266,13 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
     }
   }
 
-  // --------------------------------------------------------------------------
-  // Stage 5 (t = 5.35s): Deafening seismic bass slam of the gates closing behind the hero
-  // + long cathedral tail. Raw studio slam + sub-bass; no synthetic metallic ring.
-  // --------------------------------------------------------------------------
-  function executeStageClose(session) {
-    const wav = buffers.get('door_close');
-    const playedWav = wav
-      ? playCinematicSample(session, wav, {
-        gain: 1.15,
-        rate: 0.97,
-        reverbSend: 0.92,
-        lowShelfDb: 4.0,
-        lowShelfFreq: 100
-      })
-      : false;
-
-    // Seismic sub-bass gate-slam shockwave (96 -> 27 Hz punch straight to the sub bus)
-    spawnCinematicTone(session, {
-      type: 'sine',
-      freqStart: 96,
-      freqMid: 44,
-      midAt: 0.12,
-      freqEnd: 27,
-      delay: 0.0,
-      attack: 0.003,
-      duration: 0.9,
-      gainPeak: playedWav ? 0.52 : 0.74,
-      toSub: true
-    });
-
-    // Heavy timber-against-stone shock transient + cathedral reverb boom (broadband, no pitched modes)
-    spawnCinematicNoise(session, {
-      warm: true,
-      filterType: 'lowpass',
-      freqStart: 1650,
-      freqEnd: 145,
-      q: 0.8,
-      delay: 0.0,
-      attack: 0.003,
-      duration: 0.62,
-      gainPeak: playedWav ? 0.34 : 0.62,
-      reverbSend: 0.95
-    });
-  }
-
   function dispatchCinematicStage(session, stageId) {
     if (!session || session.stopped) return;
     if (stageId === 'bolt') executeStageBolt(session);
     else if (stageId === 'push') executeStagePush(session);
     else if (stageId === 'open') executeStageOpen(session);
     else if (stageId === 'roar') executeStageRoar(session);
-    else if (stageId === 'close') executeStageClose(session);
+    else return;
 
     if (typeof session.onStage === 'function') {
       try { session.onStage(stageId, session.elapsedSec); } catch {}
@@ -1926,6 +2284,7 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
   // ==========================================================================
 
   function createCinematicSessionBus() {
+    ensureCinemaReverbReady();
     const audioCtx = graphCtxRef;
     const t = audioCtx.currentTime;
 
@@ -1968,7 +2327,7 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
     }
 
     if (!nextStage) {
-      // Schedule graceful natural completion after final cathedral reverb tail (~2.45s after door slam at 4.95s)
+      // Schedule graceful natural completion after final cathedral reverb tail of outward door opening
       const tailRemainMs = Math.max(40, Math.ceil((BOSS_DOOR_AUDIO_SEQUENCE_DURATION - session.elapsedSec) * 1000));
       const tid = setTimeout(() => {
         activeTimers.delete(tid);
@@ -2071,7 +2430,7 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
       // Restore cinemaReverbWetGain for future sequences only if no newer session superseded us
       if (cinemaReverbWetGain && graphCtxRef && !disposed && cinemaRevToken === myRevToken) {
         const tNow = graphCtxRef.currentTime;
-        safeTargetParam(cinemaReverbWetGain.gain, 0.82, tNow, 0.04);
+        safeTargetParam(cinemaReverbWetGain.gain, 0.88, tNow, 0.04);
       }
     };
 
@@ -2103,7 +2462,7 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
       // Swiftly fade shared cinematic convolver wet return on skip when no other cinematic session is live
       if (cinemaReverbWetGain && !otherLiveSession) {
         cinemaReverbWetGain.gain.cancelScheduledValues(t);
-        const curW = finiteOr(cinemaReverbWetGain.gain.value, 0.82);
+        const curW = finiteOr(cinemaReverbWetGain.gain.value, 0.88);
         cinemaReverbWetGain.gain.setValueAtTime(Math.max(0.0001, curW), t);
         cinemaReverbWetGain.gain.linearRampToValueAtTime(0.0001, t + safeFade);
       }
@@ -2119,7 +2478,16 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
   function playCinematicBossDoorSequence(seqOpts = {}) {
     if (disposed) return false;
     if (!ensureGraph()) return false;
+    ensureCinemaReverbReady();
     if (!preloadInitiated) preload();
+
+    // Prioritize door samples immediately if cutscene starts before staggered background warmup finishes
+    if (!buffers.has('door_bolt') && !failedKeys.has('door_bolt')) {
+      loadSampleKey('door_bolt', graphCtxRef);
+    }
+    if (!buffers.has('door_open') && !failedKeys.has('door_open')) {
+      loadSampleKey('door_open', graphCtxRef);
+    }
 
     // Cleanly stop any previous sequence first
     if (cinematicSession && !cinematicSession.stopped) {
@@ -2132,7 +2500,7 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
       const t = graphCtxRef.currentTime;
       try {
         cinemaReverbWetGain.gain.cancelScheduledValues(t);
-        cinemaReverbWetGain.gain.setValueAtTime(0.82, t);
+        cinemaReverbWetGain.gain.setValueAtTime(0.88, t);
       } catch {}
     }
 
@@ -2476,12 +2844,16 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
   function playBossArmorShift(intensity = 1.0) {
     if (disposed || suspended || muted) return false;
     if (!ensureGraph()) return false;
+    ensureCinemaReverbReady();
     if (!preloadInitiated) preload();
 
     const audioCtx = graphCtxRef;
     const t0 = audioCtx.currentTime;
     const scale = clamp(finiteOr(Number(intensity), 1.0), 0.15, 1.6);
     const wav = buffers.get('boss_intro_armor_shift');
+    if (!wav && !failedKeys.has('boss_intro_armor_shift')) {
+      loadSampleKey('boss_intro_armor_shift', audioCtx);
+    }
 
     if (wav) {
       const localNodes = [];
@@ -2628,19 +3000,30 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
 
   function triggerCinematicStage(stageId) {
     if (disposed) return false;
+    // Closing door SFX is intentionally disabled in the Boss cutscene audio engine
+    if (stageId !== 'bolt' && stageId !== 'push' && stageId !== 'open' && stageId !== 'roar') {
+      return false;
+    }
     if (!ensureGraph()) return false;
+    ensureCinemaReverbReady();
     if (!preloadInitiated) preload();
+
+    if (stageId === 'open' && !buffers.has('door_open') && !failedKeys.has('door_open')) {
+      loadSampleKey('door_open', graphCtxRef);
+    } else if (stageId === 'bolt' && !buffers.has('door_bolt') && !failedKeys.has('door_bolt')) {
+      loadSampleKey('door_bolt', graphCtxRef);
+    }
 
     cinemaRevToken++;
     if (cinemaReverbWetGain && graphCtxRef) {
       const t = graphCtxRef.currentTime;
       try {
         cinemaReverbWetGain.gain.cancelScheduledValues(t);
-        cinemaReverbWetGain.gain.setValueAtTime(0.82, t);
+        cinemaReverbWetGain.gain.setValueAtTime(0.88, t);
       } catch {}
     }
 
-    // Spawn an auto-expiring mini-session for single-stage triggers (e.g., door slam after skip)
+    // Spawn an auto-expiring mini-session for single-stage triggers (e.g., manual door open)
     const buses = createCinematicSessionBus();
     const now = nowMs();
     const miniSession = {
@@ -2710,14 +3093,19 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
       const t = graphCtxRef.currentTime;
       safeTargetParam(fireGain.gain, 0.0001, t, 0.02);
       safeTargetParam(windGain.gain, 0.0001, t, 0.02);
+      ambientSilenced = true;
+      lastSentFireGain = 0.0001;
+      lastSentWindGain = 0.0001;
     }
   }
 
   function resume() {
     if (disposed || !suspended) return;
     suspended = false;
+    resetAmbientParamCache();
 
     syncSpatialMasterGain(0.05);
+    flushWarmupResumeCallbacks();
 
     // Resume paused cinematic door timeline seamlessly from exact paused timestamp
     if (cinematicSession && !cinematicSession.stopped) {
@@ -2741,6 +3129,15 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
 
   function attachContext(nextAudioCtx, nextMasterGain = null) {
     if (disposed) return false;
+    // O(1) steady-state fast path (called every frame from audio.updateSoulsSpatial!)
+    if (
+      graphInitialized &&
+      nextAudioCtx === graphCtxRef &&
+      (!nextMasterGain || nextMasterGain === graphDestRef)
+    ) {
+      if (!preloadInitiated) preload(graphCtxRef);
+      return true;
+    }
     if (isAudioContextLike(nextAudioCtx)) {
       ctx = nextAudioCtx;
     }
@@ -2785,7 +3182,7 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
   }
 
   /**
-   * Allows runtime replacement of any Boss intro VO file (1..10) — e.g. user custom audio swap.
+   * Allows runtime replacement of any Boss intro VO file (1..7) — e.g. user custom audio swap.
    */
   function setBossIntroVoiceUrl(cueIndex, url) {
     const spec = resolveVoiceLineSpec(cueIndex);
@@ -2793,11 +3190,16 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
     sampleUrls.set(spec.key, url.trim());
     buffers.delete(spec.key);
     pendingLoads.delete(spec.key);
+    failedKeys.delete(spec.key);
+    preloadCompleted = false;
+    preloadPromise = null;
+    preloadInitiated = false;
     return true;
   }
 
   function setMuted(bool) {
     muted = Boolean(bool);
+    if (!muted) resetAmbientParamCache();
     syncSpatialMasterGain(0.03);
     return muted;
   }
@@ -2834,6 +3236,9 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
     return {
       version: SOULS_SPATIAL_AUDIO_VERSION,
       initialized: graphInitialized,
+      ambReverbReady,
+      cinemaReverbReady,
+      preloadCompleted,
       disposed,
       suspended,
       muted,
@@ -2864,6 +3269,9 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
     if (disposed) return;
     disposed = true;
     suspended = true;
+    warmupGeneration++;
+    cancelWarmupHandles();
+    flushWarmupResumeCallbacks();
 
     // 1. Immediately stop & disconnect active/fading Boss intro voice nodes
     voicePlayToken++;
@@ -2901,6 +3309,7 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
       clearTimeout(tid);
     }
     activeTimers.clear();
+    procFireStopTimer = null;
 
     // 3. Stop & disconnect any lingering procedural/Foley transient nodes (armor shift, embers)
     for (const n of activeTransientNodes) {
@@ -2915,7 +3324,13 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
     // 5. Release all cached AudioBuffers & references
     buffers.clear();
     pendingLoads.clear();
+    failedKeys.clear();
+    preloadInitiated = false;
+    preloadCompleted = false;
+    preloadCtxRef = null;
+    preloadPromise = null;
     cathedralIRBuffer = null;
+    cinemaCathedralIRBuffer = null;
     warmNoiseBuffer = null;
     transientNoiseBuffer = null;
     duckMusicFn = null;
@@ -2923,7 +3338,7 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
     destNode = null;
   }
 
-  // Eagerly initialize graph & kick off WAV/MP3 preloading when AudioContext is already provided
+  // Eagerly initialize graph & kick off gentle staggered preloading when AudioContext is already provided
   if (ctx) {
     ensureGraph();
     preload(ctx);
@@ -2948,6 +3363,7 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
     setFireSources,
     attachContext,
     preload,
+    preloadSoulsAudio: preload,
     setVolume,
     getVolume,
     setMuted,

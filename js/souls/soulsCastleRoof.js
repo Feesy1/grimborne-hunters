@@ -1,34 +1,25 @@
-// Monumental Enclosed Gothic Vaulted Roof, Cathedral Dome, Clerestory Windows & Swaying Chandeliers
-// for Chapter 26 — «Abandoned Knight Rift» (Pass 2 Expanded Castle — Pure Vanilla ES Module, Three.js r160).
+// Monumental High-Gothic Vaulted Roof, Star-Ribbed Tierceron Ceilings, Deep Traceried Clerestory Windows,
+// Enlarged Boss Cathedral Dome & Swaying Wrought-Iron Candle Chandeliers
+// for Chapter 26 — «Abandoned Knight Rift» (Wave 2 `?v=20261121z68` — Pure Vanilla ES Module, Three.js r160).
 //
-// 100% Data-Driven from `soulsCastleLayout.js`:
-//   - Bonfire Hall (`courtyard`, x in [-9, +9], z in [20, 38], 3 ribbed groin vault bays -> apexY = 11.4)
-//   - Grand 36m Castle Corridor (`corridor`, x in [-5, +5], z in [-16, 20], 6 ribbed groin vault bays -> apexY = 10.2)
-//   - East Alcove Armory Chapel (`east_alcove`, x in [5.8, 13.8], z in [-5, 4], cross-ribbed chapel vault -> apexY = 8.9)
-//   - Enlarged Boss Throne Cathedral (`boss_hall`, center (0, -31.2), R = 16.0, 16-bay clerestory drum +
-//     16-rib scalloped ogival dome + 8-window Central Gothic Lantern Cupola -> apexY = 18.2,
-//     south portal chord cleanly clamped to z = BOSS_DOOR_Z = -16.0 with ZERO corridor protrusion!)
-//   - All 7 Wrought-Iron Chandeliers from `SOULS_CASTLE_CHANDELIERS` anchored solidly into their vaulted ceilings.
+// Wave 2 Architectural & Next-Gen PBR Upgrade (+200% PC Geometry, Depth & Physical Realism):
+//   - 2x Smoother Multi-Segment Pointed Arch Curvature & 10-Face Gothic Roll-and-Fillet Cavetto Rib Mouldings on PC!
+//   - Authentic High-Gothic Tierceron & Chevron Star-Vault Ribs with Primary 16-Sided Foliate Pendant Boss Keystones
+//     & Secondary Tierceron Ridge Bosses across Bonfire Hall, 36m Corridor, East Alcove & R=16 Boss Cathedral Dome!
+//   - True 0.44m-Deep Recessed Splayed Stone Clerestory Embrasures (perforated manifold lunettes + angled moonlit
+//     stone splays + outer archivolts + 3D stone Y-tracery mullions & ocular rose rings in front of stained glass)!
+//   - High-Detail Wrought-Iron Corona Lucis Chandeliers with 3D interlinked vertical & diagonal chains, pierced
+//     cusped iron friezes, S-scrollwork brackets, 3D Melted Beeswax Pillar Candles w/ warm subsurface top glow,
+//     and multi-layer blackbody flickering flames — all swaying in exact GPU rigid-body pendulum sync!
+//   - Calibrated Next-Gen PBR (PMREM reflections, 2K normal relief, balanced gothic bounce — ZERO washout/overexposure!).
 //
-// Strictly 5 Draw Calls on PC/Mobile (4 Draw Calls on LowSpec, 0 castShadow overhead!):
-//   1. vaultShellMesh       — Merged Ribbed Groin Vaults, Boss Cathedral Drum & Dome, Lantern Capstone &
-//                             Watertight Gable/Lunette Closures (THREE.FrontSide, normals strictly DOWN/INWARD!).
-//   2. vaultRibsMesh        — Merged Sculpted Gothic Vault Ribs (5-face downward-tapered chamfered mouldings,
-//                             NO upward top caps!), Transverse Arches, Carved Keystones, Wall Cornices,
-//                             Springer Corbels, Oculus Ring & Lantern Mullions (THREE.FrontSide).
-//   3. clerestoryGlassMesh  — Merged Pointed Clerestory Lancet Windows & Boss Dome Lantern Windows
-//                             with Procedural Lead-Tracery Moonlit Stained-Glass GLSL Shader (THREE.FrontSide).
-//   4. chandeliersIronMesh  — Merged Wrought-Iron Gothic Corona Lucis Chandeliers & Heavy Chains across all
-//                             4 halls with rigid-body GPU Pendulum Sway around each ceiling anchor!
-//   5. chandelierFlamesMesh — Merged GPU Billboarded Flickering Candle/Oil Flames locked bit-for-bit to
-//                             chandelier pendulum sway (hidden automatically in lowSpec -> 4 DC total!).
-//
-// Camera-Safe Backface-Culling Architecture (0 CPU overhead!):
-//   Every overhead vault panel, dome web, gable closure, clerestory window & chamfered rib uses
-//   THREE.FrontSide with normals strictly oriented INWARD/DOWNWARD into the castle chambers.
-//   Inside the castle (exploration, combat, Boss Door cutscene) -> 100% solid enclosed Gothic cathedral ceiling.
-//   If the camera ever rises high above the roofline looking downward -> hardware backface culling makes the
-//   roof cleanly invisible from above without ever obscuring the hero or boss!
+// Strictly 6 Draw Calls on PC/Mobile (<= 7 DC budget! 4 Draw Calls on LowSpec, 0 castShadow overhead!):
+//   1. vaultShellMesh        — Ribbed Groin Vaults, Boss Drum/Dome/Lantern, Gables & Deep Splayed Window Embrasures (FrontSide).
+//   2. vaultRibsMesh         — 10-Face Roll-and-Fillet Ribs, Tierceron Star-Ribs, Foliate Keystones, Y-Tracery & Cornices (FrontSide).
+//   3. clerestoryGlassMesh   — Deep-Recessed Stained-Glass Windows w/ Lead-Tracery & Sapphire-Lunar Shader (FrontSide).
+//   4. chandeliersIronMesh   — High-Poly Forged Iron Chandeliers & 3D Chains w/ GPU Pendulum Sway (FrontSide).
+//   5. chandelierCandlesMesh — 3D Clustered Melted Beeswax Candles w/ Subsurface Flame-Top Translucency & GPU Sway (off in lowSpec).
+//   6. chandelierFlamesMesh  — GPU Billboarded Blackbody Teardrop Candle Flames locked to exact wick tips (off in lowSpec).
 
 import * as THREE from '../../vendor/three.module.js';
 import { mergeGeometries } from '../../vendor/BufferGeometryUtils.js';
@@ -37,7 +28,7 @@ import {
   SOULS_CASTLE_ROOMS,
   SOULS_CASTLE_VAULTS,
   SOULS_CASTLE_CHANDELIERS
-} from './soulsCastleLayout.js?v=20261121z64';
+} from './soulsCastleLayout.js?v=20261121z68';
 
 // ============================================================================
 // Canonical Architectural Roof Spec (derived 100% live from soulsCastleLayout.js!)
@@ -53,7 +44,6 @@ function buildRoofSpecFromLayout() {
   const alcoveVault = vaults.find((v) => v.roomId === 'east_alcove') || null;
   const bossVault = vaults.find((v) => v.roomId === 'boss_hall' || v.kind === 'radial_cathedral_dome') || null;
 
-  // Build watertight contiguous bay boundary arrays along Z directly from room bounds + vault count
   const makeContiguousBaysZ = (minZ, maxZ, count, padMin, padMax) => {
     const n = Math.max(1, count);
     const step = (maxZ - minZ) / n;
@@ -70,42 +60,42 @@ function buildRoofSpecFromLayout() {
   // Courtyard (Bonfire Hall): wall height 8.6, vault apexY 11.4
   const cyRoom = rooms.courtyard;
   const cyWallH = C.COURTYARD_WALL_HEIGHT;
-  const cySpringY = Number((cyWallH - 0.25).toFixed(3)); // 8.35: overlaps 0.25m into 8.6m walls (zero seam!)
+  const cySpringY = Number((cyWallH - 0.25).toFixed(3));
   const cyApexY = courtVaults[0]?.apexY ?? cyRoom.ceilingY ?? 11.4;
   const cyRise = Math.max(1.8, cyApexY - cySpringY);
-  const cyLunetteRise = Number((cyRise * 0.82).toFixed(3)); // lunette apex ~10.85 (100% above 8.6m wall!)
-  const cyTransRise = Number((cyRise * 0.93).toFixed(3));   // transverse arch apex ~11.19
+  const cyLunetteRise = Number((cyRise * 0.84).toFixed(3));
+  const cyTransRise = Number((cyRise * 0.93).toFixed(3));
   const cyBaysZ = makeContiguousBaysZ(cyRoom.minZ, cyRoom.maxZ, courtVaults.length || 3, 0.20, 0.35);
 
   // Corridor (36m x 10m): wall height 8.4, 6 vault bays -> apexY 10.2
   const coRoom = rooms.corridor;
   const coWallH = C.CORRIDOR_WALL_HEIGHT;
-  const coSpringY = Number((coWallH - 0.25).toFixed(3)); // 8.15: overlaps 0.25m into 8.4m walls & clears 7.8m arches!
+  const coSpringY = Number((coWallH - 0.25).toFixed(3));
   const coApexY = corrVaults[0]?.apexY ?? coRoom.ceilingY ?? 10.2;
   const coRise = Math.max(1.4, coApexY - coSpringY);
-  const coLunetteRise = Number((coRise * 0.84).toFixed(3)); // lunette apex ~9.87 (100% above 8.4m wall!)
-  const coTransRise = Number((coRise * 0.93).toFixed(3));   // transverse arch apex ~10.06
+  const coLunetteRise = Number((coRise * 0.86).toFixed(3));
+  const coTransRise = Number((coRise * 0.93).toFixed(3));
   const coBaysZ = makeContiguousBaysZ(coRoom.minZ, coRoom.maxZ, corrVaults.length || 6, 0.15, 0.15);
 
   // East Alcove (Armory Chapel): wall height 7.8, cross-ribbed chapel vault -> apexY 8.9
   const eaRoom = rooms.east_alcove;
   const eaWallH = C.ALCOVE_WALL_HEIGHT;
-  const eaSpringY = Number((eaWallH - 0.25).toFixed(3)); // 7.55: overlaps 0.25m into 7.8m walls!
+  const eaSpringY = Number((eaWallH - 0.25).toFixed(3));
   const eaApexY = alcoveVault?.apexY ?? eaRoom.ceilingY ?? 8.9;
   const eaRise = Math.max(1.0, eaApexY - eaSpringY);
-  const eaLunetteRise = Number((eaRise * 0.94).toFixed(3)); // lunette apex ~8.82 (tall sanctuary lancet!)
+  const eaLunetteRise = Number((eaRise * 0.94).toFixed(3));
 
   // Boss Throne Cathedral (Enlarged R=16.0, center (0, -31.2), wall height 12.4 -> apexY 18.2)
   const bossRoom = rooms.boss_hall;
   const bossInnerR = C.BOSS_RADIUS;
   const bossWallH = C.BOSS_WALL_HEIGHT;
-  const bossSpringY = Number((bossWallH - 0.25).toFixed(3)); // 12.15: overlaps 0.25m into 12.4m curtain walls!
+  const bossSpringY = Number((bossWallH - 0.25).toFixed(3));
   const bossApexY = bossVault?.apexY ?? bossRoom.ceilingY ?? 18.2;
-  const bossDrumTopY = Number((bossSpringY + 1.92).toFixed(3)); // 14.07: 1.92m vertical clerestory drum!
-  const bossLanternApexY = bossApexY;                           // 18.20 exact match!
-  const bossLanternTopY = Number((bossLanternApexY - 0.34).toFixed(3)); // 17.86
-  const bossOculusY = Number((bossLanternTopY - 1.34).toFixed(3));      // 16.52 -> tall 1.34m glowing lantern windows!
-  const bossOculusR = Number(Math.min(3.85, Math.max(2.6, (bossVault?.oculusRadius ?? 4.0) * 0.90)).toFixed(3)); // 3.60
+  const bossDrumTopY = Number((bossSpringY + 1.96).toFixed(3));
+  const bossLanternApexY = bossApexY;
+  const bossLanternTopY = Number((bossLanternApexY - 0.34).toFixed(3));
+  const bossOculusY = Number((bossLanternTopY - 1.34).toFixed(3));
+  const bossOculusR = Number(Math.min(3.85, Math.max(2.6, (bossVault?.oculusRadius ?? 4.0) * 0.90)).toFixed(3));
 
   const courtyardOculusBay = courtVaults.find((v) => v.hasOculus) || null;
 
@@ -116,8 +106,8 @@ function buildRoofSpecFromLayout() {
       minZ: cyRoom.minZ,
       maxZ: cyRoom.maxZ,
       wallHeight: cyWallH,
-      wallOverlapX: 0.38,
-      wallOverlapZ: 0.35,
+      wallOverlapX: 0.46,
+      wallOverlapZ: 0.42,
       springY: cySpringY,
       corbelSpringY: courtVaults[0]?.springY ?? 7.4,
       apexY: cyApexY,
@@ -139,7 +129,7 @@ function buildRoofSpecFromLayout() {
       minZ: coRoom.minZ,
       maxZ: coRoom.maxZ,
       wallHeight: coWallH,
-      wallOverlapX: 0.38,
+      wallOverlapX: 0.46,
       springY: coSpringY,
       corbelSpringY: corrVaults[0]?.springY ?? 6.6,
       apexY: coApexY,
@@ -154,7 +144,7 @@ function buildRoofSpecFromLayout() {
       minZ: eaRoom.minZ,
       maxZ: eaRoom.maxZ,
       wallHeight: eaWallH,
-      wallOverlap: 0.36,
+      wallOverlap: 0.44,
       springY: eaSpringY,
       corbelSpringY: alcoveVault?.springY ?? 5.8,
       apexY: eaApexY,
@@ -166,8 +156,8 @@ function buildRoofSpecFromLayout() {
       cx: C.BOSS_CENTER_X,
       cz: C.BOSS_CENTER_Z,
       innerRadius: bossInnerR,
-      outerSkirtRadius: Number((bossInnerR + 0.95).toFixed(3)), // 16.95: overlaps past 16.275m 16-gon vertices!
-      drumRadius: Number((bossInnerR + 0.25).toFixed(3)),       // 16.25: vertical clerestory drum!
+      outerSkirtRadius: Number((bossInnerR + 0.98).toFixed(3)),
+      drumRadius: Number((bossInnerR + 0.25).toFixed(3)),
       wallHeight: bossWallH,
       springY: bossSpringY,
       drumTopY: bossDrumTopY,
@@ -202,7 +192,7 @@ function gothicOgive(absS, ecc = 0.48) {
   return val / peak;
 }
 
-// Matches soulsCastleDoors.js pointed doorway curve with slight outer clearance (never clips opening doors!)
+// Matches soulsCastleDoors.js pointed doorway curve with slight outer clearance
 function gothicBossDoorArchY(xAbs) {
   const halfSpan = SOULS_CASTLE_CONSTANTS.BOSS_PORTAL_HALF_W + 0.11;
   const springY = 4.65;
@@ -211,7 +201,26 @@ function gothicBossDoorArchY(xAbs) {
   return springY + (apexY - springY) * Math.pow(Math.sin(u * Math.PI * 0.5), 0.78);
 }
 
-// Exact ceiling height at (x, z) inside a room so EVERY chandelier chain anchors cleanly into solid stone!
+// Evaluate exact analytical groin-vault surface height at local offsets (dx, dz) inside a bay
+function evalGroinBayY(dx, dz, hx, hz, ySpring, yApex, lunetteRise, transRise) {
+  const rise = yApex - ySpring;
+  const sx = clamp01(Math.abs(dx) / Math.max(0.01, hx));
+  const sz = clamp01(Math.abs(dz) / Math.max(0.01, hz));
+  if (sx < 1e-5 && sz < 1e-5) return yApex;
+  if (sx >= sz) {
+    const u = sx;
+    const t = sz / Math.max(1e-5, sx);
+    const yd = ySpring + rise * gothicOgive(u, 0.48);
+    const ym = ySpring + lunetteRise + (rise - lunetteRise) * (1.0 - u * u);
+    return yd + (ym - yd) * gothicOgive(t, 0.48);
+  }
+  const u = sz;
+  const t = sx / Math.max(1e-5, sz);
+  const yd = ySpring + rise * gothicOgive(u, 0.48);
+  const ym = ySpring + transRise + (rise - transRise) * (1.0 - u * u);
+  return yd + (ym - yd) * gothicOgive(t, 0.48);
+}
+
 function evaluateExactRoofHeight(roomId, x, z) {
   const spec = SOULS_CASTLE_ROOF_SPEC;
   if (roomId === 'boss_hall') {
@@ -232,11 +241,7 @@ function evaluateExactRoofHeight(roomId, x, z) {
     const cz = (ea.minZ + ea.maxZ) * 0.5;
     const hx = (ea.maxX - ea.minX) * 0.5 + ea.wallOverlap;
     const hz = (ea.maxZ - ea.minZ) * 0.5 + ea.wallOverlap;
-    const sx = clamp01(Math.abs(x - cx) / hx);
-    const sz = clamp01(Math.abs(z - cz) / hz);
-    const u = Math.max(sx, sz);
-    const rise = ea.apexY - ea.springY;
-    return ea.springY + ea.lunetteRise + (rise - ea.lunetteRise) * (1.0 - u * u);
+    return evalGroinBayY(x - cx, z - cz, hx, hz, ea.springY, ea.apexY, ea.lunetteRise, ea.transRise);
   }
 
   const hall = roomId === 'courtyard' ? spec.courtyard : spec.corridor;
@@ -251,13 +256,10 @@ function evaluateExactRoofHeight(roomId, x, z) {
   }
   const cz = (baysZ[bIdx] + baysZ[bIdx + 1]) * 0.5;
   const hz = Math.max(0.5, (baysZ[bIdx + 1] - baysZ[bIdx]) * 0.5);
-  const sz = clamp01(Math.abs(z - cz) / hz);
-  const rise = hall.apexY - hall.springY;
-  // Along centerline x=0, height follows the N-S vault ridge curve cleanly!
-  return hall.springY + hall.transRise + (rise - hall.transRise) * (1.0 - sz * sz);
+  const hx = (hall.maxX - hall.minX) * 0.5 + hall.wallOverlapX;
+  return evalGroinBayY(x, z - cz, hx, hz, hall.springY, hall.apexY, hall.lunetteRise, hall.transRise);
 }
 
-// Build normalized chandelier configs straight from SOULS_CASTLE_CHANDELIERS (zero floating chains!)
 function buildChandelierSpecsFromLayout() {
   return Object.freeze(
     SOULS_CASTLE_CHANDELIERS.map((ch) => {
@@ -370,8 +372,6 @@ function placeGeo(geo, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, sx = 1, sy =
 }
 
 // Build a guaranteed-inward-facing indexed BufferGeometry from a 2D vertex grid.
-// Every triangle's geometric normal is mathematically checked against `inwardCheckFn(cx, cy, cz)`
-// so FrontSide ALWAYS faces INTO the room & DOWNWARD (0 upward ceiling leaks!).
 function buildInwardGridGeometry(rows, cols, gridVerts, inwardCheckFn) {
   const count = rows * cols;
   const positions = new Float32Array(count * 3);
@@ -405,7 +405,7 @@ function buildInwardGridGeometry(rows, cols, gridVerts, inwardCheckFn) {
     const ny = abz * acx - abx * acz;
     const nz = abx * acy - aby * acx;
     const lenSq = nx * nx + ny * ny + nz * nz;
-    if (lenSq < 1e-10) return; // skip degenerate apex triangle
+    if (lenSq < 1e-10) return;
     const mx = (a.x + b.x + c.x) * (1 / 3);
     const my = (a.y + b.y + c.y) * (1 / 3);
     const mz = (a.z + b.z + c.z) * (1 / 3);
@@ -439,31 +439,49 @@ function buildInwardGridGeometry(rows, cols, gridVerts, inwardCheckFn) {
 }
 
 // ============================================================================
-// 1. Sculpted Gothic Vault Rib Extruder (Underside-Only 5-Face Chamfered Profile!)
+// 1. Sculpted Gothic Vault Rib Extruder
+//    - PC (`!isMobile`): 10-Face Authentic Gothic Roll-and-Fillet CavettoKeel Moulding!
+//    - Mobile (`isMobile`): Crisp 5-Face Chamfered Gothic Moulding!
+//    Strictly monotonically increasing binormalFrac -> ALL faces point downward/inward
+//    (100% FrontSide backface-culling from above, 0 upward top caps!).
 // ============================================================================
-const RIB_PROFILE_5FACE = Object.freeze([
-  // [binormalFrac, dropFrac, aoBrightness]
-  Object.freeze([-0.50, -0.05, 0.58]), // left ceiling root (embedded into web)
-  Object.freeze([-0.43,  0.34, 0.86]), // left hollow chamfer shoulder
-  Object.freeze([-0.22,  0.88, 1.05]), // left soffit bevel edge
-  Object.freeze([ 0.22,  0.88, 1.05]), // right soffit bevel edge
-  Object.freeze([ 0.43,  0.34, 0.86]), // right hollow chamfer shoulder
-  Object.freeze([ 0.50, -0.05, 0.58])  // right ceiling root
+const RIB_PROFILE_PC_10FACE = Object.freeze([
+  Object.freeze([-0.50, -0.05, 0.50]), // left ceiling flange
+  Object.freeze([-0.46,  0.18, 0.68]), // left upper quirk
+  Object.freeze([-0.38,  0.34, 0.60]), // left hollow cavetto groove (deep shadow crease!)
+  Object.freeze([-0.30,  0.60, 0.96]), // left torus roll-moulding bead (catches firelight!)
+  Object.freeze([-0.16,  0.76, 0.82]), // left inner fillet step
+  Object.freeze([ 0.00,  0.98, 1.08]), // central pointed Gothic keel soffit ridge!
+  Object.freeze([ 0.16,  0.76, 0.82]), // right inner fillet step
+  Object.freeze([ 0.30,  0.60, 0.96]), // right torus roll-moulding bead
+  Object.freeze([ 0.38,  0.34, 0.60]), // right hollow cavetto groove
+  Object.freeze([ 0.46,  0.18, 0.68]), // right upper quirk
+  Object.freeze([ 0.50, -0.05, 0.50])  // right ceiling flange
+]);
+
+const RIB_PROFILE_MOB_5FACE = Object.freeze([
+  Object.freeze([-0.50, -0.05, 0.56]),
+  Object.freeze([-0.43,  0.34, 0.84]),
+  Object.freeze([-0.22,  0.88, 1.04]),
+  Object.freeze([ 0.22,  0.88, 1.04]),
+  Object.freeze([ 0.43,  0.34, 0.84]),
+  Object.freeze([ 0.50, -0.05, 0.56])
 ]);
 
 function createGothicRibGeometry(points, {
   width = 0.44,
   depth = 0.34,
-  dropDir = null, // either [dx,dy,dz] or (pt) => [dx,dy,dz]
+  dropDir = null,
   uvScale = 2.8,
   tintR = 1.0,
   tintG = 1.0,
   tintB = 1.0,
-  closedLoop = false
+  closedLoop = false,
+  highDetail = true
 } = {}) {
   const nPts = points.length;
   if (nPts < 2) return null;
-  const prof = RIB_PROFILE_5FACE;
+  const prof = highDetail ? RIB_PROFILE_PC_10FACE : RIB_PROFILE_MOB_5FACE;
   const pLen = prof.length;
 
   const rings = [];
@@ -485,7 +503,6 @@ function createGothicRibGeometry(points, {
       pNext = points[Math.min(nPts - 1, i + 1)];
     }
 
-    // Unit tangent T
     let tx = pNext.x - pPrev.x;
     let ty = pNext.y - pPrev.y;
     let tz = pNext.z - pPrev.z;
@@ -494,7 +511,6 @@ function createGothicRibGeometry(points, {
     ty /= tLen;
     tz /= tLen;
 
-    // Desired inward/downward drop vector D orthogonalized against T
     const rawDrop = typeof dropDir === 'function' ? dropDir(p) : (dropDir || [0, -1, 0]);
     let dx = rawDrop[0];
     let dy = rawDrop[1];
@@ -518,7 +534,6 @@ function createGothicRibGeometry(points, {
     dy /= dLen;
     dz /= dLen;
 
-    // Binormal B = normalize(T x D)
     let bx = ty * dz - tz * dy;
     let by = tz * dx - tx * dz;
     let bz = tx * dy - ty * dx;
@@ -591,9 +606,9 @@ function createGothicRibGeometry(points, {
       const fy = (a.y + b.y + c.y + d.y) * 0.25;
       const fz = (a.z + b.z + c.z + d.z) * 0.25;
       const outDir = [
-        (fx - centerX) + (a.dx + b.dx) * 0.14,
-        (fy - centerY) + (a.dy + b.dy) * 0.14,
-        (fz - centerZ) + (a.dz + b.dz) * 0.14
+        (fx - centerX) + (a.dx + b.dx) * 0.16,
+        (fy - centerY) + (a.dy + b.dy) * 0.16,
+        (fz - centerZ) + (a.dz + b.dz) * 0.16
       ];
       pushTri(a, b, c, outDir);
       pushTri(a, c, d, outDir);
@@ -608,17 +623,29 @@ function createGothicRibGeometry(points, {
   return geo;
 }
 
-// Sculpted downward-tapered Octagonal Gothic Keystone Boss (NO top cap -> FrontSide safe from above!)
-function createGothicKeystoneGeometry(x, y, z, scale = 1.0) {
-  const segs = 8;
-  const ringsSpec = [
-    { r: 0.72 * scale, dy:  0.04 * scale, ao: 0.64 },
-    { r: 0.66 * scale, dy: -0.16 * scale, ao: 0.86 },
-    { r: 0.54 * scale, dy: -0.22 * scale, ao: 0.76 },
-    { r: 0.46 * scale, dy: -0.40 * scale, ao: 1.00 },
-    { r: 0.24 * scale, dy: -0.54 * scale, ao: 1.06 },
-    { r: 0.00,         dy: -0.60 * scale, ao: 0.94 }
-  ];
+// Sculpted High-Detail 3D Gothic Foliate Rosette & Pendant Boss Keystone
+// (16-sided w/ 8-lobed carved acanthus/trefoil wreath on PC, 8-sided on Mobile; NO upward top cap!)
+function createGothicKeystoneGeometry(x, y, z, scale = 1.0, highDetail = true) {
+  const segs = highDetail ? 16 : 8;
+  const ringsSpec = highDetail
+    ? [
+        { r: 0.78 * scale, dy:  0.04 * scale, ao: 0.56, lobe: 0.04 }, // ceiling collar
+        { r: 0.72 * scale, dy: -0.14 * scale, ao: 0.88, lobe: 0.13 }, // upper 8-lobed foliate crown
+        { r: 0.58 * scale, dy: -0.22 * scale, ao: 0.64, lobe: 0.05 }, // undercut shadow throat
+        { r: 0.62 * scale, dy: -0.34 * scale, ao: 1.02, lobe: 0.14 }, // sculpted acanthus rosette boss!
+        { r: 0.44 * scale, dy: -0.46 * scale, ao: 0.86, lobe: 0.04 }, // octagonal shield molding
+        { r: 0.32 * scale, dy: -0.56 * scale, ao: 1.06, lobe: 0.00 }, // beveled pendant drum
+        { r: 0.14 * scale, dy: -0.66 * scale, ao: 1.00, lobe: 0.00 }, // tapered finial cone
+        { r: 0.00,         dy: -0.74 * scale, ao: 0.90, lobe: 0.00 }  // pendant tip
+      ]
+    : [
+        { r: 0.72 * scale, dy:  0.04 * scale, ao: 0.64, lobe: 0.06 },
+        { r: 0.66 * scale, dy: -0.16 * scale, ao: 0.86, lobe: 0.08 },
+        { r: 0.54 * scale, dy: -0.22 * scale, ao: 0.76, lobe: 0.00 },
+        { r: 0.46 * scale, dy: -0.40 * scale, ao: 1.00, lobe: 0.06 },
+        { r: 0.24 * scale, dy: -0.54 * scale, ao: 1.06, lobe: 0.00 },
+        { r: 0.00,         dy: -0.60 * scale, ao: 0.94, lobe: 0.00 }
+      ];
 
   const rows = ringsSpec.length;
   const cols = segs + 1;
@@ -627,51 +654,73 @@ function createGothicKeystoneGeometry(x, y, z, scale = 1.0) {
   for (let r = 0; r < rows; r++) {
     const spec = ringsSpec[r];
     for (let c = 0; c < cols; c++) {
-      const ang = (c / segs) * Math.PI * 2 + Math.PI / 8;
-      const scallop = r === 1 || r === 3 ? (1.0 + 0.06 * Math.cos(c * Math.PI)) : 1.0;
-      const rad = spec.r * scallop;
+      const ang = (c / segs) * Math.PI * 2 + Math.PI / segs;
+      const lobeWave = Math.cos(ang * 8.0);
+      const rad = spec.r * (1.0 + spec.lobe * lobeWave);
+      const lobeShade = 1.0 + spec.lobe * 0.45 * lobeWave;
+      const ao = spec.ao * lobeShade;
       verts[r * cols + c] = {
         x: x + Math.cos(ang) * rad,
         y: y + spec.dy,
         z: z + Math.sin(ang) * rad,
-        u: (c / segs) * 2.0,
-        v: r * 0.22,
-        r: spec.ao,
-        g: spec.ao * 0.99,
-        b: spec.ao * 1.02
+        u: (c / segs) * 2.2,
+        v: r * 0.18,
+        r: ao,
+        g: ao * 0.99,
+        b: ao * 1.03
       };
     }
   }
 
   return buildInwardGridGeometry(rows, cols, verts, (mx, my, mz) => [
     mx - x,
-    (my - y) - 0.55 * scale,
+    (my - y) - 0.65 * scale,
     mz - z
   ]);
 }
 
-// Sculpted Underside-Only Gothic Springer Corbel Bracket anchored to perimeter walls
-function createWallCorbelGeometry(x, y, z, inwardNx, inwardNz, width = 0.62, depth = 0.52, height = 0.92) {
+// Sculpted Underside-Only Multi-Tiered Gothic Springer Corbel Bracket anchored to perimeter walls
+function createWallCorbelGeometry(x, y, z, inwardNx, inwardNz, width = 0.62, depth = 0.52, height = 0.92, highDetail = true) {
   const tx = -inwardNz;
   const tz = inwardNx;
-  const tiers = [
-    { dy:  0.04,          proj: depth * 1.00, halfW: width * 0.54, ao: 0.96 },
-    { dy: -height * 0.20, proj: depth * 0.92, halfW: width * 0.50, ao: 0.92 },
-    { dy: -height * 0.36, proj: depth * 0.68, halfW: width * 0.42, ao: 0.80 },
-    { dy: -height * 0.68, proj: depth * 0.42, halfW: width * 0.30, ao: 0.72 },
-    { dy: -height * 1.00, proj: 0.02,         halfW: width * 0.14, ao: 0.58 }
-  ];
+  const tiers = highDetail
+    ? [
+        { dy:  0.04,          proj: depth * 1.00, halfW: width * 0.56, ao: 0.98 },
+        { dy: -height * 0.14, proj: depth * 0.96, halfW: width * 0.53, ao: 0.94 },
+        { dy: -height * 0.26, proj: depth * 0.78, halfW: width * 0.46, ao: 0.76 },
+        { dy: -height * 0.44, proj: depth * 0.70, halfW: width * 0.42, ao: 0.90 },
+        { dy: -height * 0.62, proj: depth * 0.48, halfW: width * 0.32, ao: 0.72 },
+        { dy: -height * 0.82, proj: depth * 0.28, halfW: width * 0.22, ao: 0.80 },
+        { dy: -height * 1.00, proj: 0.02,         halfW: width * 0.12, ao: 0.56 }
+      ]
+    : [
+        { dy:  0.04,          proj: depth * 1.00, halfW: width * 0.54, ao: 0.96 },
+        { dy: -height * 0.20, proj: depth * 0.92, halfW: width * 0.50, ao: 0.92 },
+        { dy: -height * 0.36, proj: depth * 0.68, halfW: width * 0.42, ao: 0.80 },
+        { dy: -height * 0.68, proj: depth * 0.42, halfW: width * 0.30, ao: 0.72 },
+        { dy: -height * 1.00, proj: 0.02,         halfW: width * 0.14, ao: 0.58 }
+      ];
+
   const rows = tiers.length;
-  const cols = 4;
+  const cols = highDetail ? 6 : 4;
   const verts = new Array(rows * cols);
   for (let r = 0; r < rows; r++) {
     const t = tiers[r];
-    const pts = [
-      { s: -t.halfW,        p: 0.0,    ao: t.ao * 0.76 },
-      { s: -t.halfW * 0.78, p: t.proj, ao: t.ao },
-      { s:  t.halfW * 0.78, p: t.proj, ao: t.ao },
-      { s:  t.halfW,        p: 0.0,    ao: t.ao * 0.76 }
-    ];
+    const pts = highDetail
+      ? [
+          { s: -t.halfW,        p: 0.0,          ao: t.ao * 0.72 },
+          { s: -t.halfW * 0.86, p: t.proj * 0.58, ao: t.ao * 0.88 },
+          { s: -t.halfW * 0.48, p: t.proj,        ao: t.ao * 1.02 },
+          { s:  t.halfW * 0.48, p: t.proj,        ao: t.ao * 1.02 },
+          { s:  t.halfW * 0.86, p: t.proj * 0.58, ao: t.ao * 0.88 },
+          { s:  t.halfW,        p: 0.0,          ao: t.ao * 0.72 }
+        ]
+      : [
+          { s: -t.halfW,        p: 0.0,    ao: t.ao * 0.76 },
+          { s: -t.halfW * 0.78, p: t.proj, ao: t.ao },
+          { s:  t.halfW * 0.78, p: t.proj, ao: t.ao },
+          { s:  t.halfW,        p: 0.0,    ao: t.ao * 0.76 }
+        ];
     for (let c = 0; c < cols; c++) {
       const pt = pts[c];
       verts[r * cols + c] = {
@@ -693,18 +742,27 @@ function createWallCorbelGeometry(x, y, z, inwardNx, inwardNz, width = 0.62, dep
   ]);
 }
 
-// Continuous Underside-Beveled Wall Cornice Strip (vertical frieze + downward-sloped soffit, NO top cap!)
-function createWallCorniceGeometry(x0, z0, x1, z1, yTop, inwardNx, inwardNz, height = 0.42, proj = 0.36) {
+// Continuous Underside-Moulded Wall Cornice Strip (NO upward top cap!)
+function createWallCorniceGeometry(x0, z0, x1, z1, yTop, inwardNx, inwardNz, height = 0.44, proj = 0.38, highDetail = true) {
   const len = Math.hypot(x1 - x0, z1 - z0);
   if (len < 0.05) return null;
-  const rows = 4;
+  const steps = highDetail
+    ? [
+        { dy:  0.02,          p: proj,        ao: 0.98 },
+        { dy: -height * 0.24, p: proj,        ao: 0.92 },
+        { dy: -height * 0.42, p: proj * 0.72, ao: 0.72 },
+        { dy: -height * 0.64, p: proj * 0.64, ao: 0.86 },
+        { dy: -height * 0.84, p: proj * 0.32, ao: 0.68 },
+        { dy: -height,        p: 0.0,         ao: 0.58 }
+      ]
+    : [
+        { dy:  0.02,          p: proj,        ao: 0.96 },
+        { dy: -height * 0.38, p: proj,        ao: 0.88 },
+        { dy: -height * 0.70, p: proj * 0.55, ao: 0.74 },
+        { dy: -height,        p: 0.0,         ao: 0.60 }
+      ];
+  const rows = steps.length;
   const cols = 2;
-  const steps = [
-    { dy:  0.02,          p: proj,        ao: 0.96 },
-    { dy: -height * 0.38, p: proj,        ao: 0.88 },
-    { dy: -height * 0.70, p: proj * 0.55, ao: 0.74 },
-    { dy: -height,        p: 0.0,         ao: 0.60 }
-  ];
   const verts = new Array(rows * cols);
   for (let r = 0; r < rows; r++) {
     const st = steps[r];
@@ -716,7 +774,7 @@ function createWallCorniceGeometry(x0, z0, x1, z1, yTop, inwardNx, inwardNz, hei
         y: yTop + st.dy,
         z: bz + inwardNz * st.p,
         u: (c * len) / 3.0,
-        v: r * 0.14,
+        v: r * 0.12,
         r: st.ao,
         g: st.ao,
         b: st.ao * 1.02
@@ -727,9 +785,21 @@ function createWallCorniceGeometry(x0, z0, x1, z1, yTop, inwardNx, inwardNz, hei
 }
 
 // ============================================================================
-// 2. Clerestory Pointed Lancet Window Builder (Glass Pane + Carved Stone Frame)
+// 2. Deep Recessed Splayed Clerestory Traceried Window Builder
+//    - Recesses stained glass `recessDepth` (0.42m) OUTWARD into the 1.2m wall!
+//    - Builds a watertight 4-sided Splayed Stone Embrasure Tunnel catching cold
+//      moonlit stained-glass bounce light + outer Gothic archivolt + 3D stone
+//      bifurcating Y-tracery mullions & ocular rose ring!
 // ============================================================================
-function appendClerestoryLancetWindow(glassParts, ribParts, windowRegistry, {
+function evalWindowContourY(sNorm, yBot, yTop) {
+  const h = Math.max(0.50, yTop - yBot);
+  const springFrac = 0.56;
+  const springY = yBot + h * springFrac;
+  const archRise = h * (1.0 - springFrac);
+  return springY + archRise * gothicOgive(Math.abs(sNorm), 0.52);
+}
+
+function appendClerestoryLancetWindow(shellParts, glassParts, ribParts, windowRegistry, {
   id,
   roomId,
   x,
@@ -739,10 +809,15 @@ function appendClerestoryLancetWindow(glassParts, ribParts, windowRegistry, {
   width,
   inwardNx,
   inwardNz,
-  winKind = 0.0, // 0.0 = wall clerestory lancet, 1.0 = Boss Hall central dome lantern
-  addStoneFrame = true
+  winKind = 0.0, // 0.0 = recessed wall clerestory, 1.0 = Boss Hall central dome lantern
+  recessDepth = 0.42,
+  splayHalfW = null,
+  splayBotY = null,
+  splayTopY = null,
+  addStoneFrame = true,
+  highDetail = true
 }) {
-  const h = Math.max(0.55, yTop - yBot);
+  const h = Math.max(0.52, yTop - yBot);
   const halfW = width * 0.5;
   const springFrac = 0.56;
   const springY = yBot + h * springFrac;
@@ -750,6 +825,9 @@ function appendClerestoryLancetWindow(glassParts, ribParts, windowRegistry, {
 
   const tx = -inwardNz;
   const tz = inwardNx;
+
+  const effRecess = recessDepth > 0.01 ? recessDepth : 0.0;
+  const glassOffsetInward = effRecess > 0 ? -effRecess : 0.06;
 
   windowRegistry.push(Object.freeze({
     id,
@@ -765,9 +843,9 @@ function appendClerestoryLancetWindow(glassParts, ribParts, windowRegistry, {
     kind: winKind > 0.5 ? 'dome_lantern' : 'clerestory'
   }));
 
-  // 1. Pointed-arch stained-glass pane geometry (FrontSide strictly facing inwardNx/inwardNz!)
-  const cols = 6;
-  const rows = 5;
+  // 1. Pointed-Arch Stained-Glass Pane Geometry (sits recessed at `glassOffsetInward`)
+  const cols = highDetail ? 8 : 6;
+  const rows = highDetail ? 6 : 5;
   const positions = [];
   const normals = [];
   const uvs = [];
@@ -784,9 +862,9 @@ function appendClerestoryLancetWindow(glassParts, ribParts, windowRegistry, {
       const py = yBot + (topAtX - yBot) * vf;
       const localU = sx * halfW;
       rowPts.push({
-        x: x + tx * localU + inwardNx * 0.07,
+        x: x + tx * localU + inwardNx * glassOffsetInward,
         y: py,
-        z: z + tz * localU + inwardNz * 0.07,
+        z: z + tz * localU + inwardNz * glassOffsetInward,
         u: uf,
         v: (py - yBot) / h
       });
@@ -828,15 +906,95 @@ function appendClerestoryLancetWindow(glassParts, ribParts, windowRegistry, {
   g.setAttribute('aWinKind', new THREE.Float32BufferAttribute(kinds, 1));
   glassParts.push(g);
 
+  // 2. Watertight 3D Splayed Stone Embrasure Tunnel connecting Inner Lunette Rim -> Recessed Glass Rim!
+  if (effRecess > 0 && shellParts) {
+    const inHW = splayHalfW || (halfW * 1.16);
+    const inBot = splayBotY !== null ? splayBotY : (yBot - 0.06);
+    const inTop = splayTopY !== null ? splayTopY : (yTop + 0.08);
+    const archSteps = highDetail ? 12 : 8;
+
+    // Trace closed loop around window opening: Bottom-Left -> Arch Apex -> Bottom-Right -> Sill -> Bottom-Left
+    const buildPerimeterLoop = (hw, bY, tY) => {
+      const loop = [];
+      // Left jamb bottom -> left springer
+      const spY = bY + Math.max(0.45, tY - bY) * 0.56;
+      loop.push({ u: -hw, y: bY });
+      loop.push({ u: -hw, y: spY });
+      // Pointed arch from -1 to +1
+      for (let i = 1; i < archSteps; i++) {
+        const s = -1.0 + (2.0 * i) / archSteps;
+        loop.push({ u: s * hw, y: evalWindowContourY(s, bY, tY) });
+      }
+      // Right springer -> right jamb bottom -> back to left jamb bottom
+      loop.push({ u: hw, y: spY });
+      loop.push({ u: hw, y: bY });
+      loop.push({ u: -hw, y: bY });
+      return loop;
+    };
+
+    const innerLoop = buildPerimeterLoop(inHW, inBot, inTop);
+    const outerLoop = buildPerimeterLoop(halfW, yBot, yTop);
+    const loopCols = innerLoop.length;
+    const tunnelVerts = new Array(2 * loopCols);
+
+    let perimDist = 0;
+    for (let c = 0; c < loopCols; c++) {
+      if (c > 0) {
+        perimDist += Math.hypot(innerLoop[c].u - innerLoop[c - 1].u, innerLoop[c].y - innerLoop[c - 1].y);
+      }
+      const pIn = innerLoop[c];
+      const pOut = outerLoop[c];
+      // Row 0: inner room wall face (slightly darker stone frame transition)
+      tunnelVerts[c] = {
+        x: x + tx * pIn.u,
+        y: pIn.y,
+        z: z + tz * pIn.u,
+        u: perimDist / 2.6,
+        v: 0.0,
+        r: 0.80,
+        g: 0.85,
+        b: 0.96
+      };
+      // Row 1: deep recessed rim right beside glowing moonlit stained glass (bright cool lunar bounce!)
+      tunnelVerts[loopCols + c] = {
+        x: x + tx * pOut.u + inwardNx * glassOffsetInward,
+        y: pOut.y,
+        z: z + tz * pOut.u + inwardNz * glassOffsetInward,
+        u: perimDist / 2.6,
+        v: effRecess / 2.6,
+        r: 0.96,
+        g: 1.08,
+        b: 1.32
+      };
+    }
+    const winMidY = (yBot + yTop) * 0.48;
+    const focusX = x + inwardNx * 1.25;
+    const focusZ = z + inwardNz * 1.25;
+    shellParts.push(
+      buildInwardGridGeometry(2, loopCols, tunnelVerts, (mx, my, mz) => [
+        focusX - mx,
+        (winMidY - 0.15) - my,
+        focusZ - mz
+      ])
+    );
+  }
+
   if (!addStoneFrame) return;
 
-  // 2. Sculpted Stone Gothic Pointed Arch Hood-Mould, Sill Ledge & Central Stone Mullion (ribParts)
+  // 3. Outer Proud Gothic Archivolt Hood-Mould, Jamb Colonnettes & Moulded Sill on Inner Wall Face
+  const outHW = splayHalfW || (halfW * 1.16);
+  const outBot = splayBotY !== null ? splayBotY : (yBot - 0.06);
+  const outTop = splayTopY !== null ? splayTopY : (yTop + 0.08);
+  const outH = Math.max(0.55, outTop - outBot);
+  const outSpringY = outBot + outH * 0.56;
+  const outArchRise = outH * 0.44;
+
   const archPts = [];
-  const archSegs = 8;
+  const archSegs = highDetail ? 14 : 8;
   for (let i = 0; i <= archSegs; i++) {
     const s = -1.0 + (2.0 * i) / archSegs;
-    const ly = springY + (archRise + 0.07) * gothicOgive(Math.abs(s), 0.52);
-    const lu = s * (halfW + 0.11);
+    const ly = outSpringY + (outArchRise + 0.06) * gothicOgive(Math.abs(s), 0.52);
+    const lu = s * (outHW + 0.09);
     archPts.push({
       x: x + tx * lu + inwardNx * 0.04,
       y: ly,
@@ -844,45 +1002,182 @@ function appendClerestoryLancetWindow(glassParts, ribParts, windowRegistry, {
     });
   }
   const hoodGeo = createGothicRibGeometry(archPts, {
-    width: 0.20,
-    depth: 0.17,
+    width: 0.22,
+    depth: 0.18,
     dropDir: [inwardNx * 0.92, -0.38, inwardNz * 0.92],
-    tintR: 0.95,
-    tintG: 0.97,
-    tintB: 1.04
+    tintR: 0.98,
+    tintG: 1.00,
+    tintB: 1.06,
+    highDetail
   });
   if (hoodGeo) ribParts.push(hoodGeo);
 
-  const jambOffsets = [-halfW - 0.08, 0.0, halfW + 0.08];
-  for (let j = 0; j < jambOffsets.length; j++) {
-    const lu = jambOffsets[j];
-    const isCenter = j === 1;
-    const topY = isCenter ? (yTop - 0.12) : (springY + 0.05);
-    const mullionPts = [
-      { x: x + tx * lu + inwardNx * 0.04, y: yBot, z: z + tz * lu + inwardNz * 0.04 },
-      { x: x + tx * lu + inwardNx * 0.04, y: topY, z: z + tz * lu + inwardNz * 0.04 }
+  // Outer engaged jamb colonnettes flanking the splayed reveal
+  for (const side of [-1, 1]) {
+    const lu = side * (outHW + 0.08);
+    const jambPts = [
+      { x: x + tx * lu + inwardNx * 0.04, y: outBot, z: z + tz * lu + inwardNz * 0.04 },
+      { x: x + tx * lu + inwardNx * 0.04, y: outSpringY + 0.06, z: z + tz * lu + inwardNz * 0.04 }
     ];
-    const mGeo = createGothicRibGeometry(mullionPts, {
-      width: isCenter ? 0.11 : 0.18,
-      depth: isCenter ? 0.11 : 0.16,
-      dropDir: [inwardNx, -0.25, inwardNz],
-      tintR: 0.92,
-      tintG: 0.94,
-      tintB: 1.02
+    const jGeo = createGothicRibGeometry(jambPts, {
+      width: 0.19,
+      depth: 0.17,
+      dropDir: [inwardNx, -0.22, inwardNz],
+      tintR: 0.94,
+      tintG: 0.96,
+      tintB: 1.04,
+      highDetail
     });
-    if (mGeo) ribParts.push(mGeo);
+    if (jGeo) ribParts.push(jGeo);
   }
 
-  const sx0 = x + tx * (-halfW - 0.18);
-  const sz0 = z + tz * (-halfW - 0.18);
-  const sx1 = x + tx * (halfW + 0.18);
-  const sz1 = z + tz * (halfW + 0.18);
-  const sillGeo = createWallCorniceGeometry(sx0, sz0, sx1, sz1, yBot + 0.04, inwardNx, inwardNz, 0.20, 0.22);
+  // Deep Recessed 3D Gothic Stone Y-Tracery Mullion + Bifurcating Branches + Ocular Rose Ring!
+  const traceryPlaneOff = glassOffsetInward + 0.055;
+  const centerTopY = highDetail ? (springY + archRise * 0.12) : (yTop - 0.12);
+  const centerMullionPts = [
+    { x: x + inwardNx * traceryPlaneOff, y: yBot, z: z + inwardNz * traceryPlaneOff },
+    { x: x + inwardNx * traceryPlaneOff, y: centerTopY, z: z + inwardNz * traceryPlaneOff }
+  ];
+  const cmGeo = createGothicRibGeometry(centerMullionPts, {
+    width: 0.12,
+    depth: 0.12,
+    dropDir: [inwardNx, -0.20, inwardNz],
+    tintR: 0.90,
+    tintG: 0.94,
+    tintB: 1.04,
+    highDetail
+  });
+  if (cmGeo) ribParts.push(cmGeo);
+
+  if (highDetail) {
+    // Bifurcating Y-tracery stone branches curving gracefully into left & right arch haunches
+    for (const side of [-1, 1]) {
+      const yBranchPts = [];
+      for (let i = 0; i <= 5; i++) {
+        const f = i / 5;
+        const lu = side * halfW * 0.62 * Math.pow(f, 0.85);
+        const ly = (springY - 0.04) + archRise * 0.56 * f;
+        yBranchPts.push({
+          x: x + tx * lu + inwardNx * traceryPlaneOff,
+          y: ly,
+          z: z + tz * lu + inwardNz * traceryPlaneOff
+        });
+      }
+      const ybGeo = createGothicRibGeometry(yBranchPts, {
+        width: 0.095,
+        depth: 0.10,
+        dropDir: [inwardNx, -0.25, inwardNz],
+        tintR: 0.92,
+        tintG: 0.96,
+        tintB: 1.06,
+        highDetail: false
+      });
+      if (ybGeo) ribParts.push(ybGeo);
+    }
+
+    // Sculpted 3D Stone Ocular Rose Ring nestled in the pointed arch head!
+    const roseR = Math.min(halfW * 0.30, archRise * 0.25);
+    if (roseR >= 0.11) {
+      const roseCy = springY + archRise * 0.54;
+      const rosePts = [];
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2;
+        const lu = Math.cos(a) * roseR;
+        const ly = roseCy + Math.sin(a) * roseR;
+        rosePts.push({
+          x: x + tx * lu + inwardNx * traceryPlaneOff,
+          y: ly,
+          z: z + tz * lu + inwardNz * traceryPlaneOff
+        });
+      }
+      const roseGeo = createGothicRibGeometry(rosePts, {
+        width: 0.085,
+        depth: 0.09,
+        dropDir: [inwardNx, -0.25, inwardNz],
+        closedLoop: true,
+        tintR: 0.94,
+        tintG: 0.98,
+        tintB: 1.08,
+        highDetail: false
+      });
+      if (roseGeo) ribParts.push(roseGeo);
+    }
+  }
+
+  // Moulded outer window sill cornice
+  const sx0 = x + tx * (-outHW - 0.18);
+  const sz0 = z + tz * (-outHW - 0.18);
+  const sx1 = x + tx * (outHW + 0.18);
+  const sz1 = z + tz * (outHW + 0.18);
+  const sillGeo = createWallCorniceGeometry(sx0, sz0, sx1, sz1, outBot + 0.04, inwardNx, inwardNz, 0.22, 0.24, highDetail);
   if (sillGeo) ribParts.push(sillGeo);
 }
 
+// Helper: Build a Perforated Manifold Lunette Wall (splits cleanly around deep recessed window opening!)
+function appendPerforatedLunetteWall(shellParts, {
+  cx,
+  cz,
+  axis,
+  wallCoord,
+  inNx,
+  inNz,
+  spanHalf,
+  yBotCurve,
+  yTopFn,
+  steps,
+  tileScale,
+  hole = null // { halfW, yBot, yTop }
+}) {
+  const inwardFn = () => [inNx, -0.06, inNz];
+
+  const emitStrip = (uStart, uEnd, count, botFn, topFn) => {
+    if (uEnd - uStart < 0.005) return;
+    const cols = Math.max(2, count + 1);
+    const verts = new Array(2 * cols);
+    for (let c = 0; c < cols; c++) {
+      const f = c / (cols - 1);
+      const uLocal = uStart + (uEnd - uStart) * f;
+      const yb = botFn(uLocal);
+      const yt = Math.max(yb + 0.015, topFn(uLocal));
+      const vx = axis === 'x' ? wallCoord : (cx + uLocal);
+      const vz = axis === 'x' ? (cz + uLocal) : wallCoord;
+      const uTex = uLocal / tileScale;
+      verts[c] = {
+        x: vx, y: yb, z: vz, u: uTex, v: yb / tileScale,
+        r: 0.72, g: 0.75, b: 0.83
+      };
+      verts[cols + c] = {
+        x: vx, y: yt, z: vz, u: uTex, v: yt / tileScale,
+        r: 0.90, g: 0.95, b: 1.05
+      };
+    }
+    shellParts.push(buildInwardGridGeometry(2, cols, verts, inwardFn));
+  };
+
+  if (!hole) {
+    emitStrip(-spanHalf, spanHalf, steps, () => yBotCurve, yTopFn);
+    return;
+  }
+
+  const hHW = Math.min(spanHalf - 0.12, hole.halfW);
+  const sideSteps = Math.max(3, Math.round(steps * 0.35));
+  const midSteps = Math.max(6, Math.round(steps * 0.5));
+
+  // Left solid wing, Right solid wing, Lower Sill below window, Upper Arch Spandrel above window
+  emitStrip(-spanHalf, -hHW, sideSteps, () => yBotCurve, yTopFn);
+  emitStrip(hHW, spanHalf, sideSteps, () => yBotCurve, yTopFn);
+  emitStrip(-hHW, hHW, midSteps, () => yBotCurve, () => hole.yBot);
+  emitStrip(
+    -hHW,
+    hHW,
+    midSteps,
+    (uLocal) => evalWindowContourY(uLocal / hHW, hole.yBot, hole.yTop),
+    yTopFn
+  );
+}
+
 // ============================================================================
-// 3. True 4-Severy Ribbed Gothic Groin Vault Bay Builder
+// 3. True 4-Severy High-Gothic Star-Ribbed Groin Vault Bay Builder
 // ============================================================================
 function buildGroinVaultBay({
   roomId,
@@ -901,6 +1196,7 @@ function buildGroinVaultBay({
   wallHeight = 8.4,
   segU,
   segT,
+  highDetail = true,
   shellParts,
   ribParts,
   glassParts,
@@ -927,7 +1223,7 @@ function buildGroinVaultBay({
   const inwardRef = [cx, ySpring - 10.0, cz];
   const inwardCheck = (mx, my, mz) => [inwardRef[0] - mx, inwardRef[1] - my, inwardRef[2] - mz];
 
-  // A. West (-1) & East (+1) Severies
+  // A. West (-1) & East (+1) Curved Masonry Severies
   for (const sideX of [-1, 1]) {
     const rows = segU + 1;
     const cols = segT * 2 + 1;
@@ -946,8 +1242,8 @@ function buildGroinVaultBay({
 
         const cornerAO = 1.0 - 0.34 * (u * u) * (0.45 + 0.55 * absT * absT);
         const groinCreaseAO = 1.0 - 0.14 * Math.pow(absT, 3.0);
-        const ao = Math.max(0.60, Math.min(1.06, cornerAO * groinCreaseAO));
-        const moonLift = u > 0.55 && absT < 0.52 ? 0.14 * (u - 0.55) : 0.0;
+        const ao = Math.max(0.58, Math.min(1.06, cornerAO * groinCreaseAO));
+        const moonLift = u > 0.52 && absT < 0.55 ? 0.16 * (u - 0.52) : 0.0;
 
         verts[r * cols + c] = {
           x: px,
@@ -964,7 +1260,7 @@ function buildGroinVaultBay({
     shellParts.push(buildInwardGridGeometry(rows, cols, verts, inwardCheck));
   }
 
-  // B. North (-1) & South (+1) Severies
+  // B. North (-1) & South (+1) Curved Masonry Severies
   for (const sideZ of [-1, 1]) {
     const rows = segU + 1;
     const cols = segT * 2 + 1;
@@ -983,7 +1279,7 @@ function buildGroinVaultBay({
 
         const cornerAO = 1.0 - 0.34 * (u * u) * (0.45 + 0.55 * absT * absT);
         const groinCreaseAO = 1.0 - 0.14 * Math.pow(absT, 3.0);
-        const ao = Math.max(0.60, Math.min(1.06, cornerAO * groinCreaseAO));
+        const ao = Math.max(0.58, Math.min(1.06, cornerAO * groinCreaseAO));
 
         verts[r * cols + c] = {
           x: px,
@@ -1000,7 +1296,7 @@ function buildGroinVaultBay({
     shellParts.push(buildInwardGridGeometry(rows, cols, verts, inwardCheck));
   }
 
-  // C. Carved Gothic Diagonal Ogive Ribs (2 full corner-to-corner crossing arches!)
+  // C. Primary Diagonal Ogive Vault Ribs (10-face roll-and-fillet moulding on PC!)
   const diagSteps = segU * 2;
   for (const diagSign of [-1, 1]) {
     const pts = [];
@@ -1015,8 +1311,9 @@ function buildGroinVaultBay({
     }
     const diagRib = createGothicRibGeometry(pts, {
       width: ribThick,
-      depth: ribThick * 0.80,
-      dropDir: (pt) => [(cx - pt.x) * 0.08, -1.0, (cz - pt.z) * 0.08]
+      depth: ribThick * 0.82,
+      dropDir: (pt) => [(cx - pt.x) * 0.08, -1.0, (cz - pt.z) * 0.08],
+      highDetail
     });
     if (diagRib) ribParts.push(diagRib);
   }
@@ -1030,22 +1327,76 @@ function buildGroinVaultBay({
     ridgeNS.push({ x: cx, y: yRidgeNS(absS), z: cz + s * hz });
     ridgeEW.push({ x: cx + s * innerHalfX, y: yRidgeEW(absS * (innerHalfX / hx)), z: cz });
   }
-  const rNS = createGothicRibGeometry(ridgeNS, { width: ribThick * 0.68, depth: ribThick * 0.48, dropDir: [0, -1, 0] });
-  const rEW = createGothicRibGeometry(ridgeEW, { width: ribThick * 0.68, depth: ribThick * 0.48, dropDir: [0, -1, 0] });
+  const rNS = createGothicRibGeometry(ridgeNS, { width: ribThick * 0.68, depth: ribThick * 0.50, dropDir: [0, -1, 0], highDetail });
+  const rEW = createGothicRibGeometry(ridgeEW, { width: ribThick * 0.68, depth: ribThick * 0.50, dropDir: [0, -1, 0], highDetail });
   if (rNS) ribParts.push(rNS);
   if (rEW) ribParts.push(rEW);
 
-  // E. Sculpted Central Keystone Boss at Bay Apex
-  if (includeKeystone) {
-    ribParts.push(createGothicKeystoneGeometry(cx, yApex, cz, keystoneScale));
+  // D2. High-Gothic Tierceron Star-Vault Ribs & Secondary Foliate Bosses on PC (`highDetail === true`)!
+  if (highDetail) {
+    const tSteps = 8;
+    const ridgeFrac = 0.54;
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        // 1) Tierceron from corner (sx*innerHalfX, sz*innerHalfZ) -> N-S ridge point (0, sz*ridgeFrac*hz)
+        const ptsNS = [];
+        for (let i = 0; i <= tSteps; i++) {
+          const f = i / tSteps;
+          const easeX = 1.0 - Math.pow(f, 0.90);
+          const dx = sx * innerHalfX * easeX;
+          const dz = sz * (innerHalfZ * (1.0 - f) + hz * ridgeFrac * f);
+          const py = evalGroinBayY(dx, dz, hx, hz, ySpring, yApex, lunetteRise, transRise);
+          ptsNS.push({ x: cx + dx, y: py, z: cz + dz });
+        }
+        const tRibNS = createGothicRibGeometry(ptsNS, {
+          width: ribThick * 0.62,
+          depth: ribThick * 0.50,
+          dropDir: (pt) => [(cx - pt.x) * 0.07, -1.0, (cz - pt.z) * 0.07],
+          highDetail: true
+        });
+        if (tRibNS) ribParts.push(tRibNS);
+
+        // 2) Tierceron from corner -> E-W ridge point (sx*ridgeFrac*innerHalfX, 0)
+        const ptsEW = [];
+        for (let i = 0; i <= tSteps; i++) {
+          const f = i / tSteps;
+          const easeZ = 1.0 - Math.pow(f, 0.90);
+          const dx = sx * innerHalfX * ((1.0 - f) + ridgeFrac * f);
+          const dz = sz * innerHalfZ * easeZ;
+          const py = evalGroinBayY(dx, dz, hx, hz, ySpring, yApex, lunetteRise, transRise);
+          ptsEW.push({ x: cx + dx, y: py, z: cz + dz });
+        }
+        const tRibEW = createGothicRibGeometry(ptsEW, {
+          width: ribThick * 0.62,
+          depth: ribThick * 0.50,
+          dropDir: (pt) => [(cx - pt.x) * 0.07, -1.0, (cz - pt.z) * 0.07],
+          highDetail: true
+        });
+        if (tRibEW) ribParts.push(tRibEW);
+      }
+    }
+
+    // 4 Secondary Carved Foliate Bosses where the 8 tiercerons meet the Longitudinal & Transverse Ridge Ribs!
+    for (const sz of [-1, 1]) {
+      const bz = cz + sz * ridgeFrac * hz;
+      const by = evalGroinBayY(0, sz * ridgeFrac * hz, hx, hz, ySpring, yApex, lunetteRise, transRise);
+      ribParts.push(createGothicKeystoneGeometry(cx, by + 0.02, bz, keystoneScale * 0.52, false));
+    }
+    for (const sx of [-1, 1]) {
+      const bx = cx + sx * ridgeFrac * innerHalfX;
+      const by = evalGroinBayY(sx * ridgeFrac * innerHalfX, 0, hx, hz, ySpring, yApex, lunetteRise, transRise);
+      ribParts.push(createGothicKeystoneGeometry(bx, by + 0.02, cz, keystoneScale * 0.52, false));
+    }
   }
 
-  // F. Watertight Perimeter Clerestory Lunette Spandrel Walls + Formeret Ribs + Lancet Windows
+  // E. Sculpted Primary 16-Sided Foliate Pendant Keystone Boss at Bay Apex
+  if (includeKeystone) {
+    ribParts.push(createGothicKeystoneGeometry(cx, yApex, cz, keystoneScale, highDetail));
+  }
+
+  // F. Perforated Manifold Clerestory Lunette Walls + Formeret Ribs + Deep Recessed Traceried Windows
   const buildSideLunette = (axis, side, hasWindow) => {
     const steps = segT * 2;
-    const rows = 2;
-    const cols = steps + 1;
-    const verts = new Array(rows * cols);
     const wallCoord = axis === 'x'
       ? cx + side * (innerHalfX + 0.02)
       : cz + side * (innerHalfZ + 0.02);
@@ -1054,57 +1405,76 @@ function buildGroinVaultBay({
     const spanHalf = axis === 'x' ? hz : hx;
     const riseVal = axis === 'x' ? lunetteRise : transRise;
 
+    const yTopFn = (uLocal) => ySpring + riseVal * gothicOgive(Math.abs(uLocal) / spanHalf, 0.48) + 0.08;
+    const yBotCurve = ySpring - 0.18;
+
     const formeretPts = [];
     for (let c = 0; c <= steps; c++) {
-      const tSigned = -1.0 + (2.0 * c) / steps;
-      const absT = Math.abs(tSigned);
-      const yTopCurve = ySpring + riseVal * gothicOgive(absT, 0.48) + 0.08;
-      const yBotCurve = ySpring - 0.18;
-      const vx = axis === 'x' ? wallCoord : (cx + tSigned * spanHalf);
-      const vz = axis === 'x' ? (cz + tSigned * spanHalf) : wallCoord;
-      const uCoord = (tSigned * spanHalf) / tileScale;
-
-      verts[c] = {
-        x: vx, y: yBotCurve, z: vz, u: uCoord, v: yBotCurve / tileScale,
-        r: 0.72, g: 0.75, b: 0.82
-      };
-      verts[cols + c] = {
-        x: vx, y: yTopCurve, z: vz, u: uCoord, v: yTopCurve / tileScale,
-        r: 0.90, g: 0.94, b: 1.04
-      };
+      const uLocal = -spanHalf + (2.0 * spanHalf * c) / steps;
+      const yTopCurve = yTopFn(uLocal);
+      const vx = axis === 'x' ? wallCoord : (cx + uLocal);
+      const vz = axis === 'x' ? (cz + uLocal) : wallCoord;
       formeretPts.push({
         x: vx + inNx * 0.04,
         y: yTopCurve - 0.08,
         z: vz + inNz * 0.04
       });
     }
-    shellParts.push(buildInwardGridGeometry(rows, cols, verts, () => [inNx, -0.06, inNz]));
-
     const formRib = createGothicRibGeometry(formeretPts, {
-      width: 0.24,
+      width: 0.25,
       depth: 0.20,
-      dropDir: [inNx * 0.72, -0.69, inNz * 0.72]
+      dropDir: [inNx * 0.72, -0.69, inNz * 0.72],
+      highDetail
     });
     if (formRib) ribParts.push(formRib);
 
-    if (hasWindow) {
-      // Position clerestory window strictly ABOVE the room's solid perimeter wall height (0 wall occlusion!)
-      const winBot = Math.max(ySpring + 0.16, wallHeight + 0.04);
-      const winTop = Math.max(winBot + 0.72, ySpring + riseVal - 0.16);
-      appendClerestoryLancetWindow(glassParts, ribParts, windowRegistry, {
-        id: `clerestory_${roomId}_${axis}${side > 0 ? 'p' : 'n'}_${bayIndex}`,
-        roomId,
-        x: axis === 'x' ? wallCoord : cx,
-        yBot: winBot,
-        yTop: winTop,
-        z: axis === 'x' ? cz : wallCoord,
-        width: windowWidth,
-        inwardNx: inNx,
-        inwardNz: inNz,
-        winKind: 0.0,
-        addStoneFrame: true
+    if (!hasWindow) {
+      appendPerforatedLunetteWall(shellParts, {
+        cx, cz, axis, wallCoord, inNx, inNz, spanHalf, yBotCurve, yTopFn, steps, tileScale, hole: null
       });
+      return;
     }
+
+    const winBot = Math.max(ySpring + 0.14, wallHeight + 0.04);
+    const splayHW = windowWidth * 0.5 * 1.16;
+    const maxAllowedTop = ySpring + riseVal * gothicOgive(splayHW / spanHalf, 0.48) - 0.06;
+    const winTop = Math.max(winBot + 0.65, Math.min(ySpring + riseVal - 0.16, maxAllowedTop));
+    const splayBot = Math.max(yBotCurve + 0.04, winBot - 0.05);
+    const splayTop = winTop + 0.06;
+
+    appendPerforatedLunetteWall(shellParts, {
+      cx,
+      cz,
+      axis,
+      wallCoord,
+      inNx,
+      inNz,
+      spanHalf,
+      yBotCurve,
+      yTopFn,
+      steps,
+      tileScale,
+      hole: { halfW: splayHW, yBot: splayBot, yTop: splayTop }
+    });
+
+    appendClerestoryLancetWindow(shellParts, glassParts, ribParts, windowRegistry, {
+      id: `clerestory_${roomId}_${axis}${side > 0 ? 'p' : 'n'}_${bayIndex}`,
+      roomId,
+      x: axis === 'x' ? wallCoord : cx,
+      yBot: winBot,
+      yTop: winTop,
+      z: axis === 'x' ? cz : wallCoord,
+      width: windowWidth,
+      inwardNx: inNx,
+      inwardNz: inNz,
+      winKind: 0.0,
+      recessDepth: 0.42,
+      splayHalfW: splayHW,
+      splayBotY: splayBot,
+      splayTopY: splayTop,
+      addStoneFrame: true,
+      highDetail
+    });
   };
 
   if (addWestLunette) buildSideLunette('x', -1, addWestWindow);
@@ -1113,8 +1483,8 @@ function buildGroinVaultBay({
   if (addSouthLunette) buildSideLunette('z', +1, addSouthWindow);
 }
 
-// Helper: Transverse Pointed Arch Rib spanning X across a hall at zPos
-function appendTransverseArchRib(ribParts, cx, innerHalfX, hx, zPos, ySpring, transRise, width = 0.54, depth = 0.42, segs = 12) {
+// Helper: Transverse Pointed Arch Rib + Crown Keystone Boss spanning X across a hall at zPos
+function appendTransverseArchRib(ribParts, cx, innerHalfX, hx, zPos, ySpring, transRise, width = 0.54, depth = 0.42, segs = 18, highDetail = true) {
   const pts = [];
   for (let i = 0; i <= segs; i++) {
     const s = -1.0 + (2.0 * i) / segs;
@@ -1128,13 +1498,17 @@ function appendTransverseArchRib(ribParts, cx, innerHalfX, hx, zPos, ySpring, tr
     dropDir: [0, -1, 0],
     tintR: 1.02,
     tintG: 1.02,
-    tintB: 1.04
+    tintB: 1.04,
+    highDetail
   });
   if (geo) ribParts.push(geo);
+  if (highDetail) {
+    ribParts.push(createGothicKeystoneGeometry(cx, ySpring + transRise + 0.02, zPos, 0.64, false));
+  }
 }
 
 // Watertight Vertical Pointed Tympanum Wall along Z = zPlane spanning x in [minX, maxX]
-function buildGableTympanumZ(zPlane, minX, maxX, yBotFn, yTopFn, inwardNz, segs = 18, tileScale = 3.2) {
+function buildGableTympanumZ(zPlane, minX, maxX, yBotFn, yTopFn, inwardNz, segs = 22, tileScale = 3.2) {
   const rows = 2;
   const cols = segs + 1;
   const verts = new Array(rows * cols);
@@ -1157,38 +1531,37 @@ function buildGableTympanumZ(zPlane, minX, maxX, yBotFn, yTopFn, inwardNz, segs 
 }
 
 // ============================================================================
-// 4. Giant 16-Bay Boss Throne Cathedral Clerestory Drum, Ogival Dome & Lantern
-//    (Enlarged R = 16.0, center (0, -31.2), apexY = 18.2, clamped cleanly at z = -16.05!)
+// 4. Giant 16-Bay Boss Throne Cathedral Clerestory Drum, Star-Ribbed Ogival Dome & Lantern
 // ============================================================================
 function buildBossCathedralDome(shellParts, ribParts, glassParts, windowRegistry, isMobile) {
+  const highDetail = !isMobile;
   const spec = SOULS_CASTLE_ROOF_SPEC.bossHall;
   const cx = spec.cx;
   const cz = spec.cz;
-  const R_outer = spec.outerSkirtRadius; // 16.95
-  const R_drum = spec.drumRadius;        // 16.25
-  const R_inner = spec.innerRadius;      // 16.00
-  const R_oculus = spec.oculusRadius;    // 3.60
-  const ySpring = spec.springY;          // 12.15
-  const yDrumTop = spec.drumTopY;        // 14.07
-  const yOculus = spec.oculusY;          // 16.86
-  const yLanternTop = spec.lanternTopY;  // 17.84
-  const yLanternApex = spec.lanternApexY; // 18.20
-  const bays = spec.radialBays;          // 16
+  const R_outer = spec.outerSkirtRadius;
+  const R_drum = spec.drumRadius;
+  const R_inner = spec.innerRadius;
+  const R_oculus = spec.oculusRadius;
+  const ySpring = spec.springY;
+  const yDrumTop = spec.drumTopY;
+  const yOculus = spec.oculusY;
+  const yLanternTop = spec.lanternTopY;
+  const yLanternApex = spec.lanternApexY;
+  const bays = spec.radialBays; // 16
   const bayAng = (Math.PI * 2) / bays;
-  const baseAngOffset = bayAng * 0.5;    // centers North (Throne) & South (Boss Doors) cleanly inside bays!
-  const southClampZ = spec.doorZ - 0.05; // -16.05: ZERO dome protrusion into Corridor!
-  // Exact chord half-width where outer dome skirt meets z = southClampZ (~7.6m on R=16.0 hall!)
+  const baseAngOffset = bayAng * 0.5;
+  const southClampZ = spec.doorZ - 0.05;
   const southDz = Math.abs(southClampZ - cz);
   const southClampHalfX = Math.sqrt(Math.max(16.0, R_outer * R_outer - southDz * southDz)) + 0.35;
   const southDrumHalfX = Math.sqrt(Math.max(12.0, R_drum * R_drum - southDz * southDz)) + 0.25;
 
-  const ringSegs = isMobile ? 6 : 9;
-  const subAngSegs = isMobile ? 2 : 3;
+  const ringSegs = isMobile ? 6 : 15;
+  const subAngSegs = isMobile ? 2 : 5;
   const domeRise = yOculus - yDrumTop;
 
-  // A0. Horizontal Stone Wall-to-Drum Soffit Collar (seals 16-segment curtain walls R=16.0..16.95 at y=12.15)
+  // A0. Horizontal Stone Wall-to-Drum Soffit Collar (seals 16-segment curtain walls R=16.0..16.98 at y=12.15)
   {
-    const colSegs = 32;
+    const colSegs = isMobile ? 32 : 64;
     const rows = 2;
     const cols = colSegs + 1;
     const verts = new Array(rows * cols);
@@ -1200,50 +1573,99 @@ function buildBossCathedralDome(shellParts, ribParts, glassParts, windowRegistry
         let pz = cz + Math.sin(a) * rad;
         if (pz > southClampZ && Math.abs(px) < southClampHalfX) pz = southClampZ;
         verts[r * cols + c] = {
-          x: px,
-          y: ySpring,
-          z: pz,
-          u: (c / colSegs) * 30.0,
-          v: r * 0.35,
-          r: 0.64,
-          g: 0.67,
-          b: 0.74
+          x: px, y: ySpring, z: pz,
+          u: (c / colSegs) * 30.0, v: r * 0.35,
+          r: 0.64, g: 0.67, b: 0.74
         };
       }
     }
     shellParts.push(buildInwardGridGeometry(rows, cols, verts, () => [0, -1, 0]));
   }
 
-  // A1. Vertical 16-Bay Gothic Clerestory Drum (y = 12.15 -> 14.07 at R = 16.25, FrontSide strictly inward!)
-  {
-    const drumSegs = bays * 2;
-    const rows = 2;
-    const cols = drumSegs + 1;
-    const verts = new Array(rows * cols);
-    for (let r = 0; r < rows; r++) {
-      const vy = r === 0 ? (ySpring - 0.04) : (yDrumTop + 0.06);
-      for (let c = 0; c < cols; c++) {
-        const a = baseAngOffset + (c / drumSegs) * Math.PI * 2;
+  // A1 + D. 16-Bay Vertical Clerestory Drum w/ Perforated Manifold Bays & 8 Deep-Recessed Drum Windows!
+  for (let b = 0; b < bays; b++) {
+    const a0 = baseAngOffset + b * bayAng;
+    const a1 = a0 + bayAng;
+    const midAng = (a0 + a1) * 0.5;
+    const inNx = -Math.cos(midAng);
+    const inNz = -Math.sin(midAng);
+
+    const p0x = cx + Math.cos(a0) * R_drum;
+    const p0z = cz + Math.sin(a0) * R_drum;
+    const p1x = cx + Math.cos(a1) * R_drum;
+    const p1z = cz + Math.sin(a1) * R_drum;
+    const isSouthClamped = (Math.sin(midAng) > 0.78 && Math.abs(cx + Math.cos(midAng) * R_drum) < southDrumHalfX + 0.6);
+    const hasWin = (b % 2 === 0) && !isSouthClamped;
+
+    if (!hasWin) {
+      // Solid curved/clamped drum bay
+      const cSegs = highDetail ? 4 : 2;
+      const verts = new Array(2 * (cSegs + 1));
+      for (let c = 0; c <= cSegs; c++) {
+        const a = a0 + (bayAng * c) / cSegs;
         let px = cx + Math.cos(a) * R_drum;
         let pz = cz + Math.sin(a) * R_drum;
         if (pz > southClampZ && Math.abs(px) < southClampHalfX) pz = southClampZ;
-        const ao = r === 0 ? 0.68 : 0.88;
-        verts[r * cols + c] = {
-          x: px,
-          y: vy,
-          z: pz,
-          u: (c / drumSegs) * 32.0,
-          v: (vy - ySpring) / 3.0,
-          r: ao * 0.94,
-          g: ao * 0.98,
-          b: ao * 1.06
-        };
+        verts[c] = { x: px, y: ySpring - 0.04, z: pz, u: c * 0.8, v: 0.0, r: 0.68, g: 0.71, b: 0.78 };
+        verts[cSegs + 1 + c] = { x: px, y: yDrumTop + 0.06, z: pz, u: c * 0.8, v: 0.65, r: 0.88, g: 0.92, b: 1.00 };
       }
+      shellParts.push(buildInwardGridGeometry(2, cSegs + 1, verts, (mx, _my, mz) => [cx - mx, -0.05, cz - mz]));
+    } else {
+      // Chord plane from (p0x, p0z) to (p1x, p1z) with exact perforated hole & 0.44m splayed stone embrasure!
+      const chordCx = (p0x + p1x) * 0.5;
+      const chordCz = (p0z + p1z) * 0.5;
+      const chordHalf = Math.hypot(p1x - p0x, p1z - p0z) * 0.5;
+      const tx = (p1x - p0x) / (chordHalf * 2.0);
+      const tz = (p1z - p0z) / (chordHalf * 2.0);
+      const winW = Math.min(2.25, chordHalf * 1.32);
+      const splayHW = winW * 0.5 * 1.15;
+      const winBot = Math.max(ySpring + 0.22, spec.wallHeight + 0.05);
+      const winTop = yDrumTop - 0.16;
+      const splayBot = winBot - 0.05;
+      const splayTop = winTop + 0.06;
+
+      const emitChordStrip = (u0, u1, colsCount, botFn, topFn) => {
+        const cols = colsCount + 1;
+        const verts = new Array(2 * cols);
+        for (let c = 0; c < cols; c++) {
+          const uL = u0 + ((u1 - u0) * c) / colsCount;
+          const yb = botFn(uL);
+          const yt = Math.max(yb + 0.015, topFn(uL));
+          const vx = chordCx + tx * uL;
+          const vz = chordCz + tz * uL;
+          verts[c] = { x: vx, y: yb, z: vz, u: uL / 3.0, v: yb / 3.0, r: 0.70, g: 0.74, b: 0.82 };
+          verts[cols + c] = { x: vx, y: yt, z: vz, u: uL / 3.0, v: yt / 3.0, r: 0.90, g: 0.94, b: 1.03 };
+        }
+        shellParts.push(buildInwardGridGeometry(2, cols, verts, () => [inNx, -0.05, inNz]));
+      };
+
+      emitChordStrip(-chordHalf, -splayHW, 2, () => ySpring - 0.04, () => yDrumTop + 0.06);
+      emitChordStrip(splayHW, chordHalf, 2, () => ySpring - 0.04, () => yDrumTop + 0.06);
+      emitChordStrip(-splayHW, splayHW, 4, () => ySpring - 0.04, () => splayBot);
+      emitChordStrip(-splayHW, splayHW, 6, (uL) => evalWindowContourY(uL / splayHW, splayBot, splayTop), () => yDrumTop + 0.06);
+
+      appendClerestoryLancetWindow(shellParts, glassParts, ribParts, windowRegistry, {
+        id: `clerestory_boss_drum_${b}`,
+        roomId: 'boss_hall',
+        x: chordCx,
+        yBot: winBot,
+        yTop: winTop,
+        z: chordCz,
+        width: winW,
+        inwardNx: inNx,
+        inwardNz: inNz,
+        winKind: 0.0,
+        recessDepth: 0.44,
+        splayHalfW: splayHW,
+        splayBotY: splayBot,
+        splayTopY: splayTop,
+        addStoneFrame: true,
+        highDetail
+      });
     }
-    shellParts.push(buildInwardGridGeometry(rows, cols, verts, (mx, _my, mz) => [cx - mx, -0.05, cz - mz]));
   }
 
-  // Helper evaluating a point on the 16-bay scalloped Gothic ogival dome (y = 14.07 -> 16.86)
+  // Helper evaluating a point on the 16-bay scalloped Gothic ogival dome (y = 14.07 -> 16.52)
   const evalDomePoint = (ang, u, bayFrac) => {
     const baseR = R_oculus + (R_drum - R_oculus) * Math.pow(Math.cos(u * Math.PI * 0.5), 0.86);
     const baseY = yDrumTop + domeRise * Math.pow(Math.sin(u * Math.PI * 0.5), 0.78);
@@ -1251,16 +1673,14 @@ function buildBossCathedralDome(shellParts, ribParts, glassParts, windowRegistry
     let px = cx + Math.cos(ang) * baseR;
     let pz = cz + Math.sin(ang) * baseR;
     const py = baseY + scallop;
-
     if (pz > southClampZ && Math.abs(px) < southClampHalfX) {
       pz = southClampZ;
     }
     return { x: px, y: py, z: pz, r: baseR };
   };
 
-  // A2. 16 Curved Scalloped Dome Shell Bays (FrontSide strictly pointing inward/downward!)
+  // A2. 16 High-Resolution Curved Scalloped Dome Shell Bays
   const domeInwardCheck = (mx, my, mz) => [cx - mx, (ySpring - 10.0) - my, cz - mz];
-
   for (let b = 0; b < bays; b++) {
     const a0 = baseAngOffset + b * bayAng;
     const rows = ringSegs + 1;
@@ -1274,15 +1694,13 @@ function buildBossCathedralDome(shellParts, ribParts, glassParts, windowRegistry
         const ang = a0 + bf * bayAng;
         const pt = evalDomePoint(ang, u, bf);
 
-        const ribCrease = 1.0 - 0.14 * Math.pow(Math.abs(bf - 0.5) * 2.0, 2.2);
-        const heightShade = 0.72 + 0.32 * Math.pow(u, 0.70);
-        const oculusGlow = u > 0.60 ? (u - 0.60) / 0.40 : 0.0;
-        const ao = Math.max(0.62, heightShade * ribCrease);
+        const ribCrease = 1.0 - 0.15 * Math.pow(Math.abs(bf - 0.5) * 2.0, 2.2);
+        const heightShade = 0.70 + 0.34 * Math.pow(u, 0.70);
+        const oculusGlow = u > 0.58 ? (u - 0.58) / 0.42 : 0.0;
+        const ao = Math.max(0.60, heightShade * ribCrease);
 
         verts[r * cols + c] = {
-          x: pt.x,
-          y: pt.y,
-          z: pt.z,
+          x: pt.x, y: pt.y, z: pt.z,
           u: ((b + bf) * (Math.PI * 2 * (pt.r * 0.16))) / 3.2,
           v: (u * 14.8) / 3.2,
           r: ao * (0.94 + oculusGlow * 0.16),
@@ -1294,8 +1712,9 @@ function buildBossCathedralDome(shellParts, ribParts, glassParts, windowRegistry
     shellParts.push(buildInwardGridGeometry(rows, cols, verts, domeInwardCheck));
   }
 
-  // B. 16 Engaged Drum Pilasters + Sweeping Radial Gothic Dome Ribs + Wall Corbels
-  const ribSteps = isMobile ? 7 : 10;
+  // B. 16 Engaged Drum Pilasters + Sweeping 20-Segment Radial Gothic Dome Ribs + Chevron Star-Liernes (PC!)
+  const ribSteps = isMobile ? 7 : 18;
+  const midU = 0.48;
   for (let b = 0; b < bays; b++) {
     const ang = baseAngOffset + b * bayAng;
     const pts = [];
@@ -1315,7 +1734,7 @@ function buildBossCathedralDome(shellParts, ribParts, glassParts, windowRegistry
     }
     const radialRib = createGothicRibGeometry(pts, {
       width: spec.ribThick,
-      depth: spec.ribThick * 0.78,
+      depth: spec.ribThick * 0.80,
       dropDir: (pt) => {
         const dx = cx - pt.x;
         const dz = cz - pt.z;
@@ -1324,33 +1743,68 @@ function buildBossCathedralDome(shellParts, ribParts, glassParts, windowRegistry
       },
       tintR: 1.00,
       tintG: 1.02,
-      tintB: 1.08
+      tintB: 1.08,
+      highDetail
     });
     if (radialRib) ribParts.push(radialRib);
+
+    // High-Gothic Chevron Star-Lierne Ribs weaving across each dome bay + Secondary Bosses on PC!
+    if (highDetail) {
+      const nextAng = ang + bayAng;
+      const midAng = ang + bayAng * 0.5;
+      // 2 diagonal star-tiercerons rising from base of ribs `b` & `b+1` to mid-dome bay center `(midAng, midU)`!
+      for (const srcAng of [ang, nextAng]) {
+        const liernePts = [];
+        for (let k = 0; k <= 7; k++) {
+          const f = k / 7;
+          const uCur = midU * f;
+          const aCur = srcAng + (midAng - srcAng) * f;
+          const bf = (aCur - ang) / bayAng;
+          const pt = evalDomePoint(aCur, uCur, bf);
+          liernePts.push({ x: pt.x, y: pt.y - 0.04, z: pt.z });
+        }
+        const lGeo = createGothicRibGeometry(liernePts, {
+          width: spec.ribThick * 0.62,
+          depth: spec.ribThick * 0.50,
+          dropDir: (pt) => {
+            const dx = cx - pt.x;
+            const dz = cz - pt.z;
+            const d = Math.hypot(dx, dz) || 1;
+            return [(dx / d) * 0.58, -0.82, (dz / d) * 0.58];
+          },
+          highDetail: true
+        });
+        if (lGeo) ribParts.push(lGeo);
+      }
+      const bossPt = evalDomePoint(midAng, midU, 0.5);
+      if (!(bossPt.z > southClampZ - 0.1 && Math.abs(bossPt.x) < southClampHalfX)) {
+        ribParts.push(createGothicKeystoneGeometry(bossPt.x, bossPt.y, bossPt.z, 0.58, false));
+      }
+    }
 
     const wallX = cx + Math.cos(ang) * (R_inner + 0.04);
     const wallZ = cz + Math.sin(ang) * (R_inner + 0.04);
     if (!(wallZ > spec.doorZ - 0.6 && Math.abs(wallX) < spec.doorHalfW + 1.0)) {
       ribParts.push(
-        createWallCorbelGeometry(wallX, ySpring + 0.02, wallZ, -Math.cos(ang), -Math.sin(ang), 0.82, 0.68, 1.25)
+        createWallCorbelGeometry(wallX, ySpring + 0.02, wallZ, -Math.cos(ang), -Math.sin(ang), 0.84, 0.70, 1.28, highDetail)
       );
     }
   }
 
-  // C. Concentric Cathedral Structural Rings (Lower Drum, Upper Drum, Mid-Dome Tierceron Purline, Oculus Ring)
-  const midU = 0.48;
+  // C. 4 Concentric Cathedral Structural Rings (smooth 64-seg on PC!)
+  const ringSegCount = isMobile ? 32 : 64;
   const ringConfigs = [
-    { r: R_inner - 0.02, y: ySpring + 0.06, w: 0.52, d: 0.40, segs: 32, clampSouth: true },
-    { r: R_drum - 0.16, y: yDrumTop, w: 0.50, d: 0.38, segs: 32, clampSouth: true },
+    { r: R_inner - 0.02, y: ySpring + 0.06, w: 0.52, d: 0.40, segs: ringSegCount, clampSouth: true },
+    { r: R_drum - 0.16, y: yDrumTop, w: 0.50, d: 0.38, segs: ringSegCount, clampSouth: true },
     {
       r: R_oculus + (R_drum - 0.14 - R_oculus) * Math.pow(Math.cos(midU * Math.PI * 0.5), 0.86),
       y: yDrumTop + domeRise * Math.pow(Math.sin(midU * Math.PI * 0.5), 0.78),
       w: 0.44,
       d: 0.34,
-      segs: 32,
+      segs: ringSegCount,
       clampSouth: false
     },
-    { r: R_oculus, y: yOculus, w: 0.60, d: 0.46, segs: 24, clampSouth: false }
+    { r: R_oculus, y: yOculus, w: 0.62, d: 0.48, segs: isMobile ? 24 : 48, clampSouth: false }
   ];
 
   for (const rc of ringConfigs) {
@@ -1374,31 +1828,10 @@ function buildBossCathedralDome(shellParts, ribParts, glassParts, windowRegistry
       closedLoop: true,
       tintR: 1.00,
       tintG: 1.02,
-      tintB: 1.08
+      tintB: 1.08,
+      highDetail
     });
     if (ringGeo) ribParts.push(ringGeo);
-  }
-
-  // D. 8 Unclipped Vertical Clerestory Drum Lancet Windows (flush inside drum y = 12.44..13.90!)
-  for (let b = 0; b < bays; b += 2) {
-    const midAng = baseAngOffset + (b + 0.5) * bayAng;
-    const wx = cx + Math.cos(midAng) * (R_drum - 0.18);
-    const wz = cz + Math.sin(midAng) * (R_drum - 0.18);
-    // Skip South Boss Door bay
-    if (Math.sin(midAng) > 0.78 && Math.abs(wx) < southDrumHalfX + 0.5) continue;
-    appendClerestoryLancetWindow(glassParts, ribParts, windowRegistry, {
-      id: `clerestory_boss_drum_${b}`,
-      roomId: 'boss_hall',
-      x: wx,
-      yBot: Math.max(ySpring + 0.20, spec.wallHeight + 0.04),
-      yTop: yDrumTop - 0.14,
-      z: wz,
-      width: 2.30,
-      inwardNx: -Math.cos(midAng),
-      inwardNz: -Math.sin(midAng),
-      winKind: 0.0,
-      addStoneFrame: true
-    });
   }
 
   // E. Central Gothic Cathedral Lantern Cupola (8 Glowing Moonlit Lancet Windows + Star-Vault Capstone -> y=18.20!)
@@ -1424,14 +1857,15 @@ function buildBossCathedralDome(shellParts, ribParts, glassParts, windowRegistry
       dropDir: [-Math.cos(pierAng), -0.18, -Math.sin(pierAng)],
       tintR: 0.96,
       tintG: 1.00,
-      tintB: 1.12
+      tintB: 1.12,
+      highDetail
     });
     if (pierGeo) ribParts.push(pierGeo);
 
     const chordW = 2.0 * (lRadius - 0.14) * Math.sin(lStep * 0.5) - 0.18;
     const wx = cx + Math.cos(winAng) * (lRadius - 0.08);
     const wz = cz + Math.sin(winAng) * (lRadius - 0.08);
-    appendClerestoryLancetWindow(glassParts, ribParts, windowRegistry, {
+    appendClerestoryLancetWindow(null, glassParts, ribParts, windowRegistry, {
       id: `boss_lantern_window_${i}`,
       roomId: 'boss_hall',
       x: wx,
@@ -1442,14 +1876,15 @@ function buildBossCathedralDome(shellParts, ribParts, glassParts, windowRegistry
       inwardNx: inNx,
       inwardNz: inNz,
       winKind: 1.0,
-      addStoneFrame: false
+      recessDepth: 0.0,
+      addStoneFrame: highDetail,
+      highDetail
     });
   }
 
-  // Lantern upper cornice ring
   const capRingPts = [];
-  for (let i = 0; i < lBays; i++) {
-    const a = i * lStep;
+  for (let i = 0; i < lBays * 2; i++) {
+    const a = (i / (lBays * 2)) * Math.PI * 2;
     capRingPts.push({
       x: cx + Math.cos(a) * (lRadius + 0.02),
       y: yLanternTop,
@@ -1463,11 +1898,11 @@ function buildBossCathedralDome(shellParts, ribParts, glassParts, windowRegistry
     closedLoop: true,
     tintR: 0.96,
     tintG: 1.02,
-    tintB: 1.12
+    tintB: 1.12,
+    highDetail
   });
   if (lanternCrownRing) ribParts.push(lanternCrownRing);
 
-  // Solid inward-facing lantern spandrel drum backing (seals pointed arch corners behind lantern windows!)
   const drumRows = 2;
   const drumCols = lBays + 1;
   const drumVerts = new Array(drumRows * drumCols);
@@ -1476,9 +1911,9 @@ function buildBossCathedralDome(shellParts, ribParts, glassParts, windowRegistry
     for (let c = 0; c < drumCols; c++) {
       const a = (c % lBays) * lStep;
       drumVerts[r * drumCols + c] = {
-        x: cx + Math.cos(a) * (lRadius + 0.08),
+        x: cx + Math.cos(a) * (lRadius + 0.14),
         y: vy,
-        z: cz + Math.sin(a) * (lRadius + 0.08),
+        z: cz + Math.sin(a) * (lRadius + 0.14),
         u: (c / lBays) * 4.5,
         v: r * 0.5,
         r: 0.72,
@@ -1489,16 +1924,16 @@ function buildBossCathedralDome(shellParts, ribParts, glassParts, windowRegistry
   }
   shellParts.push(buildInwardGridGeometry(drumRows, drumCols, drumVerts, (mx, _my, mz) => [cx - mx, -0.15, cz - mz]));
 
-  // Pointed Octagonal Star-Vault Lantern Capstone (y = 17.84 -> 18.20, FrontSide strictly DOWNWARD!)
-  const capRows = 3;
-  const capCols = lBays + 1;
+  const capRows = highDetail ? 5 : 3;
+  const capCols = (highDetail ? lBays * 2 : lBays) + 1;
+  const capSegs = capCols - 1;
   const capVerts = new Array(capRows * capCols);
   for (let r = 0; r < capRows; r++) {
     const f = r / (capRows - 1);
-    const rad = (lRadius + 0.12) * (1.0 - f);
+    const rad = (lRadius + 0.14) * (1.0 - f);
     const vy = yLanternTop + (yLanternApex - yLanternTop) * Math.sin(f * Math.PI * 0.5);
     for (let c = 0; c < capCols; c++) {
-      const a = (c % lBays) * lStep;
+      const a = (c % capSegs) * ((Math.PI * 2) / capSegs);
       capVerts[r * capCols + c] = {
         x: cx + Math.cos(a) * rad,
         y: vy,
@@ -1513,7 +1948,6 @@ function buildBossCathedralDome(shellParts, ribParts, glassParts, windowRegistry
   }
   shellParts.push(buildInwardGridGeometry(capRows, capCols, capVerts, () => [0, -1, 0]));
 
-  // 8 Star-Vault Lantern Capstone Ribs + Royal Central Boss Keystone anchoring `chandelier_boss_center`!
   for (let i = 0; i < lBays; i++) {
     const a = i * lStep;
     const pts = [
@@ -1521,12 +1955,12 @@ function buildBossCathedralDome(shellParts, ribParts, glassParts, windowRegistry
       { x: cx + Math.cos(a) * (lRadius * 0.5), y: (yLanternTop + yLanternApex) * 0.5 + 0.08, z: cz + Math.sin(a) * (lRadius * 0.5) },
       { x: cx, y: yLanternApex, z: cz }
     ];
-    const capRib = createGothicRibGeometry(pts, { width: 0.24, depth: 0.18, dropDir: [0, -1, 0] });
+    const capRib = createGothicRibGeometry(pts, { width: 0.24, depth: 0.18, dropDir: [0, -1, 0], highDetail });
     if (capRib) ribParts.push(capRib);
   }
-  ribParts.push(createGothicKeystoneGeometry(cx, yLanternApex, cz, 1.45));
+  ribParts.push(createGothicKeystoneGeometry(cx, yLanternApex, cz, 1.50, highDetail));
 
-  // F. Watertight South Boss Portal Tympanum Wall (Boss Hall side, z = -16.05, normal -Z facing Boss Hall)
+  // F. Watertight South Boss Portal Tympanum Wall + Triumphal Arch
   const bossPortalTopFn = (x) => {
     const dist = Math.hypot(x - cx, southClampZ - cz);
     const cosTerm = clamp01((dist - R_oculus) / (R_drum - R_oculus));
@@ -1535,24 +1969,25 @@ function buildBossCathedralDome(shellParts, ribParts, glassParts, windowRegistry
   };
   const bossPortalBotFn = (x) => (Math.abs(x) < spec.doorHalfW + 0.10 ? gothicBossDoorArchY(x) : 8.40);
   const tympHalfX = Math.max(6.25, southDrumHalfX);
-  shellParts.push(buildGableTympanumZ(southClampZ, -tympHalfX, tympHalfX, bossPortalBotFn, bossPortalTopFn, -1, 22, 3.2));
+  shellParts.push(buildGableTympanumZ(southClampZ, -tympHalfX, tympHalfX, bossPortalBotFn, bossPortalTopFn, -1, highDetail ? 32 : 22, 3.2));
 
-  // Triumphal Gothic Stone Arch Framing the Boss Portal Tympanum on the Throne Hall Side
+  const pSegs = highDetail ? 24 : 16;
   const portalFramePts = [];
-  for (let i = 0; i <= 16; i++) {
-    const x = -tympHalfX + 0.20 + ((tympHalfX * 2 - 0.40) * i) / 16;
+  for (let i = 0; i <= pSegs; i++) {
+    const x = -tympHalfX + 0.20 + ((tympHalfX * 2 - 0.40) * i) / pSegs;
     portalFramePts.push({ x, y: bossPortalTopFn(x) - 0.18, z: southClampZ - 0.06 });
   }
   const portalArchRib = createGothicRibGeometry(portalFramePts, {
-    width: 0.56,
-    depth: 0.44,
-    dropDir: [0, -0.78, -0.62]
+    width: 0.58,
+    depth: 0.46,
+    dropDir: [0, -0.78, -0.62],
+    highDetail
   });
   if (portalArchRib) ribParts.push(portalArchRib);
 }
 
 // ============================================================================
-// 5. Wrought-Iron Gothic Corona Lucis Chandeliers + GPU Pendulum Sway + Flames
+// 5. High-Detail Wrought-Iron Chandeliers + 3D Chains + Melted Beeswax Candles
 // ============================================================================
 function tagChandelierPart(rawGeo, pivotX, pivotY, pivotZ, phase) {
   const g = rawGeo.index ? rawGeo.toNonIndexed() : rawGeo.clone();
@@ -1578,13 +2013,78 @@ function tagChandelierPart(rawGeo, pivotX, pivotY, pivotZ, phase) {
   return g;
 }
 
-function appendChandelierTier(ironParts, flameSpecs, cfg, tierRadius, tierY, cupCount, isUpperTier = false) {
+// Build a sculpted 3D melted beeswax pillar candle + wax drips tagged with `aPivotPhase` + `aWaxGlow`
+function appendMeltedWaxCandle(candleParts, cx, baseY, cz, candleH, candleR, pivotX, pivotY, pivotZ, phase, flickerPhase, highDetail) {
+  const segs = highDetail ? 8 : 6;
+  const geo = new THREE.CylinderGeometry(candleR * 0.90, candleR * 1.04, candleH, segs, 2, false);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const lx = pos.getX(i);
+    const ly = pos.getY(i);
+    const lz = pos.getZ(i);
+    // Organic melted lip undulation along top rim
+    if (ly > candleH * 0.25) {
+      const ang = Math.atan2(lz, lx);
+      const melt = 0.016 * Math.sin(ang * 3.0 + flickerPhase) + 0.010 * Math.cos(ang * 5.0);
+      pos.setY(i, ly + melt);
+    }
+  }
+  geo.translate(cx, baseY + candleH * 0.5, cz);
+  geo.computeVertexNormals();
+
+  const parts = [geo];
+  if (highDetail) {
+    // 2 organic solidified wax drip rivulets down the side of the candle + smaller secondary stub!
+    for (let d = 0; d < 2; d++) {
+      const dAng = flickerPhase * 1.3 + d * 2.35;
+      const dh = candleH * (0.48 + d * 0.22);
+      const drip = new THREE.CylinderGeometry(candleR * 0.22, candleR * 0.30, dh, 5);
+      drip.translate(
+        cx + Math.cos(dAng) * (candleR * 0.88),
+        baseY + candleH - dh * 0.52,
+        cz + Math.sin(dAng) * (candleR * 0.88)
+      );
+      parts.push(drip);
+    }
+  }
+
+  for (let p = 0; p < parts.length; p++) {
+    const g = parts[p].index ? parts[p].toNonIndexed() : parts[p].clone();
+    parts[p].dispose();
+    for (const attrName of Object.keys(g.attributes)) {
+      if (attrName !== 'position' && attrName !== 'normal' && attrName !== 'uv') {
+        g.deleteAttribute(attrName);
+      }
+    }
+    if (!g.attributes.normal) g.computeVertexNormals();
+    const n = g.attributes.position.count;
+    if (!g.attributes.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(n * 2), 2));
+    const piv = new Float32Array(n * 4);
+    const glow = new Float32Array(n * 2); // [waxTop01, flickerPhase]
+    const gp = g.attributes.position;
+    for (let i = 0; i < n; i++) {
+      piv[i * 4] = pivotX;
+      piv[i * 4 + 1] = pivotY;
+      piv[i * 4 + 2] = pivotZ;
+      piv[i * 4 + 3] = phase;
+      const h01 = clamp01((gp.getY(i) - baseY) / Math.max(0.05, candleH));
+      glow[i * 2] = h01;
+      glow[i * 2 + 1] = flickerPhase;
+    }
+    g.setAttribute('aPivotPhase', new THREE.BufferAttribute(piv, 4));
+    g.setAttribute('aWaxGlow', new THREE.BufferAttribute(glow, 2));
+    candleParts.push(g);
+  }
+}
+
+function appendChandelierTier(ironParts, candleParts, flameSpecs, cfg, tierRadius, tierY, cupCount, isUpperTier, highDetail) {
   const { x, z, pivotY, phase } = cfg;
   const push = (geo) => ironParts.push(tagChandelierPart(geo, x, pivotY, z, phase));
 
-  const ringSegs = Math.max(8, cupCount);
-  const bandH = isUpperTier ? 0.18 : (cfg.doubleTier ? 0.28 : 0.22);
-  const bandThick = isUpperTier ? 0.055 : 0.075;
+  // Smooth multi-segmented circular iron hoop on PC (2x smoother wheel silhouette!)
+  const ringSegs = highDetail ? Math.max(16, cupCount * 2) : Math.max(8, cupCount);
+  const bandH = isUpperTier ? 0.20 : (cfg.doubleTier ? 0.30 : 0.24);
+  const bandThick = isUpperTier ? 0.058 : 0.078;
 
   for (let i = 0; i < ringSegs; i++) {
     const a0 = (i / ringSegs) * Math.PI * 2;
@@ -1594,41 +2094,79 @@ function appendChandelierTier(ironParts, flameSpecs, cfg, tierRadius, tierY, cup
     const z0 = z + Math.sin(a0) * tierRadius;
     const x1 = x + Math.cos(a1) * tierRadius;
     const z1 = z + Math.sin(a1) * tierRadius;
-    const chord = Math.hypot(x1 - x0, z1 - z0) + 0.04;
+    const chord = Math.hypot(x1 - x0, z1 - z0) + 0.025;
     const mx = (x0 + x1) * 0.5;
     const mz = (z0 + z1) * 0.5;
     const rotY = -Math.atan2(z1 - z0, x1 - x0);
 
+    // Main forged iron band + proud top/bottom beveled iron rim moldings
     push(placeGeo(new THREE.BoxGeometry(chord, bandH, bandThick), mx, tierY, mz, 0, rotY, 0));
-    push(placeGeo(new THREE.BoxGeometry(chord + 0.02, 0.042, bandThick + 0.042), mx, tierY + bandH * 0.46, mz, 0, rotY, 0));
-    push(placeGeo(new THREE.BoxGeometry(chord + 0.02, 0.042, bandThick + 0.042), mx, tierY - bandH * 0.46, mz, 0, rotY, 0));
+    push(placeGeo(new THREE.BoxGeometry(chord + 0.015, 0.045, bandThick + 0.048), mx, tierY + bandH * 0.48, mz, 0, rotY, 0));
+    push(placeGeo(new THREE.BoxGeometry(chord + 0.015, 0.045, bandThick + 0.048), mx, tierY - bandH * 0.48, mz, 0, rotY, 0));
 
+    // Pierced Gothic quatrefoil / rivet boss stud on outer band face (PC!)
+    if (highDetail) {
+      const rx = x + Math.cos(am) * (tierRadius + bandThick * 0.55);
+      const rz = z + Math.sin(am) * (tierRadius + bandThick * 0.55);
+      push(placeGeo(new THREE.OctahedronGeometry(0.032, 0), rx, tierY, rz));
+    }
+
+    // Gothic fleur-de-lis iron crown spike + hanging iron drop-finial along the wheel!
     const sx = x + Math.cos(a0) * tierRadius;
     const sz = z + Math.sin(a0) * tierRadius;
-    push(placeGeo(new THREE.ConeGeometry(0.052, 0.26, 4), sx, tierY + bandH * 0.5 + 0.12, sz, 0, -a0 + Math.PI * 0.25, 0));
+    const spikeH = (i % 2 === 0) ? 0.30 : 0.19;
+    push(placeGeo(new THREE.ConeGeometry(0.048, spikeH, 4), sx, tierY + bandH * 0.5 + spikeH * 0.46, sz, 0, -a0 + Math.PI * 0.25, 0));
+    if (highDetail && i % 2 === 0) {
+      push(placeGeo(new THREE.ConeGeometry(0.040, 0.20, 4), sx, tierY - bandH * 0.5 - 0.10, sz, Math.PI, -a0 + Math.PI * 0.25, 0));
+    }
+  }
 
-    const cupR = tierRadius + 0.16;
+  // Cantilevered S-Scrollwork Forged Iron Sconce Cups + 3D Melted Wax Candles + Flames
+  for (let i = 0; i < cupCount; i++) {
+    const am = ((i + 0.5) / cupCount) * Math.PI * 2;
+    const cupR = tierRadius + 0.18;
     const cx = x + Math.cos(am) * cupR;
     const cz = z + Math.sin(am) * cupR;
     const bracketX = x + Math.cos(am) * (tierRadius + 0.09);
     const bracketZ = z + Math.sin(am) * (tierRadius + 0.09);
-    push(placeGeo(new THREE.BoxGeometry(0.18, 0.042, 0.05), bracketX, tierY - 0.02, bracketZ, 0, -am, 0));
-    push(placeGeo(new THREE.CylinderGeometry(0.12, 0.08, 0.045, 6), cx, tierY + 0.04, cz));
-    push(placeGeo(new THREE.CylinderGeometry(0.085, 0.055, 0.13, 6), cx, tierY + 0.12, cz));
+
+    // Forged horizontal bracket arm + lower S-scrollwork strut
+    push(placeGeo(new THREE.BoxGeometry(0.20, 0.044, 0.052), bracketX, tierY - 0.02, bracketZ, 0, -am, 0));
+    if (highDetail) {
+      const scroll = new THREE.BoxGeometry(0.20, 0.034, 0.038);
+      scroll.rotateZ(0.52);
+      scroll.rotateY(-am);
+      scroll.translate(bracketX, tierY - 0.09, bracketZ);
+      push(scroll);
+    }
+
+    // Wide fluted iron drip-saucer + ribbed sconce goblet + dark iron wick pricket
+    push(placeGeo(new THREE.CylinderGeometry(0.135, 0.085, 0.048, highDetail ? 8 : 6), cx, tierY + 0.035, cz));
+    push(placeGeo(new THREE.CylinderGeometry(0.088, 0.058, 0.12, highDetail ? 8 : 6), cx, tierY + 0.10, cz));
+
+    const fPhase = i * 1.73 + phase * 3.1 + (isUpperTier ? 4.2 : 0);
+    const candleH = (cfg.doubleTier ? (isUpperTier ? 0.24 : 0.30) : 0.25) * (0.88 + 0.22 * ((i * 37) % 5) / 4);
+    const candleR = cfg.doubleTier ? 0.046 : 0.040;
+    const candleBaseY = tierY + 0.15;
+
+    appendMeltedWaxCandle(candleParts, cx, candleBaseY, cz, candleH, candleR, x, pivotY, z, phase, fPhase, highDetail);
+    // Charred iron/cotton wick stub poking out of melted wax crater
+    push(placeGeo(new THREE.CylinderGeometry(0.008, 0.010, 0.055, 4), cx, candleBaseY + candleH + 0.02, cz));
 
     flameSpecs.push({
       x: cx,
-      y: tierY + 0.29,
+      y: candleBaseY + candleH + 0.09,
       z: cz,
       pivotX: x,
       pivotY,
       pivotZ: z,
       phase,
-      flickerPhase: i * 1.73 + phase * 3.1 + (isUpperTier ? 4.2 : 0),
+      flickerPhase: fPhase,
       scale: cfg.doubleTier ? (isUpperTier ? 0.34 : 0.42) : 0.32
     });
   }
 
+  // Interior Radial Iron Cross-Spokes + Heavy Diagonal Suspension Chains!
   const spokeCount = cfg.doubleTier ? (isUpperTier ? 4 : 6) : 4;
   const collarY = Math.min(pivotY - 0.55, tierY + (cfg.doubleTier ? (isUpperTier ? 1.45 : 2.10) : 1.30));
   for (let s = 0; s < spokeCount; s++) {
@@ -1636,7 +2174,7 @@ function appendChandelierTier(ironParts, flameSpecs, cfg, tierRadius, tierY, cup
     const midR = tierRadius * 0.5;
     push(
       placeGeo(
-        new THREE.BoxGeometry(tierRadius, 0.05, 0.05),
+        new THREE.BoxGeometry(tierRadius, 0.052, 0.052),
         x + Math.cos(a) * midR,
         tierY,
         z + Math.sin(a) * midR,
@@ -1645,84 +2183,110 @@ function appendChandelierTier(ironParts, flameSpecs, cfg, tierRadius, tierY, cup
         0
       )
     );
-    const rimX = x + Math.cos(a) * (tierRadius - 0.06);
-    const rimZ = z + Math.sin(a) * (tierRadius - 0.06);
+
+    const rimR = tierRadius - 0.06;
+    const rimX = x + Math.cos(a) * rimR;
+    const rimZ = z + Math.sin(a) * rimR;
     const dy = Math.max(0.3, collarY - tierY);
-    const strutLen = Math.hypot(tierRadius - 0.12, dy);
-    const tiltAng = Math.atan2(tierRadius - 0.12, dy);
+    const strutLen = Math.hypot(rimR, dy);
+    const tiltAng = Math.atan2(rimR, dy);
     const mx = (rimX + x) * 0.5;
     const my = (tierY + collarY) * 0.5;
     const mz = (rimZ + z) * 0.5;
-    const strut = new THREE.CylinderGeometry(0.026, 0.026, strutLen, 5);
+    const strut = new THREE.CylinderGeometry(0.024, 0.024, strutLen, 5);
     strut.rotateZ(tiltAng);
     strut.rotateY(-a);
     strut.translate(mx, my, mz);
     push(strut);
+
+    // 3D Interlinked Diagonal Iron Chain Links along every stay-chain on PC!
+    if (highDetail) {
+      const diagLinks = Math.max(4, Math.min(12, Math.floor(strutLen / 0.30)));
+      for (let lk = 0; lk < diagLinks; lk++) {
+        const f = (lk + 0.5) / diagLinks;
+        const lx = x + (rimX - x) * f;
+        const ly = collarY + (tierY - collarY) * f;
+        const lz = z + (rimZ - z) * f;
+        const dLink = new THREE.TorusGeometry(0.064, 0.020, 4, 7);
+        dLink.scale(0.66, 1.32, 1.0);
+        dLink.rotateY((lk % 2) * (Math.PI * 0.5));
+        dLink.rotateZ(tiltAng);
+        dLink.rotateY(-a);
+        dLink.translate(lx, ly, lz);
+        push(dLink);
+      }
+    }
   }
 }
 
-function appendGothicChandelier(ironParts, flameSpecs, ribParts, cfg, isMobile) {
+function appendGothicChandelier(ironParts, candleParts, flameSpecs, ribParts, cfg, isMobile) {
+  const highDetail = !isMobile;
   const { x, z, pivotY, wheelY, radius, cupCount, phase, doubleTier } = cfg;
   const push = (geo) => ironParts.push(tagChandelierPart(geo, x, pivotY, z, phase));
 
-  // Carved stone ceiling anchor rosette boss on the vault/dome so every suspension chain bolts into stone!
   if (cfg.id !== 'chandelier_boss_center') {
-    ribParts.push(createGothicKeystoneGeometry(x, pivotY + 0.04, z, doubleTier ? 0.95 : 0.78));
+    ribParts.push(createGothicKeystoneGeometry(x, pivotY + 0.04, z, doubleTier ? 0.98 : 0.80, highDetail));
   }
 
-  // 1. Heavy Ceiling Iron Anchor Rosette & Shackle Collar bolted to keystone
-  push(placeGeo(new THREE.CylinderGeometry(0.24, 0.18, 0.16, 8), x, pivotY - 0.18, z));
-  push(placeGeo(new THREE.TorusGeometry(0.11, 0.032, 4, 8), x, pivotY - 0.30, z));
+  // 1. Heavy Ceiling Forged Iron Rosette & Swivel Shackle
+  push(placeGeo(new THREE.CylinderGeometry(0.26, 0.19, 0.17, highDetail ? 12 : 8), x, pivotY - 0.18, z));
+  push(placeGeo(new THREE.TorusGeometry(0.115, 0.034, highDetail ? 6 : 4, highDetail ? 12 : 8), x, pivotY - 0.30, z));
 
-  // 2. Heavy Forged Iron Vertical Suspension Chain descending from ceiling boss to upper hub collar
+  // 2. Heavy Forged Vertical Iron Chain descending from keystone to upper hub canopy
   const hubCollarY = Math.min(pivotY - 0.55, doubleTier ? (cfg.upperY + 1.45) : (wheelY + 1.30));
   const chainTopY = pivotY - 0.34;
   const chainLen = Math.max(0.35, chainTopY - hubCollarY);
-  const linkStep = isMobile ? 0.38 : 0.27;
+  const linkStep = isMobile ? 0.38 : 0.21;
   const linkCount = Math.max(2, Math.floor(chainLen / linkStep));
   const actualStep = chainLen / linkCount;
 
-  push(placeGeo(new THREE.CylinderGeometry(0.028, 0.028, chainLen + 0.1, 5), x, (chainTopY + hubCollarY) * 0.5, z));
+  push(placeGeo(new THREE.CylinderGeometry(0.026, 0.026, chainLen + 0.1, 6), x, (chainTopY + hubCollarY) * 0.5, z));
   for (let i = 0; i < linkCount; i++) {
     const ly = chainTopY - (i + 0.5) * actualStep;
     const rotY = (i % 2) * (Math.PI * 0.5);
-    const link = new THREE.TorusGeometry(0.085, 0.026, 4, 6);
-    link.scale(0.68, 1.35, 1.0);
+    const link = new THREE.TorusGeometry(0.092, 0.028, highDetail ? 6 : 4, highDetail ? 10 : 6);
+    link.scale(0.68, 1.36, 1.0);
     link.rotateY(rotY);
     link.translate(x, ly, z);
     push(link);
   }
 
-  // 3. Central Forged Iron Hub Shaft, Flared Crowns & Hanging Gothic Plumb Finial
-  const shaftBotY = wheelY - 0.46;
+  // 3. Central Forged Iron Hub Shaft, Flared Gothic Canopy Crowns & Hanging Cage Plumb Finial
+  const shaftBotY = wheelY - 0.50;
   const shaftH = Math.max(0.5, hubCollarY - shaftBotY);
-  push(placeGeo(new THREE.CylinderGeometry(0.065, 0.085, shaftH, 6), x, (hubCollarY + shaftBotY) * 0.5, z));
-  push(placeGeo(new THREE.CylinderGeometry(0.22, 0.14, 0.22, 8), x, hubCollarY, z));
-  push(placeGeo(new THREE.CylinderGeometry(0.24, 0.28, 0.24, 8), x, wheelY, z));
-  push(placeGeo(new THREE.ConeGeometry(0.15, 0.52, 6), x, wheelY - 0.68, z, Math.PI, 0, 0));
+  const cylSegs = highDetail ? 10 : 6;
+  push(placeGeo(new THREE.CylinderGeometry(0.068, 0.090, shaftH, cylSegs), x, (hubCollarY + shaftBotY) * 0.5, z));
+  push(placeGeo(new THREE.CylinderGeometry(0.25, 0.14, 0.24, highDetail ? 12 : 8), x, hubCollarY, z));
+  push(placeGeo(new THREE.CylinderGeometry(0.26, 0.30, 0.25, highDetail ? 12 : 8), x, wheelY, z));
+  push(placeGeo(new THREE.ConeGeometry(0.165, 0.56, highDetail ? 8 : 6), x, wheelY - 0.72, z, Math.PI, 0, 0));
+  if (highDetail) {
+    // Ornate hanging forged iron ring beneath central plumb finial
+    push(placeGeo(new THREE.TorusGeometry(0.12, 0.024, 5, 12), x, wheelY - 1.04, z));
+  }
 
   // 4. Primary Lower Iron Wheel Tier (+ Upper Royal Crown Tier when tierCount >= 2!)
-  appendChandelierTier(ironParts, flameSpecs, cfg, radius, wheelY, cupCount, false);
+  appendChandelierTier(ironParts, candleParts, flameSpecs, cfg, radius, wheelY, cupCount, false, highDetail);
   if (doubleTier) {
-    appendChandelierTier(ironParts, flameSpecs, cfg, cfg.upperRadius, cfg.upperY, cfg.upperCupCount, true);
-    for (let k = 0; k < 4; k++) {
-      const a = (k / 4) * Math.PI * 2 + Math.PI * 0.25;
+    appendChandelierTier(ironParts, candleParts, flameSpecs, cfg, cfg.upperRadius, cfg.upperY, cfg.upperCupCount, true, highDetail);
+    const rodCount = highDetail ? 8 : 4;
+    for (let k = 0; k < rodCount; k++) {
+      const a = (k / rodCount) * Math.PI * 2 + Math.PI / rodCount;
       const lx = x + Math.cos(a) * (cfg.upperRadius + 0.22);
       const lz = z + Math.sin(a) * (cfg.upperRadius + 0.22);
       const dy = cfg.upperY - wheelY;
-      push(placeGeo(new THREE.CylinderGeometry(0.03, 0.03, dy, 5), lx, (wheelY + cfg.upperY) * 0.5, lz));
+      push(placeGeo(new THREE.CylinderGeometry(0.028, 0.028, dy, 5), lx, (wheelY + cfg.upperY) * 0.5, lz));
     }
   }
 }
 
-// Build 1 merged billboarded BufferGeometry for ALL chandelier candle/fire flames
+// Build 1 merged billboarded BufferGeometry for ALL chandelier candle flames
 function buildChandelierFlamesGeometry(flameSpecs) {
   const count = flameSpecs.length;
   const positions = new Float32Array(count * 4 * 3);
   const quadOffsets = new Float32Array(count * 4 * 2);
   const uvs = new Float32Array(count * 4 * 2);
   const pivotPhases = new Float32Array(count * 4 * 4);
-  const flameParams = new Float32Array(count * 4 * 2); // [flickerPhase, scale]
+  const flameParams = new Float32Array(count * 4 * 2);
   const indices = new Uint16Array(count * 6);
 
   const corners = [
@@ -1773,25 +2337,9 @@ function buildChandelierFlamesGeometry(flameSpecs) {
 // ============================================================================
 // 6. Main Factory: createSoulsCastleRoof(options)
 // ============================================================================
-/**
- * Builds the complete enclosed Gothic vaulted roof, cathedral dome, clerestory lancet windows,
- * and gently swaying wrought-iron chandeliers for the Chapter 26 Castle Arena (5 DC PC/Mobile, 4 DC LowSpec).
- * Synchronized 100% directly with `SOULS_CASTLE_CONSTANTS`, `SOULS_CASTLE_ROOMS`,
- * `SOULS_CASTLE_VAULTS`, and `SOULS_CASTLE_CHANDELIERS` from `soulsCastleLayout.js`.
- *
- * @param {object} [options]
- * @param {THREE.MeshStandardMaterial} [options.darkStoneMat]  Shared ashlar stone material from soulsArena.js
- * @param {THREE.MeshStandardMaterial} [options.trimStoneMat]  Shared carved trim stone material from soulsArena.js
- * @param {THREE.MeshStandardMaterial} [options.ironMat]       Shared wrought-iron material from soulsArena.js
- * @param {object} [options.pbr]                               Optional PBR suite from soulsPbrTextures.js
- * @param {THREE.Texture} [options.vaultStoneAlbedo]           Optional explicit vaulted stone albedo map
- * @param {THREE.Texture} [options.vaultStoneNormal]           Optional explicit vaulted stone normal map
- * @param {boolean} [options.isMobile=false]                   Mobile tessellation preset
- * @param {boolean} [options.lowSpec=false]                    Low-spec mode (drops normalMaps & chandelier flames -> 4 DC)
- * @param {boolean} [options.enableChandelierFlames=true]      Enable flickering flames on chandelier cups
- */
 export function createSoulsCastleRoof(options = {}) {
   const isMobile = Boolean(options.isMobile);
+  const highDetail = !isMobile;
   let lowSpecMode = Boolean(options.lowSpec);
   const enableChandelierFlames = options.enableChandelierFlames !== false;
 
@@ -1810,7 +2358,7 @@ export function createSoulsCastleRoof(options = {}) {
   };
 
   // ==========================================================================
-  // A. Owned Derived PBR Materials (Shares caller textures, NEVER disposes them!)
+  // A. Calibrated Next-Gen PBR Materials (PMREM reflections + 2K relief, 0 washout!)
   // ==========================================================================
   const srcDark = options.darkStoneMat || null;
   const srcTrim = options.trimStoneMat || null;
@@ -1820,7 +2368,7 @@ export function createSoulsCastleRoof(options = {}) {
   const vaultAlbedoMap = options.vaultStoneAlbedo || pbr?.vaultStoneAlbedo || srcDark?.map || pbr?.ashlarAlbedo || null;
   const vaultNormalMap = options.vaultStoneNormal || pbr?.vaultStoneNormal || srcDark?.normalMap || pbr?.ashlarNormal || null;
   const vaultRoughMap = srcDark?.roughnessMap || pbr?.ashlarRoughness || null;
-  const baseNormalScale = isMobile ? 1.05 : 1.35;
+  const baseNormalScale = isMobile ? 1.15 : 1.65;
 
   // DC #1 Material: Carved Gothic Vaulted Ceiling Stone (STRICT THREE.FrontSide!)
   const vaultShellMat = trackMat(new THREE.MeshStandardMaterial({
@@ -1828,17 +2376,18 @@ export function createSoulsCastleRoof(options = {}) {
     normalMap: lowSpecMode ? null : vaultNormalMap,
     normalScale: new THREE.Vector2(baseNormalScale, baseNormalScale),
     roughnessMap: vaultRoughMap,
-    color: 0xa2acc8,
-    emissive: new THREE.Color(0x2d3c5c),
+    color: 0x9aa5c2,
+    emissive: new THREE.Color(0x1f2b44),
     emissiveMap: vaultAlbedoMap,
-    emissiveIntensity: 0.72,
-    roughness: 0.94,
-    metalness: 0.08,
+    emissiveIntensity: 0.48,
+    roughness: 0.78,
+    metalness: 0.07,
+    envMapIntensity: 1.15,
     vertexColors: true,
     side: THREE.FrontSide
   }));
 
-  // DC #2 Material: Carved Limestone Gothic Vault Ribs, Arches, Keystones & Cornices (STRICT THREE.FrontSide!)
+  // DC #2 Material: Dressed Limestone 10-Face Gothic Ribs, Star-Tiercerons & Foliate Keystones (STRICT THREE.FrontSide!)
   const ribAlbedoMap = srcTrim?.map || pbr?.ashlarAlbedo || vaultAlbedoMap;
   const ribNormalMap = srcTrim?.normalMap || pbr?.ashlarNormal || vaultNormalMap;
   const ribRoughMap = srcTrim?.roughnessMap || pbr?.ashlarRoughness || vaultRoughMap;
@@ -1846,19 +2395,20 @@ export function createSoulsCastleRoof(options = {}) {
   const vaultRibsMat = trackMat(new THREE.MeshStandardMaterial({
     map: ribAlbedoMap,
     normalMap: lowSpecMode ? null : ribNormalMap,
-    normalScale: new THREE.Vector2(baseNormalScale * 0.92, baseNormalScale * 0.92),
+    normalScale: new THREE.Vector2(baseNormalScale * 0.90, baseNormalScale * 0.90),
     roughnessMap: ribRoughMap,
-    color: 0xc2cae2,
-    emissive: new THREE.Color(0x26324a),
+    color: 0xbcc6df,
+    emissive: new THREE.Color(0x1b253a),
     emissiveMap: ribAlbedoMap,
-    emissiveIntensity: 0.48,
-    roughness: 0.90,
+    emissiveIntensity: 0.36,
+    roughness: 0.68,
     metalness: 0.11,
+    envMapIntensity: 1.25,
     vertexColors: true,
     side: THREE.FrontSide
   }));
 
-  // DC #3 Material: Procedural Moonlit Clerestory Stained-Glass + Gothic Lead Tracery (STRICT THREE.FrontSide!)
+  // DC #3 Material: Deep-Recessed Stained-Glass Clerestory Windows w/ Sapphire-Lunar Lead Tracery (STRICT THREE.FrontSide!)
   const glassUniforms = {
     uTime: { value: 0 },
     uLowSpec: { value: lowSpecMode ? 1.0 : 0.0 },
@@ -1898,55 +2448,68 @@ export function createSoulsCastleRoof(options = {}) {
         vec2 uv = vUv;
         float cx = abs(uv.x - 0.5) * 2.0;
 
-        float outerLead = smoothstep(0.91, 0.96, cx) + smoothstep(0.04, 0.0, uv.y) + smoothstep(0.95, 0.99, uv.y);
-        float centerBar = 1.0 - smoothstep(0.022, 0.042, abs(uv.x - 0.5));
-        float hBar1 = 1.0 - smoothstep(0.012, 0.024, abs(uv.y - 0.30));
-        float hBar2 = 1.0 - smoothstep(0.012, 0.024, abs(uv.y - 0.60));
+        // Outer leaded border & horizontal wrought-iron saddle bars
+        float outerLead = smoothstep(0.90, 0.96, cx) + smoothstep(0.04, 0.0, uv.y) + smoothstep(0.95, 0.99, uv.y);
+        float centerBar = 1.0 - smoothstep(0.020, 0.038, abs(uv.x - 0.5));
+        float hBar1 = 1.0 - smoothstep(0.011, 0.022, abs(uv.y - 0.28));
+        float hBar2 = 1.0 - smoothstep(0.011, 0.022, abs(uv.y - 0.56));
 
+        // Gothic arch-head quatrefoil rose medallion
         vec2 roseDelta = vec2((uv.x - 0.5) * 1.35, (uv.y - 0.77) * 2.05);
         float roseDist = length(roseDelta);
-        float roseRing = 1.0 - smoothstep(0.025, 0.055, abs(roseDist - 0.24));
-        float roseCore = 1.0 - smoothstep(0.05, 0.09, roseDist);
+        float roseAng = atan(roseDelta.y, roseDelta.x);
+        float rosePetals = abs(roseDist - (0.21 + 0.035 * cos(roseAng * 4.0)));
+        float roseRing = 1.0 - smoothstep(0.020, 0.048, rosePetals);
+        float roseCore = 1.0 - smoothstep(0.04, 0.075, roseDist);
 
-        float d1 = abs(fract(uv.x * 5.0 + uv.y * 8.0) - 0.5);
-        float d2 = abs(fract(uv.x * 5.0 - uv.y * 8.0) - 0.5);
-        float diamondLead = (1.0 - smoothstep(0.028, 0.058, d1)) + (1.0 - smoothstep(0.028, 0.058, d2));
+        // Fine medieval diamond quarry lead-caming lattice
+        float d1 = abs(fract(uv.x * 6.0 + uv.y * 9.5) - 0.5);
+        float d2 = abs(fract(uv.x * 6.0 - uv.y * 9.5) - 0.5);
+        float diamondLead = (1.0 - smoothstep(0.026, 0.054, d1)) + (1.0 - smoothstep(0.026, 0.054, d2));
 
-        float leadMask = clamp(outerLead + centerBar + hBar1 + hBar2 + roseRing + roseCore * 0.6 + diamondLead * 0.58, 0.0, 1.0);
+        float leadMask = clamp(outerLead + centerBar + hBar1 + hBar2 + roseRing + roseCore * 0.55 + diamondLead * 0.56, 0.0, 1.0);
 
-        float vGrad = smoothstep(0.0, 0.85, uv.y);
-        float archCore = 1.0 - smoothstep(0.0, 0.92, cx * 0.72 + abs(uv.y - 0.62) * 0.55);
-        vec3 deepLunar = vec3(0.20, 0.33, 0.56);
-        vec3 paleLunar = vec3(0.54, 0.75, 1.00);
-        vec3 moonHeart = vec3(0.76, 0.89, 1.00);
+        // Rich gothic stained-glass palette: deep cobalt-sapphire border -> pale lunar silver-blue core + subtle warm gold rose heart
+        float borderBand = smoothstep(0.68, 0.90, cx);
+        float vGrad = smoothstep(0.0, 0.86, uv.y);
+        float archCore = 1.0 - smoothstep(0.0, 0.90, cx * 0.72 + abs(uv.y - 0.62) * 0.55);
 
-        vec3 glassCol = mix(deepLunar, paleLunar, vGrad * 0.65 + archCore * 0.35);
-        glassCol = mix(glassCol, moonHeart, archCore * (0.28 + 0.34 * vKind));
+        vec3 sapphireEdge = vec3(0.11, 0.21, 0.44);
+        vec3 deepLunar    = vec3(0.22, 0.36, 0.60);
+        vec3 paleLunar    = vec3(0.52, 0.73, 0.98);
+        vec3 moonHeart    = vec3(0.74, 0.88, 1.00);
+        vec3 goldRoseTint = vec3(0.76, 0.62, 0.36);
+
+        vec3 glassCol = mix(deepLunar, paleLunar, vGrad * 0.62 + archCore * 0.38);
+        glassCol = mix(glassCol, sapphireEdge, borderBand * 0.65);
+        glassCol = mix(glassCol, moonHeart, archCore * (0.24 + 0.30 * vKind));
+        float inRose = 1.0 - smoothstep(0.14, 0.22, roseDist);
+        glassCol = mix(glassCol, goldRoseTint, inRose * 0.38);
 
         if (uLowSpec < 0.5) {
           float cloudWave = 0.88 + 0.12 * sin(uv.x * 4.2 + uTime * 0.24 + vWorldPos.z * 0.15)
                                        * cos(uv.y * 3.1 - uTime * 0.18 + vWorldPos.x * 0.12);
           vec3 viewDir = normalize(uCamPos - vWorldPos);
           float fresnel = pow(1.0 - max(0.0, dot(normalize(vWorldNormal), viewDir)), 2.0);
-          glassCol *= cloudWave * (1.0 + fresnel * 0.26);
+          glassCol *= cloudWave * (1.0 + fresnel * 0.24);
         }
 
-        glassCol *= (1.0 + 0.34 * vKind);
+        glassCol *= (0.96 + 0.28 * vKind);
 
-        vec3 leadCol = vec3(0.032, 0.038, 0.054);
+        vec3 leadCol = vec3(0.026, 0.032, 0.048);
         vec3 finalCol = mix(glassCol, leadCol, leadMask);
 
         float camDist = length(uCamPos - vWorldPos);
         float fogAmt = smoothstep(30.0, 108.0, camDist) * 0.52;
-        finalCol = mix(finalCol, vec3(0.055, 0.070, 0.112), fogAmt);
+        finalCol = mix(finalCol, vec3(0.050, 0.064, 0.104), fogAmt);
 
-        float alpha = mix(0.82 + 0.10 * vKind, 0.96, leadMask);
+        float alpha = mix(0.84 + 0.08 * vKind, 0.97, leadMask);
         gl_FragColor = vec4(finalCol, alpha);
       }
     `
   }));
 
-  // DC #4 Material: Forged Wrought-Iron Chandeliers w/ Rigid-Body GPU Pendulum Sway around each Ceiling Anchor!
+  // DC #4 Material: Hand-Forged Blackened Wrought-Iron Chandeliers w/ Metallic PMREM Glints + GPU Pendulum Sway!
   const ironNormalMap = srcIron?.normalMap || pbr?.ironNormal || null;
   const ironRoughMap = srcIron?.roughnessMap || pbr?.ironRoughness || null;
   const chandelierSwayUniforms = {
@@ -1956,16 +2519,17 @@ export function createSoulsCastleRoof(options = {}) {
 
   const chandeliersIronMat = trackMat(new THREE.MeshStandardMaterial({
     normalMap: lowSpecMode ? null : ironNormalMap,
-    normalScale: new THREE.Vector2(0.95, 0.95),
+    normalScale: new THREE.Vector2(1.25, 1.25),
     roughnessMap: ironRoughMap,
-    color: srcIron?.color ? srcIron.color.clone() : new THREE.Color(0x2d323e),
-    emissive: new THREE.Color(0x24160c),
-    emissiveIntensity: 0.28,
-    roughness: 0.86,
-    metalness: 0.86,
+    color: new THREE.Color(0x323846),
+    emissive: new THREE.Color(0x180e07),
+    emissiveIntensity: 0.18,
+    roughness: 0.48,
+    metalness: 0.88,
+    envMapIntensity: 1.45,
     side: THREE.FrontSide
   }));
-  chandeliersIronMat.customProgramCacheKey = () => 'souls_chandelier_pendulum_v2';
+  chandeliersIronMat.customProgramCacheKey = () => 'souls_chandelier_pendulum_v3';
   chandeliersIronMat.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = chandelierSwayUniforms.uTime;
     shader.uniforms.uSwayAmp = chandelierSwayUniforms.uSwayAmp;
@@ -1992,7 +2556,60 @@ export function createSoulsCastleRoof(options = {}) {
       );
   };
 
-  // DC #5 Material: GPU Billboarded Flickering Candle/Oil Flames locked bit-for-bit to Chandelier Pendulum Sway!
+  // DC #5 Material: 3D Melted Beeswax Pillar Candles w/ Warm Subsurface Flame-Top Translucency & GPU Sway!
+  const chandelierCandlesMat = trackMat(new THREE.MeshStandardMaterial({
+    color: new THREE.Color(0xdccfb4),
+    roughness: 0.62,
+    metalness: 0.02,
+    emissive: new THREE.Color(0x2e1c0a),
+    emissiveIntensity: 0.35,
+    side: THREE.FrontSide
+  }));
+  chandelierCandlesMat.customProgramCacheKey = () => 'souls_chandelier_wax_sss_v1';
+  chandelierCandlesMat.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = chandelierSwayUniforms.uTime;
+    shader.uniforms.uSwayAmp = chandelierSwayUniforms.uSwayAmp;
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+        attribute vec4 aPivotPhase;
+        attribute vec2 aWaxGlow;
+        uniform float uTime;
+        uniform float uSwayAmp;
+        varying vec2 vWaxGlow;`
+      )
+      .replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+        vWaxGlow = aWaxGlow;
+        vec3 chRel = transformed - aPivotPhase.xyz;
+        float chAmp = uSwayAmp * step(0.01, -chRel.y);
+        float chAx = sin(uTime * 0.66 + aPivotPhase.w) * 0.016 * chAmp;
+        float chAz = cos(uTime * 0.54 + aPivotPhase.w * 1.41) * 0.013 * chAmp;
+        float chCx = cos(chAx), chSx = sin(chAx);
+        float chCz = cos(chAz), chSz = sin(chAz);
+        vec3 chR1 = vec3(chRel.x * chCz - chRel.y * chSz, chRel.x * chSz + chRel.y * chCz, chRel.z);
+        vec3 chR2 = vec3(chR1.x, chR1.y * chCx - chR1.z * chSx, chR1.y * chSx + chR1.z * chCx);
+        transformed = aPivotPhase.xyz + chR2;`
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+        uniform float uTime;
+        varying vec2 vWaxGlow;`
+      )
+      .replace(
+        '#include <emissivemap_fragment>',
+        `#include <emissivemap_fragment>
+        float sssFlick = 0.86 + 0.14 * sin(uTime * 9.5 + vWaxGlow.y);
+        float topTranslucency = pow(clamp(vWaxGlow.x, 0.0, 1.0), 2.4);
+        totalEmissiveRadiance += vec3(0.96, 0.52, 0.14) * topTranslucency * sssFlick * 0.92;`
+      );
+  };
+
+  // DC #6 Material: Multi-Layer Blackbody Flickering Candle Flames locked bit-for-bit to Wick Tips!
   const flameUniforms = {
     uTime: { value: 0 },
     uSwayAmp: chandelierSwayUniforms.uSwayAmp
@@ -2011,10 +2628,12 @@ export function createSoulsCastleRoof(options = {}) {
       uniform float uSwayAmp;
       varying vec2 vUv;
       varying float vFlicker;
+      varying float vPhase;
       void main() {
         vUv = uv;
         float fPhase = aFlameParam.x;
         float fScale = aFlameParam.y;
+        vPhase = fPhase;
         float flick = 0.88 + 0.12 * sin(uTime * 9.5 + fPhase) + 0.07 * sin(uTime * 17.2 + fPhase * 1.7);
         vFlicker = flick;
 
@@ -2029,34 +2648,40 @@ export function createSoulsCastleRoof(options = {}) {
         vec3 worldCenter = aPivotPhase.xyz + r2;
 
         vec4 mvCenter = modelViewMatrix * vec4(worldCenter, 1.0);
-        float wSize = fScale * (0.94 + 0.10 * flick);
-        float hSize = fScale * 1.48 * flick;
-        float tipSway = sin(uTime * 11.0 + fPhase) * 0.08 * max(0.0, uv.y);
+        float wSize = fScale * (0.90 + 0.10 * flick);
+        float hSize = fScale * 1.44 * flick;
+        float tipSway = sin(uTime * 11.2 + fPhase) * 0.075 * pow(max(0.0, uv.y), 1.4);
         mvCenter.x += (aQuadOffset.x + tipSway) * wSize;
         mvCenter.y += aQuadOffset.y * hSize;
         gl_Position = projectionMatrix * mvCenter;
       }
     `,
     fragmentShader: `
+      uniform float uTime;
       varying vec2 vUv;
       varying float vFlicker;
+      varying float vPhase;
       void main() {
         vec2 p = vec2((vUv.x - 0.5) * 2.0, vUv.y);
-        float widthAtY = mix(0.68, 0.05, pow(clamp(p.y, 0.0, 1.0), 0.72));
-        float dx = abs(p.x) / max(0.04, widthAtY);
-        float flameBody = smoothstep(1.0, 0.15, dx) * smoothstep(0.0, 0.14, p.y) * smoothstep(1.0, 0.42, p.y);
-        float innerCore = smoothstep(0.62, 0.05, length(vec2(p.x * 1.6, (p.y - 0.24) * 2.1)));
-        float halo = smoothstep(0.95, 0.05, length(vec2(p.x * 0.92, (p.y - 0.34) * 1.12))) * 0.32;
+        float wobble = sin(p.y * 6.5 - uTime * 13.0 + vPhase) * 0.07 * p.y;
+        float px = p.x + wobble;
+        float widthAtY = mix(0.64, 0.04, pow(clamp(p.y, 0.0, 1.0), 0.74));
+        float dx = abs(px) / max(0.035, widthAtY);
+        float flameBody = smoothstep(1.0, 0.14, dx) * smoothstep(0.0, 0.13, p.y) * smoothstep(1.0, 0.38, p.y);
+        float innerCore = smoothstep(0.58, 0.04, length(vec2(px * 1.65, (p.y - 0.22) * 2.15)));
+        float blueBase  = smoothstep(0.42, 0.04, length(vec2(px * 1.9, (p.y - 0.09) * 3.4)));
+        float halo = smoothstep(0.96, 0.04, length(vec2(px * 0.90, (p.y - 0.34) * 1.12))) * 0.26;
 
-        float intensity = clamp(flameBody * 0.92 + innerCore * 0.85 + halo, 0.0, 1.0);
+        float intensity = clamp(flameBody * 0.92 + innerCore * 0.88 + halo, 0.0, 1.0);
         if (intensity < 0.015) discard;
 
-        vec3 outerOrange = vec3(1.00, 0.38, 0.06);
-        vec3 midGold = vec3(1.00, 0.72, 0.22);
-        vec3 hotCore = vec3(1.00, 0.96, 0.78);
-        vec3 col = mix(outerOrange, midGold, clamp(flameBody, 0.0, 1.0));
+        vec3 crimsonVeil = vec3(0.92, 0.24, 0.03);
+        vec3 amberBody   = vec3(1.00, 0.66, 0.16);
+        vec3 hotCore     = vec3(1.00, 0.96, 0.82);
+        vec3 col = mix(crimsonVeil, amberBody, clamp(flameBody * 1.15, 0.0, 1.0));
+        col = mix(col, vec3(0.35, 0.55, 1.0), blueBase * 0.32);
         col = mix(col, hotCore, clamp(innerCore, 0.0, 1.0));
-        gl_FragColor = vec4(col * vFlicker, intensity * 0.92);
+        gl_FragColor = vec4(col * vFlicker, intensity * 0.90);
       }
     `
   }));
@@ -2068,22 +2693,23 @@ export function createSoulsCastleRoof(options = {}) {
   ];
 
   // ==========================================================================
-  // B. Assemble All Architectural Roof Buckets from SOULS_CASTLE_ROOF_SPEC
+  // B. Assemble All High-Gothic Architectural Roof Buckets
   // ==========================================================================
   const shellParts = [];
   const ribParts = [];
   const glassParts = [];
   const windowRegistry = [];
 
-  const segU = isMobile ? 4 : 6;
-  const segT = isMobile ? 3 : 5;
+  // 2x higher curve & vault tessellation on PC (`highDetail`), lean on Mobile!
+  const segU = isMobile ? 4 : 10;
+  const segT = isMobile ? 3 : 8;
 
   // --------------------------------------------------------------------------
-  // 1. BONFIRE HALL (`courtyard`, x in [-9, +9], z in [20, 38], 3 Groin Bays -> apexY = 11.4)
+  // 1. BONFIRE HALL (`courtyard`, x in [-9, +9], z in [20, 38], 3 Star-Groin Bays -> apexY = 11.4)
   // --------------------------------------------------------------------------
   const cy = SOULS_CASTLE_ROOF_SPEC.courtyard;
-  const cyHalfInnerX = (cy.maxX - cy.minX) * 0.5; // 9.0
-  const cyHx = cyHalfInnerX + cy.wallOverlapX;    // 9.38
+  const cyHalfInnerX = (cy.maxX - cy.minX) * 0.5;
+  const cyHx = cyHalfInnerX + cy.wallOverlapX;
 
   for (let b = 0; b < cy.baysZ.length - 1; b++) {
     const z0 = cy.baysZ[b];
@@ -2107,6 +2733,7 @@ export function createSoulsCastleRoof(options = {}) {
       wallHeight: cy.wallHeight,
       segU,
       segT,
+      highDetail,
       shellParts,
       ribParts,
       glassParts,
@@ -2115,19 +2742,20 @@ export function createSoulsCastleRoof(options = {}) {
       addEastLunette: true,
       addWestWindow: true,
       addEastWindow: true,
-      windowWidth: 1.90,
+      windowWidth: 1.88,
       includeKeystone: true,
-      keystoneScale: b === 1 ? 1.24 : 1.08
+      keystoneScale: b === 1 ? 1.28 : 1.12
     });
   }
 
-  // Sculpted stone Bonfire smoke-oculus crown ring on the vaulted ceiling above the Bonfire!
+  // Sculpted stone Bonfire smoke-oculus crown ring + radial collar bosses above Bonfire!
   if (cy.oculus) {
     const ocR = Math.min(2.15, cy.oculus.radius * 0.85);
     const ocY = evaluateExactRoofHeight('courtyard', cy.oculus.x, cy.oculus.z) - 0.14;
+    const ocSegs = highDetail ? 32 : 16;
     const ocPts = [];
-    for (let i = 0; i < 16; i++) {
-      const a = (i / 16) * Math.PI * 2;
+    for (let i = 0; i < ocSegs; i++) {
+      const a = (i / ocSegs) * Math.PI * 2;
       ocPts.push({
         x: cy.oculus.x + Math.cos(a) * ocR,
         y: ocY,
@@ -2135,78 +2763,81 @@ export function createSoulsCastleRoof(options = {}) {
       });
     }
     const ocRing = createGothicRibGeometry(ocPts, {
-      width: 0.36,
-      depth: 0.28,
+      width: 0.38,
+      depth: 0.30,
       dropDir: [0, -1, 0],
       closedLoop: true,
       tintR: 0.96,
       tintG: 0.98,
-      tintB: 1.04
+      tintB: 1.04,
+      highDetail
     });
     if (ocRing) ribParts.push(ocRing);
   }
 
-  // Courtyard Transverse Pointed Arches + Wall Springer Corbels + Perimeter Cornices
+  // Courtyard Transverse Pointed Arches + Multi-Tiered Wall Corbels + Moulded Cornices
   const co = SOULS_CASTLE_ROOF_SPEC.corridor;
-  const coHalfInnerX = (co.maxX - co.minX) * 0.5; // 5.0
-  const coHx = coHalfInnerX + co.wallOverlapX;    // 5.38
+  const coHalfInnerX = (co.maxX - co.minX) * 0.5;
+  const coHx = coHalfInnerX + co.wallOverlapX;
 
   for (let i = 0; i < cy.baysZ.length; i++) {
     const bz = Math.max(cy.minZ + 0.04, Math.min(cy.maxZ - 0.04, cy.baysZ[i]));
-    appendTransverseArchRib(ribParts, 0, cyHalfInnerX, cyHx, bz, cy.springY, cy.transRise, 0.56, 0.42, isMobile ? 10 : 14);
-    ribParts.push(createWallCorbelGeometry(-cyHalfInnerX, cy.springY + 0.04, bz, 1, 0, 0.72, 0.56, 1.08));
-    ribParts.push(createWallCorbelGeometry(cyHalfInnerX, cy.springY + 0.04, bz, -1, 0, 0.72, 0.56, 1.08));
+    appendTransverseArchRib(ribParts, 0, cyHalfInnerX, cyHx, bz, cy.springY, cy.transRise, 0.58, 0.44, isMobile ? 10 : 22, highDetail);
+    ribParts.push(createWallCorbelGeometry(-cyHalfInnerX, cy.springY + 0.04, bz, 1, 0, 0.74, 0.58, 1.10, highDetail));
+    ribParts.push(createWallCorbelGeometry(cyHalfInnerX, cy.springY + 0.04, bz, -1, 0, 0.74, 0.58, 1.10, highDetail));
   }
-  ribParts.push(createWallCorniceGeometry(-cyHalfInnerX, cy.minZ, -cyHalfInnerX, cy.maxZ, cy.springY + 0.06, 1, 0, 0.44, 0.36));
-  ribParts.push(createWallCorniceGeometry(cyHalfInnerX, cy.minZ, cyHalfInnerX, cy.maxZ, cy.springY + 0.06, -1, 0, 0.44, 0.36));
-  ribParts.push(createWallCorniceGeometry(-cyHalfInnerX, cy.maxZ, cyHalfInnerX, cy.maxZ, cy.springY + 0.06, 0, -1, 0.44, 0.36));
-  ribParts.push(createWallCorniceGeometry(-cyHalfInnerX, cy.minZ, -coHalfInnerX, cy.minZ, cy.springY + 0.06, 0, 1, 0.44, 0.36));
-  ribParts.push(createWallCorniceGeometry(coHalfInnerX, cy.minZ, cyHalfInnerX, cy.minZ, cy.springY + 0.06, 0, 1, 0.44, 0.36));
+  ribParts.push(createWallCorniceGeometry(-cyHalfInnerX, cy.minZ, -cyHalfInnerX, cy.maxZ, cy.springY + 0.06, 1, 0, 0.46, 0.38, highDetail));
+  ribParts.push(createWallCorniceGeometry(cyHalfInnerX, cy.minZ, cyHalfInnerX, cy.maxZ, cy.springY + 0.06, -1, 0, 0.46, 0.38, highDetail));
+  ribParts.push(createWallCorniceGeometry(-cyHalfInnerX, cy.maxZ, cyHalfInnerX, cy.maxZ, cy.springY + 0.06, 0, -1, 0.46, 0.38, highDetail));
+  ribParts.push(createWallCorniceGeometry(-cyHalfInnerX, cy.minZ, -coHalfInnerX, cy.minZ, cy.springY + 0.06, 0, 1, 0.46, 0.38, highDetail));
+  ribParts.push(createWallCorniceGeometry(coHalfInnerX, cy.minZ, cyHalfInnerX, cy.minZ, cy.springY + 0.06, 0, 1, 0.46, 0.38, highDetail));
 
-  // Watertight South Gable Tympanum (z = 38.02, normal -Z) + Monumental Triple-Lancet South Cathedral Window
+  // South Gable Perforated Tympanum (z = 38.02, normal -Z) + Deep-Recessed South Cathedral Lancet Window!
   const cyArchTopFn = (x) => cy.springY + cy.transRise * gothicOgive(Math.abs(x) / cyHx, 0.48) + 0.08;
-  shellParts.push(buildGableTympanumZ(cy.maxZ + 0.02, -cyHx, cyHx, () => cy.springY - 0.16, cyArchTopFn, -1, 18, 3.2));
-  appendClerestoryLancetWindow(glassParts, ribParts, windowRegistry, {
+  const southWinW = 2.25;
+  const southSplayHW = southWinW * 0.5 * 1.16;
+  const southWinBot = cy.wallHeight + 0.06;
+  const southWinTop = cy.springY + cy.transRise - 0.24;
+  appendPerforatedLunetteWall(shellParts, {
+    cx: 0,
+    cz: cy.maxZ + 0.02,
+    axis: 'z',
+    wallCoord: cy.maxZ + 0.02,
+    inNx: 0,
+    inNz: -1,
+    spanHalf: cyHx,
+    yBotCurve: cy.springY - 0.16,
+    yTopFn: cyArchTopFn,
+    steps: highDetail ? 26 : 16,
+    tileScale: 3.2,
+    hole: { halfW: southSplayHW, yBot: southWinBot - 0.05, yTop: southWinTop + 0.06 }
+  });
+  appendClerestoryLancetWindow(shellParts, glassParts, ribParts, windowRegistry, {
     id: 'clerestory_courtyard_south_center',
     roomId: 'courtyard',
     x: 0.0,
-    yBot: cy.wallHeight + 0.08,
-    yTop: cy.springY + cy.transRise - 0.22,
-    z: cy.maxZ,
-    width: 2.15,
+    yBot: southWinBot,
+    yTop: southWinTop,
+    z: cy.maxZ + 0.02,
+    width: southWinW,
     inwardNx: 0,
     inwardNz: -1,
     winKind: 0.0,
-    addStoneFrame: true
+    recessDepth: 0.44,
+    splayHalfW: southSplayHW,
+    splayBotY: southWinBot - 0.05,
+    splayTopY: southWinTop + 0.06,
+    addStoneFrame: true,
+    highDetail
   });
-  for (const sx of [-2.60, 2.60]) {
-    appendClerestoryLancetWindow(glassParts, ribParts, windowRegistry, {
-      id: `clerestory_courtyard_south_${sx < 0 ? 'w' : 'e'}`,
-      roomId: 'courtyard',
-      x: sx,
-      yBot: cy.wallHeight + 0.08,
-      yTop: cy.springY + cy.transRise * 0.72,
-      z: cy.maxZ,
-      width: 1.32,
-      inwardNx: 0,
-      inwardNz: -1,
-      winKind: 0.0,
-      addStoneFrame: true
-    });
-  }
 
   // Watertight North Transition Tympanum (z = 19.98, normal +Z facing Courtyard)
   const coArchTopFn = (x) => co.springY + co.transRise * gothicOgive(Math.abs(x) / coHx, 0.48) + 0.06;
-  const cyNorthBotFn = (x) => {
-    if (Math.abs(x) < coHalfInnerX + 0.02) {
-      return coArchTopFn(x) - 0.12;
-    }
-    return cy.springY - 0.16;
-  };
-  shellParts.push(buildGableTympanumZ(cy.minZ - 0.02, -cyHx, cyHx, cyNorthBotFn, cyArchTopFn, +1, 22, 3.2));
+  const cyNorthBotFn = (x) => (Math.abs(x) < coHalfInnerX + 0.02 ? coArchTopFn(x) - 0.12 : cy.springY - 0.16);
+  shellParts.push(buildGableTympanumZ(cy.minZ - 0.02, -cyHx, cyHx, cyNorthBotFn, cyArchTopFn, +1, highDetail ? 30 : 22, 3.2));
 
   // --------------------------------------------------------------------------
-  // 2. GRAND 36m CASTLE CORRIDOR (`corridor`, x in [-5, +5], z in [-16, 20], 6 Groin Bays -> apexY = 10.2)
+  // 2. GRAND 36m CASTLE CORRIDOR (`corridor`, x in [-5, +5], z in [-16, 20], 6 Star-Groin Bays -> apexY = 10.2)
   // --------------------------------------------------------------------------
   for (let b = 0; b < co.baysZ.length - 1; b++) {
     const z0 = co.baysZ[b];
@@ -2230,6 +2861,7 @@ export function createSoulsCastleRoof(options = {}) {
       wallHeight: co.wallHeight,
       segU,
       segT,
+      highDetail,
       shellParts,
       ribParts,
       glassParts,
@@ -2238,35 +2870,34 @@ export function createSoulsCastleRoof(options = {}) {
       addEastLunette: true,
       addWestWindow: true,
       addEastWindow: true,
-      windowWidth: 1.50,
+      windowWidth: 1.48,
       includeKeystone: true,
-      keystoneScale: 0.94
+      keystoneScale: 0.98
     });
   }
 
-  // Corridor Transverse Pointed Arches, Corbels & Perimeter Cornices along full 36m span
   for (let i = 0; i < co.baysZ.length; i++) {
     const bz = Math.max(co.minZ + 0.08, Math.min(co.maxZ - 0.04, co.baysZ[i]));
-    appendTransverseArchRib(ribParts, 0, coHalfInnerX, coHx, bz, co.springY, co.transRise, 0.48, 0.36, isMobile ? 9 : 12);
-    ribParts.push(createWallCorbelGeometry(-coHalfInnerX, co.springY + 0.04, bz, 1, 0, 0.58, 0.44, 0.88));
-    ribParts.push(createWallCorbelGeometry(coHalfInnerX, co.springY + 0.04, bz, -1, 0, 0.58, 0.44, 0.88));
+    appendTransverseArchRib(ribParts, 0, coHalfInnerX, coHx, bz, co.springY, co.transRise, 0.50, 0.38, isMobile ? 9 : 20, highDetail);
+    ribParts.push(createWallCorbelGeometry(-coHalfInnerX, co.springY + 0.04, bz, 1, 0, 0.60, 0.46, 0.90, highDetail));
+    ribParts.push(createWallCorbelGeometry(coHalfInnerX, co.springY + 0.04, bz, -1, 0, 0.60, 0.46, 0.90, highDetail));
   }
-  ribParts.push(createWallCorniceGeometry(-coHalfInnerX, co.minZ, -coHalfInnerX, co.maxZ, co.springY + 0.05, 1, 0, 0.38, 0.30));
-  ribParts.push(createWallCorniceGeometry(coHalfInnerX, co.minZ, coHalfInnerX, co.maxZ, co.springY + 0.05, -1, 0, 0.38, 0.30));
+  ribParts.push(createWallCorniceGeometry(-coHalfInnerX, co.minZ, -coHalfInnerX, co.maxZ, co.springY + 0.05, 1, 0, 0.40, 0.32, highDetail));
+  ribParts.push(createWallCorniceGeometry(coHalfInnerX, co.minZ, coHalfInnerX, co.maxZ, co.springY + 0.05, -1, 0, 0.40, 0.32, highDetail));
 
   // Watertight Corridor North End Tympanum above Boss Doors (z = -15.95, normal +Z facing Corridor)
   const bossHalfW = SOULS_CASTLE_CONSTANTS.BOSS_PORTAL_HALF_W + 0.10;
   const coNorthBotFn = (x) => (Math.abs(x) < bossHalfW ? gothicBossDoorArchY(x) : co.springY - 0.16);
-  shellParts.push(buildGableTympanumZ(co.minZ + 0.05, -coHx, coHx, coNorthBotFn, coArchTopFn, +1, 20, 3.2));
+  shellParts.push(buildGableTympanumZ(co.minZ + 0.05, -coHx, coHx, coNorthBotFn, coArchTopFn, +1, highDetail ? 28 : 20, 3.2));
 
   // --------------------------------------------------------------------------
   // 3. EAST ALCOVE CHAPEL (`east_alcove`, x in [5.8, 13.8], z in [-5, 4] -> apexY = 8.9)
   // --------------------------------------------------------------------------
   const ea = SOULS_CASTLE_ROOF_SPEC.eastAlcove;
-  const eaCx = (ea.minX + ea.maxX) * 0.5;      // 9.8
-  const eaCz = (ea.minZ + ea.maxZ) * 0.5;      // -0.5
-  const eaInnerHx = (ea.maxX - ea.minX) * 0.5; // 4.0
-  const eaInnerHz = (ea.maxZ - ea.minZ) * 0.5; // 4.5
+  const eaCx = (ea.minX + ea.maxX) * 0.5;
+  const eaCz = (ea.minZ + ea.maxZ) * 0.5;
+  const eaInnerHx = (ea.maxX - ea.minX) * 0.5;
+  const eaInnerHz = (ea.maxZ - ea.minZ) * 0.5;
   const eaHx = eaInnerHx + ea.wallOverlap;
   const eaHz = eaInnerHz + ea.wallOverlap;
 
@@ -2287,6 +2918,7 @@ export function createSoulsCastleRoof(options = {}) {
     wallHeight: ea.wallHeight,
     segU,
     segT,
+    highDetail,
     shellParts,
     ribParts,
     glassParts,
@@ -2296,19 +2928,18 @@ export function createSoulsCastleRoof(options = {}) {
     addNorthLunette: true,
     addSouthLunette: true,
     addWestWindow: false,
-    addEastWindow: true, // Moonlit sanctuary window directly above the Estus Relic Shrine!
+    addEastWindow: true,
     addNorthWindow: false,
     addSouthWindow: false,
-    windowWidth: 1.68,
+    windowWidth: 1.65,
     includeKeystone: true,
-    keystoneScale: 0.88
+    keystoneScale: 0.92
   });
 
-  // East Alcove Perimeter Cornices & 4 Corner Corbels
-  ribParts.push(createWallCorniceGeometry(ea.minX, ea.minZ, ea.maxX, ea.minZ, ea.springY + 0.05, 0, 1, 0.34, 0.26));
-  ribParts.push(createWallCorniceGeometry(ea.minX, ea.maxZ, ea.maxX, ea.maxZ, ea.springY + 0.05, 0, -1, 0.34, 0.26));
-  ribParts.push(createWallCorniceGeometry(ea.maxX, ea.minZ, ea.maxX, ea.maxZ, ea.springY + 0.05, -1, 0, 0.34, 0.26));
-  ribParts.push(createWallCorniceGeometry(ea.minX, ea.minZ, ea.minX, ea.maxZ, ea.springY + 0.05, 1, 0, 0.34, 0.26));
+  ribParts.push(createWallCorniceGeometry(ea.minX, ea.minZ, ea.maxX, ea.minZ, ea.springY + 0.05, 0, 1, 0.36, 0.28, highDetail));
+  ribParts.push(createWallCorniceGeometry(ea.minX, ea.maxZ, ea.maxX, ea.maxZ, ea.springY + 0.05, 0, -1, 0.36, 0.28, highDetail));
+  ribParts.push(createWallCorniceGeometry(ea.maxX, ea.minZ, ea.maxX, ea.maxZ, ea.springY + 0.05, -1, 0, 0.36, 0.28, highDetail));
+  ribParts.push(createWallCorniceGeometry(ea.minX, ea.minZ, ea.minX, ea.maxZ, ea.springY + 0.05, 1, 0, 0.36, 0.28, highDetail));
   for (const sx of [-1, 1]) {
     for (const sz of [-1, 1]) {
       const invLen = 1 / Math.SQRT2;
@@ -2319,9 +2950,10 @@ export function createSoulsCastleRoof(options = {}) {
           eaCz + sz * eaInnerHz,
           -sx * invLen,
           -sz * invLen,
-          0.56,
-          0.44,
-          0.84
+          0.58,
+          0.46,
+          0.86,
+          highDetail
         )
       );
     }
@@ -2333,18 +2965,19 @@ export function createSoulsCastleRoof(options = {}) {
   buildBossCathedralDome(shellParts, ribParts, glassParts, windowRegistry, isMobile);
 
   // --------------------------------------------------------------------------
-  // 5. All 7 Wrought-Iron Gothic Chandeliers (synced 1:1 with SOULS_CASTLE_CHANDELIERS)
+  // 5. All 7 High-Detail Wrought-Iron Chandeliers + 3D Melted Wax Candles + Flames
   // --------------------------------------------------------------------------
   const ironParts = [];
+  const candleParts = [];
   const flameSpecs = [];
   for (let i = 0; i < CHANDELIER_SPECS.length; i++) {
-    appendGothicChandelier(ironParts, flameSpecs, ribParts, CHANDELIER_SPECS[i], isMobile);
+    appendGothicChandelier(ironParts, candleParts, flameSpecs, ribParts, CHANDELIER_SPECS[i], isMobile);
   }
 
   // ==========================================================================
-  // C. Merge Into Strictly 5 Draw-Call Meshes (4 DC LowSpec, 0 CastShadow!)
+  // C. Merge Into Strictly 6 Draw-Call Meshes (<= 7 DC Budget! 4 DC LowSpec!)
   // ==========================================================================
-  // 1. Vaulted Ceiling Shell [1 DC]
+  // 1. Vaulted Ceiling Shell + Deep Splayed Window Embrasures [1 DC]
   const vaultShellGeo = trackGeo(mergeStoneParts(shellParts));
   vaultShellGeo.computeBoundingSphere();
   const vaultShellMesh = new THREE.Mesh(vaultShellGeo, vaultShellMat);
@@ -2353,7 +2986,7 @@ export function createSoulsCastleRoof(options = {}) {
   vaultShellMesh.receiveShadow = false;
   group.add(vaultShellMesh);
 
-  // 2. Sculpted Gothic Vault Ribs, Arches, Keystones, Corbels & Cornices [1 DC]
+  // 2. Sculpted 10-Face Gothic Ribs, Star-Tiercerons, Foliate Keystones & Y-Tracery [1 DC]
   const vaultRibsGeo = trackGeo(mergeStoneParts(ribParts));
   vaultRibsGeo.computeBoundingSphere();
   const vaultRibsMesh = new THREE.Mesh(vaultRibsGeo, vaultRibsMat);
@@ -2362,7 +2995,7 @@ export function createSoulsCastleRoof(options = {}) {
   vaultRibsMesh.receiveShadow = false;
   group.add(vaultRibsMesh);
 
-  // 3. Moonlit Gothic Clerestory & Cathedral Dome Lantern Stained-Glass Windows [1 DC]
+  // 3. Deep-Recessed Moonlit Clerestory & Dome Lantern Stained-Glass Windows [1 DC]
   const clerestoryGlassGeo = trackGeo(mergeGeometries(glassParts, false));
   for (let i = 0; i < glassParts.length; i++) glassParts[i].dispose();
   clerestoryGlassGeo.computeBoundingSphere();
@@ -2373,7 +3006,7 @@ export function createSoulsCastleRoof(options = {}) {
   clerestoryGlassMesh.renderOrder = 3;
   group.add(clerestoryGlassMesh);
 
-  // 4. Merged Wrought-Iron Swaying Gothic Chandeliers & Heavy Chains [1 DC]
+  // 4. Merged Forged Wrought-Iron Chandeliers & 3D Chains [1 DC]
   const chandeliersIronGeo = trackGeo(mergeGeometries(ironParts, false));
   for (let i = 0; i < ironParts.length; i++) ironParts[i].dispose();
   applyBoxProjectedUVs(chandeliersIronGeo, 1.4);
@@ -2384,7 +3017,18 @@ export function createSoulsCastleRoof(options = {}) {
   chandeliersIronMesh.receiveShadow = false;
   group.add(chandeliersIronMesh);
 
-  // 5. Merged GPU Billboarded Flickering Chandelier Flames [1 DC, off in lowSpec]
+  // 5. Merged 3D Melted Beeswax Pillar Candles w/ Warm Subsurface Top Glow [1 DC, off in lowSpec]
+  const chandelierCandlesGeo = trackGeo(mergeGeometries(candleParts, false));
+  for (let i = 0; i < candleParts.length; i++) candleParts[i].dispose();
+  chandelierCandlesGeo.computeBoundingSphere();
+  const chandelierCandlesMesh = new THREE.Mesh(chandelierCandlesGeo, chandelierCandlesMat);
+  chandelierCandlesMesh.name = 'CastleChandelierCandles';
+  chandelierCandlesMesh.castShadow = false;
+  chandelierCandlesMesh.receiveShadow = false;
+  chandelierCandlesMesh.visible = !lowSpecMode;
+  group.add(chandelierCandlesMesh);
+
+  // 6. Merged GPU Billboarded Multi-Layer Blackbody Candle Flames [1 DC, off in lowSpec]
   const chandelierFlamesGeo = trackGeo(buildChandelierFlamesGeometry(flameSpecs));
   const chandelierFlamesMesh = new THREE.Mesh(chandelierFlamesGeo, chandelierFlamesMat);
   chandelierFlamesMesh.name = 'CastleChandelierFlames';
@@ -2426,6 +3070,7 @@ export function createSoulsCastleRoof(options = {}) {
 
     glassUniforms.uLowSpec.value = lowSpecMode ? 1.0 : 0.0;
     chandelierSwayUniforms.uSwayAmp.value = lowSpecMode ? 0.45 : 1.0;
+    chandelierCandlesMesh.visible = !lowSpecMode;
     chandelierFlamesMesh.visible = enableChandelierFlames && !lowSpecMode;
   }
 
@@ -2440,6 +3085,7 @@ export function createSoulsCastleRoof(options = {}) {
     if (vaultRibsMesh.visible) dc++;
     if (clerestoryGlassMesh.visible) dc++;
     if (chandeliersIronMesh.visible) dc++;
+    if (chandelierCandlesMesh.visible) dc++;
     if (chandelierFlamesMesh.visible) dc++;
     return dc;
   }
@@ -2465,6 +3111,7 @@ export function createSoulsCastleRoof(options = {}) {
       vaultRibsMesh,
       clerestoryGlassMesh,
       chandeliersIronMesh,
+      chandelierCandlesMesh,
       chandelierFlamesMesh
     },
     clerestoryWindows: Object.freeze(windowRegistry),

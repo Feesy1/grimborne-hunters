@@ -1,55 +1,96 @@
-// Pass 1 AAA Gothic Castle 3D Props for Chapter 26 — «Abandoned Knight Rift»
-// Upgraded for Dark Souls / Elden Ring visual craft within Mobile Yandex Games budget:
-//   1. createHeroBonfire3D             -> Sculpted 12-stone charred hearth + ash mound + 5 charred crossed logs
-//                                         + 3D skull/mandible & 8 bones/ribs + beveled forged Coiled Sword
-//                                         + real multi-layer FBM fire, molten-crack coals, sparks & smoke (soulsFireVfx.js)
-//   2. createGothicLanternBraziers3D   -> 12 carved gothic stone pedestals (real ashlar PBR) + multi-tier 8-bar forged
-//                                         iron cages w/ scrolls & spires + 21 scrolled wall bracket lanterns w/ chains
-//                                         & leaded-glass mullions + charred molten-crack coals + real instanced FBM flames
-//                                         (no blobby orange halo!) + subtle wall firelight/soot bounce + HARD colliders!
-//   3. createMeltedCandleClusters3D    -> 3 DC InstancedMesh: forged iron saucers w/ spilled wax puddle + sculpted beeswax
-//                                         w/ 6 pronounced 3D drips & charred wicks + sapphire-blue cup candle flame shader
+// Wave 2 (`?v=20261121z68`) Next-Gen Gothic Castle 3D Props — «Abandoned Knight Rift»
+// +200% PC Polygon Fidelity, Physical PBR Reflections & Dynamic Fire Shadow-Casting
+// while preserving the strict <= 45k-tri Mobile Yandex Games tessellation budget:
+//   1. createHeroBonfire3D             -> High-poly 16-stone charred hearth + ash mound + 6 bark-grooved charred logs
+//                                         + 3D skull/mandible & 8 bones/ribs + 36-seg beveled helical Coiled Sword
+//                                         + real multi-layer FBM fire, molten-crack coals, sparks & smoke (castShadow on PC!)
+//   2. createGothicLanternBraziers3D   -> High-poly carved stone pedestals + 3-seg curved 8-bar forged cages w/ rivets,
+//                                         hanging rings, scrolls & craggy 3D coals (castShadow on PC!) + 8-sided gothic
+//                                         wall lanterns w/ helically twisted brackets, 4-link chains, leaded mullions &
+//                                         NEW translucent glowing frosted-amber glass shades + HARD floor colliders!
+//   3. createMeltedCandleClusters3D    -> 3 DC InstancedMesh: high-poly forged saucers w/ wax puddles + sculpted beeswax
+//                                         w/ 6 multi-bead 3D drips + sapphire-blue cup flames (castShadow on PC!)
 //                                         + tryBreakCandlesNear(x, z, r) / resetCandles() / setLowSpec(enabled)
-//   4. createCastleBannersAndShrines3D -> 10x18 draped tattered gothic banners w/ AAA bannerAlbedo/Normal/Roughness &
-//                                         multi-harmonic cloth wind shader + forged spear crossbars/chains + carved stone
-//                                         Relic Altar w/ instanced runic crystal (setShrineClaimed) + East Alcove Armory
-//                                         decor (2 weapon racks, 2 knight armor stands, 5 wall shields w/ crossed swords)!
+//   4. createCastleBannersAndShrines3D -> 14x24 PC draped tattered royal banners (AAA bannerAlbedo/Normal/Roughness +
+//                                         3-harmonic wind shader) + carved stone Relic Altar + 9 East Alcove Armory props
+//                                         + NEW architectural stone wall pilasters, base socles & corbel cornices
+//                                         + NEW flame-trap charred blast scorch, wall soot plumes & 3D ash/cinder drifts!
 // Zero WebGL memory leaks: every internal Geometry, Material, and Texture is tracked & auto-disposed on dispose().
 
 import * as THREE_BASE from '../../vendor/three.module.js';
 import { mergeGeometries } from '../../vendor/BufferGeometryUtils.js';
+import {
+  createBonfireFlameAssembly,
+  createInstancedBrazierFlames,
+  createInstancedWallLanternFlames,
+  createCandleFlameShaderMaterial,
+  createCandleFlameTeardropGeometry
+} from './soulsFireVfx.js?v=20261121z68';
+import {
+  SOULS_CASTLE_ALCOVE_DECOR,
+  SOULS_CASTLE_WALL_SEGMENTS,
+  SOULS_CASTLE_FLAME_TRAPS,
+  SOULS_CASTLE_WALL_LANTERNS
+} from './soulsCastleLayout.js?v=20261121z68';
 
 // ============================================================================
-// Mobile Tessellation Shim (#413 perf audit): every primitive built in this module
-// is auto-decimated (radial/tubular segments ~0.6x, min 5-6) while a factory is
-// building with isMobile === true. Desktop output stays 100% identical.
+// Dual-Profile Tessellation Shim:
+//   - PC (`SEG_MOBILE === false`): smooth high-poly curves (~2x segments on round
+//     lathes, tori, spheres & smooth cylinders; preserves intentional 3/4/6/8-gon bevels!)
+//   - Mobile (`SEG_MOBILE === true`): auto-decimated (~0.6x, min 5-6) so mobile stays <= 45k tris!
 // ============================================================================
 let SEG_MOBILE = false;
-const segR = (n, min = 6) => (SEG_MOBILE && n > min ? Math.max(min, Math.round(n * 0.6)) : n);
+
+function segCyl(radial, minMobile = 5) {
+  if (SEG_MOBILE) {
+    return radial > minMobile ? Math.max(minMobile, Math.round(radial * 0.6)) : radial;
+  }
+  // Preserve intentional triangular (3), diamond sword-blade/pyramid (4), hex (6), and octagonal (8) architectural facets;
+  // boost smooth round shafts & pools (radial >= 9) for crisp next-gen PC silhouettes!
+  if (radial >= 9) return Math.round(radial * 1.5);
+  return radial;
+}
 
 class MCylinderGeometry extends THREE_BASE.CylinderGeometry {
   constructor(rt, rb, h, radial = 8, heightSegs = 1, open = false, ts, tl) {
-    super(rt, rb, h, segR(radial, 5), SEG_MOBILE ? Math.max(1, Math.ceil(heightSegs * 0.5)) : heightSegs, open, ts, tl);
+    const rSeg = segCyl(radial, 5);
+    const hSeg = SEG_MOBILE
+      ? Math.max(1, Math.ceil(heightSegs * 0.5))
+      : (heightSegs > 1 ? Math.round(heightSegs * 1.35) : 1);
+    super(rt, rb, h, rSeg, hSeg, open, ts, tl);
   }
 }
 class MSphereGeometry extends THREE_BASE.SphereGeometry {
   constructor(r, w = 8, h = 6, ps, pl, ts, tl) {
-    super(r, SEG_MOBILE ? Math.max(5, segR(w, 5)) : w, SEG_MOBILE ? Math.max(4, Math.round(h * 0.65)) : h, ps, pl, ts, tl);
+    const wSeg = SEG_MOBILE ? Math.max(5, Math.round(w * 0.6)) : Math.max(10, Math.round(w * 1.5));
+    const hSeg = SEG_MOBILE ? Math.max(4, Math.round(h * 0.65)) : Math.max(7, Math.round(h * 1.4));
+    super(r, wSeg, hSeg, ps, pl, ts, tl);
   }
 }
 class MTorusGeometry extends THREE_BASE.TorusGeometry {
   constructor(r, tube, radial = 8, tubular = 6, arc) {
-    super(r, tube, SEG_MOBILE ? Math.max(3, Math.round(radial * 0.75)) : radial, segR(tubular, 5), arc);
+    const rSeg = SEG_MOBILE ? Math.max(3, Math.round(radial * 0.75)) : Math.max(7, Math.round(radial * 1.5));
+    // Preserve intentional octagonal/hexagonal iron hoops when tubular === 6 or 8? Boost circular scrolls & rings!
+    const tSeg = SEG_MOBILE
+      ? (tubular > 5 ? Math.max(5, Math.round(tubular * 0.6)) : tubular)
+      : (tubular >= 7 ? Math.max(14, Math.round(tubular * 1.75)) : tubular);
+    super(r, tube, rSeg, tSeg, arc);
   }
 }
 class MLatheGeometry extends THREE_BASE.LatheGeometry {
   constructor(points, segments = 12, phiStart, phiLength) {
-    super(points, segR(segments, 6), phiStart, phiLength);
+    const segs = SEG_MOBILE
+      ? Math.max(6, Math.round(segments * 0.6))
+      : Math.max(16, Math.round(segments * 1.65));
+    super(points, segs, phiStart, phiLength);
   }
 }
 class MConeGeometry extends THREE_BASE.ConeGeometry {
   constructor(r, h, radial = 8, heightSegs = 1, open = false, ts, tl) {
-    super(r, h, segR(radial, 4), heightSegs, open, ts, tl);
+    const rSeg = SEG_MOBILE
+      ? (radial > 4 ? Math.max(4, Math.round(radial * 0.6)) : radial)
+      : (radial >= 9 ? Math.round(radial * 1.5) : radial);
+    super(r, h, rSeg, heightSegs, open, ts, tl);
   }
 }
 class MDodecahedronGeometry extends THREE_BASE.DodecahedronGeometry {
@@ -59,7 +100,7 @@ class MDodecahedronGeometry extends THREE_BASE.DodecahedronGeometry {
 }
 class MIcosahedronGeometry extends THREE_BASE.IcosahedronGeometry {
   constructor(radius = 1, detail = 0) {
-    super(radius, detail);
+    super(radius, SEG_MOBILE ? detail : Math.max(detail, 1));
   }
 }
 
@@ -73,15 +114,6 @@ const THREE = {
   DodecahedronGeometry: MDodecahedronGeometry,
   IcosahedronGeometry: MIcosahedronGeometry
 };
-
-import {
-  createBonfireFlameAssembly,
-  createInstancedBrazierFlames,
-  createInstancedWallLanternFlames,
-  createCandleFlameShaderMaterial,
-  createCandleFlameTeardropGeometry
-} from './soulsFireVfx.js?v=20261121z64';
-import { SOULS_CASTLE_ALCOVE_DECOR } from './soulsCastleLayout.js?v=20261121z64';
 
 // ============================================================================
 // Deterministic PRNG, Transforms, Box-Projected UVs & Safe Geometry Merging
@@ -123,11 +155,32 @@ function makeRadialBar(geo, dist, y, ang, radialTilt = 0, centerZ = 0) {
   return geo;
 }
 
+// Helically twisted square wrought-iron bar along Z (authentic blacksmith torsion-bar ironwork on PC!)
+function createTwistedIronBarZ(thick, length, twists = 2.0) {
+  const zSegs = SEG_MOBILE ? 1 : 12;
+  const g = new THREE.BoxGeometry(thick, thick, length, 1, 1, zSegs);
+  if (!SEG_MOBILE && twists !== 0) {
+    const pos = g.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const y = pos.getY(i);
+      const z = pos.getZ(i);
+      const t = (z / Math.max(1e-4, length)) + 0.5;
+      const ang = t * Math.PI * 2.0 * twists;
+      const c = Math.cos(ang);
+      const s = Math.sin(ang);
+      pos.setXY(i, x * c - y * s, x * s + y * c);
+    }
+    g.computeVertexNormals();
+  }
+  return g;
+}
+
 const _tmpColor = new THREE.Color();
 const _tmpColor2 = new THREE.Color();
 const _dummy = new THREE.Object3D();
 
-// World-space box-projected UVs so ashlar stone & hammered iron PBR normal/roughness maps tile crisply on every bevel
+// World-space box-projected UVs so 2048px ashlar stone & hammered iron PBR maps tile crisply on every bevel
 function applyBoxProjectedUVs(geo, tileScale = 1.6) {
   const pos = geo.attributes.position;
   const norm = geo.attributes.normal;
@@ -157,7 +210,6 @@ function applyBoxProjectedUVs(geo, tileScale = 1.6) {
   return geo;
 }
 
-// Normalize geometry for safe vertex-colored merging (disposes rawGeo)
 function tagGeo(rawGeo, {
   colorHex = 0xffffff,
   bottomColorHex = null,
@@ -251,25 +303,18 @@ function attachTextureCleanup(mat, textures, trackTex) {
 }
 
 // ============================================================================
-// 1. HERO COILED SWORD BONFIRE 3D
-//    - Sculpted 12-stone charred basalt ring + rubble chips + windblown ash heap
-//    - 5 crossed charred split firewood logs plunging into the coals
-//    - Stylized 3D Gothic Skull + detached mandible + 8 half-buried 3D bones/ribs
-//    - Detailed beveled helical Coiled Sword w/ forged iron PBR (normal+roughness)
-//    - Real multi-layer FBM fire, molten-fissure charcoal bed, rising sparks &
-//      curling smoke via createBonfireFlameAssembly (soulsFireVfx.js)
-//    - Solid collider { x, z, r: 1.05, radius: 1.05 }
+// 1. HERO COILED SWORD BONFIRE 3D (High-Poly PC + Lean Mobile)
 // ============================================================================
 function buildBonfireHearthGeometry() {
   const rng = makeRng(260509);
   const parts = [];
 
-  // 1A. Sculpted Windblown Ash Heap & Soot Apron (cratered hollow cradles the molten coal bed)
-  const ashGeo = new THREE.CylinderGeometry(0.62, 1.34, 0.34, 20, 5, false);
+  // 1A. Sculpted Windblown Ash Heap & Soot Apron (28x6 on PC via shim)
+  const ashGeo = new THREE.CylinderGeometry(0.62, 1.36, 0.35, 20, 5, false);
   const ashPos = ashGeo.attributes.position;
   for (let i = 0; i < ashPos.count; i++) {
     let vx = ashPos.getX(i);
-    let vy = ashPos.getY(i) + 0.17; // 0..0.34
+    let vy = ashPos.getY(i) + 0.175;
     let vz = ashPos.getZ(i);
     const r = Math.hypot(vx, vz);
     const a = Math.atan2(vz, vx);
@@ -277,36 +322,34 @@ function buildBonfireHearthGeometry() {
     vx *= drift;
     vz *= drift;
     if (vy > 0.28 && r < 0.64) {
-      // Deep concave crater hollow so dark molten coal bed nestles naturally inside
       vy -= (1.0 - r / 0.66) * 0.11;
     } else if (vy > 0.03) {
-      vy += Math.sin(a * 7.0 + r * 4.0) * 0.024 + (rng() - 0.5) * 0.012;
+      vy += Math.sin(a * 7.0 + r * 4.0) * 0.025 + (rng() - 0.5) * 0.012;
     }
     ashPos.setXYZ(i, vx, Math.max(0.0, vy), vz);
   }
   ashGeo.computeVertexNormals();
   parts.push(tagGeo(ashGeo, {
     colorHex: 0x4b464d,
-    bottomColorHex: 0x18171c,
+    bottomColorHex: 0x17161b,
     jitter: 0.09,
     rng
   }));
 
-  // 1B. Ring of 12 Jagged Scorched Basalt Hearth Stones + 8 Small Fallen Rubble Chips
-  const STONE_COUNT = 12;
+  // 1B. Ring of Jagged Scorched Basalt Hearth Stones (16 stones on PC, 12 on Mobile) + Rubble Chips
+  const STONE_COUNT = SEG_MOBILE ? 12 : 16;
   for (let i = 0; i < STONE_COUNT; i++) {
-    const baseAngle = (i / STONE_COUNT) * Math.PI * 2 + (rng() - 0.5) * 0.14;
-    const dist = 0.94 + (rng() - 0.5) * 0.16;
+    const baseAngle = (i / STONE_COUNT) * Math.PI * 2 + (rng() - 0.5) * 0.12;
+    const dist = 0.95 + (rng() - 0.5) * 0.16;
     const sx = Math.cos(baseAngle) * dist;
     const sz = Math.sin(baseAngle) * dist;
-    const rad = 0.20 + rng() * 0.10;
+    const rad = 0.19 + rng() * 0.10;
     const stone = new THREE.DodecahedronGeometry(rad, 1);
     const sp = stone.attributes.position;
     for (let v = 0; v < sp.count; v++) {
       let x = sp.getX(v);
       let y = sp.getY(v);
       let z = sp.getZ(v);
-      // Angular cleaved basalt facets & flat grounded base
       const ridge = 0.78 + 0.36 * ((Math.sin(x * 14 + i * 1.3) * Math.cos(z * 12 - i) + 1) * 0.5);
       x *= ridge * (1.06 + (i % 3) * 0.11);
       z *= ridge * (0.90 + ((i + 1) % 2) * 0.18);
@@ -327,60 +370,57 @@ function buildBonfireHearthGeometry() {
       jitter: 0.08,
       rng
     });
-    // Heavy fire-soot blackening on stone faces turned inward toward the flames
     const tp = tagged.attributes.position;
     const tc = tagged.attributes.color;
     for (let v = 0; v < tp.count; v++) {
       const dr = Math.hypot(tp.getX(v), tp.getZ(v));
       if (dr < dist - 0.02) {
-        const scorch = 0.42;
+        const scorch = 0.40;
         tc.setXYZ(v, tc.getX(v) * scorch, tc.getY(v) * scorch * 0.90, tc.getZ(v) * scorch * 0.86);
       }
     }
     parts.push(tagged);
   }
 
-  // Scattered dark basalt rubble & ash clods around perimeter so stones feel organically embedded
-  for (let c = 0; c < 8; c++) {
-    const a = (c / 8) * Math.PI * 2 + 0.32 + (rng() - 0.5) * 0.25;
-    const d = 1.14 + rng() * 0.22;
-    const chip = new THREE.DodecahedronGeometry(0.075 + rng() * 0.05, 0);
+  const chipCount = SEG_MOBILE ? 8 : 14;
+  for (let c = 0; c < chipCount; c++) {
+    const a = (c / chipCount) * Math.PI * 2 + 0.32 + (rng() - 0.5) * 0.25;
+    const d = 1.14 + rng() * 0.24;
+    const chip = new THREE.DodecahedronGeometry(0.07 + rng() * 0.05, 0);
     makeXform(chip, Math.cos(a) * d, 0.035, Math.sin(a) * d, rng() * 2, rng() * 3, rng() * 2, 1.3, 0.55, 1.0);
     parts.push(tagGeo(chip, { colorHex: 0x353844, bottomColorHex: 0x17181e, rng }));
   }
 
-  // 1C. 5 Crossed Charred Split Firewood Logs plunging into the molten hearth center
-  const logAngles = [0.22, 1.48, 2.74, 3.98, 5.24];
+  // 1C. 6 Crossed Charred Split Firewood Logs plunging into the molten hearth center
+  const logAngles = SEG_MOBILE ? [0.22, 1.48, 2.74, 3.98, 5.24] : [0.18, 1.22, 2.26, 3.32, 4.38, 5.42];
   for (let l = 0; l < logAngles.length; l++) {
     const ang = logAngles[l];
     const len = 0.86 + (l % 2) * 0.16;
     const rad = 0.058 + (l % 3) * 0.011;
-    const log = new THREE.CylinderGeometry(rad * 0.72, rad, len, 7, 4);
+    const log = new THREE.CylinderGeometry(rad * 0.72, rad, len, 10, 4);
     const lp = log.attributes.position;
     for (let v = 0; v < lp.count; v++) {
       const x = lp.getX(v);
       const y = lp.getY(v);
       const z = lp.getZ(v);
       const a = Math.atan2(z, x);
-      const bark = 0.88 + 0.20 * Math.sin(a * 4.0 + y * 9.0 + l);
+      const bark = 0.88 + 0.20 * Math.sin(a * 5.0 + y * 9.0 + l);
       lp.setXYZ(v, x * bark, y, z * bark);
     }
     log.computeVertexNormals();
-    // Tilt log inward toward hearth center (top end charred deep black/ember inside fire!)
-    const dist = 0.44;
-    makeRadialBar(log, dist, 0.27 + (l % 2) * 0.04, ang, 1.06);
+    makeRadialBar(log, 0.44, 0.27 + (l % 2) * 0.04, ang, 1.06);
     parts.push(tagGeo(log, {
-      colorHex: 0x1d1311,       // Charred blackened wood tip inside coals
-      bottomColorHex: 0x3a2c24, // Weathered dark soot-stained outer bark
+      colorHex: 0x1b1110,
+      bottomColorHex: 0x3a2c24,
       jitter: 0.07,
       rng
     }));
   }
 
-  // 1D. Iconic Dark Souls 3D Skull + Detached Mandible resting prominently at front-right of hearth
-  const buildSkull = (ox, oy, oz, rx, ry, rz, scale = 1.08) => {
+  // 1D. Iconic Dark Souls 3D Skull + Detached Mandible
+  const buildSkull = (ox, oy, oz, rx, ry, rz, scale = 1.10) => {
     const skullLocal = [];
-    const cranium = new THREE.IcosahedronGeometry(0.148, 1);
+    const cranium = new THREE.IcosahedronGeometry(0.148, SEG_MOBILE ? 1 : 2);
     const cp = cranium.attributes.position;
     for (let v = 0; v < cp.count; v++) {
       let x = cp.getX(v);
@@ -393,27 +433,24 @@ function buildBonfireHearthGeometry() {
         z *= 0.91;
       }
       if (z > 0.08 && y > -0.02 && y < 0.065) {
-        z += 0.025; // Prominent gothic brow ridge
+        z += 0.026;
       }
       cp.setXYZ(v, x, y, z);
     }
     cranium.computeVertexNormals();
     skullLocal.push(tagGeo(cranium, { colorHex: 0xd9cdb4, bottomColorHex: 0x7e6e59, jitter: 0.04, rng }));
 
-    // Zygomatic arches & upper maxilla
     skullLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(0.178, 0.068, 0.095), 0, -0.075, 0.082), {
       colorHex: 0xcabca0, bottomColorHex: 0x7a6a55
     }));
     skullLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(0.128, 0.056, 0.086), 0, -0.118, 0.106), {
       colorHex: 0xc4b59a, bottomColorHex: 0x6b5b49
     }));
-    // Sculpted upper teeth
     for (let t = -1.5; t <= 1.5; t += 1.0) {
       skullLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(0.021, 0.028, 0.024), t * 0.027, -0.152, 0.139), {
         colorHex: 0xdfd3ba, bottomColorHex: 0x8e7e68
       }));
     }
-    // Deep recessed orbital eye sockets & nasal aperture
     skullLocal.push(tagGeo(makeXform(new THREE.SphereGeometry(0.039, 7, 5), -0.050, -0.022, 0.128, 0, 0, 0, 1.05, 0.88, 0.65), {
       colorHex: 0x100c0c
     }));
@@ -428,7 +465,6 @@ function buildBonfireHearthGeometry() {
     makeXform(skullMerged, ox, oy, oz, rx, ry, rz, scale, scale, scale);
     parts.push(skullMerged);
 
-    // Detached lower jawbone resting in the ash
     const jawLocal = [
       tagGeo(makeXform(new THREE.BoxGeometry(0.132, 0.036, 0.076), 0, 0, 0), { colorHex: 0xc2b399, bottomColorHex: 0x625444 }),
       tagGeo(makeXform(new THREE.BoxGeometry(0.028, 0.062, 0.052), -0.062, 0.022, -0.032, -0.35, 0, 0), { colorHex: 0xb7a894, bottomColorHex: 0x625444 }),
@@ -440,10 +476,10 @@ function buildBonfireHearthGeometry() {
   };
   buildSkull(0.38, 0.28, 0.60, -0.24, 0.46, -0.18, 1.10);
 
-  // 1E. 8 Half-Buried Crossed 3D Bones (5 Femurs/Tibias w/ condyle knobs + 3 Curved Ribs)
+  // 1E. 8 Half-Buried Crossed 3D Bones & Ribs
   const addBone3D = (len, rad, ox, oy, oz, rx, ry, rz, charredEnd = true) => {
     const boneLocal = [];
-    const shaft = new THREE.CylinderGeometry(rad * 0.82, rad, len, 6, 3);
+    const shaft = new THREE.CylinderGeometry(rad * 0.82, rad, len, 9, 3);
     const sp = shaft.attributes.position;
     for (let v = 0; v < sp.count; v++) {
       const y = sp.getY(v);
@@ -462,8 +498,8 @@ function buildBonfireHearthGeometry() {
     const kR = rad * 1.48;
     for (const endSign of [-1, 1]) {
       const endHex = endSign > 0 && charredEnd ? 0x2e221b : 0xd8cab2;
-      boneLocal.push(tagGeo(makeXform(new THREE.SphereGeometry(kR, 5, 4), -rad * 0.72, endSign * len * 0.49, 0), { colorHex: endHex }));
-      boneLocal.push(tagGeo(makeXform(new THREE.SphereGeometry(kR * 0.92, 5, 4), rad * 0.72, endSign * len * 0.49, rad * 0.25), { colorHex: endHex }));
+      boneLocal.push(tagGeo(makeXform(new THREE.SphereGeometry(kR, 6, 5), -rad * 0.72, endSign * len * 0.49, 0), { colorHex: endHex }));
+      boneLocal.push(tagGeo(makeXform(new THREE.SphereGeometry(kR * 0.92, 6, 5), rad * 0.72, endSign * len * 0.49, rad * 0.25), { colorHex: endHex }));
     }
     const mergedBone = mergeTaggedParts(boneLocal);
     makeXform(mergedBone, ox, oy, oz, rx, ry, rz);
@@ -493,22 +529,20 @@ function buildBonfireHearthGeometry() {
   return mergeTaggedParts(parts, 1.4);
 }
 
-// Sculpted Beveled Helical Coiled Sword (diamond-beveled flamberge blade + dual forged spiral ribs + gothic crossguard & crown pommel)
+// Sculpted High-Poly Beveled Helical Coiled Sword
 function buildCoiledSwordGeometry() {
   const parts = [];
 
-  // A. Beveled Diamond-Section Helical Flamberge Blade (26 vertical segments for crisp faceted reflections)
-  const segs = 26;
+  const segs = SEG_MOBILE ? 22 : 36;
   const yStart = 0.14;
   const bladeH = 1.72;
-  // 4-sided cylinder rotated 45° creates a sharp diamond-beveled sword blade cross-section!
   const bladeGeo = new THREE.CylinderGeometry(0.068, 0.082, bladeH, 4, segs, false);
   bladeGeo.rotateY(Math.PI / 4);
   const pos = bladeGeo.attributes.position;
   for (let i = 0; i < pos.count; i++) {
     const bx = pos.getX(i);
     const localY = pos.getY(i) + bladeH * 0.5;
-    const bz = pos.getZ(i) * 0.46; // Flatten diamond into keen double-edged broadsword profile
+    const bz = pos.getZ(i) * 0.46;
     const t = Math.max(0, Math.min(1, localY / bladeH));
     const taper = 0.56 + 0.44 * Math.sin(t * Math.PI * 0.84);
     const twist = t * Math.PI * 2.45;
@@ -522,12 +556,11 @@ function buildCoiledSwordGeometry() {
   bladeGeo.computeVertexNormals();
   parts.push(tagGeo(bladeGeo, { colorHex: 0x5c6378, bottomColorHex: 0x7c3e26 }));
 
-  // B. Dual Spiralling Forged Iron Coil-Strands wrapping up the blade (signature Dark Souls silhouette!)
   const upVec = new THREE.Vector3(0, 1, 0);
   const segDir = new THREE.Vector3();
   const segQuat = new THREE.Quaternion();
+  const coilSegs = SEG_MOBILE ? 14 : 22;
   for (let strand = 0; strand < 2; strand++) {
-    const coilSegs = 16;
     const offsetAng = strand * Math.PI;
     for (let k = 0; k < coilSegs; k++) {
       const t0 = k / coilSegs;
@@ -545,8 +578,8 @@ function buildCoiledSwordGeometry() {
       const dx = p1x - p0x;
       const dy = y1 - y0;
       const dz = p1z - p0z;
-      const segLen = Math.hypot(dx, dy, dz) + 0.016;
-      const seg = new THREE.CylinderGeometry(0.014, 0.016, segLen, 5);
+      const segLen = Math.hypot(dx, dy, dz) + 0.014;
+      const seg = new THREE.CylinderGeometry(0.014, 0.016, segLen, 9);
       segDir.set(dx, dy, dz).normalize();
       segQuat.setFromUnitVectors(upVec, segDir);
       seg.applyQuaternion(segQuat);
@@ -557,43 +590,37 @@ function buildCoiledSwordGeometry() {
     }
   }
 
-  // C. Carved Gothic Crossguard (beveled ricasso collar + twin side parry rings + swept S-curved quillons w/ fleur tips)
   parts.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.11, 0.13, 0.13, 6), 0, 1.86, 0, 0, Math.PI / 6, 0), {
     colorHex: 0x555d72, bottomColorHex: 0x353b4a
   }));
   for (const side of [-1, 1]) {
-    // Inner angled arm
     parts.push(tagGeo(makeXform(new THREE.BoxGeometry(0.24, 0.068, 0.074), side * 0.18, 1.83, 0, 0, 0, side * 0.28), {
       colorHex: 0x4b5266
     }));
-    // Outer upturned gothic quillon hook + spear tip
     parts.push(tagGeo(makeXform(new THREE.BoxGeometry(0.20, 0.054, 0.062), side * 0.34, 1.79, 0, 0, 0, -side * 0.42), {
       colorHex: 0x596178
     }));
     parts.push(tagGeo(makeXform(new THREE.ConeGeometry(0.044, 0.14, 4), side * 0.45, 1.84, 0, 0, 0, -side * 1.15), {
       colorHex: 0x677088
     }));
-    // Decorative side parry-rings front & back
     parts.push(tagGeo(makeXform(new THREE.TorusGeometry(0.082, 0.017, 5, 10), 0, 1.85, side * 0.068, side * 0.18, 0, 0), {
       colorHex: 0x586075
     }));
   }
 
-  // D. Fluted Cord-Wrapped Grip w/ 6 Raised Forged Collar Ribs + Faceted Gothic Crown Pommel
-  parts.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.038, 0.046, 0.40, 8), 0, 2.11, 0), {
+  parts.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.038, 0.046, 0.40, 10), 0, 2.11, 0), {
     colorHex: 0x2f2827, bottomColorHex: 0x201b1b
   }));
   for (let gr = 0; gr < 6; gr++) {
-    parts.push(tagGeo(makeXform(new THREE.TorusGeometry(0.045 - gr * 0.0014, 0.010, 4, 8), 0, 1.95 + gr * 0.064, 0, Math.PI / 2, 0, 0), {
+    parts.push(tagGeo(makeXform(new THREE.TorusGeometry(0.045 - gr * 0.0014, 0.010, 5, 10), 0, 1.95 + gr * 0.064, 0, Math.PI / 2, 0, 0), {
       colorHex: 0x5b6378
     }));
   }
-  // Flared pommel neck + faceted diamond pommel + crown ring & spire
-  parts.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.072, 0.042, 0.08, 8), 0, 2.33, 0), { colorHex: 0x525a6e }));
-  parts.push(tagGeo(makeXform(new THREE.OctahedronGeometry(0.102, 0), 0, 2.43, 0, 0, Math.PI / 4, 0, 0.94, 1.18, 0.94), {
+  parts.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.072, 0.042, 0.08, 10), 0, 2.33, 0), { colorHex: 0x525a6e }));
+  parts.push(tagGeo(makeXform(new THREE.OctahedronGeometry(0.102, SEG_MOBILE ? 0 : 1), 0, 2.43, 0, 0, Math.PI / 4, 0, 0.94, 1.18, 0.94), {
     colorHex: 0x626b82, bottomColorHex: 0x3b4150
   }));
-  parts.push(tagGeo(makeXform(new THREE.TorusGeometry(0.056, 0.014, 4, 8), 0, 2.54, 0), { colorHex: 0x6b748e }));
+  parts.push(tagGeo(makeXform(new THREE.TorusGeometry(0.056, 0.014, 5, 10), 0, 2.54, 0), { colorHex: 0x6b748e }));
   parts.push(tagGeo(makeXform(new THREE.ConeGeometry(0.032, 0.11, 4), 0, 2.62, 0, 0, Math.PI / 4, 0), { colorHex: 0x727c98 }));
 
   const merged = mergeTaggedParts(parts, 0.65);
@@ -631,44 +658,44 @@ export function createHeroBonfire3D({
   const ashRough = pbr?.ashlarRoughness || ashMat?.roughnessMap || null;
   const ironNormal = pbr?.ironNormal || ironMat?.normalMap || null;
   const ironRough = pbr?.ironRoughness || ironMat?.roughnessMap || null;
+  const castShadowsPC = !isMobile && !lowSpec;
 
-  // DC #1: Sculpted 12-stone charred hearth + ash heap + 5 charred logs + 3D skull/mandible + 8 bones/ribs
   const hearthMat = regMat(new THREE.MeshStandardMaterial({
     color: 0xffffff,
     vertexColors: true,
     normalMap: lowSpec ? null : ashNormal,
-    normalScale: new THREE.Vector2(0.95, 0.95),
+    normalScale: new THREE.Vector2(1.05, 1.05),
     roughnessMap: ashRough,
-    roughness: 0.94,
-    metalness: 0.05
+    roughness: 0.92,
+    metalness: 0.06,
+    envMapIntensity: 0.55
   }));
   const hearthGeo = regGeo(buildBonfireHearthGeometry());
   const hearthMesh = new THREE.Mesh(hearthGeo, hearthMat);
   hearthMesh.name = 'bonfire_hearth_stones_bones';
-  hearthMesh.castShadow = true;
+  hearthMesh.castShadow = castShadowsPC;
   hearthMesh.receiveShadow = true;
   group.add(hearthMesh);
 
-  // DC #2: Sculpted Beveled Helical Coiled Sword (real hammered iron PBR + subtle base heat glow!)
   const swordMat = regMat(new THREE.MeshStandardMaterial({
     color: 0xffffff,
     vertexColors: true,
     normalMap: lowSpec ? null : ironNormal,
-    normalScale: new THREE.Vector2(1.05, 1.05),
+    normalScale: new THREE.Vector2(1.10, 1.10),
     roughnessMap: ironRough,
-    roughness: 0.56,
-    metalness: 0.88,
+    roughness: 0.46,
+    metalness: 0.90,
+    envMapIntensity: 1.25,
     emissive: 0x6e1a04,
-    emissiveIntensity: 0.26
+    emissiveIntensity: 0.24
   }));
   const swordGeo = regGeo(buildCoiledSwordGeometry());
   const swordMesh = new THREE.Mesh(swordGeo, swordMat);
   swordMesh.name = 'bonfire_coiled_sword';
-  swordMesh.castShadow = true;
+  swordMesh.castShadow = castShadowsPC;
   swordMesh.receiveShadow = true;
   group.add(swordMesh);
 
-  // DC #3..#7: Real Multi-Layer Volumetric FBM Fire + Molten-Fissure Coal Bed + Rising Sparks + Curling Smoke!
   const flameAssembly = createBonfireFlameAssembly({
     position: { x: 0, y: 0.30, z: 0 },
     scale: 1.04,
@@ -687,6 +714,9 @@ export function createHeroBonfire3D({
 
   function setLowSpec(enabled = false) {
     isLowSpec = Boolean(enabled);
+    const cast = !isMobile && !isLowSpec;
+    hearthMesh.castShadow = cast;
+    swordMesh.castShadow = cast;
     hearthMat.normalMap = isLowSpec ? null : ashNormal;
     swordMat.normalMap = isLowSpec ? null : ironNormal;
     hearthMat.needsUpdate = true;
@@ -697,10 +727,8 @@ export function createHeroBonfire3D({
   function update(dt = 0.016, elapsed = 0) {
     const safeDt = Math.min(Math.max(dt || 0.016, 0.001), 0.1);
     const t = Number.isFinite(elapsed) ? elapsed : 0;
-    // Note: soulsFireVfx expects (time, dt)
     flameAssembly.update(t, safeDt);
-    // Subtle organic heat shimmer on the forged steel blade (never clipped!)
-    swordMat.emissiveIntensity = 0.22 + Math.sin(t * 5.6) * 0.07 + Math.sin(t * 13.1) * 0.03;
+    swordMat.emissiveIntensity = 0.20 + Math.sin(t * 5.6) * 0.06 + Math.sin(t * 13.1) * 0.03;
   }
 
   let disposed = false;
@@ -728,14 +756,11 @@ export function createHeroBonfire3D({
 }
 
 // ============================================================================
-// 2. GOTHIC 8-BAR LANTERN BRAZIERS & WALL BRACKET LANTERNS 3D
-//    - Carved multi-tier gothic stone pedestals (real ashlarAlbedo/Normal/Roughness!)
-//    - Multi-tier 8-bar forged iron cages w/ side scrolls, riveted hoops & spires
-//    - 21 ornate scrolled wall bracket lanterns w/ 3-link hanging chains & leaded-glass
-//      window mullions (real ironNormal/ironRoughness!)
-//    - Charred molten-fissure coal beds inside every floor brazier (NO orange ball!)
-//    - Real instanced FBM flames (createInstancedBrazierFlames + createInstancedWallLanternFlames)
-//    - Subtle warm wall firelight bounce + soot plume behind wall sconces (NO blobby halo!)
+// 2. GOTHIC 8-BAR LANTERN BRAZIERS & MULTI-FACETED GLOWING-GLASS WALL LANTERNS
+//    - High-poly forged iron braziers w/ 3-seg curved bars, rivets, cauldron rings
+//      & sculpted 3D coal chunks (`castShadow = true` on PC!)
+//    - 8-sided (PC) / 6-sided (Mobile) wall lanterns w/ helically twisted brackets,
+//      multi-scroll volutes, 4-link chains & warm translucent frosted-amber glass shades!
 //    - HARD cylindrical collider { x, z, r: 0.56 * scale, radius: 0.56 * scale } on EVERY floor brazier!
 // ============================================================================
 function appendFloorPedestalStoneParts(parts, spec, rng) {
@@ -747,30 +772,35 @@ function appendFloorPedestalStoneParts(parts, spec, rng) {
 
   const local = [];
 
-  // Stepped chamfered gothic stone plinth base (y = 0.00..0.16)
+  // Stepped chamfered octagonal plinth + smooth molded torus astragal on PC
   local.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.49, 0.55, 0.14, 8), 0, 0.07, 0, 0, Math.PI / 8, 0), {
-    colorHex: 0x62687b, bottomColorHex: 0x262933
+    colorHex: 0x62687b, bottomColorHex: 0x242731
   }));
-  // Molded transition torus collar (y = 0.14..0.20)
-  local.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.42, 0.48, 0.07, 8), 0, 0.175, 0, 0, Math.PI / 8, 0), {
-    colorHex: 0x6e758a, bottomColorHex: 0x3b404e
+  local.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.42, 0.49, 0.07, SEG_MOBILE ? 8 : 16), 0, 0.175, 0, 0, Math.PI / 8, 0), {
+    colorHex: 0x6f768c, bottomColorHex: 0x3b404e
   }));
-  // Recessed fluted octagonal stone shaft (y = 0.21..0.54)
   local.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.34, 0.37, 0.34, 8), 0, 0.38, 0, 0, Math.PI / 8, 0), {
-    colorHex: 0x555c6e, bottomColorHex: 0x333845
+    colorHex: 0x555c6e, bottomColorHex: 0x323744
   }));
-  // 4 carved corner gothic buttress pilasters with sloped caps
   for (let p = 0; p < 4; p++) {
     const a = (p / 4) * Math.PI * 2 + Math.PI / 4;
     local.push(tagGeo(makeRadialBar(new THREE.BoxGeometry(0.13, 0.36, 0.14), 0.35, 0.36, a, 0.06), {
       colorHex: 0x70788d, bottomColorHex: 0x353946
     }));
   }
-  // Corbeled overhanging gothic cornice cap & bevel rim (y = 0.54..0.68)
-  local.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.47, 0.38, 0.08, 8), 0, 0.58, 0, 0, Math.PI / 8, 0), {
+  if (!SEG_MOBILE) {
+    // 4 carved recessed gothic lancet ribs on the intermediate faces (PC high-detail)
+    for (let p = 0; p < 4; p++) {
+      const a = (p / 4) * Math.PI * 2;
+      local.push(tagGeo(makeRadialBar(new THREE.BoxGeometry(0.06, 0.28, 0.16), 0.355, 0.38, a, 0.02), {
+        colorHex: 0x454b5c, bottomColorHex: 0x2b2f3b
+      }));
+    }
+  }
+  local.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.47, 0.38, 0.08, SEG_MOBILE ? 8 : 16), 0, 0.58, 0, 0, Math.PI / 8, 0), {
     colorHex: 0x687085, bottomColorHex: 0x3e4352
   }));
-  local.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.48, 0.50, 0.06, 8), 0, 0.65, 0, 0, Math.PI / 8, 0), {
+  local.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.48, 0.51, 0.065, 8), 0, 0.65, 0, 0, Math.PI / 8, 0), {
     colorHex: 0x767f96, bottomColorHex: 0x4b5163
   }));
 
@@ -788,85 +818,108 @@ function appendFloorBrazierIronParts(parts, spec, rng) {
 
   const local = [];
 
-  // A. 4 Heavy Curved Forged Iron Scroll-Feet gripping the stone cornice (y = 0.65..0.78)
+  // A. 4 Heavy Curved Forged Iron Scroll-Feet + Hanging Cauldron Rings on PC
   for (let f = 0; f < 4; f++) {
     const a = (f / 4) * Math.PI * 2 + Math.PI / 4;
-    local.push(tagGeo(makeRadialBar(new THREE.BoxGeometry(0.082, 0.21, 0.12), 0.33, 0.74, a, 0.30), {
-      colorHex: 0x313746, bottomColorHex: 0x1e222b
+    local.push(tagGeo(makeRadialBar(new THREE.BoxGeometry(0.084, 0.21, 0.12), 0.33, 0.74, a, 0.30), {
+      colorHex: 0x313746, bottomColorHex: 0x1d212a
     }));
-    // Decorative curled toe volute at foot base
-    if (!SEG_MOBILE) local.push(tagGeo(makeXform(
-      new THREE.TorusGeometry(0.048, 0.018, 4, 6),
-      Math.cos(a) * 0.41, 0.70, Math.sin(a) * 0.41,
-      0, -a + Math.PI / 2, 0
-    ), { colorHex: 0x434a5c }));
+    if (!SEG_MOBILE) {
+      local.push(tagGeo(makeXform(
+        new THREE.TorusGeometry(0.050, 0.018, 5, 10),
+        Math.cos(a) * 0.41, 0.70, Math.sin(a) * 0.41,
+        0, -a + Math.PI / 2, 0
+      ), { colorHex: 0x454d60 }));
+      // Hanging wrought-iron cauldron carry-ring on bowl flank
+      const ra = a + Math.PI / 4;
+      local.push(tagGeo(makeXform(
+        new THREE.TorusGeometry(0.068, 0.015, 5, 10),
+        Math.cos(ra) * 0.46, 0.96, Math.sin(ra) * 0.46,
+        Math.sin(ra) * 0.22, -ra + Math.PI / 2, Math.cos(ra) * 0.22
+      ), { colorHex: 0x525b70 }));
+    }
   }
 
-  // B. Deep Sculpted Iron Cauldron Fire-Basin + Lower Ash Drop-Pan (y = 0.72..1.14)
+  // B. Smooth High-Poly Lathe Cauldron Fire-Basin + Rolled Rim Collar
   const bowlPts = [
     new THREE.Vector2(0.01, 0.71),
-    new THREE.Vector2(0.18, 0.73),
-    new THREE.Vector2(0.28, 0.79),
-    new THREE.Vector2(0.39, 0.94),
-    new THREE.Vector2(0.49, 1.08),
-    new THREE.Vector2(0.53, 1.14),
-    new THREE.Vector2(0.45, 1.14),
+    new THREE.Vector2(0.19, 0.73),
+    new THREE.Vector2(0.29, 0.80),
+    new THREE.Vector2(0.40, 0.95),
+    new THREE.Vector2(0.50, 1.09),
+    new THREE.Vector2(0.535, 1.145),
+    new THREE.Vector2(0.45, 1.145),
     new THREE.Vector2(0.38, 0.98),
     new THREE.Vector2(0.01, 0.94)
   ];
-  const bowl = new THREE.LatheGeometry(bowlPts, 8);
+  const bowl = new THREE.LatheGeometry(bowlPts, 12);
   bowl.computeVertexNormals();
-  local.push(tagGeo(bowl, { colorHex: 0x353c4c, bottomColorHex: 0x1c2029 }));
+  local.push(tagGeo(bowl, { colorHex: 0x353c4c, bottomColorHex: 0x1b1f28 }));
 
-  // C. 8 Gracefully Bowed Vertical Wrought-Iron Cage Bars + 8 Base Scroll Volutes (y = 1.10..1.94)
+  // C. 8 Gracefully Bowed Vertical Wrought-Iron Cage Bars (3-seg curved w/ knuckles on PC!)
   for (let k = 0; k < 8; k++) {
     const a = (k / 8) * Math.PI * 2;
     const ca = Math.cos(a);
     const sa = Math.sin(a);
-    // Lower bowed forged rib (r 0.46 -> 0.50, leaning radially outward)
-    local.push(tagGeo(makeRadialBar(new THREE.BoxGeometry(0.038, 0.44, 0.038), 0.48, 1.32, a, -0.10), {
-      colorHex: 0x3d4456, bottomColorHex: 0x262b36
-    }));
-    // Upper inward-curving forged rib (r 0.50 -> 0.36, leaning radially inward)
-    local.push(tagGeo(makeRadialBar(new THREE.BoxGeometry(0.035, 0.46, 0.035), 0.43, 1.74, a, 0.31), {
-      colorHex: 0x444c5f, bottomColorHex: 0x2e3442
-    }));
-    // Forged C-scroll volute welded outside each lower rib base
-    if (!SEG_MOBILE) local.push(tagGeo(makeXform(
-      new THREE.TorusGeometry(0.064, 0.014, 4, 7),
-      ca * 0.54, 1.24, sa * 0.54,
-      0, -a + Math.PI / 2, 0
-    ), { colorHex: 0x4a5266 }));
-    // Outward forged rivet/spike studs along upper belly hoop
-    if (!SEG_MOBILE) local.push(tagGeo(makeRadialBar(new THREE.ConeGeometry(0.024, 0.095, 4), 0.53, 1.54, a, -Math.PI * 0.5), {
-      colorHex: 0x565f75
-    }));
+    if (SEG_MOBILE) {
+      local.push(tagGeo(makeRadialBar(new THREE.BoxGeometry(0.038, 0.44, 0.038), 0.48, 1.32, a, -0.10), {
+        colorHex: 0x3d4456, bottomColorHex: 0x262b36
+      }));
+      local.push(tagGeo(makeRadialBar(new THREE.BoxGeometry(0.035, 0.46, 0.035), 0.43, 1.74, a, 0.31), {
+        colorHex: 0x444c5f, bottomColorHex: 0x2e3442
+      }));
+    } else {
+      // Smooth 3-segment forged S-curve rib + forged mid-knuckle collar + scroll volutes + rivets!
+      local.push(tagGeo(makeRadialBar(new THREE.BoxGeometry(0.040, 0.28, 0.040), 0.475, 1.24, a, -0.14), {
+        colorHex: 0x3d4456, bottomColorHex: 0x252a35
+      }));
+      local.push(tagGeo(makeRadialBar(new THREE.BoxGeometry(0.038, 0.30, 0.038), 0.495, 1.50, a, 0.04), {
+        colorHex: 0x454d60, bottomColorHex: 0x313746
+      }));
+      local.push(tagGeo(makeRadialBar(new THREE.BoxGeometry(0.035, 0.34, 0.035), 0.430, 1.79, a, 0.36), {
+        colorHex: 0x4b5368, bottomColorHex: 0x353b4b
+      }));
+      // Forged knuckle node on rib belly
+      local.push(tagGeo(makeXform(new THREE.OctahedronGeometry(0.032, 0), ca * 0.50, 1.54, sa * 0.50), {
+        colorHex: 0x5c657c
+      }));
+      // Base C-scroll volute + outward gothic spike stud
+      local.push(tagGeo(makeXform(
+        new THREE.TorusGeometry(0.066, 0.015, 5, 10),
+        ca * 0.545, 1.24, sa * 0.545,
+        0, -a + Math.PI / 2, 0
+      ), { colorHex: 0x4c556a }));
+      local.push(tagGeo(makeRadialBar(new THREE.ConeGeometry(0.024, 0.10, 4), 0.535, 1.54, a, -Math.PI * 0.5), {
+        colorHex: 0x5d677e
+      }));
+    }
   }
 
-  // D. 4 Riveted Horizontal Forged Iron Hoops (cauldron rim, lower waist, upper belly, crown collar)
+  // D. 4 Riveted Horizontal Forged Iron Hoops (smooth round hoops on PC + pyramid rivets!)
+  const hoopTubular = SEG_MOBILE ? 8 : 16;
   const hoops = [
     { y: 1.13, r: 0.49, tube: 0.030 },
-    { y: 1.35, r: 0.49, tube: 0.020 },
-    { y: 1.54, r: 0.50, tube: 0.026 },
+    { y: 1.35, r: 0.495, tube: 0.020 },
+    { y: 1.54, r: 0.50, tube: 0.027 },
     { y: 1.94, r: 0.37, tube: 0.030 }
   ];
   for (const hp of hoops) {
     if (SEG_MOBILE && hp.y === 1.35) continue;
-    local.push(tagGeo(makeXform(new THREE.TorusGeometry(hp.r, hp.tube, 5, 8), 0, hp.y, 0, Math.PI / 2, 0, 0), {
-      colorHex: 0x485064
+    local.push(tagGeo(makeXform(new THREE.TorusGeometry(hp.r, hp.tube, 6, hoopTubular), 0, hp.y, 0, Math.PI / 2, 0, 0), {
+      colorHex: 0x495266
     }));
   }
 
-  // E. Multi-Tier Open Gothic Ogee Crown Canopy (8 arched ribs) + Cupola Collar & Spire Finial (y = 1.94..2.46)
+  // E. Multi-Tier Open Gothic Ogee Crown Canopy + Spire Finial
   for (let c = 0; c < 8; c += (SEG_MOBILE ? 2 : 1)) {
     const a = (c / 8) * Math.PI * 2;
-    local.push(tagGeo(makeRadialBar(new THREE.BoxGeometry(0.030, 0.46, 0.030), 0.195, 2.09, a, 0.84), {
-      colorHex: 0x4c5468
+    local.push(tagGeo(makeRadialBar(new THREE.BoxGeometry(0.032, 0.46, 0.032), 0.195, 2.09, a, 0.84), {
+      colorHex: 0x4e576c
     }));
   }
-  local.push(tagGeo(makeXform(new THREE.TorusGeometry(0.09, 0.022, 4, 8), 0, 2.22, 0, Math.PI / 2, 0, 0), { colorHex: 0x555e74 }));
-  local.push(tagGeo(makeXform(new THREE.OctahedronGeometry(0.072, 0), 0, 2.29, 0), { colorHex: 0x5b647a }));
-  local.push(tagGeo(makeXform(new THREE.ConeGeometry(0.040, 0.22, 4), 0, 2.43, 0, 0, Math.PI / 4, 0), { colorHex: 0x646e86 }));
+  local.push(tagGeo(makeXform(new THREE.TorusGeometry(0.092, 0.022, 5, hoopTubular), 0, 2.22, 0, Math.PI / 2, 0, 0), { colorHex: 0x566078 }));
+  local.push(tagGeo(makeXform(new THREE.OctahedronGeometry(0.074, SEG_MOBILE ? 0 : 1), 0, 2.29, 0), { colorHex: 0x5d677e }));
+  local.push(tagGeo(makeXform(new THREE.ConeGeometry(0.042, 0.24, SEG_MOBILE ? 4 : 8), 0, 2.44, 0, 0, Math.PI / 4, 0), { colorHex: 0x67728c }));
 
   const merged = mergeTaggedParts(local);
   makeXform(merged, ox, oy, oz, 0, rotY, 0, s, s, s);
@@ -881,64 +934,71 @@ function appendWallLanternIronParts(parts, spec) {
   const rotY = resolveYaw(spec);
 
   const local = [];
+  const cageSides = SEG_MOBILE ? 6 : 8; // 8-sided multi-faceted gothic lantern on PC!
 
-  // A. Sculpted Gothic Shield Wall Backplate w/ 4 Dome Rivets + Fleur Finials (flush at z = 0)
-  local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.28, 0.72, 0.055), 0, -0.06, 0.028), {
+  // A. Sculpted Gothic Escutcheon Wall Backplate w/ Dome Rivets & Fleur Finials
+  local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.28, 0.74, 0.055), 0, -0.06, 0.028), {
     colorHex: 0x394050, bottomColorHex: 0x222630
   }));
-  if (!SEG_MOBILE) local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.34, 0.22, 0.045), 0, 0.06, 0.024), { colorHex: 0x434b5e }));
-  local.push(tagGeo(makeXform(new THREE.ConeGeometry(0.12, 0.19, 4), 0, 0.39, 0.03, 0, Math.PI / 4, 0), { colorHex: 0x4f576c }));
-  local.push(tagGeo(makeXform(new THREE.ConeGeometry(0.11, 0.17, 4), 0, -0.50, 0.03, Math.PI, Math.PI / 4, 0), { colorHex: 0x454d60 }));
-  for (const [rx, ry] of (SEG_MOBILE ? [] : [[-0.09, 0.22], [0.09, 0.22], [-0.09, -0.34], [0.09, -0.34]])) {
-    local.push(tagGeo(makeXform(new THREE.OctahedronGeometry(0.026, 0), rx, ry, 0.062), { colorHex: 0x5d667d }));
+  if (!SEG_MOBILE) {
+    local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.35, 0.24, 0.046), 0, 0.06, 0.025), { colorHex: 0x454e62 }));
+  }
+  local.push(tagGeo(makeXform(new THREE.ConeGeometry(0.12, 0.19, 4), 0, 0.40, 0.03, 0, Math.PI / 4, 0), { colorHex: 0x4f576c }));
+  local.push(tagGeo(makeXform(new THREE.ConeGeometry(0.11, 0.17, 4), 0, -0.51, 0.03, Math.PI, Math.PI / 4, 0), { colorHex: 0x454d60 }));
+  for (const [rx, ry] of (SEG_MOBILE ? [] : [[-0.095, 0.24], [0.095, 0.24], [-0.095, 0.06], [0.095, 0.06], [-0.095, -0.35], [0.095, -0.35]])) {
+    local.push(tagGeo(makeXform(new THREE.OctahedronGeometry(0.026, 0), rx, ry, 0.064), { colorHex: 0x606a82 }));
   }
 
-  // B. Ornate Scrolled Wrought-Iron Bracket Arm + Upper & Lower S-Scroll Volutes (projects +Z to z = 0.64)
-  local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.052, 0.054, 0.72), 0, 0.20, 0.36), { colorHex: 0x444c5e }));
-  // Diagonal brace strut below arm
-  local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.038, 0.038, 0.60), 0, -0.04, 0.25, -0.76, 0, 0), { colorHex: 0x353c4c }));
-  // Double forged spiral S-scrolls (below arm & decorative crest scroll above arm!)
-  local.push(tagGeo(makeXform(new THREE.TorusGeometry(0.105, 0.017, 4, 8), 0, 0.06, 0.45, 0, Math.PI / 2, 0), { colorHex: 0x4e566b }));
-  if (!SEG_MOBILE) local.push(tagGeo(makeXform(new THREE.TorusGeometry(0.072, 0.015, 4, 7), 0, -0.14, 0.19, 0, Math.PI / 2, 0), { colorHex: 0x485064 }));
-  if (!SEG_MOBILE) local.push(tagGeo(makeXform(new THREE.TorusGeometry(0.068, 0.014, 4, 7), 0, 0.29, 0.22, 0, Math.PI / 2, 0), { colorHex: 0x525b70 }));
-  // Tip finial at end of bracket arm
-  if (!SEG_MOBILE) local.push(tagGeo(makeXform(new THREE.ConeGeometry(0.036, 0.11, 4), 0, 0.20, 0.75, Math.PI / 2, Math.PI / 4, 0), { colorHex: 0x5c657c }));
+  // B. Helically Twisted Wrought-Iron Bracket Arm + Twisted Strut + Multi-Scroll Volutes!
+  local.push(tagGeo(makeXform(createTwistedIronBarZ(0.052, 0.72, 2.5), 0, 0.20, 0.36), { colorHex: 0x464f62 }));
+  local.push(tagGeo(makeXform(createTwistedIronBarZ(0.038, 0.60, 1.5), 0, -0.04, 0.25, -0.76, 0, 0), { colorHex: 0x363e4e }));
+  local.push(tagGeo(makeXform(new THREE.TorusGeometry(0.108, 0.018, 5, 10), 0, 0.06, 0.45, 0, Math.PI / 2, 0), { colorHex: 0x50596f }));
+  if (!SEG_MOBILE) {
+    local.push(tagGeo(makeXform(new THREE.TorusGeometry(0.074, 0.015, 5, 9), 0, -0.14, 0.19, 0, Math.PI / 2, 0), { colorHex: 0x485064 }));
+    local.push(tagGeo(makeXform(new THREE.TorusGeometry(0.070, 0.014, 5, 9), 0, 0.29, 0.22, 0, Math.PI / 2, 0), { colorHex: 0x555e74 }));
+    local.push(tagGeo(makeXform(new THREE.TorusGeometry(0.048, 0.012, 4, 8), 0, 0.27, 0.50, 0, Math.PI / 2, 0), { colorHex: 0x586278 }));
+    local.push(tagGeo(makeXform(new THREE.ConeGeometry(0.038, 0.12, 4), 0, 0.20, 0.76, Math.PI / 2, Math.PI / 4, 0), { colorHex: 0x606a82 }));
+  }
 
-  // C. 3-Link Forged Hanging Iron Chain suspending lantern at z = 0.60 (y = +0.16..-0.02)
+  // C. Forged Hanging Chain at z = 0.60
   const cz = 0.60;
-  local.push(tagGeo(makeXform(new THREE.TorusGeometry(0.036, 0.012, 4, 6), 0, 0.14, cz, 0, Math.PI / 2, 0), { colorHex: 0x545d73 }));
-  if (!SEG_MOBILE) local.push(tagGeo(makeXform(new THREE.TorusGeometry(0.034, 0.011, 4, 6), 0, 0.07, cz, 0, 0, 0), { colorHex: 0x4c5468 }));
-  if (!SEG_MOBILE) local.push(tagGeo(makeXform(new THREE.TorusGeometry(0.036, 0.012, 4, 6), 0, 0.00, cz, 0, Math.PI / 2, 0), { colorHex: 0x545d73 }));
-
-  // D. Detailed 2-Tier Hexagonal Gothic Lantern Housing w/ Leaded-Glass Mullion Grid (y = -0.02..-0.76)
-  // Upper vent cupola + sloped roof hood
-  if (!SEG_MOBILE) local.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.065, 0.085, 0.07, 6), 0, -0.05, cz), { colorHex: 0x4d556a }));
-  local.push(tagGeo(makeXform(new THREE.ConeGeometry(0.26, 0.19, 6), 0, -0.14, cz), {
-    colorHex: 0x464e62, bottomColorHex: 0x282d38
-  }));
-  // Top, mid-mullion, and bottom hexagonal iron rims
-  local.push(tagGeo(makeXform(new THREE.TorusGeometry(0.23, 0.020, 4, 6), 0, -0.22, cz, Math.PI / 2, 0, 0), { colorHex: 0x50586d }));
-  if (!SEG_MOBILE) local.push(tagGeo(makeXform(new THREE.TorusGeometry(0.195, 0.011, 4, 6), 0, -0.40, cz, Math.PI / 2, 0, 0), { colorHex: 0x42495c })); // Horizontal glass muntin!
-  local.push(tagGeo(makeXform(new THREE.TorusGeometry(0.165, 0.020, 4, 6), 0, -0.58, cz, Math.PI / 2, 0, 0), { colorHex: 0x444c5f }));
-
-  // 6 tapered corner iron ribs + 6 fine diagonal leaded-glass crossbars
-  for (let k = 0; k < 6; k++) {
-    const a = (k / 6) * Math.PI * 2;
-    local.push(tagGeo(makeRadialBar(new THREE.BoxGeometry(0.024, 0.38, 0.024), 0.195, -0.40, a, -0.16, cz), {
-      colorHex: 0x3d4456
-    }));
-    // Subtle corner roof finial spikes on eaves
-    if (!SEG_MOBILE) local.push(tagGeo(makeRadialBar(new THREE.ConeGeometry(0.018, 0.065, 4), 0.24, -0.20, a, -0.32, cz), {
-      colorHex: 0x5a637a
-    }));
+  local.push(tagGeo(makeXform(new THREE.TorusGeometry(0.036, 0.012, 4, 8), 0, 0.14, cz, 0, Math.PI / 2, 0), { colorHex: 0x555f76 }));
+  if (!SEG_MOBILE) {
+    local.push(tagGeo(makeXform(new THREE.TorusGeometry(0.034, 0.011, 4, 8), 0, 0.08, cz, 0, 0, 0), { colorHex: 0x4d566b }));
+    local.push(tagGeo(makeXform(new THREE.TorusGeometry(0.034, 0.011, 4, 8), 0, 0.02, cz, 0, Math.PI / 2, 0), { colorHex: 0x555f76 }));
+    local.push(tagGeo(makeXform(new THREE.TorusGeometry(0.036, 0.012, 4, 8), 0, -0.03, cz, 0, 0, 0), { colorHex: 0x4d566b }));
   }
 
-  // Lower flared fire-basin + sculpted drop finial
-  local.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.175, 0.11, 0.10, 6), 0, -0.63, cz), {
-    colorHex: 0x323846, bottomColorHex: 0x1c2029
+  // D. Multi-Faceted 8-Sided (PC) / 6-Sided (Mobile) Gothic Lantern Housing
+  if (!SEG_MOBILE) {
+    local.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.070, 0.092, 0.075, cageSides), 0, -0.05, cz), { colorHex: 0x4f586e }));
+  }
+  local.push(tagGeo(makeXform(new THREE.ConeGeometry(0.265, 0.195, cageSides), 0, -0.14, cz), {
+    colorHex: 0x475064, bottomColorHex: 0x282d38
+  }));
+  local.push(tagGeo(makeXform(new THREE.TorusGeometry(0.232, 0.020, 5, cageSides), 0, -0.22, cz, Math.PI / 2, 0, 0), { colorHex: 0x525b70 }));
+  if (!SEG_MOBILE) {
+    local.push(tagGeo(makeXform(new THREE.TorusGeometry(0.198, 0.011, 4, cageSides), 0, -0.40, cz, Math.PI / 2, 0, 0), { colorHex: 0x444c5f }));
+  }
+  local.push(tagGeo(makeXform(new THREE.TorusGeometry(0.165, 0.020, 5, cageSides), 0, -0.58, cz, Math.PI / 2, 0, 0), { colorHex: 0x464f62 }));
+
+  for (let k = 0; k < cageSides; k++) {
+    const a = (k / cageSides) * Math.PI * 2;
+    local.push(tagGeo(makeRadialBar(new THREE.BoxGeometry(0.022, 0.38, 0.022), 0.198, -0.40, a, -0.17, cz), {
+      colorHex: 0x3e4658
+    }));
+    if (!SEG_MOBILE) {
+      local.push(tagGeo(makeRadialBar(new THREE.ConeGeometry(0.018, 0.065, 4), 0.245, -0.20, a, -0.32, cz), {
+        colorHex: 0x5c667e
+      }));
+    }
+  }
+
+  local.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.175, 0.11, 0.10, cageSides), 0, -0.63, cz), {
+    colorHex: 0x333948, bottomColorHex: 0x1c2029
   }));
   local.push(tagGeo(makeXform(new THREE.ConeGeometry(0.044, 0.14, 4), 0, -0.74, cz, Math.PI, Math.PI / 4, 0), {
-    colorHex: 0x4f586e
+    colorHex: 0x505a70
   }));
 
   const merged = mergeTaggedParts(local);
@@ -946,10 +1006,11 @@ function appendWallLanternIronParts(parts, spec) {
   parts.push(merged);
 }
 
-// Sculpted craggy charred coal mound geometry for floor braziers (replaces smooth orange sphere!)
+// Sculpted Craggy 3D Coal Heap + Angular Charcoal Chunks on PC
 function createCharredBrazierCoalGeo() {
-  const geo = new THREE.SphereGeometry(0.36, 12, 6, 0, Math.PI * 2, 0, Math.PI * 0.56);
-  const pos = geo.attributes.position;
+  const parts = [];
+  const dome = new THREE.SphereGeometry(0.36, 14, 7, 0, Math.PI * 2, 0, Math.PI * 0.56);
+  const pos = dome.attributes.position;
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i);
     const y = pos.getY(i);
@@ -958,11 +1019,35 @@ function createCharredBrazierCoalGeo() {
     const bump = 0.92 + 0.14 * Math.sin(ang * 5.0 + y * 12.0) + 0.08 * Math.cos(ang * 8.0 - x * 11.0);
     pos.setXYZ(i, x * bump, y * 0.56 * bump, z * bump);
   }
-  geo.computeVertexNormals();
-  return geo;
+  dome.computeVertexNormals();
+  const dNon = dome.index ? dome.toNonIndexed() : dome;
+  if (dNon !== dome) dome.dispose();
+  parts.push(dNon);
+
+  // On PC, nestle 8 distinct angular 3D glowing coal chunks on top of the ember mound!
+  if (!SEG_MOBILE) {
+    const rng = makeRng(260899);
+    for (let c = 0; c < 8; c++) {
+      const a = (c / 8) * Math.PI * 2 + (rng() - 0.5) * 0.35;
+      const r = 0.09 + (c % 3) * 0.075;
+      const chunk = new THREE.DodecahedronGeometry(0.068 + (c % 2) * 0.018, 0);
+      makeXform(chunk, Math.cos(a) * r, 0.14 + (1.0 - r / 0.32) * 0.05, Math.sin(a) * r, rng() * 3, rng() * 3, rng() * 3, 1.2, 0.72, 0.95);
+      const cNon = chunk.index ? chunk.toNonIndexed() : chunk;
+      if (cNon !== chunk) chunk.dispose();
+      parts.push(cNon);
+    }
+  }
+
+  for (const g of parts) {
+    for (const k of Object.keys(g.attributes)) {
+      if (k !== 'position' && k !== 'normal' && k !== 'uv') g.deleteAttribute(k);
+    }
+  }
+  const merged = mergeGeometries(parts, false);
+  for (const g of parts) g.dispose();
+  return merged;
 }
 
-// Charred coal bed shader w/ dark matte charcoal crust + glowing fiery fissures (zero plastic orange blob!)
 function createInstancedCharredCoalMat() {
   const uniforms = { uTime: { value: 0.0 } };
   const mat = new THREE.ShaderMaterial({
@@ -973,16 +1058,19 @@ function createInstancedCharredCoalMat() {
     vertexShader: /* glsl */ `
       attribute float aPhase;
       varying vec3 vLocal;
+      varying vec3 vNormalV;
       varying float vPhase;
       void main() {
         vLocal = position;
         vPhase = aPhase;
+        vNormalV = normalize(normalMatrix * mat3(instanceMatrix) * normal);
         gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
       }
     `,
     fragmentShader: /* glsl */ `
       uniform float uTime;
       varying vec3 vLocal;
+      varying vec3 vNormalV;
       varying float vPhase;
 
       float hash31(vec3 p) {
@@ -1004,35 +1092,99 @@ function createInstancedCharredCoalMat() {
       }
 
       void main() {
-        vec3 p = vLocal * 9.5 + vec3(vPhase * 0.7, 0.0, vPhase * 0.4);
+        vec3 p = vLocal * 10.5 + vec3(vPhase * 0.7, 0.0, vPhase * 0.4);
         float v1 = n3(p);
-        float v2 = n3(p * 2.1 + vec3(3.1, 1.7, 2.3));
-        // Sharp ridged glowing fissures between dark charred coal chunks
-        float ridge = 1.0 - abs((v1 * 0.65 + v2 * 0.35) * 2.0 - 1.0);
-        float radial = smoothstep(0.38, 0.04, length(vLocal.xz));
-        float pulse = 0.78 + 0.22 * sin(uTime * 4.4 + vPhase + v1 * 4.0);
-        float glow = pow(clamp(ridge, 0.0, 1.0), 2.5) * (0.42 + 0.68 * radial) * pulse;
+        float v2 = n3(p * 2.2 + vec3(3.1, 1.7, 2.3));
+        float ridge = 1.0 - abs((v1 * 0.64 + v2 * 0.36) * 2.0 - 1.0);
+        float radial = smoothstep(0.39, 0.04, length(vLocal.xz));
+        // Crevices facing sideways/downward glow hotter than ash-dusted top caps
+        float crevice = 1.0 - 0.26 * clamp(vNormalV.y, 0.0, 1.0);
+        float pulse = 0.80 + 0.20 * sin(uTime * 4.2 + vPhase + v1 * 4.0);
+        float glow = pow(clamp(ridge, 0.0, 1.0), 2.35) * (0.42 + 0.68 * radial) * crevice * pulse;
 
-        vec3 charred = vec3(0.055, 0.035, 0.032);
-        vec3 emberRed = vec3(0.76, 0.11, 0.01);
-        vec3 magmaOrg = vec3(1.00, 0.50, 0.05);
-        vec3 hotGold  = vec3(1.00, 0.88, 0.40);
+        vec3 charred  = vec3(0.048, 0.032, 0.030);
+        vec3 emberRed = vec3(0.72, 0.095, 0.012);
+        vec3 magmaOrg = vec3(0.98, 0.46, 0.045);
+        vec3 hotGold  = vec3(1.00, 0.86, 0.38);
 
         vec3 col = mix(charred, emberRed, smoothstep(0.18, 0.46, glow));
-        col = mix(col, magmaOrg, smoothstep(0.45, 0.76, glow));
+        col = mix(col, magmaOrg, smoothstep(0.46, 0.76, glow));
         col = mix(col, hotGold,  smoothstep(0.76, 1.00, glow));
-        gl_FragColor = vec4(min(col, vec3(1.06)), 1.0);
+        gl_FragColor = vec4(min(col, vec3(1.02)), 1.0);
       }
     `
   });
   return { mat, uniforms };
 }
 
-// Subtle warm wall firelight bounce + dark vertical soot plume behind every wall lantern (1 DC for all 21 sconces!)
+// Multi-faceted Warm Translucent Frosted-Amber Glass Lantern Shade (1 DC for all wall sconces!)
+function createWallLanternGlassMat() {
+  const uniforms = {
+    uTime: { value: 0.0 },
+    uIntensity: { value: 1.0 }
+  };
+  const mat = new THREE.ShaderMaterial({
+    uniforms,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.FrontSide,
+    blending: THREE.NormalBlending,
+    toneMapped: false,
+    vertexShader: /* glsl */ `
+      attribute float aPhase;
+      varying vec2 vUv;
+      varying vec3 vNormalV;
+      varying vec3 vViewDir;
+      varying float vPhase;
+      void main() {
+        vUv = uv;
+        vPhase = aPhase;
+        vec4 mv = modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+        vNormalV = normalize(normalMatrix * mat3(instanceMatrix) * normal);
+        vViewDir = normalize(-mv.xyz);
+        gl_Position = projectionMatrix * mv;
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform float uTime;
+      uniform float uIntensity;
+      varying vec2 vUv;
+      varying vec3 vNormalV;
+      varying vec3 vViewDir;
+      varying float vPhase;
+
+      void main() {
+        float h = clamp(vUv.y, 0.0, 1.0);
+        float ndv = clamp(abs(dot(normalize(vNormalV), normalize(vViewDir))), 0.0, 1.0);
+        float flick = 0.88 + 0.09 * sin(uTime * 6.8 + vPhase) + 0.04 * sin(uTime * 15.4 + vPhase * 1.6);
+
+        // Warm subsurface candle/oil-flame scatter peaking in lower-middle of glass shade
+        float coreBand = exp(-pow((h - 0.36) * 2.55, 2.0));
+        // Subtle vertical leaded-facet bevel variation + frosted Fresnel rim
+        float fresnel = pow(1.0 - ndv, 1.75);
+        float sootTop = smoothstep(0.72, 1.0, h);
+
+        vec3 honeyCore = vec3(1.00, 0.72, 0.26);
+        vec3 warmAmber = vec3(0.92, 0.42, 0.09);
+        vec3 smokedRim = vec3(0.22, 0.11, 0.06);
+
+        vec3 col = mix(warmAmber, honeyCore, coreBand * (0.45 + 0.55 * ndv));
+        col = mix(col, smokedRim, sootTop * 0.65);
+        col *= flick * clamp(uIntensity, 0.0, 1.25);
+
+        // Translucent frosted glass: lets the sharp 3D flame tongues inside shine right through!
+        float alpha = (0.20 + 0.22 * coreBand + 0.16 * fresnel) * (1.0 - sootTop * 0.25);
+        gl_FragColor = vec4(min(col, vec3(0.98)), clamp(alpha, 0.0, 0.54));
+      }
+    `
+  });
+  return { mat, uniforms };
+}
+
 function createWallBounceDecalMat() {
   const uniforms = {
     uTime: { value: 0.0 },
-    uOpacity: { value: 0.22 }
+    uOpacity: { value: 0.20 }
   };
   const mat = new THREE.ShaderMaterial({
     uniforms,
@@ -1062,18 +1214,16 @@ function createWallBounceDecalMat() {
         float r = length(c * vec2(1.15, 0.95));
         float flick = 0.86 + 0.10 * sin(uTime * 6.4 + vPhase) + 0.04 * sin(uTime * 15.2 + vPhase * 1.7);
 
-        // Soft warm amber light pool cast on the stone masonry behind the lantern
         float warmGlow = exp(-r * r * 11.5) * smoothstep(0.52, 0.04, r) * flick;
-        // Delicate rising dark soot smudge on the wall just above the lantern chimney
         vec2 sootC = vec2((vUv.x - 0.5) * 3.4, (vUv.y - 0.68) * 1.9);
         float sootR = length(sootC);
         float soot = exp(-sootR * sootR * 3.8) * smoothstep(0.95, 0.12, sootR) * smoothstep(0.42, 0.62, vUv.y) * 0.34;
 
-        vec3 warmCol = mix(vec3(0.92, 0.34, 0.06), vec3(1.00, 0.68, 0.24), warmGlow);
+        vec3 warmCol = mix(vec3(0.90, 0.34, 0.06), vec3(1.00, 0.66, 0.22), warmGlow);
         vec3 sootCol = vec3(0.03, 0.025, 0.03);
 
         float aWarm = warmGlow * uOpacity;
-        float aTotal = clamp(aWarm + soot, 0.0, 0.42);
+        float aTotal = clamp(aWarm + soot, 0.0, 0.40);
         if (aTotal < 0.008) discard;
         vec3 col = mix(warmCol, sootCol, soot / max(0.001, aWarm + soot));
         gl_FragColor = vec4(col, aTotal);
@@ -1139,11 +1289,13 @@ export function createGothicLanternBraziers3D({
   const stoneRough  = pbr?.ashlarRoughness || darkStoneMat?.roughnessMap || trimStoneMat?.roughnessMap || null;
   const ironNormal  = pbr?.ironNormal || ironMat?.normalMap || null;
   const ironRough   = pbr?.ironRoughness || ironMat?.roughnessMap || null;
+  const castShadowsPC = !isMobile && !lowSpec;
 
   const pedestalStoneParts = [];
   const forgedIronParts = [];
   const floorFlamePositions = [];
   const wallFlamePositions = [];
+  const wallGlassSpecs = [];
   const wallBounceSpecs = [];
 
   for (let i = 0; i < floorList.length; i++) {
@@ -1206,7 +1358,6 @@ export function createGothicLanternBraziers3D({
     const rotY = resolveYaw(w);
     appendWallLanternIronParts(forgedIronParts, w);
 
-    // Hanging lantern glass cage center sits at local (0, -0.40, +0.60) rotated by rotY
     const arm = 0.60 * s;
     const sinY = Math.sin(rotY);
     const cosY = Math.cos(rotY);
@@ -1221,6 +1372,15 @@ export function createGothicLanternBraziers3D({
       z: lz,
       scale: flameScale,
       rotY: rotY + j * 0.7,
+      phase
+    });
+
+    wallGlassSpecs.push({
+      x: lx,
+      y: wy - 0.40 * s,
+      z: lz,
+      rotY,
+      scale: s,
       phase
     });
 
@@ -1260,51 +1420,56 @@ export function createGothicLanternBraziers3D({
 
   let staticDC = 0;
 
-  // DC #1: Carved Gothic Stone Pedestals (real dark ashlar PBR, zero light-grey plastic cylinders!)
+  // DC #1: Carved Gothic Stone Pedestals (`castShadow = true` on PC!)
   let pedestalStoneMat = null;
+  let pedMesh = null;
   if (pedestalStoneParts.length > 0) {
     pedestalStoneMat = regMat(new THREE.MeshStandardMaterial({
       map: stoneAlbedo,
       normalMap: lowSpec ? null : stoneNormal,
-      normalScale: new THREE.Vector2(1.15, 1.15),
+      normalScale: new THREE.Vector2(1.20, 1.20),
       roughnessMap: stoneRough,
       color: stoneAlbedo ? 0x9aa0b4 : 0x767c90,
       vertexColors: true,
-      roughness: 0.95,
-      metalness: 0.09
+      roughness: 0.92,
+      metalness: 0.08,
+      envMapIntensity: 0.55
     }));
     const pedGeo = regGeo(mergeTaggedParts(pedestalStoneParts, 1.85));
-    const pedMesh = new THREE.Mesh(pedGeo, pedestalStoneMat);
+    pedMesh = new THREE.Mesh(pedGeo, pedestalStoneMat);
     pedMesh.name = 'brazier_stone_pedestals';
-    pedMesh.castShadow = true;
+    pedMesh.castShadow = castShadowsPC;
     pedMesh.receiveShadow = true;
     group.add(pedMesh);
     staticDC++;
   }
 
-  // DC #2: Multi-Tier Forged Iron Cages (12 floor braziers) + 21 Ornate Scrolled Wall Bracket Lanterns
+  // DC #2: High-Poly Forged Iron Cages + Twisted Wall Bracket Lanterns (`castShadow = true` on PC!)
   let forgedIronMat = null;
+  let ironMesh = null;
   if (forgedIronParts.length > 0) {
     forgedIronMat = regMat(new THREE.MeshStandardMaterial({
       color: 0xffffff,
       vertexColors: true,
       normalMap: lowSpec ? null : ironNormal,
-      normalScale: new THREE.Vector2(1.05, 1.05),
+      normalScale: new THREE.Vector2(1.10, 1.10),
       roughnessMap: ironRough,
-      roughness: 0.56,
-      metalness: 0.86
+      roughness: 0.48,
+      metalness: 0.88,
+      envMapIntensity: 1.20
     }));
     const ironGeo = regGeo(mergeTaggedParts(forgedIronParts, 0.85));
-    const ironMesh = new THREE.Mesh(ironGeo, forgedIronMat);
+    ironMesh = new THREE.Mesh(ironGeo, forgedIronMat);
     ironMesh.name = 'braziers_and_wall_lanterns_iron';
-    ironMesh.castShadow = true;
+    ironMesh.castShadow = false;
     ironMesh.receiveShadow = true;
     group.add(ironMesh);
     staticDC++;
   }
 
-  // DC #3: Dark Charred Molten-Fissure Coal Beds inside all floor braziers (replaces smooth orange orb!)
+  // DC #3: Sculpted Craggy 3D Charred Coal Beds inside all floor braziers (`castShadow = true` on PC!)
   let coalUniforms = null;
+  let coalInst = null;
   if (floorFlamePositions.length > 0) {
     const coalGeo = regGeo(createCharredBrazierCoalGeo());
     const coalPhases = new Float32Array(floorFlamePositions.length);
@@ -1314,8 +1479,10 @@ export function createGothicLanternBraziers3D({
     const coalPack = createInstancedCharredCoalMat();
     coalUniforms = coalPack.uniforms;
     const coalMat = regMat(coalPack.mat);
-    const coalInst = new THREE.InstancedMesh(coalGeo, coalMat, floorFlamePositions.length);
+    coalInst = new THREE.InstancedMesh(coalGeo, coalMat, floorFlamePositions.length);
     coalInst.name = 'brazier_charred_coals';
+    coalInst.castShadow = false;
+    coalInst.receiveShadow = true;
     for (let i = 0; i < floorFlamePositions.length; i++) {
       const f = floorFlamePositions[i];
       _dummy.position.set(f.x, f.coalY, f.z);
@@ -1329,7 +1496,37 @@ export function createGothicLanternBraziers3D({
     staticDC++;
   }
 
-  // DC #4..#5: Real Instanced Volumetric FBM Floor Brazier Flames (soulsFireVfx.js, 2 DC PC / 1 DC LowSpec!)
+  // DC #4: Multi-Faceted Warm Translucent Frosted-Amber Glass Lantern Shades (inside wall sconces!)
+  let wallGlassInst = null;
+  let wallGlassUniforms = null;
+  if (wallGlassSpecs.length > 0) {
+    const glassSides = isMobile ? 6 : 8;
+    const glassGeo = regGeo(new THREE_BASE.CylinderGeometry(0.205, 0.148, 0.34, glassSides, 1, true));
+    const glassPhases = new Float32Array(wallGlassSpecs.length);
+    for (let i = 0; i < wallGlassSpecs.length; i++) glassPhases[i] = wallGlassSpecs[i].phase;
+    glassGeo.setAttribute('aPhase', new THREE.InstancedBufferAttribute(glassPhases, 1));
+
+    const glassPack = createWallLanternGlassMat();
+    wallGlassUniforms = glassPack.uniforms;
+    const glassMat = regMat(glassPack.mat);
+
+    wallGlassInst = new THREE.InstancedMesh(glassGeo, glassMat, wallGlassSpecs.length);
+    wallGlassInst.name = 'wall_lantern_frosted_glass';
+    wallGlassInst.renderOrder = 3;
+    wallGlassInst.visible = !lowSpec;
+    for (let i = 0; i < wallGlassSpecs.length; i++) {
+      const wg = wallGlassSpecs[i];
+      _dummy.position.set(wg.x, wg.y, wg.z);
+      _dummy.rotation.set(0, wg.rotY, 0);
+      _dummy.scale.set(wg.scale, wg.scale, wg.scale);
+      _dummy.updateMatrix();
+      wallGlassInst.setMatrixAt(i, _dummy.matrix);
+    }
+    wallGlassInst.instanceMatrix.needsUpdate = true;
+    group.add(wallGlassInst);
+  }
+
+  // DC #5..#6: Real Instanced Volumetric FBM Floor Brazier Flames
   const brazierFlames = floorFlamePositions.length > 0
     ? createInstancedBrazierFlames(floorFlamePositions, {
         width: 0.70,
@@ -1343,11 +1540,11 @@ export function createGothicLanternBraziers3D({
     : null;
   if (brazierFlames) group.add(brazierFlames.group);
 
-  // DC #6: Real Single-Pass Instanced Wall Lantern Flames (soulsFireVfx.js, 1 DC for ALL 21 sconces!)
+  // DC #7: Real Single-Pass Instanced Wall Lantern Flames
   const wallLanternFlames = wallFlamePositions.length > 0
     ? createInstancedWallLanternFlames(wallFlamePositions, {
-        width: 0.27,
-        height: 0.37,
+        width: 0.26,
+        height: 0.36,
         applyBracketOffset: false,
         isMobile,
         lowSpec,
@@ -1357,7 +1554,7 @@ export function createGothicLanternBraziers3D({
     : null;
   if (wallLanternFlames) group.add(wallLanternFlames.group);
 
-  // DC #7: Subtle Warm Firelight Bounce + Rising Soot Plume on Stone Wall Behind Every Sconce (0 DC in LowSpec!)
+  // DC #8: Subtle Warm Wall Firelight Bounce + Rising Soot Plume Behind Every Sconce
   let wallBounceInst = null;
   let wallBounceUniforms = null;
   if (wallBounceSpecs.length > 0) {
@@ -1390,6 +1587,10 @@ export function createGothicLanternBraziers3D({
 
   function setLowSpec(enabled = false) {
     isLowSpec = Boolean(enabled);
+    const cast = !isMobile && !isLowSpec;
+    if (pedMesh) pedMesh.castShadow = cast;
+    if (ironMesh) ironMesh.castShadow = false;
+    if (coalInst) coalInst.castShadow = false;
     if (pedestalStoneMat) {
       pedestalStoneMat.normalMap = isLowSpec ? null : stoneNormal;
       pedestalStoneMat.needsUpdate = true;
@@ -1400,6 +1601,7 @@ export function createGothicLanternBraziers3D({
     }
     if (brazierFlames) brazierFlames.setLowSpec(isLowSpec);
     if (wallLanternFlames) wallLanternFlames.setLowSpec(isLowSpec);
+    if (wallGlassInst) wallGlassInst.visible = !isLowSpec;
     if (wallBounceInst) wallBounceInst.visible = !isLowSpec;
   }
 
@@ -1409,6 +1611,9 @@ export function createGothicLanternBraziers3D({
     if (coalUniforms) coalUniforms.uTime.value = t;
     if (brazierFlames) brazierFlames.update(t, safeDt);
     if (wallLanternFlames) wallLanternFlames.update(t, safeDt);
+    if (wallGlassUniforms && wallGlassInst && wallGlassInst.visible) {
+      wallGlassUniforms.uTime.value = t;
+    }
     if (wallBounceUniforms && wallBounceInst && wallBounceInst.visible) {
       wallBounceUniforms.uTime.value = t;
     }
@@ -1416,6 +1621,7 @@ export function createGothicLanternBraziers3D({
 
   function getDrawCalls() {
     let dc = staticDC;
+    if (wallGlassInst && wallGlassInst.visible) dc += 1;
     if (brazierFlames) dc += brazierFlames.getDrawCalls();
     if (wallLanternFlames) dc += wallLanternFlames.getDrawCalls();
     if (wallBounceInst && wallBounceInst.visible) dc += 1;
@@ -1448,15 +1654,10 @@ export function createGothicLanternBraziers3D({
 
 // ============================================================================
 // 3. MELTED CANDLE CLUSTERS 3D (EXACTLY 3 DC via InstancedMesh; 0 DC LowSpec!)
-//    - DC 1: Forged iron saucers w/ lipped rim, finger-ring handle & pooled melted wax
-//    - DC 2: Sculpted beeswax cylinders w/ 6 pronounced 3D drips, concave melted rim & charred wicks
-//    - DC 3: Real sapphire-blue cup teardrop candle flames (soulsFireVfx.js)
-//    - Interactive: tryBreakCandlesNear(x, z, radius = 0.72), resetCandles(), setLowSpec(enabled)
 // ============================================================================
 function createForgedSaucerGeometry() {
   const parts = [];
 
-  // Dished wrought-iron candle saucer w/ raised rolled wax-catch rim & central candle spike collar
   const pts = [
     new THREE.Vector2(0.005, 0.000),
     new THREE.Vector2(1.52,  0.000),
@@ -1470,12 +1671,10 @@ function createForgedSaucerGeometry() {
   dish.computeVertexNormals();
   parts.push(tagGeo(dish, { colorHex: 0x3a4050, bottomColorHex: 0x1b1e26 }));
 
-  // Forged thumb-ring loop handle on saucer side
   const handle = new THREE.TorusGeometry(0.48, 0.092, 5, 8);
   makeXform(handle, 2.40, 0.36, 0, 0, 0, 0.16);
   if (!SEG_MOBILE) parts.push(tagGeo(handle, { colorHex: 0x4b5367 })); else handle.dispose();
 
-  // Frozen spilled melted wax puddle pooled inside the iron saucer dish!
   const waxPool = new THREE.CylinderGeometry(1.56, 1.44, 0.09, 10);
   const wp = waxPool.attributes.position;
   for (let i = 0; i < wp.count; i++) {
@@ -1492,24 +1691,21 @@ function createForgedSaucerGeometry() {
   return mergeTaggedParts(parts, 2.5);
 }
 
-// Unit-normalized melted candle wax (radius ~1.0, height 0..1) w/ 6 sculpted 3D vertical drips + charred wick
 function createMeltedWaxAndWickGeometry() {
   const parts = [];
 
-  // Organically slumped beeswax cylinder w/ asymmetric scooped melted crown
   const body = new THREE.CylinderGeometry(0.92, 1.08, 1.0, 10, 5, false);
   const bp = body.attributes.position;
   for (let i = 0; i < bp.count; i++) {
     let x = bp.getX(i);
-    let y = bp.getY(i) + 0.5; // 0..1
+    let y = bp.getY(i) + 0.5;
     let z = bp.getZ(i);
     const r = Math.hypot(x, z);
     const a = Math.atan2(z, x);
     if (y > 0.95) {
       if (r < 0.18) {
-        y = 0.86; // Deep concave melted wax reservoir around wick
+        y = 0.86;
       } else {
-        // Dramatic organic melted wax lip wave
         y = 0.94 + Math.sin(a * 2.0 + 0.4) * 0.068 + Math.cos(a * 3.0 - 0.6) * 0.036;
       }
     } else if (y > 0.04) {
@@ -1522,7 +1718,6 @@ function createMeltedWaxAndWickGeometry() {
   body.computeVertexNormals();
   parts.push(tagGeo(body, { colorHex: 0xf2e6cc, bottomColorHex: 0xb39f7e }));
 
-  // 6 Pronounced 3D Sculpted Vertical Melted Wax Drips cascading down the sides w/ frozen bulbous droplets
   const dripSpecs = [
     { ang: 0.25, len: 0.62, r: 0.21 },
     { ang: 1.25, len: 0.36, r: 0.16 },
@@ -1532,19 +1727,17 @@ function createMeltedWaxAndWickGeometry() {
     { ang: 5.40, len: 0.30, r: 0.15 }
   ];
   for (let di = 0; di < dripSpecs.length; di++) {
-    if (SEG_MOBILE && (di % 2) === 1) continue; // mobile: 3 drips instead of 6
+    if (SEG_MOBILE && (di % 2) === 1) continue;
     const d = dripSpecs[di];
     const ca = Math.cos(d.ang);
     const sa = Math.sin(d.ang);
     const topY = 0.95;
     const botY = Math.max(0.06, topY - d.len);
     const midY = (topY + botY) * 0.5;
-    // Bulging melted wax stream clinging down candle outer surface
     parts.push(tagGeo(makeXform(
-      new THREE.CylinderGeometry(d.r * 0.72, d.r * 1.02, topY - botY, 5),
+      new THREE.CylinderGeometry(d.r * 0.72, d.r * 1.02, topY - botY, SEG_MOBILE ? 5 : 9),
       ca * 0.96, midY, sa * 0.96
     ), { colorHex: 0xecdec2, bottomColorHex: 0xc5af89 }));
-    // Rounded frozen teardrop wax bead at drip bottom
     parts.push(tagGeo(makeXform(
       new THREE.SphereGeometry(d.r * 1.28, 6, 4),
       ca * 0.99, botY, sa * 0.99,
@@ -1552,8 +1745,7 @@ function createMeltedWaxAndWickGeometry() {
     ), { colorHex: 0xf1e4ca, bottomColorHex: 0xbca680 }));
   }
 
-  // Dark charred curved wick rising out of the concave wax pool (y = 0.86..1.16)
-  parts.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.085, 0.115, 0.28, 5), 0.04, 1.01, 0, 0, 0, -0.22), {
+  parts.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.085, 0.115, 0.28, SEG_MOBILE ? 5 : 8), 0.04, 1.01, 0, 0, 0, -0.22), {
     colorHex: 0x151112, bottomColorHex: 0x2b201b
   }));
 
@@ -1641,38 +1833,40 @@ export function createMeltedCandleClusters3D({
 
   const ironNormal = pbr?.ironNormal || ironMat?.normalMap || null;
   const ironRough  = pbr?.ironRoughness || ironMat?.roughnessMap || null;
+  const castShadowsPC = !isMobile && !lowSpec;
 
-  // DC #1: Forged Iron Saucers w/ Finger-Ring Handle & Spilled Melted Wax Puddle
   const saucerGeo = regGeo(createForgedSaucerGeometry());
   const saucerMat = regMat(new THREE.MeshStandardMaterial({
     color: 0xffffff,
     vertexColors: true,
     normalMap: lowSpec ? null : ironNormal,
-    normalScale: new THREE.Vector2(0.85, 0.85),
+    normalScale: new THREE.Vector2(0.90, 0.90),
     roughnessMap: ironRough,
-    roughness: 0.54,
-    metalness: 0.72
+    roughness: 0.48,
+    metalness: 0.78,
+    envMapIntensity: 1.10
   }));
   const saucerInst = new THREE.InstancedMesh(saucerGeo, saucerMat, items.length);
   saucerInst.name = 'candle_forged_saucers';
+  saucerInst.castShadow = false;
   saucerInst.receiveShadow = true;
 
-  // DC #2: Sculpted Melted Beeswax Cylinders w/ 6 3D Wax Drips + Dark Charred Wicks
   const waxGeo = regGeo(createMeltedWaxAndWickGeometry());
   const waxMat = regMat(new THREE.MeshStandardMaterial({
     color: 0xffffff,
     vertexColors: true,
-    roughness: 0.58,
+    roughness: 0.54,
     metalness: 0.02,
+    envMapIntensity: 0.45,
     emissive: 0x4e2408,
-    emissiveIntensity: 0.26
+    emissiveIntensity: 0.24
   }));
   const waxInst = new THREE.InstancedMesh(waxGeo, waxMat, items.length);
   waxInst.name = 'candle_melted_wax';
+  waxInst.castShadow = false;
   waxInst.receiveShadow = true;
 
-  // DC #3: Real Sapphire-Blue Cup Teardrop Candle Flames (from soulsFireVfx.js!)
-  const flameGeo = regGeo(createCandleFlameTeardropGeometry({ height: 0.145, radius: 0.028, radialSegments: isMobile ? 5 : 8 }));
+  const flameGeo = regGeo(createCandleFlameTeardropGeometry({ height: 0.145, radius: 0.028, radialSegments: isMobile ? 5 : 12 }));
   const flamePhases = new Float32Array(items.length);
   for (let i = 0; i < items.length; i++) flamePhases[i] = items[i].phase;
   flameGeo.setAttribute('aPhase', new THREE.InstancedBufferAttribute(flamePhases, 1));
@@ -1810,6 +2004,9 @@ export function createMeltedCandleClusters3D({
 
   function setLowSpec(enabled = false) {
     isLowSpec = Boolean(enabled);
+    const cast = !isMobile && !isLowSpec;
+    saucerInst.castShadow = false;
+    waxInst.castShadow = false;
     saucerMat.normalMap = isLowSpec ? null : ironNormal;
     saucerMat.needsUpdate = true;
     flameMat.setLowSpec(isLowSpec);
@@ -1847,14 +2044,8 @@ export function createMeltedCandleClusters3D({
 }
 
 // ============================================================================
-// 4. CASTLE BANNERS, RELIC SHRINES & EAST ALCOVE ARMORY DECOR 3D (4 DC TOTAL!)
-//    - DC 1: 10x18 draped tattered gothic banners w/ AAA pbr.bannerAlbedo/Normal/Roughness
-//            + multi-harmonic cloth wind shader (unique phase/fray per banner!)
-//    - DC 2: Carved gothic stone Relic Altar(s) w/ real ashlarAlbedo/Normal/Roughness
-//    - DC 3: Forged iron banner spear-crossbars/chains + shrine reliquary cradle + ALL 9
-//            East Alcove Armory props (2 weapon racks w/ greatswords/halberds/spears,
-//            2 full suits of Ashen Plate Armor on stands, 5 wall heraldic shields w/ crossed swords)
-//    - DC 4: Instanced glowing runic crystals + orbital rings w/ setShrineClaimed(id)
+// 4. CASTLE BANNERS, RELIC SHRINES, EAST ALCOVE ARMORY, ARCHITECTURAL STONE
+//    WALL PILASTERS/CORNICES & FLAME-TRAP CHARRED SCORCH / 3D ASH DRIFTS!
 // ============================================================================
 function createFallbackBannerTexture() {
   if (typeof document === 'undefined') {
@@ -1935,7 +2126,6 @@ function createFallbackBannerTexture() {
   return tex;
 }
 
-// Ornate forged banner crossbar w/ scrolled wall mounts, spear finials, 4 hanging rings & angled chains!
 function appendBannerHardwareParts(parts, spec) {
   const w = Number.isFinite(spec.width) ? spec.width : 1.25;
   const ox = spec.x || 0;
@@ -1944,41 +2134,37 @@ function appendBannerHardwareParts(parts, spec) {
   const rotY = resolveYaw(spec);
 
   const local = [];
-  // Two wall-mounted gothic bracket backplates + projecting support arms + upper anchor chains
   for (const sx of [-w * 0.44, w * 0.44]) {
     local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.11, 0.28, 0.045), sx, 0.02, 0.022), { colorHex: 0x353c4c }));
-    local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.052, 0.056, 0.26), sx, 0.03, 0.13), { colorHex: 0x41495c }));
-    // Scrolled bracket strut below arm
-    local.push(tagGeo(makeXform(new THREE.TorusGeometry(0.068, 0.014, 4, 7), sx, -0.05, 0.12, 0, Math.PI / 2, 0), { colorHex: 0x4b5368 }));
-    // Angled forged suspension chain running from wall eye (+0.42y) down to crossbar
+    local.push(tagGeo(makeXform(createTwistedIronBarZ(0.052, 0.26, 1.0), sx, 0.03, 0.13), { colorHex: 0x41495c }));
+    local.push(tagGeo(makeXform(new THREE.TorusGeometry(0.068, 0.014, 4, 8), sx, -0.05, 0.12, 0, Math.PI / 2, 0), { colorHex: 0x4b5368 }));
     local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.075, 0.10, 0.035), sx, 0.40, 0.018), { colorHex: 0x383f50 }));
-    for (let lnk = 0; lnk < (SEG_MOBILE ? 2 : 4); lnk++) {
-      const f = (lnk + 0.5) / (SEG_MOBILE ? 2 : 4);
+    const chainCount = SEG_MOBILE ? 2 : 4;
+    for (let lnk = 0; lnk < chainCount; lnk++) {
+      const f = (lnk + 0.5) / chainCount;
       local.push(tagGeo(makeXform(
-        new THREE.TorusGeometry(0.032, 0.010, 4, 6),
+        new THREE.TorusGeometry(0.032, 0.010, 4, 7),
         sx, 0.40 - f * 0.36, 0.03 + f * 0.19,
         0.48, lnk % 2 === 0 ? Math.PI / 2 : 0, 0
       ), { colorHex: 0x515a6f }));
     }
   }
 
-  // Horizontal forged iron crossbar extending past banner width + decorative collar rings
   const barLen = w + 0.50;
-  local.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.034, 0.034, barLen, 7), 0, 0.03, 0.22, 0, 0, Math.PI / 2), {
+  local.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.034, 0.034, barLen, 10), 0, 0.03, 0.22, 0, 0, Math.PI / 2), {
     colorHex: 0x464e62, bottomColorHex: 0x282d39
   }));
   for (const side of [-1, 1]) {
     const endX = side * (barLen * 0.5);
-    // Double forged collar + diamond spearhead finial w/ cross-barbs
-    local.push(tagGeo(makeXform(new THREE.TorusGeometry(0.044, 0.014, 4, 7), endX - side * 0.05, 0.03, 0.22, 0, Math.PI / 2, 0), { colorHex: 0x5c657c }));
+    local.push(tagGeo(makeXform(new THREE.TorusGeometry(0.044, 0.014, 4, 8), endX - side * 0.05, 0.03, 0.22, 0, Math.PI / 2, 0), { colorHex: 0x5c657c }));
     local.push(tagGeo(makeXform(new THREE.OctahedronGeometry(0.056, 0), endX + side * 0.02, 0.03, 0.22), { colorHex: 0x5e677e }));
     local.push(tagGeo(makeXform(new THREE.ConeGeometry(0.048, 0.20, 4), endX + side * 0.15, 0.03, 0.22, 0, 0, -side * Math.PI / 2), { colorHex: 0x6b758e }));
   }
 
-  // 4 forged wrought-iron suspension rings gripping the banner top edge
-  for (let r = 0; r < (SEG_MOBILE ? 2 : 4); r++) {
-    const rx = -w * 0.41 + (r / (SEG_MOBILE ? 1 : 3)) * (w * 0.82);
-    local.push(tagGeo(makeXform(new THREE.TorusGeometry(0.052, 0.013, 4, 8), rx, -0.015, 0.22, 0, Math.PI / 2, 0), {
+  const ringCount = SEG_MOBILE ? 2 : 4;
+  for (let r = 0; r < ringCount; r++) {
+    const rx = -w * 0.41 + (r / Math.max(1, ringCount - 1)) * (w * 0.82);
+    local.push(tagGeo(makeXform(new THREE.TorusGeometry(0.052, 0.013, 4, 9), rx, -0.015, 0.22, 0, Math.PI / 2, 0), {
       colorHex: 0x555e74
     }));
   }
@@ -1988,7 +2174,7 @@ function appendBannerHardwareParts(parts, spec) {
   parts.push(merged);
 }
 
-// High-res 10x18 draped & tattered swallowtail banner cloth geometry w/ unique fray & natural ring sag!
+// 14x24 PC (8x11 Mobile) draped & tattered swallowtail banner cloth geometry
 function createSingleBannerClothGeo(spec, idx) {
   const rng = makeRng(269820 + idx * 131);
   const w = (Number.isFinite(spec.width) ? spec.width : 1.25) * (0.97 + rng() * 0.06);
@@ -1998,13 +2184,12 @@ function createSingleBannerClothGeo(spec, idx) {
   const oz = spec.z || 0;
   const rotY = resolveYaw(spec);
 
-  const cols = SEG_MOBILE ? 8 : 10;
-  const rows = SEG_MOBILE ? 11 : 18;
+  const cols = SEG_MOBILE ? 8 : 14;
+  const rows = SEG_MOBILE ? 11 : 24;
   const plane = new THREE.PlaneGeometry(w, h, cols, rows);
   const pos = plane.attributes.position;
   const uv = plane.attributes.uv;
 
-  // Unique per-banner asymmetric tattered swallowtail V-notch + jagged battle-torn notches along hem
   const colHemCut = new Float32Array(cols + 1);
   const notchAsym = (rng() - 0.5) * 0.07;
   const tearCol = 1 + Math.floor(rng() * (cols - 1));
@@ -2020,17 +2205,15 @@ function createSingleBannerClothGeo(spec, idx) {
   const foldPhase = idx * 0.93 + rng() * 1.4;
   for (let i = 0; i < pos.count; i++) {
     const u = uv.getX(i);
-    const v = uv.getY(i); // 1 top -> 0 bottom
-    const hangT = 1.0 - v; // 0 top -> 1 bottom
+    const v = uv.getY(i);
+    const hangT = 1.0 - v;
 
     const colIdx = Math.min(cols, Math.max(0, Math.round(u * cols)));
     const effectiveH = h * (1.0 - colHemCut[colIdx] * Math.pow(hangT, 1.28));
 
-    // Natural catenary sag between the 4 iron suspension rings at top edge (u = 0.09, 0.36, 0.64, 0.91)
     const ringWave = Math.abs(Math.sin(((u - 0.09) / 0.82) * Math.PI * 3.0));
     const topSag = ringWave * 0.055 * (1.0 - hangT * 0.65);
 
-    // Deep vertical drapery pleats radiating down from the 4 rings + soft wind belly
     const pleatZ = Math.cos(((u - 0.09) / 0.82) * Math.PI * 6.0) * 0.036 * (0.25 + 0.75 * Math.sin(hangT * Math.PI * 0.9));
     const broadWaveZ = Math.sin(u * Math.PI * 2.0 + foldPhase) * 0.032 * Math.sin(hangT * Math.PI);
     const edgeCurlZ = Math.pow(Math.abs(u - 0.5) * 2.0, 2.2) * 0.042 * hangT;
@@ -2056,7 +2239,6 @@ function createSingleBannerClothGeo(spec, idx) {
     const u = pUv.getX(i);
     const hangT = 1.0 - pUv.getY(i);
     swayPhase[i] = phaseVal;
-    // Pinned solidly at top rings (0), billowing richly toward tattered swallowtail tips (1)
     swayWeight[i] = Math.pow(hangT, 1.65);
     lateral[i] = (u - 0.5) * 2.0;
   }
@@ -2068,7 +2250,6 @@ function createSingleBannerClothGeo(spec, idx) {
   return nonIdx;
 }
 
-// Carved Gothic Stone Relic Altar (separated to receive real ashlarAlbedo/Normal/Roughness!)
 function appendRelicShrineStoneParts(parts, spec) {
   const ox = spec.x || 0;
   const oy = spec.y || 0;
@@ -2077,32 +2258,25 @@ function appendRelicShrineStoneParts(parts, spec) {
 
   const local = [];
 
-  // 2-tier chamfered stepped gothic dais plinth
   local.push(tagGeo(makeXform(new THREE.BoxGeometry(1.66, 0.14, 1.44), 0, 0.07, 0), {
     colorHex: 0x62697d, bottomColorHex: 0x262933
   }));
   local.push(tagGeo(makeXform(new THREE.BoxGeometry(1.36, 0.14, 1.16), 0, 0.21, 0), {
     colorHex: 0x717990, bottomColorHex: 0x3b404f
   }));
-
-  // Carved pedestal block + recessed gothic panel trim + 4 corner fluted colonnettes
   local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.94, 0.76, 0.78), 0, 0.66, 0), {
     colorHex: 0x5c6376, bottomColorHex: 0x343946
   }));
   for (const sx of [-0.47, 0.47]) {
     for (const sz of [-0.39, 0.39]) {
-      local.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.092, 0.105, 0.78, 8), sx, 0.67, sz), {
+      local.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.092, 0.105, 0.78, 10), sx, 0.67, sz), {
         colorHex: 0x7b849c, bottomColorHex: 0x424859
       }));
     }
   }
-
-  // Beveled overhanging stone altar mensa slab
   local.push(tagGeo(makeXform(new THREE.BoxGeometry(1.28, 0.14, 1.06), 0, 1.11, 0), {
     colorHex: 0x848ea8, bottomColorHex: 0x4e5568
   }));
-
-  // Pointed gothic rear stela arch hood w/ spire finial & flanking crocketed pinnacles
   for (const sx of [-0.48, 0.48]) {
     local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.20, 0.90, 0.26), sx, 1.63, -0.35), {
       colorHex: 0x6c748a, bottomColorHex: 0x3e4454
@@ -2142,10 +2316,368 @@ function appendRelicShrineIronParts(parts, spec) {
 }
 
 // ============================================================================
-// East Alcove Armory Decor 3D Builders (Merged into the same forged iron PBR DC!)
-//   - weapon_rack: dark timber A-frame w/ iron corner straps + greatswords, halberds, longswords, spears
-//   - armor_stand: gothic Ashen Plate Armor cuirass, layered pauldrons, barbute/sallet helm, tassets & gauntlets
-//   - wall_shield: beveled gothic kite/heater shields w/ heraldic crests & crossed broadswords
+// Architectural Stone Wall Pilasters, Grounded Base Socles & Corbel Cornices
+//   - Dynamically follows `SOULS_CASTLE_WALL_SEGMENTS` across ALL castle zones!
+//   - Automatically clears banners, wall lanterns, shields & flame-trap nozzles.
+//   - Merged into `stoneShrineParts` (0 extra draw calls!).
+// ============================================================================
+function appendCastleWallArchitecturalTrim(stoneParts, wallSegments, obstacles) {
+  const walls = Array.isArray(wallSegments) ? wallSegments : [];
+  if (!walls.length) return 0;
+
+  let pilasterCount = 0;
+
+  const isNearWallProp = (px, pz, minDist = 1.05) => {
+    const minSq = minDist * minDist;
+    for (let i = 0; i < obstacles.length; i++) {
+      const ob = obstacles[i];
+      if (!ob) continue;
+      const dx = (ob.x || 0) - px;
+      const dz = (ob.z || 0) - pz;
+      if (dx * dx + dz * dz < minSq) return true;
+    }
+    return false;
+  };
+
+  for (let w = 0; w < walls.length; w++) {
+    const seg = walls[w];
+    if (!seg || !Number.isFinite(seg.x1) || !Number.isFinite(seg.z1) || !Number.isFinite(seg.x2) || !Number.isFinite(seg.z2)) {
+      continue;
+    }
+    const dx = seg.x2 - seg.x1;
+    const dz = seg.z2 - seg.z1;
+    const segLen = Math.hypot(dx, dz);
+    if (segLen < 2.2) continue;
+
+    const nx = Number.isFinite(seg.normalX) ? seg.normalX : 0;
+    const nz = Number.isFinite(seg.normalZ) ? seg.normalZ : 1;
+    const wallH = Number.isFinite(seg.height) ? seg.height : 8.0;
+    const ux = dx / segLen;
+    const uz = dz / segLen;
+
+    // Local +X runs along `(ux, uz)` and local +Z projects inward along `(nx, nz)`?
+    // Check right-hand Y rotation: rotateY(theta) maps local (1, 0, 0) -> (cos, 0, -sin) and (0, 0, 1) -> (sin, 0, cos).
+    // Align local +Z directly with inward wall normal (nx, nz):
+    const rotY = Math.atan2(nx, nz);
+    const midX = (seg.x1 + seg.x2) * 0.5;
+    const midZ = (seg.z1 + seg.z2) * 0.5;
+    const trimSpan = Math.max(1.2, segLen - 0.36);
+
+    const segLocal = [];
+
+    // 1. Grounded Chamfered Stone Base Socle Molding (eliminates sterile 90-degree wall-floor seams!)
+    segLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(trimSpan, 0.28, 0.15), 0, 0.14, 0.075), {
+      colorHex: 0x5f667a, bottomColorHex: 0x1c1f28
+    }));
+    if (!SEG_MOBILE) {
+      // Sloped stone water-table bevel cap along socle top
+      segLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(trimSpan, 0.09, 0.12), 0, 0.31, 0.05, 0.42, 0, 0), {
+        colorHex: 0x747d94, bottomColorHex: 0x4b5163
+      }));
+    }
+
+    // 2. Mid-Wall Carved Gothic Stringcourse Band (on straight masonry walls, stays behind banners/sconces!)
+    if (seg.axis !== 'angled' && wallH >= 6.2) {
+      segLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(trimSpan, 0.14, 0.11), 0, 4.08, 0.055), {
+        colorHex: 0x727b92, bottomColorHex: 0x3d4352
+      }));
+    }
+
+    // 3. Upper Corbel Cornice Frieze + PC Dentil Corbel Blocks
+    segLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(trimSpan, 0.24, 0.22), 0, wallH - 0.12, 0.11), {
+      colorHex: 0x788199, bottomColorHex: 0x414758
+    }));
+    if (!SEG_MOBILE && seg.axis !== 'angled' && trimSpan >= 3.2) {
+      const corbels = Math.min(14, Math.floor(trimSpan / 1.55));
+      for (let c = 0; c < corbels; c++) {
+        const lx = -trimSpan * 0.44 + (corbels > 1 ? (c / (corbels - 1)) * (trimSpan * 0.88) : 0);
+        segLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(0.18, 0.20, 0.18), lx, wallH - 0.32, 0.09, 0.24, 0, 0), {
+          colorHex: 0x677086, bottomColorHex: 0x343948
+        }));
+      }
+    }
+
+    const trimMerged = mergeTaggedParts(segLocal);
+    makeXform(trimMerged, midX, 0, midZ, 0, rotY, 0);
+    stoneParts.push(trimMerged);
+
+    // 4. Engaged Vertical Gothic Stone Pilasters along straight walls (skipping props & archways!)
+    if (seg.axis !== 'angled' && segLen >= 6.4) {
+      const bayCount = Math.max(1, Math.floor(segLen / 5.8));
+      for (let b = 1; b <= bayCount; b++) {
+        const frac = b / (bayCount + 1);
+        const px = seg.x1 + ux * (segLen * frac);
+        const pz = seg.z1 + uz * (segLen * frac);
+        if (isNearWallProp(px, pz, 1.05)) continue;
+
+        const pil = [];
+        // Stepped pilaster base plinth
+        pil.push(tagGeo(makeXform(new THREE.BoxGeometry(0.60, 0.46, 0.24), 0, 0.23, 0.12), {
+          colorHex: 0x687086, bottomColorHex: 0x1e212a
+        }));
+        // Vertical chamfered pilaster shaft
+        const shaftH = Math.max(2.0, wallH - 0.92);
+        pil.push(tagGeo(makeXform(new THREE.BoxGeometry(0.40, shaftH, 0.17), 0, 0.46 + shaftH * 0.5, 0.085), {
+          colorHex: 0x636b80, bottomColorHex: 0x3b404f
+        }));
+        if (!SEG_MOBILE) {
+          // Central gothic vertical molding rib on pilaster face
+          pil.push(tagGeo(makeXform(new THREE.BoxGeometry(0.14, shaftH - 0.3, 0.05), 0, 0.46 + shaftH * 0.5, 0.185), {
+            colorHex: 0x79829a, bottomColorHex: 0x484f62
+          }));
+        }
+        // Corbeled pilaster capital supporting vault ribs
+        pil.push(tagGeo(makeXform(new THREE.BoxGeometry(0.56, 0.36, 0.26), 0, wallH - 0.28, 0.13), {
+          colorHex: 0x7e88a0, bottomColorHex: 0x454c5e
+        }));
+
+        const pilMerged = mergeTaggedParts(pil);
+        makeXform(pilMerged, px, 0, pz, 0, rotY, 0);
+        stoneParts.push(pilMerged);
+        pilasterCount++;
+      }
+    }
+  }
+
+  return pilasterCount;
+}
+
+// ============================================================================
+// Flame-Trap Gauntlet Charred Blast Scorch, Wall Soot Plumes & 3D Ash Clods!
+//   - Raycasts each flame trap across `wallSegments` to find exact opposite wall!
+//   - Places 3D blackened ash drifts & spalled stone clods at wall bases (0 extra DC)
+//     + procedural FBM floor/wall scorch & smoldering cinder shader mesh (1 DC)!
+// ============================================================================
+function raycastWallHit2D(ox, oz, dx, dz, maxDist, wallSegments) {
+  let bestT = Infinity;
+  let bestWall = null;
+  const walls = Array.isArray(wallSegments) ? wallSegments : [];
+  for (let i = 0; i < walls.length; i++) {
+    const w = walls[i];
+    if (!w || !Number.isFinite(w.x1)) continue;
+    const sx = w.x2 - w.x1;
+    const sz = w.z2 - w.z1;
+    const denom = dx * sz - dz * sx;
+    if (Math.abs(denom) < 1e-6) continue;
+    const qx = w.x1 - ox;
+    const qz = w.z1 - oz;
+    const t = (qx * sz - qz * sx) / denom;
+    const u = (qx * dz - qz * dx) / denom;
+    if (t > 1.8 && t <= maxDist && u >= 0.05 && u <= 0.95 && t < bestT) {
+      bestT = t;
+      bestWall = w;
+    }
+  }
+  if (!bestWall) return null;
+  return {
+    dist: bestT,
+    x: ox + dx * bestT,
+    z: oz + dz * bestT,
+    nx: Number.isFinite(bestWall.normalX) ? bestWall.normalX : -dx,
+    nz: Number.isFinite(bestWall.normalZ) ? bestWall.normalZ : -dz
+  };
+}
+
+function appendFlameTrapAshAndScorch(stoneParts, scorchPlanes, flameTraps, wallSegments) {
+  const traps = Array.isArray(flameTraps) ? flameTraps : [];
+  if (!traps.length) return 0;
+  const rng = makeRng(265511);
+
+  const pushScorchPlane = (planeGeo, role, seed) => {
+    const g = planeGeo.index ? planeGeo.toNonIndexed() : planeGeo;
+    if (g !== planeGeo) planeGeo.dispose();
+    const count = g.attributes.position.count;
+    const meta = new Float32Array(count * 2);
+    for (let i = 0; i < count; i++) {
+      meta[i * 2] = role;
+      meta[i * 2 + 1] = seed;
+    }
+    g.setAttribute('aScorchMeta', new THREE.BufferAttribute(meta, 2));
+    scorchPlanes.push(g);
+  };
+
+  const addCharredAshDrift3D = (cx, cz, nx, nz, scale = 1.0) => {
+    const local = [];
+    // Low-profile windblown charred ash heap hugging the wall plinth (y <= 0.09m, zero trip hazard!)
+    const mound = new THREE.CylinderGeometry(0.28 * scale, 0.68 * scale, 0.075 * scale, SEG_MOBILE ? 6 : 10);
+    makeXform(mound, 0, 0.036 * scale, 0.24 * scale, 0, 0, 0, 1.55, 1.0, 0.72);
+    local.push(tagGeo(mound, { colorHex: 0x1c191d, bottomColorHex: 0x0d0b0e, jitter: 0.08, rng }));
+
+    const clods = SEG_MOBILE ? 2 : 5;
+    for (let k = 0; k < clods; k++) {
+      const clod = new THREE.DodecahedronGeometry((0.048 + rng() * 0.038) * scale, 0);
+      makeXform(
+        clod,
+        (rng() - 0.5) * 0.95 * scale,
+        0.032 * scale,
+        (0.14 + rng() * 0.36) * scale,
+        rng() * 2, rng() * 3, rng() * 2,
+        1.25, 0.52, 0.95
+      );
+      local.push(tagGeo(clod, { colorHex: k % 2 === 0 ? 0x241d1c : 0x151316, bottomColorHex: 0x0c0a0c }));
+    }
+    const merged = mergeTaggedParts(local);
+    makeXform(merged, cx, 0, cz, 0, Math.atan2(nx, nz), 0);
+    stoneParts.push(merged);
+  };
+
+  for (let i = 0; i < traps.length; i++) {
+    const tr = traps[i];
+    if (!tr || !Number.isFinite(tr.x) || !Number.isFinite(tr.z)) continue;
+    const rawDx = Number.isFinite(tr.dirX) ? tr.dirX : 1;
+    const rawDz = Number.isFinite(tr.dirZ) ? tr.dirZ : 0;
+    const lenDir = Math.hypot(rawDx, rawDz) || 1;
+    const dx = rawDx / lenDir;
+    const dz = rawDz / lenDir;
+    const jetLen = Number.isFinite(tr.jetLength) ? tr.jetLength : 7.8;
+    const halfW = Number.isFinite(tr.jetHalfWidth) ? tr.jetHalfWidth : 1.15;
+    const nozzleY = Number.isFinite(tr.y) ? tr.y : 1.15;
+    const seed = i * 1.73 + 0.41;
+
+    const hit = raycastWallHit2D(tr.x, tr.z, dx, dz, jetLen + 4.0, wallSegments);
+    const streakLen = hit ? Math.min(hit.dist - 0.08, jetLen + 2.4) : jetLen + 0.8;
+
+    // 1. Floor Charred Blast Streak across flagstones (u = 0 at nozzle -> u = 1 at impact end)
+    const floorW = halfW * 2.75;
+    const fp = new THREE_BASE.PlaneGeometry(streakLen, floorW);
+    fp.rotateX(-Math.PI / 2);
+    // Plane X initially spans [-streakLen/2, +streakLen/2]; shift +X by streakLen/2 then rotate along (dx, dz)
+    fp.translate(streakLen * 0.5 + 0.06, 0.019, 0);
+    fp.rotateY(Math.atan2(-dz, dx));
+    fp.translate(tr.x, 0, tr.z);
+    pushScorchPlane(fp, 0.0, seed);
+
+    // 2. Nozzle Wall Blackened Soot Halo & Rising Buoyant Plume
+    const srcRotY = Math.atan2(dx, dz);
+    const wpSrc = new THREE_BASE.PlaneGeometry(2.5, 3.3);
+    makeXform(wpSrc, tr.x + dx * 0.036, nozzleY + 0.65, tr.z + dz * 0.036, 0, srcRotY, 0);
+    pushScorchPlane(wpSrc, 1.0, seed);
+
+    // 3D charred ash drift directly beneath nozzle
+    addCharredAshDrift3D(tr.x, tr.z, dx, dz, 1.0);
+
+    // 3. Opposite Wall Heavy Carbonized Impact Crater & Soot Tongues (only when solid wall hit!)
+    if (hit) {
+      const hitRotY = Math.atan2(hit.nx, hit.nz);
+      const wpHit = new THREE_BASE.PlaneGeometry(3.1, 3.3);
+      makeXform(wpHit, hit.x + hit.nx * 0.036, nozzleY + 0.45, hit.z + hit.nz * 0.036, 0, hitRotY, 0);
+      pushScorchPlane(wpHit, 2.0, seed + 0.9);
+
+      // Larger 3D heap of burned ash & spalled stone chips at the opposite wall impact base!
+      addCharredAshDrift3D(hit.x, hit.z, hit.nx, hit.nz, 1.22);
+    }
+  }
+
+  return traps.length;
+}
+
+function createFlameTrapScorchShaderMat() {
+  const uniforms = { uTime: { value: 0.0 } };
+  const mat = new THREE.ShaderMaterial({
+    uniforms,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.NormalBlending,
+    polygonOffset: true,
+    polygonOffsetFactor: -3,
+    polygonOffsetUnits: -3,
+    toneMapped: false,
+    vertexShader: /* glsl */ `
+      attribute vec2 aScorchMeta;
+      varying vec2 vUv;
+      varying vec2 vMeta;
+      void main() {
+        vUv = uv;
+        vMeta = aScorchMeta;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform float uTime;
+      varying vec2 vUv;
+      varying vec2 vMeta;
+
+      float hash21(vec2 p) {
+        p = fract(p * vec2(127.1, 311.7));
+        p += dot(p, p + 34.5);
+        return fract(p.x * p.y);
+      }
+      float vnoise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        return mix(
+          mix(hash21(i), hash21(i + vec2(1.0, 0.0)), f.x),
+          mix(hash21(i + vec2(0.0, 1.0)), hash21(i + vec2(1.0, 1.0)), f.x),
+          f.y
+        );
+      }
+      float fbm(vec2 p) {
+        return vnoise(p) * 0.56 + vnoise(p * 2.13 + vec2(3.7, 1.9)) * 0.30 + vnoise(p * 4.41) * 0.14;
+      }
+
+      void main() {
+        float role = vMeta.x;
+        float seed = vMeta.y;
+        float soot = 0.0;
+        float ashRing = 0.0;
+        float ember = 0.0;
+
+        if (role < 0.5) {
+          // Role 0: Floor elongated turbulent flame-blast scorch fan (u=0 nozzle -> u=1 opposite wall)
+          float u = vUv.x;
+          float v = (vUv.y - 0.5) * 2.0;
+          float n = fbm(vec2(u * 4.5 + seed, v * 3.2));
+          // Fan widens slightly away from nozzle with ragged turbulent edges
+          float fanHalfW = mix(0.32, 0.88, pow(clamp(u, 0.0, 1.0), 0.55));
+          float lat = abs(v + (n - 0.5) * 0.36) / max(0.12, fanHalfW);
+          float along = smoothstep(0.0, 0.08, u) * smoothstep(1.0, 0.68, u - (n - 0.5) * 0.18);
+          float body = smoothstep(1.0, 0.18, lat) * along;
+          soot = clamp(body * (0.62 + 0.58 * n), 0.0, 1.0);
+          ashRing = smoothstep(0.96, 0.55, lat) * (1.0 - smoothstep(0.55, 0.20, lat)) * along * n;
+          // Faint smoldering residual ember specks in flagstone mortar cracks
+          float speck = vnoise(vec2(u * 26.0 + seed * 5.0, v * 14.0));
+          ember = smoothstep(0.86, 0.96, speck) * body * (0.55 + 0.45 * sin(uTime * 3.6 + speck * 18.0));
+        } else if (role < 1.5) {
+          // Role 1: Nozzle wall soot collar + buoyant rising smoke tongue
+          vec2 c = vec2((vUv.x - 0.5) * 2.2, (vUv.y - 0.30) * 1.5);
+          float n = fbm(vec2(c.x * 3.0 + seed, c.y * 2.6));
+          float plumeW = mix(0.42, 0.72, clamp(vUv.y, 0.0, 1.0));
+          float plume = smoothstep(plumeW, 0.08, abs(c.x + (n - 0.5) * 0.28))
+                      * smoothstep(0.06, 0.28, vUv.y) * smoothstep(0.98, 0.36, vUv.y);
+          float ring = exp(-dot(c, c) * 6.5);
+          soot = clamp((plume * 0.75 + ring * 0.85) * (0.65 + 0.50 * n), 0.0, 1.0);
+        } else {
+          // Role 2: Opposite stone wall heavy carbonized flame-impact blast mark
+          vec2 c = vec2((vUv.x - 0.5) * 2.0, (vUv.y - 0.38) * 1.75);
+          float n = fbm(vec2(c.x * 3.4 + seed, c.y * 3.0));
+          float r = length(c) + (n - 0.5) * 0.34;
+          float blast = smoothstep(0.95, 0.14, r);
+          float upLick = smoothstep(0.68, 0.10, abs(c.x + (n - 0.5) * 0.3)) * smoothstep(0.32, 0.52, vUv.y) * smoothstep(0.98, 0.48, vUv.y);
+          soot = clamp(max(blast, upLick * 0.82) * (0.68 + 0.48 * n), 0.0, 1.0);
+          ashRing = smoothstep(0.94, 0.62, r) * (1.0 - smoothstep(0.62, 0.32, r)) * n;
+          float fis = vnoise(c * 14.0 + seed);
+          ember = smoothstep(0.83, 0.95, fis) * smoothstep(0.48, 0.06, r) * (0.55 + 0.45 * sin(uTime * 4.1 + seed * 3.0));
+        }
+
+        float alpha = clamp(soot * 0.76 + ashRing * 0.32 + ember * 0.45, 0.0, 0.82);
+        if (alpha < 0.012) discard;
+
+        vec3 sootBlack = vec3(0.024, 0.020, 0.024);
+        vec3 paleAsh   = vec3(0.24, 0.22, 0.23);
+        vec3 hotCinder = vec3(0.92, 0.30, 0.04);
+
+        vec3 col = mix(sootBlack, paleAsh, clamp(ashRing * 0.85, 0.0, 0.65));
+        col = mix(col, hotCinder, clamp(ember, 0.0, 0.85));
+        gl_FragColor = vec4(col, alpha);
+      }
+    `
+  });
+  return { mat, uniforms };
+}
+
+// ============================================================================
+// East Alcove Armory Decor 3D Builders
 // ============================================================================
 function appendWeaponRackParts(parts, spec) {
   const ox = spec.x || 0;
@@ -2159,48 +2691,39 @@ function appendWeaponRackParts(parts, spec) {
   const local = [];
   const halfW = w * 0.46;
 
-  // Heavy dark aged oak A-frame stand w/ forged iron base boots & notched crossbars
   for (const side of [-1, 1]) {
     const sx = side * halfW;
     local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.11, 0.12, 0.62), sx, 0.06, 0), { colorHex: 0x2b201a, bottomColorHex: 0x17120f }));
     local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.09, h * 0.78, 0.10), sx, h * 0.42, -0.06, 0.12, 0, 0), { colorHex: 0x3b2c22, bottomColorHex: 0x221914 }));
     local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.09, h * 0.76, 0.10), sx, h * 0.41,  0.14, -0.14, 0, 0), { colorHex: 0x3b2c22, bottomColorHex: 0x221914 }));
-    // Iron top cap & side braces
     local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.12, 0.08, 0.24), sx, h * 0.78, 0.04), { colorHex: 0x454d60 }));
   }
-  // Horizontal weapon-rest rails + floor trough
   local.push(tagGeo(makeXform(new THREE.BoxGeometry(w, 0.08, 0.34), 0, 0.14, 0.02), { colorHex: 0x35271e }));
   local.push(tagGeo(makeXform(new THREE.BoxGeometry(w + 0.08, 0.075, 0.09), 0, h * 0.62, 0.02), { colorHex: 0x403025 }));
   local.push(tagGeo(makeXform(new THREE.BoxGeometry(w + 0.12, 0.055, 0.06), 0, h * 0.78, 0.04), { colorHex: 0x485064 }));
 
-  // Helper: standing knightly sword leaning cleanly inside the rack
   const addRackSword = (sx, bladeLen, guardW, tiltZ) => {
     const sw = [];
-    // Beveled diamond blade
     sw.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.028, 0.055, bladeLen, 4), 0, bladeLen * 0.5 + 0.18, 0, 0, Math.PI / 4, 0, 1.0, 1.0, 0.35), {
       colorHex: 0x7b849b, bottomColorHex: 0x4d5466
     }));
-    // Crossguard + grip + pommel
     sw.push(tagGeo(makeXform(new THREE.BoxGeometry(guardW, 0.045, 0.055), 0, bladeLen + 0.18, 0), { colorHex: 0x525a6f }));
-    sw.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.024, 0.028, 0.26, 6), 0, bladeLen + 0.33, 0), { colorHex: 0x2c221f }));
+    sw.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.024, 0.028, 0.26, 8), 0, bladeLen + 0.33, 0), { colorHex: 0x2c221f }));
     sw.push(tagGeo(makeXform(new THREE.OctahedronGeometry(0.052, 0), 0, bladeLen + 0.48, 0), { colorHex: 0x677088 }));
     const sm = mergeTaggedParts(sw);
     makeXform(sm, sx, 0, 0.04, -0.06, 0, tiltZ);
     local.push(sm);
   };
 
-  // Helper: towering gothic halberd / polearm spear
   const addRackPolearm = (sx, poleH, isHalberd, tiltZ) => {
     const pl = [];
-    pl.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.022, 0.026, poleH, 6), 0, poleH * 0.5 + 0.14, 0), {
+    pl.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.022, 0.026, poleH, 8), 0, poleH * 0.5 + 0.14, 0), {
       colorHex: 0x3d2e24, bottomColorHex: 0x241a15
     }));
-    // Top spearhead
     pl.push(tagGeo(makeXform(new THREE.ConeGeometry(0.048, 0.34, 4), 0, poleH + 0.28, 0, 0, Math.PI / 4, 0, 1.0, 1.0, 0.42), {
       colorHex: 0x848ea6, bottomColorHex: 0x555d72
     }));
     if (isHalberd) {
-      // Swept crescent axe blade + back armor-piercing beak
       pl.push(tagGeo(makeXform(new THREE.BoxGeometry(0.24, 0.26, 0.022), 0.12, poleH + 0.04, 0, 0, 0, -0.18), { colorHex: 0x7c859c }));
       pl.push(tagGeo(makeXform(new THREE.ConeGeometry(0.036, 0.18, 4), -0.10, poleH + 0.08, 0, 0, 0, Math.PI * 0.52), { colorHex: 0x697288 }));
     }
@@ -2234,43 +2757,35 @@ function appendArmorStandParts(parts, spec) {
 
   const local = [];
 
-  // Octagonal timber/iron stand plinth + central post + shoulder crossbar
   local.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.36, 0.42, 0.14, 8), 0, 0.07, 0, 0, Math.PI / 8, 0), {
     colorHex: 0x3b312a, bottomColorHex: 0x1e1916
   }));
-  local.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.045, 0.055, 1.56, 7), 0, 0.86, 0), { colorHex: 0x302620 }));
+  local.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.045, 0.055, 1.56, 8), 0, 0.86, 0), { colorHex: 0x302620 }));
   local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.76, 0.055, 0.055), 0, 1.44, 0), { colorHex: 0x362b24 }));
 
-  // Sculpted Ashen Plate Cuirass (fluted breastplate + gorget + waist faulds & thigh tassets)
-  local.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.24, 0.19, 0.46, 8), 0, 1.24, 0.02, 0, Math.PI / 8, 0, 1.16, 1.0, 0.78), {
+  local.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.24, 0.19, 0.46, 10), 0, 1.24, 0.02, 0, Math.PI / 8, 0, 1.16, 1.0, 0.78), {
     colorHex: 0x6c748a, bottomColorHex: 0x3a4050
   }));
-  // Central breastplate keel ridge
   local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.055, 0.44, 0.10), 0, 1.24, 0.16, -0.08, 0, 0), { colorHex: 0x8089a2 }));
-  // Armored gorget collar
-  local.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.14, 0.21, 0.12, 8), 0, 1.50, 0.01), { colorHex: 0x5c6478 }));
-  // Layered hip faulds + twin hanging thigh tassets
-  local.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.20, 0.26, 0.20, 8), 0, 0.94, 0.01, 0, Math.PI / 8, 0, 1.12, 1.0, 0.78), {
+  local.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.14, 0.21, 0.12, 10), 0, 1.50, 0.01), { colorHex: 0x5c6478 }));
+  local.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.20, 0.26, 0.20, 10), 0, 0.94, 0.01, 0, Math.PI / 8, 0, 1.12, 1.0, 0.78), {
     colorHex: 0x565e72, bottomColorHex: 0x343a48
   }));
   for (const side of [-1, 1]) {
     local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.16, 0.30, 0.05), side * 0.14, 0.72, 0.13, -0.14, side * 0.22, side * 0.08), {
       colorHex: 0x626b80, bottomColorHex: 0x383e4d
     }));
-    // Layered rounded gothic pauldrons + rerebrace sleeves
     local.push(tagGeo(makeXform(new THREE.SphereGeometry(0.155, 8, 6, 0, Math.PI * 2, 0, Math.PI * 0.65), side * 0.31, 1.44, 0, 0, 0, -side * 0.42, 1.15, 0.92, 1.05), {
       colorHex: 0x767f96, bottomColorHex: 0x42495a
     }));
-    local.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.082, 0.068, 0.32, 7), side * 0.36, 1.22, 0.01, 0, 0, -side * 0.12), {
+    local.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.082, 0.068, 0.32, 9), side * 0.36, 1.22, 0.01, 0, 0, -side * 0.12), {
       colorHex: 0x596175, bottomColorHex: 0x343a48
     }));
   }
 
-  // Sculpted Gothic Sallet / Barbute Knight Helm w/ sharp visor ridge & dark eye-slit
   local.push(tagGeo(makeXform(new THREE.SphereGeometry(0.148, 9, 7), 0, 1.70, 0.01, 0, 0, 0, 0.92, 1.14, 1.08), {
     colorHex: 0x7b859e, bottomColorHex: 0x42495c
   }));
-  // Pointed visor prow + crest keel + dark breathing slit
   local.push(tagGeo(makeXform(new THREE.ConeGeometry(0.11, 0.22, 4), 0, 1.65, 0.14, Math.PI * 0.46, Math.PI / 4, 0), {
     colorHex: 0x697288, bottomColorHex: 0x3d4354
   }));
@@ -2291,7 +2806,6 @@ function appendWallShieldParts(parts, spec) {
 
   const local = [];
 
-  // Optional crossed knightly broadswords mounted behind the shield (z = 0.045)
   if (spec.crossedSwords) {
     for (const side of [-1, 1]) {
       const sw = [];
@@ -2299,7 +2813,7 @@ function appendWallShieldParts(parts, spec) {
         colorHex: 0x7e87a0, bottomColorHex: 0x525a6e
       }));
       sw.push(tagGeo(makeXform(new THREE.BoxGeometry(0.32, 0.042, 0.048), 0, 0.49, 0), { colorHex: 0x9b7e3c }));
-      sw.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.022, 0.026, 0.22, 6), 0, 0.62, 0), { colorHex: 0x2c221e }));
+      sw.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.022, 0.026, 0.22, 8), 0, 0.62, 0), { colorHex: 0x2c221e }));
       sw.push(tagGeo(makeXform(new THREE.OctahedronGeometry(0.046, 0), 0, 0.75, 0), { colorHex: 0xb89648 }));
       const sm = mergeTaggedParts(sw);
       makeXform(sm, 0, 0.04, 0.048, 0, 0, side * 0.56);
@@ -2307,7 +2821,6 @@ function appendWallShieldParts(parts, spec) {
     }
   }
 
-  // Sculpted Symmetric Gothic Heater Shield body (ExtrudeGeometry for crisp medieval silhouette, z = 0.08..0.14)
   const faceHex = spec.crest === 'relic_sun_shield' ? 0x6c1824 : (spec.crest === 'iron_cross' ? 0x263146 : 0x4e1421);
   const trimHex = spec.crest === 'relic_sun_shield' ? 0xd9ad4e : 0x7b859e;
 
@@ -2319,31 +2832,28 @@ function appendWallShieldParts(parts, spec) {
   shieldShape.quadraticCurveTo(-0.28, -0.34, -0.34, 0.02);
   shieldShape.closePath();
 
-  // Outer beveled metallic rim backing (slightly larger)
   const rimGeo = new THREE.ExtrudeGeometry(shieldShape, {
     depth: 0.042,
     bevelEnabled: true,
     bevelThickness: 0.014,
     bevelSize: 0.032,
-    bevelSegments: 1,
-    curveSegments: SEG_MOBILE ? 2 : 5
+    bevelSegments: SEG_MOBILE ? 1 : 2,
+    curveSegments: SEG_MOBILE ? 2 : 7
   });
   makeXform(rimGeo, 0, 0, 0.082);
   local.push(tagGeo(rimGeo, { colorHex: trimHex, bottomColorHex: 0x3b3532 }));
 
-  // Inner painted/enameled heraldic shield face slightly proud of rim trough
   const faceGeo = new THREE.ExtrudeGeometry(shieldShape, {
     depth: 0.030,
     bevelEnabled: true,
     bevelThickness: 0.008,
     bevelSize: -0.012,
-    bevelSegments: 1,
-    curveSegments: SEG_MOBILE ? 2 : 5
+    bevelSegments: SEG_MOBILE ? 1 : 2,
+    curveSegments: SEG_MOBILE ? 2 : 7
   });
   makeXform(faceGeo, 0, 0, 0.112);
   local.push(tagGeo(faceGeo, { colorHex: faceHex, bottomColorHex: 0x1a1117 }));
 
-  // Central Heraldic Relief Crest on shield face
   if (spec.crest === 'relic_sun_shield') {
     local.push(tagGeo(makeXform(new THREE.SphereGeometry(0.12, 8, 6), 0, 0.06, 0.15, 0, 0, 0, 1.0, 1.0, 0.52), { colorHex: 0xe6be5c }));
     for (let r = 0; r < 8; r++) {
@@ -2357,7 +2867,6 @@ function appendWallShieldParts(parts, spec) {
     local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.44, 0.11, 0.04), 0, 0.12, 0.15), { colorHex: 0x9aa4bd }));
     local.push(tagGeo(makeXform(new THREE.OctahedronGeometry(0.072, 0), 0, 0.12, 0.175), { colorHex: 0xcba146 }));
   } else {
-    // Ashen Crown emblem
     local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.28, 0.08, 0.04), 0, 0.06, 0.15), { colorHex: 0xd0a448 }));
     for (const cx of [-0.11, 0, 0.11]) {
       local.push(tagGeo(makeXform(new THREE.ConeGeometry(0.045, 0.15, 4), cx, 0.16, 0.155), { colorHex: 0xe2b95b }));
@@ -2370,16 +2879,15 @@ function appendWallShieldParts(parts, spec) {
   parts.push(merged);
 }
 
-// Sculpted Double-Pointed Runic Crystal + Tilted Orbital Runic Ring (InstancedMesh)
 function createRunicCrystalGeometry() {
   const parts = [];
-  const crystal = new THREE.OctahedronGeometry(0.22, 0);
+  const crystal = new THREE.OctahedronGeometry(0.22, SEG_MOBILE ? 0 : 1);
   crystal.scale(0.76, 1.78, 0.76);
   const nonIdxC = crystal.index ? crystal.toNonIndexed() : crystal;
   if (nonIdxC !== crystal) crystal.dispose();
   parts.push(nonIdxC);
 
-  const ring = new THREE.TorusGeometry(0.33, 0.021, 4, 6);
+  const ring = new THREE.TorusGeometry(0.33, 0.021, 5, SEG_MOBILE ? 6 : 12);
   ring.rotateX(Math.PI * 0.38);
   ring.rotateZ(0.32);
   const nonIdxR = ring.index ? ring.toNonIndexed() : ring;
@@ -2395,6 +2903,11 @@ export function createCastleBannersAndShrines3D({
   bannerSpecs = [],
   shrineSpecs = [],
   alcoveDecorSpecs = SOULS_CASTLE_ALCOVE_DECOR,
+  wallSegments = SOULS_CASTLE_WALL_SEGMENTS,
+  flameTrapSpecs = SOULS_CASTLE_FLAME_TRAPS,
+  wallLanternSpecs = SOULS_CASTLE_WALL_LANTERNS,
+  includeWallTrim = undefined,
+  includeFlameTrapScorch = undefined,
   darkStoneMat = null,
   trimStoneMat = null,
   ironMat = null,
@@ -2412,6 +2925,15 @@ export function createCastleBannersAndShrines3D({
   const banners = Array.isArray(bannerSpecs) ? bannerSpecs : [];
   const shrines = Array.isArray(shrineSpecs) ? shrineSpecs : [];
   const alcoveDecor = Array.isArray(alcoveDecorSpecs) ? alcoveDecorSpecs : [];
+  const walls = Array.isArray(wallSegments) ? wallSegments : [];
+  const flameTraps = Array.isArray(flameTrapSpecs) ? flameTrapSpecs : [];
+  const wallLanterns = Array.isArray(wallLanternSpecs) ? wallLanternSpecs : [];
+
+  // Auto-enable wall architectural trim & flame-trap scorch whenever full castle layout is active
+  // (e.g. alcoveDecor or >= 4 banners or explicit flag), while letting small isolated showcase scenes stay clean!
+  const isFullCastleContext = alcoveDecor.length > 0 || banners.length >= 4;
+  const useWallTrim = includeWallTrim !== undefined ? Boolean(includeWallTrim) : isFullCastleContext;
+  const useFlameScorch = includeFlameTrapScorch !== undefined ? Boolean(includeFlameTrapScorch) : isFullCastleContext;
 
   const localGeos = [];
   const localMats = [];
@@ -2424,15 +2946,16 @@ export function createCastleBannersAndShrines3D({
   const stoneRough  = pbr?.ashlarRoughness || trimStoneMat?.roughnessMap || darkStoneMat?.roughnessMap || null;
   const ironNormal  = pbr?.ironNormal || ironMat?.normalMap || null;
   const ironRough   = pbr?.ironRoughness || ironMat?.roughnessMap || null;
+  const castShadowsPC = !isMobile && !lowSpec;
 
   const shrineColliders = [];
   const alcoveColliders = [];
   const shrineLights = [];
   let drawCalls = 0;
 
-  // Collect Stone Shrine Parts & Forged Iron / East Alcove Armory Parts
   const stoneShrineParts = [];
   const forgedHardwareAndAlcoveParts = [];
+  const scorchPlanes = [];
 
   for (let i = 0; i < banners.length; i++) {
     appendBannerHardwareParts(forgedHardwareAndAlcoveParts, banners[i]);
@@ -2476,55 +2999,76 @@ export function createCastleBannersAndShrines3D({
     }
   }
 
-  // DC #1: Carved Gothic Stone Relic Altars (real ashlar PBR!)
+  let pilasterCount = 0;
+  if (useWallTrim && walls.length > 0) {
+    const wallObstacles = [
+      ...banners,
+      ...wallLanterns,
+      ...alcoveDecor.filter((a) => a && a.kind === 'wall_shield'),
+      ...flameTraps
+    ];
+    pilasterCount = appendCastleWallArchitecturalTrim(stoneShrineParts, walls, wallObstacles);
+  }
+
+  let scorchedTrapCount = 0;
+  if (useFlameScorch && flameTraps.length > 0) {
+    scorchedTrapCount = appendFlameTrapAshAndScorch(stoneShrineParts, scorchPlanes, flameTraps, walls);
+  }
+
+  // DC #1: Carved Gothic Stone Relic Altars + Wall Pilasters/Socles/Cornices + 3D Charred Ash Clods!
   let stoneShrineMat = null;
+  let stoneMesh = null;
   if (stoneShrineParts.length > 0) {
     stoneShrineMat = regMat(new THREE.MeshStandardMaterial({
       map: stoneAlbedo,
       normalMap: lowSpec ? null : stoneNormal,
-      normalScale: new THREE.Vector2(1.15, 1.15),
+      normalScale: new THREE.Vector2(1.20, 1.20),
       roughnessMap: stoneRough,
       color: stoneAlbedo ? 0xa3aac0 : 0x7f879e,
       vertexColors: true,
-      roughness: 0.94,
-      metalness: 0.10
+      roughness: 0.90,
+      metalness: 0.09,
+      envMapIntensity: 0.55
     }));
     const stoneGeo = regGeo(mergeTaggedParts(stoneShrineParts, 2.0));
-    const stoneMesh = new THREE.Mesh(stoneGeo, stoneShrineMat);
-    stoneMesh.name = 'castle_relic_shrines_stone';
-    stoneMesh.castShadow = true;
+    stoneMesh = new THREE.Mesh(stoneGeo, stoneShrineMat);
+    stoneMesh.name = 'castle_relic_shrines_and_wall_trim_stone';
+    stoneMesh.castShadow = castShadowsPC;
     stoneMesh.receiveShadow = true;
     group.add(stoneMesh);
     drawCalls++;
   }
 
-  // DC #2: Forged Iron Banner Crossbars/Chains + Shrine Iron Cradle + ALL 9 East Alcove Armory Props!
+  // DC #2: Forged Iron Banner Crossbars/Chains + Shrine Cradle + ALL 9 East Alcove Armory Props!
   let forgedDecorMat = null;
+  let ironMesh = null;
   if (forgedHardwareAndAlcoveParts.length > 0) {
     forgedDecorMat = regMat(new THREE.MeshStandardMaterial({
       color: 0xffffff,
       vertexColors: true,
       normalMap: lowSpec ? null : ironNormal,
-      normalScale: new THREE.Vector2(0.72, 0.72),
+      normalScale: new THREE.Vector2(0.80, 0.80),
       roughnessMap: ironRough,
-      roughness: 0.72,
-      metalness: 0.68
+      roughness: 0.62,
+      metalness: 0.74,
+      envMapIntensity: 1.15
     }));
     const ironGeo = regGeo(mergeTaggedParts(forgedHardwareAndAlcoveParts, 0.90));
-    const ironMesh = new THREE.Mesh(ironGeo, forgedDecorMat);
+    ironMesh = new THREE.Mesh(ironGeo, forgedDecorMat);
     ironMesh.name = 'castle_banner_hardware_and_alcove_armory';
-    ironMesh.castShadow = true;
+    ironMesh.castShadow = false;
     ironMesh.receiveShadow = true;
     group.add(ironMesh);
     drawCalls++;
   }
 
-  // DC #3: AAA 10x18 Draped Tattered Gothic Banners w/ bannerAlbedo/Normal/Roughness + Multi-Harmonic Wind Shader!
+  // DC #3: AAA 14x24 PC Draped Tattered Gothic Banners w/ bannerAlbedo/Normal/Roughness + Wind Shader!
   const bannerSwayUniforms = {
     uTime: { value: 0 },
     uSwayAmp: { value: lowSpec ? 0.040 : 0.088 }
   };
   let bannerMat = null;
+  let bannersClothMesh = null;
   const bannerNormalTex = pbr?.bannerNormal || null;
   if (banners.length > 0) {
     const clothParts = [];
@@ -2541,11 +3085,12 @@ export function createCastleBannersAndShrines3D({
     bannerMat = regMat(new THREE.MeshStandardMaterial({
       map: bannerAlbedoTex,
       normalMap: lowSpec ? null : bannerNormalTex,
-      normalScale: new THREE.Vector2(1.15, 1.15),
+      normalScale: new THREE.Vector2(1.20, 1.20),
       roughnessMap: bannerRoughTex,
       color: 0xffffff,
       roughness: bannerRoughTex ? 1.0 : 0.84,
-      metalness: 0.16,
+      metalness: 0.18,
+      envMapIntensity: 0.65,
       side: THREE.DoubleSide
     }));
     bannerMat.customProgramCacheKey = () => 'souls_banner_cloth_wind_v2';
@@ -2565,13 +3110,11 @@ export function createCastleBannersAndShrines3D({
         .replace(
           '#include <begin_vertex>',
           `#include <begin_vertex>
-           // 3-harmonic gothic draft cloth simulation: slow cathedral swell + downward traveling wave + hem corner flutter
            float gust  = sin(uTime * 1.35 + aSwayPhase) * 0.56;
            float wave  = sin(uTime * 2.45 + aSwayPhase * 1.3 + position.y * 1.65) * 0.30;
            float flutt = sin(uTime * 4.65 + aSwayPhase * 2.1 + position.y * 3.1 + aLateral * 2.4) * 0.14;
            float disp  = (gust + wave + flutt) * uSwayAmp * aSwayWeight;
            transformed += normal * disp;
-           // Subtle inextensible cloth lift when billowing out
            transformed.y += abs(disp) * 0.14;`
         );
     };
@@ -2579,7 +3122,7 @@ export function createCastleBannersAndShrines3D({
       texCleanups.push(attachTextureCleanup(bannerMat, [bannerAlbedoTex], trackTex));
     }
 
-    const bannersClothMesh = new THREE.Mesh(mergedClothGeo, bannerMat);
+    bannersClothMesh = new THREE.Mesh(mergedClothGeo, bannerMat);
     bannersClothMesh.name = 'castle_gothic_banners_cloth';
     bannersClothMesh.castShadow = false;
     bannersClothMesh.receiveShadow = true;
@@ -2587,7 +3130,25 @@ export function createCastleBannersAndShrines3D({
     drawCalls++;
   }
 
-  // DC #4: Instanced Glowing Runic Shrine Crystals (per-instance color & setShrineClaimed extinguishment!)
+  // DC #4: Flame-Trap Gauntlet Charred Blast Scorch & Smoldering Ember Decals (1 DC for all 5 traps!)
+  let scorchUniforms = null;
+  let scorchMesh = null;
+  if (scorchPlanes.length > 0) {
+    const scorchGeo = regGeo(mergeGeometries(scorchPlanes, false));
+    for (let i = 0; i < scorchPlanes.length; i++) scorchPlanes[i].dispose();
+
+    const scorchPack = createFlameTrapScorchShaderMat();
+    scorchUniforms = scorchPack.uniforms;
+    const scorchMat = regMat(scorchPack.mat);
+
+    scorchMesh = new THREE.Mesh(scorchGeo, scorchMat);
+    scorchMesh.name = 'flame_trap_charred_scorch_marks';
+    scorchMesh.renderOrder = 2;
+    group.add(scorchMesh);
+    drawCalls++;
+  }
+
+  // DC #5: Instanced Glowing Runic Shrine Crystals
   const shrineIdToIdx = new Map();
   const shrineClaimedState = new Float32Array(shrines.length);
   let shrineClaimedAttr = null;
@@ -2748,7 +3309,11 @@ export function createCastleBannersAndShrines3D({
 
   function setLowSpec(enabled = false) {
     const low = Boolean(enabled);
+    const cast = !isMobile && !low;
     bannerSwayUniforms.uSwayAmp.value = low ? 0.040 : 0.088;
+    if (stoneMesh) stoneMesh.castShadow = cast;
+    if (ironMesh) ironMesh.castShadow = cast;
+    if (bannersClothMesh) bannersClothMesh.castShadow = cast;
     if (stoneShrineMat) {
       stoneShrineMat.normalMap = low ? null : stoneNormal;
       stoneShrineMat.needsUpdate = true;
@@ -2768,6 +3333,9 @@ export function createCastleBannersAndShrines3D({
     bannerSwayUniforms.uTime.value = t;
     if (shrineRelicUniforms) {
       shrineRelicUniforms.uTime.value = t;
+    }
+    if (scorchUniforms) {
+      scorchUniforms.uTime.value = t;
     }
   }
 
@@ -2790,6 +3358,9 @@ export function createCastleBannersAndShrines3D({
     colliders: [...shrineColliders, ...alcoveColliders],
     shrineLights,
     alcoveDecorCount: alcoveDecor.length,
+    pilasterCount,
+    scorchedTrapCount,
+    scorchMesh,
     drawCalls,
     setShrineClaimed,
     isShrineClaimed,

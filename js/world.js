@@ -4,19 +4,20 @@
 import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { DRACOLoader } from '../vendor/DRACOLoader.js';
-import { ARENA_HALF_SIZE } from './config.js?v=20261121z64';
-import { createMistyArena } from './mistyArena.js?v=20261121z64';
-import { createSoulsArena } from './soulsArena.js?v=20261121z64';
+import { ARENA_HALF_SIZE } from './config.js?v=20261121z68';
+import { createMistyArena } from './mistyArena.js?v=20261121z68';
+import { createSoulsArena } from './soulsArena.js?v=20261121z68';
 import {
   BOSS_DOOR_CUTSCENE_DURATION,
   evaluateBossDoorCutscene,
   getBossDoorCutsceneSkipState,
   computeBossDoorCutsceneShakeOffset
-} from './souls/soulsCutsceneChoreography.js?v=20261121z64';
+} from './souls/soulsCutsceneChoreography.js?v=20261121z68';
 import {
   clampCastleCameraPosition,
   SOULS_CASTLE_CONSTANTS
-} from './souls/soulsCastleLayout.js?v=20261121z64';
+} from './souls/soulsCastleLayout.js?v=20261121z68';
+import { createSoulsEnvironmentMap } from './souls/soulsLightingRig.js?v=20261121z68';
 import {
   createCourtyardStoneTexture,
   createHubMistTexture,
@@ -27,7 +28,7 @@ import {
   createHubContactAoTexture,
   createArcaneCircleTexture,
   getSlashCrescentGeo
-} from './world/textures.js?v=20261121z64';
+} from './world/textures.js?v=20261121z68';
 
 const sharedDracoLoader = new DRACOLoader();
 sharedDracoLoader.setDecoderPath('./vendor/draco/');
@@ -180,51 +181,14 @@ export function createArenaWorld(canvas) {
     return bossModeActive ? PALETTE_BOSS : getCombatBasePalette();
   };
 
-  // Lazy 64px procedural PMREM environment map strictly for souls_citadel
-  // (cool moonlit zenith #3b5588 + warm coal/ember nadir #3d1e10; null in Hub & PvE)
+  // Linear HDR Gothic Cathedral PMREM environment map strictly for souls_citadel
+  // (from soulsLightingRig.js: moonlit clerestory + dark stone ribs + warm firelight bounce; null in Hub & PvE)
   let soulsEnvRenderTarget = null;
   let soulsEnvMap = null;
   function getSoulsEnvMap() {
     if (soulsEnvMap) return soulsEnvMap;
     try {
-      const pmrem = new THREE.PMREMGenerator(renderer);
-      pmrem.compileEquirectangularShader();
-      const w = 64;
-      const h = 32;
-      const c = document.createElement('canvas');
-      c.width = w;
-      c.height = h;
-      const g = c.getContext('2d');
-      const grad = g.createLinearGradient(0, 0, 0, h);
-      grad.addColorStop(0.0, '#3b5588');
-      grad.addColorStop(0.32, '#2d4470');
-      grad.addColorStop(0.50, '#182136');
-      grad.addColorStop(0.68, '#2b1b18');
-      grad.addColorStop(1.0, '#3d1e10');
-      g.fillStyle = grad;
-      g.fillRect(0, 0, w, h);
-      // Cool moonlight reflection lobe + warm bonfire underside bounce
-      const moonGrad = g.createRadialGradient(w * 0.28, h * 0.24, 0.5, w * 0.28, h * 0.24, 9);
-      moonGrad.addColorStop(0.0, 'rgba(210, 228, 255, 0.92)');
-      moonGrad.addColorStop(0.45, 'rgba(130, 168, 232, 0.34)');
-      moonGrad.addColorStop(1.0, 'rgba(59, 85, 136, 0.0)');
-      g.fillStyle = moonGrad;
-      g.fillRect(0, 0, w, h);
-      const emberGrad = g.createRadialGradient(w * 0.72, h * 0.68, 0.5, w * 0.72, h * 0.68, 11);
-      emberGrad.addColorStop(0.0, 'rgba(255, 148, 66, 0.48)');
-      emberGrad.addColorStop(1.0, 'rgba(61, 30, 16, 0.0)');
-      g.fillStyle = emberGrad;
-      g.fillRect(0, 0, w, h);
-
-      const eqTex = new THREE.CanvasTexture(c);
-      eqTex.mapping = THREE.EquirectangularReflectionMapping;
-      eqTex.colorSpace = THREE.SRGBColorSpace;
-      eqTex.needsUpdate = true;
-
-      soulsEnvRenderTarget = pmrem.fromEquirectangular(eqTex);
-      soulsEnvMap = soulsEnvRenderTarget.texture;
-      eqTex.dispose();
-      pmrem.dispose();
+      soulsEnvMap = createSoulsEnvironmentMap(renderer, { isMobile: isMobileDevice });
     } catch {
       soulsEnvMap = null;
     }
@@ -237,7 +201,7 @@ export function createArenaWorld(canvas) {
     return COMBAT_EXPOSURE;
   };
   const getCombatAmbientColorForBiome = (b = currentBiome) => {
-    if (b === 'souls_citadel') return 0x4f5a74;
+    if (b === 'souls_citadel') return 0x64708c;
     if (b === 'frost_ruins') return 0x7aaec9;
     if (b === 'ash_citadel') return 0xa66e64;
     return COMBAT_AMBIENT_COLOR;
@@ -315,6 +279,7 @@ export function createArenaWorld(canvas) {
   dirLight.shadow.camera.top = shadowExtent;
   dirLight.shadow.camera.bottom = -shadowExtent;
   dirLight.shadow.bias = -0.0004;
+  dirLight.shadow.normalBias = 0.04;
   scene.add(dirLight);
   scene.add(dirLight.target);
 
@@ -395,7 +360,11 @@ export function createArenaWorld(canvas) {
     }
   }
 
-  function getGroundHeight() {
+  function getGroundHeight(x = 0, z = 0) {
+    if (isSoulsBiome(currentBiome) && typeof soulsArena?.getFloorHeight === 'function') {
+      const h = soulsArena.getFloorHeight(x, z);
+      return Number.isFinite(h) ? h : 0;
+    }
     return 0;
   }
 
@@ -1425,6 +1394,7 @@ export function createArenaWorld(canvas) {
   const partMat = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false });
   const particleMesh = new THREE.InstancedMesh(partGeo, partMat, MAX_PARTICLES);
   particleMesh.frustumCulled = false;
+  particleMesh.visible = false;
   particleMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 
   const zeroMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
@@ -1451,6 +1421,7 @@ export function createArenaWorld(canvas) {
       gravity: 12
     };
   }
+  let activeParticleCount = 0;
   let particleCursor = 0;
   const pDummy = new THREE.Object3D();
 
@@ -1475,7 +1446,10 @@ export function createArenaWorld(canvas) {
 
       const theta = Math.random() * Math.PI * 2;
       const horiz = (0.35 + Math.random() * 0.75) * speed;
-      p.active = true;
+      if (!p.active) {
+        p.active = true;
+        activeParticleCount += 1;
+      }
       p.x = x + (Math.random() - 0.5) * 0.22;
       p.y = Math.max(0.12, y + (Math.random() - 0.5) * 0.20);
       p.z = z + (Math.random() - 0.5) * 0.22;
@@ -1496,6 +1470,7 @@ export function createArenaWorld(canvas) {
       _tmpParticleColor.copy(tmpColor).offsetHSL(0, 0, lumShift);
       particleMesh.setColorAt(idx, _tmpParticleColor);
     }
+    particleMesh.visible = true;
     if (particleMesh.instanceColor) particleMesh.instanceColor.needsUpdate = true;
   }
 
@@ -1834,6 +1809,8 @@ export function createArenaWorld(canvas) {
     duration = 1.1,
     color = 0xef4444
   } = {}) {
+    // Pure Dark Souls mode: zero arcade red floor circles/zones in Abandoned Knight Rift!
+    if (currentBiome === 'souls_citadel') return { cancel() {} };
     let entry = freeDangerZones.pop();
     if (!entry) {
       const group = new THREE.Group();
@@ -1944,7 +1921,8 @@ export function createArenaWorld(canvas) {
     color = 0xef4444,
     duration = 0.65
   } = {}) {
-    if (!telegraphsVisible) return { cancel() {} };
+    // Pure Dark Souls mode: zero red floor telegraph circles for mobs or Boss in Abandoned Knight Rift!
+    if (currentBiome === 'souls_citadel' || !telegraphsVisible) return { cancel() {} };
     const safeRadius = Math.max(0.35, Number(radius) || 2.0);
     const safeDuration = Math.max(0.1, Number(duration) || 0.65);
 
@@ -3590,9 +3568,13 @@ export function createArenaWorld(canvas) {
   let hubStageFocus = 'center'; // 'center' (Главная) | 'heroes' (Герои)
   let currentHubShiftX = 0;
   let targetX = 0;
+  let targetY = 0;
   let targetZ = 0;
   let lastHeroX = 0;
   let lastHeroZ = 0;
+  let lastDirSnapX = NaN;
+  let lastDirSnapZ = NaN;
+  let lastDirSnapSouls = null;
 
   // Cinematic 7.2s 4-Act Boss Door Opening Cutscene (Abandoned Knight Rift [E])
   let bossDoorCutsceneActive = false;
@@ -3680,9 +3662,10 @@ export function createArenaWorld(canvas) {
       lastHeroX = hx;
       lastHeroZ = hz;
       const hgY = getGroundHeight(hx, hz);
-      const hPivotY = hgY + 1.05;
+      targetY = hgY;
+      const hPivotY = hgY + SOULS_CAMERA_PIVOT_Y;
       const cosP = Math.cos(orbitPitch);
-      const reqDist = Math.max(3.2, orbitDist);
+      const reqDist = Math.max(2.8, orbitDist);
       let cX = hx + Math.sin(orbitYaw) * cosP * reqDist;
       let cY = Math.max(hgY + 0.52, hPivotY + Math.sin(orbitPitch) * reqDist);
       let cZ = hz + Math.cos(orbitYaw) * cosP * reqDist;
@@ -3797,7 +3780,7 @@ export function createArenaWorld(canvas) {
     hemiLight.color.copy(combatPal.hemiSky);
     hemiLight.groundColor.copy(combatPal.hemiGround);
     hemiLight.intensity = isSouls
-      ? 0.50
+      ? 0.56
       : isMisty
         ? COMBAT_HEMI_INTENSITY * (isAsh ? 1.14 : 1.12)
         : COMBAT_HEMI_INTENSITY;
@@ -3898,7 +3881,11 @@ export function createArenaWorld(canvas) {
       scene.fog.near = 40;
       scene.fog.far = 120;
       targetX = 0;
+      targetY = 0;
       targetZ = 0;
+      lastDirSnapX = NaN;
+      lastDirSnapZ = NaN;
+      lastDirSnapSouls = null;
       bossDoorCutsceneActive = false;
       bossDoorCutsceneElapsed = 0;
       _cutsceneState = null;
@@ -3920,6 +3907,9 @@ export function createArenaWorld(canvas) {
       // Apply biome-accurate Combat lighting, PMREM env (Souls only), and shadow frustum
       applyCombatLightingAndShadows(true);
 
+      lastDirSnapX = NaN;
+      lastDirSnapZ = NaN;
+      lastDirSnapSouls = null;
       hasFollowedOnce = false;
       const aspect = camera.aspect || 1;
       camera.fov = getCombatFovForBiome(aspect);
@@ -3937,7 +3927,7 @@ export function createArenaWorld(canvas) {
 
   function getCombatFovForBiome(aspect = 1) {
     if (isSoulsBiome(currentBiome)) {
-      return aspect < 1.0 ? Math.min(68, 52 + (1.0 - aspect) * 24) : 52;
+      return aspect < 1.0 ? Math.min(68, 56 + (1.0 - aspect) * 22) : 56;
     }
     return aspect < 1.0 ? Math.min(64, 44 + (1.0 - aspect) * 34) : 44;
   }
@@ -4020,12 +4010,12 @@ export function createArenaWorld(canvas) {
       obstacles.length = 0;
       const cols = sa.getColliders();
       for (let i = 0; i < cols.length; i++) obstacles.push(cols[i]);
-      // Authentic Dark Souls 3 / Elden Ring over-the-shoulder 3rd-person camera framing
+      // Authentic Elden Ring / Dark Souls 3 over-the-head 3rd-person camera framing
       cameraLocked = false;
       orbitYaw = orbitTargetYaw = 0;
-      orbitPitch = orbitTargetPitch = 0.56;
-      orbitDist = orbitTargetDist = 9.8;
-      soulsCamClipDist = 9.8;
+      orbitPitch = orbitTargetPitch = SOULS_DEFAULT_ORBIT_PITCH;
+      orbitDist = orbitTargetDist = SOULS_DEFAULT_ORBIT_DIST;
+      soulsCamClipDist = SOULS_DEFAULT_ORBIT_DIST;
       soulsLockDistBonus = 0;
     } else if (isMisty) {
       if (soulsArena) soulsArena.group.visible = false;
@@ -4069,10 +4059,11 @@ export function createArenaWorld(canvas) {
       groundMesh.material.metalness = 0.05;
       groundMesh.material.needsUpdate = true;
     }
-    outerGround.position.y = -0.06;
-    outerGround.material.color.setHex(getOuterGroundColorForBiome(currentBiome));
-    outerGround.material.roughness = 0.95;
-    outerGround.material.needsUpdate = true;
+    if (!isSouls) {
+      outerGround.position.y = -0.06;
+      outerGround.material.color.setHex(getOuterGroundColorForBiome(currentBiome));
+      outerGround.material.roughness = 0.95;
+    }
     syncBiomeWeatherVisibility();
 
     if (cameraMode !== 'hub') {
@@ -4085,16 +4076,179 @@ export function createArenaWorld(canvas) {
     }
   }
 
+  // One-time GPU Shader Pre-Compilation + Texture Upload for souls_citadel (ZERO mid-run GLSL compile hitches!)
+  const prewarmedTextures = new WeakSet();
+  const PREWARM_TEX_KEYS = [
+    'map',
+    'normalMap',
+    'roughnessMap',
+    'metalnessMap',
+    'emissiveMap',
+    'aoMap',
+    'alphaMap',
+    'bumpMap',
+    'envMap'
+  ];
+
+  function prewarmTextureIfReady(tex) {
+    if (!tex || !tex.isTexture || prewarmedTextures.has(tex)) return;
+    if (tex.isRenderTargetTexture || tex.isFramebufferTexture) return;
+    const img = tex.image;
+    if (!img) return;
+    if (typeof HTMLImageElement !== 'undefined' && img instanceof HTMLImageElement && (!img.complete || img.naturalWidth === 0)) {
+      return;
+    }
+    try {
+      renderer.initTexture(tex);
+      prewarmedTextures.add(tex);
+    } catch {}
+  }
+
+  function prewarmMaterialTextures(mat) {
+    if (!mat) return;
+    for (let i = 0; i < PREWARM_TEX_KEYS.length; i++) {
+      prewarmTextureIfReady(mat[PREWARM_TEX_KEYS[i]]);
+    }
+    if (mat.uniforms && typeof mat.uniforms === 'object') {
+      const keys = Object.keys(mat.uniforms);
+      for (let i = 0; i < keys.length; i++) {
+        const u = mat.uniforms[keys[i]];
+        if (u && u.value && u.value.isTexture) {
+          prewarmTextureIfReady(u.value);
+        }
+      }
+    }
+  }
+
+  function prewarmSoulsShaders() {
+    if (!isSoulsBiome(currentBiome)) return false;
+    const sa = ensureSoulsArena();
+    if (!sa || !sa.group) return false;
+
+    // Pre-seed 1 hidden pooled debris mesh per PBR material so first kill/break never compiles mid-combat
+    if (activeDebris.length === 0) {
+      const seedKinds = ['bone', 'helmet', 'shield'];
+      for (let i = 0; i < seedKinds.length; i++) {
+        const k = seedKinds[i];
+        if (freeDebrisByKind[k] && freeDebrisByKind[k].length === 0) {
+          const piece = acquireDebrisPiece(k);
+          piece.mesh.visible = false;
+          freeDebrisByKind[k].push(piece);
+        }
+      }
+    }
+
+    const savedVis = new Map();
+    const setTempVisible = (node, vis) => {
+      if (!node) return;
+      if (!savedVis.has(node)) savedVis.set(node, node.visible);
+      node.visible = vis;
+    };
+
+    try {
+      setTempVisible(arenaGroup, true);
+      setTempVisible(sa.group, true);
+      setTempVisible(courtyardPropsGroup, false);
+      if (mistyArena) setTempVisible(mistyArena.group, false);
+      setTempVisible(hubBackdropGroup, false);
+      setTempVisible(hubKeySpotLight, false);
+      setTempVisible(hubRimLight, false);
+
+      if (!scene.environment) {
+        scene.environment = getSoulsEnvMap();
+      }
+
+      const isExcludedSubtree = (obj) => {
+        let cur = obj;
+        while (cur) {
+          if (cur === courtyardPropsGroup || cur === hubBackdropGroup || (mistyArena && cur === mistyArena.group)) {
+            return true;
+          }
+          cur = cur.parent;
+        }
+        return false;
+      };
+
+      const occludableSoulsLights = [];
+      let anyOccludableVisibleNow = false;
+      scene.traverse((obj) => {
+        if (!obj || isExcludedSubtree(obj)) return;
+        if (obj.isPointLight && obj.name === 'bossShoulderLanternLight') {
+          occludableSoulsLights.push(obj);
+          let effVis = true;
+          let cur = obj;
+          while (cur) {
+            if (!cur.visible) {
+              effVis = false;
+              break;
+            }
+            cur = cur.parent;
+          }
+          if (effVis) anyOccludableVisibleNow = true;
+        }
+        const mat = obj.material;
+        if (mat) {
+          if (Array.isArray(mat)) {
+            for (let i = 0; i < mat.length; i++) prewarmMaterialTextures(mat[i]);
+          } else {
+            prewarmMaterialTextures(mat);
+          }
+        }
+      });
+
+      scene.updateMatrixWorld(true);
+      camera.updateMatrixWorld(true);
+
+      const applyOccludableLightState = (enabled) => {
+        for (let i = 0; i < occludableSoulsLights.length; i++) {
+          const l = occludableSoulsLights[i];
+          if (enabled) {
+            let cur = l;
+            while (cur && cur !== scene) {
+              setTempVisible(cur, true);
+              cur = cur.parent;
+            }
+          } else {
+            setTempVisible(l, false);
+          }
+        }
+      };
+
+      // Compile BOTH active & occluded Boss-light count shader variants upfront (current state last
+      // so material.currentProgram matches gameplay frame 1 with zero mid-run GLSL recompiles!)
+      if (occludableSoulsLights.length > 0) {
+        applyOccludableLightState(!anyOccludableVisibleNow);
+        renderer.compile(scene, camera);
+        applyOccludableLightState(anyOccludableVisibleNow);
+        renderer.compile(scene, camera);
+      } else {
+        renderer.compile(scene, camera);
+      }
+      return true;
+    } catch (err) {
+      console.warn('[world] prewarmSoulsShaders skipped:', err);
+      return false;
+    } finally {
+      for (const [node, vis] of savedVis) {
+        node.visible = vis;
+      }
+    }
+  }
+
   // Free 3D Orbital Combat Camera State (RMB drag: yaw left/right & pitch up/down; Mouse wheel: zoom in/out)
   const DEFAULT_ORBIT_PITCH = Math.atan2(COMBAT_CAM_OFFSET.y - 0.5, COMBAT_CAM_OFFSET.z);
   const DEFAULT_ORBIT_DIST = Math.hypot(COMBAT_CAM_OFFSET.y - 0.5, COMBAT_CAM_OFFSET.z);
+  const SOULS_DEFAULT_ORBIT_PITCH = 0.42;
+  const SOULS_DEFAULT_ORBIT_DIST = 8.2;
+  const SOULS_CAMERA_PIVOT_Y = 1.55;
+  const SOULS_BOSS_LOCK_DIST_BONUS = 1.4;
   let orbitYaw = Math.PI / 4;
   let orbitPitch = DEFAULT_ORBIT_PITCH;
   let orbitDist = DEFAULT_ORBIT_DIST;
   let orbitTargetYaw = Math.PI / 4;
   let orbitTargetPitch = DEFAULT_ORBIT_PITCH;
   let orbitTargetDist = DEFAULT_ORBIT_DIST;
-  let soulsCamClipDist = 6.2;
+  let soulsCamClipDist = SOULS_DEFAULT_ORBIT_DIST;
   let soulsLockDistBonus = 0;
 
   let cameraLocked = false;
@@ -4120,8 +4274,8 @@ export function createArenaWorld(canvas) {
   function zoomCombatOrbit(wheelDelta = 0) {
     if (cameraLocked) return;
     const step = Math.sign(wheelDelta) * Math.min(Math.abs(wheelDelta), 160) * 0.018;
-    const minD = isSoulsBiome() ? 4.5 : 3.0;
-    const maxD = isSoulsBiome() ? 14.5 : 68.0;
+    const minD = isSoulsBiome() ? 4.6 : 3.0;
+    const maxD = isSoulsBiome() ? 16.0 : 68.0;
     orbitTargetDist = Math.max(minD, Math.min(maxD, orbitTargetDist * Math.exp(step * 0.12)));
   }
 
@@ -4185,7 +4339,7 @@ export function createArenaWorld(canvas) {
     if (devEditors) return Promise.resolve(devEditors);
     if (!isDevModeEnabled()) return Promise.resolve(null);
     if (!devEditorsPromise) {
-      devEditorsPromise = import('./world/devEditors.js?v=20261121z64')
+      devEditorsPromise = import('./world/devEditors.js?v=20261121z68')
         .then((mod) => {
           devEditors = mod.createWorldDevEditors({
             scene,
@@ -4316,11 +4470,14 @@ export function createArenaWorld(canvas) {
 
   function resetCombatOrbit() {
     orbitYaw = 0;
-    orbitPitch = DEFAULT_ORBIT_PITCH;
-    orbitDist = DEFAULT_ORBIT_DIST;
+    const p = isSoulsBiome() ? SOULS_DEFAULT_ORBIT_PITCH : DEFAULT_ORBIT_PITCH;
+    const d = isSoulsBiome() ? SOULS_DEFAULT_ORBIT_DIST : DEFAULT_ORBIT_DIST;
+    orbitPitch = p;
+    orbitDist = d;
     orbitTargetYaw = 0;
-    orbitTargetPitch = DEFAULT_ORBIT_PITCH;
-    orbitTargetDist = DEFAULT_ORBIT_DIST;
+    orbitTargetPitch = p;
+    orbitTargetDist = d;
+    if (isSoulsBiome()) soulsCamClipDist = d;
   }
 
   // Dark Souls / Elden Ring Target Lock-On State & Iconic 3D Reticle
@@ -4429,46 +4586,29 @@ export function createArenaWorld(canvas) {
   }
 
   function computeSoulsSafeCamDist(pivotX, pivotY, pivotZ, dirX, dirY, dirZ, desiredDist) {
-    const minDist = 3.2;
+    const minDist = 2.6;
     if (desiredDist <= minDist) return desiredDist;
     const steps = 16;
-    const camPad = 0.36;
+    const camPad = 0.34;
     let safeDist = desiredDist;
 
-    for (let s = 1; s <= steps; s++) {
-      const d = minDist + ((desiredDist - minDist) * s) / steps;
-      const px = pivotX + dirX * d;
-      const py = pivotY + dirY * d;
-      const pz = pivotZ + dirZ * d;
-      let hit = false;
+    // Wall, doorway, sealed Boss Door & vaulted-ceiling clamping is handled authoritatively by
+    // clampCastleCameraPosition() for the full 6-zone castle layout (z in [-64..+68]).
+    // Here we only sweep against tall interior columns & Throne backrest so they never occlude the hero.
+    if (obstacles.length > 0) {
+      for (let s = 1; s <= steps; s++) {
+        const d = minDist + ((desiredDist - minDist) * s) / steps;
+        const px = pivotX + dirX * d;
+        const py = pivotY + dirY * d;
+        const pz = pivotZ + dirZ * d;
+        let hit = false;
 
-      // 1. Rear wall behind Bonfire Courtyard (generous margin so 9.8m spawn camera & mobile portrait never clip)
-      if (pz > 32.2) {
-        hit = true;
-      } else if (pz >= 4.5) {
-        // South Bonfire Courtyard & First Duel Terrace low stone side walls (|x| ~ 7.35, h ~ 1.45)
-        if (py < 1.65 && Math.abs(px) > 6.65) hit = true;
-      } else if (pz >= -10.8) {
-        // Narrow Gothic Bridge low stone parapets (|x| ~ 3.85)
-        if (py < 1.35 && Math.abs(px) > 3.65) hit = true;
-      } else {
-        // Circular Boss Cathedral Courtyard (center (0, -23.0), walkable radius 13.2m, colonnade wall ~13.6m)
-        const inBridgeNeck = pz > -12.6 && Math.abs(px) <= 3.55;
-        if (!inBridgeNeck) {
-          const rBoss = Math.hypot(px, pz + 23.0);
-          if (rBoss > 13.0) hit = true;
-        }
-      }
-
-      // 2. Tall solid arena columns & Throne backrest ONLY (ignore low Bonfire at (0,25), braziers & small props!)
-      if (!hit && obstacles.length > 0) {
         for (let i = 0; i < obstacles.length; i++) {
           const o = obstacles[i];
-          if (!o || o.isBonfire) continue;
-          if (o.height != null && py > o.height + 0.2) continue;
-          if (Math.hypot(o.x, o.z - 25.0) < 1.6) continue;
+          if (!o || o.isBonfire || o.kind === 'bonfire' || o.kind === 'brazier' || o.kind === 'shrine') continue;
+          if (o.height != null && py > o.height + 0.25) continue;
           if (o.halfW != null && o.halfD != null) {
-            if (Math.max(o.halfW, o.halfD) < 0.85) continue;
+            if (Math.max(o.halfW, o.halfD) < 0.9) continue;
             if (
               Math.abs(px - o.x) < o.halfW + camPad &&
               Math.abs(pz - o.z) < o.halfD + camPad
@@ -4477,7 +4617,7 @@ export function createArenaWorld(canvas) {
               break;
             }
           } else if (o.radius != null) {
-            if (o.radius < 0.85) continue;
+            if (o.radius < 0.9) continue;
             const ox = px - o.x;
             const oz = pz - o.z;
             const rLim = o.radius + camPad;
@@ -4487,11 +4627,11 @@ export function createArenaWorld(canvas) {
             }
           }
         }
-      }
 
-      if (hit) {
-        safeDist = Math.max(minDist, d - (desiredDist - minDist) / steps - 0.12);
-        break;
+        if (hit) {
+          safeDist = Math.max(minDist, d - (desiredDist - minDist) / steps - 0.10);
+          break;
+        }
       }
     }
     return safeDist;
@@ -4524,27 +4664,36 @@ export function createArenaWorld(canvas) {
         const lockYawStep = 1 - Math.exp(-5.5 * clampedDt);
         orbitTargetYaw += yawDiff * lockYawStep;
       }
-      // Keep towering boss comfortably framed when locked on in Souls mode
-      if (isSouls && lockOnTarget.isBoss && orbitTargetPitch < 0.44) {
-        const pitchNudge = 1 - Math.exp(-5.5 * clampedDt);
-        orbitTargetPitch += (0.44 - orbitTargetPitch) * pitchNudge;
+      // Keep towering boss comfortably framed when locked on in Souls mode (Elden Ring horizon)
+      if (isSouls && lockOnTarget.isBoss) {
+        const pitchNudge = 1 - Math.exp(-5.0 * clampedDt);
+        if (orbitTargetPitch < 0.28) {
+          orbitTargetPitch += (0.28 - orbitTargetPitch) * pitchNudge;
+        } else if (orbitTargetPitch > 0.54) {
+          orbitTargetPitch += (0.54 - orbitTargetPitch) * pitchNudge;
+        }
       }
     }
 
     if (!hasFollowedOnce || !dt || dt <= 0) {
       targetX = x;
+      targetY = groundY;
       targetZ = z;
       orbitYaw = orbitTargetYaw;
       orbitPitch = orbitTargetPitch;
       orbitDist = orbitTargetDist;
-      soulsLockDistBonus = isSouls && lockOnTarget?.isBoss ? 0.80 : 0;
+      soulsLockDistBonus = isSouls && lockOnTarget?.isBoss ? SOULS_BOSS_LOCK_DIST_BONUS : 0;
       soulsCamClipDist = orbitDist + soulsLockDistBonus;
       hasFollowedOnce = true;
     } else {
       const posFactor = isSouls
         ? 1 - Math.exp(-11.5 * clampedDt)
         : 1 - Math.exp(-26 * clampedDt);
+      const yFactor = isSouls
+        ? 1 - Math.exp(-16 * clampedDt)
+        : 1 - Math.exp(-26 * clampedDt);
       targetX += (x - targetX) * posFactor;
+      targetY += (groundY - targetY) * yFactor;
       targetZ += (z - targetZ) * posFactor;
       const orbitSmooth = isSouls
         ? 1 - Math.exp(-24 * clampedDt)
@@ -4557,11 +4706,11 @@ export function createArenaWorld(canvas) {
       orbitPitch += (orbitTargetPitch - orbitPitch) * orbitSmooth;
       orbitDist += (orbitTargetDist - orbitDist) * orbitSmooth;
 
-      const wantLockBonus = isSouls && lockOnTarget?.isBoss ? 0.80 : 0;
+      const wantLockBonus = isSouls && lockOnTarget?.isBoss ? SOULS_BOSS_LOCK_DIST_BONUS : 0;
       soulsLockDistBonus += (wantLockBonus - soulsLockDistBonus) * (1 - Math.exp(-5.5 * clampedDt));
     }
 
-    const pivotY = isSouls ? groundY + 1.05 : groundY + 0.85;
+    const pivotY = isSouls ? targetY + SOULS_CAMERA_PIVOT_Y : targetY + 0.85;
 
     // Smoothly interpolate weighted lookAt offset (Souls boss lock: 62% hero + 38% boss chest; PvE: 70% / 30%)
     const lockXzWeight = isSouls && lockOnTarget?.isBoss ? 0.38 : 0.30;
@@ -4610,29 +4759,42 @@ export function createArenaWorld(canvas) {
       const dirX = Math.sin(orbitYaw) * cosP;
       const dirY = Math.sin(orbitPitch);
       const dirZ = Math.cos(orbitYaw) * cosP;
-      const safeDist = computeSoulsSafeCamDist(targetX, pivotY, targetZ, dirX, dirY, dirZ, desiredDist);
+      const pillarSafeDist = computeSoulsSafeCamDist(targetX, pivotY, targetZ, dirX, dirY, dirZ, desiredDist);
+      let safeDist = pillarSafeDist;
+      const doorStateNow = soulsArena?.getBossDoorState?.() || 'closed';
+      if (!bossDoorCutsceneActive) {
+        const rawCamX = targetX + dirX * safeDist;
+        const rawCamY = Math.max(groundY + 0.52, pivotY + dirY * safeDist);
+        const rawCamZ = targetZ + dirZ * safeDist;
+        const wallTest = clampCastleCameraPosition(
+          targetX, pivotY, targetZ, rawCamX, rawCamY, rawCamZ, doorStateNow, _castleCamClampOpts
+        );
+        if (wallTest.hitWall) {
+          const wallDist = Math.hypot(wallTest.x - targetX, wallTest.y - pivotY, wallTest.z - targetZ);
+          if (wallDist < safeDist) safeDist = Math.max(2.6, wallDist);
+        }
+      }
       const clipSmooth = (!dt || dt <= 0)
         ? 1
         : safeDist < soulsCamClipDist
           ? 1 - Math.exp(-24 * clampedDt)
-          : 1 - Math.exp(-6.5 * clampedDt);
+          : 1 - Math.exp(-7.5 * clampedDt);
       soulsCamClipDist += (safeDist - soulsCamClipDist) * clipSmooth;
-      const finalDist = Math.max(3.2, Math.min(desiredDist, soulsCamClipDist));
+      const finalDist = Math.max(2.6, Math.min(desiredDist, soulsCamClipDist));
       camX = targetX + dirX * finalDist;
       camZ = targetZ + dirZ * finalDist;
       const camGroundY = getGroundHeight(camX, camZ);
-      camY = Math.max(Math.max(groundY, camGroundY) + 0.52, pivotY + dirY * finalDist);
+      const minCamFloorY = Math.max(targetY, groundY, camGroundY) + 0.52;
+      camY = Math.max(minCamFloorY, pivotY + dirY * finalDist);
 
-      // Spring-arm castle wall + sealed-Boss-Door collision: ray (hero pivot -> camera) can never
-      // look through walls into the void or get stuck outside the sealed Boss Gates.
+      // Final hard spring-arm clamp so camera never pokes outside castle walls or sealed Boss Gates.
       if (!bossDoorCutsceneActive) {
-        const doorStateNow = soulsArena?.getBossDoorState?.() || 'closed';
         const sprung = clampCastleCameraPosition(
           targetX, pivotY, targetZ, camX, camY, camZ, doorStateNow, _castleCamClampOpts
         );
         if (sprung.hitWall) {
           camX = sprung.x;
-          camY = Math.max(Math.max(groundY, camGroundY) + 0.52, sprung.y);
+          camY = Math.max(minCamFloorY, sprung.y);
           camZ = sprung.z;
           const sprungDist = Math.hypot(camX - targetX, camY - pivotY, camZ - targetZ);
           if (sprungDist < soulsCamClipDist) soulsCamClipDist = sprungDist;
@@ -4640,13 +4802,13 @@ export function createArenaWorld(canvas) {
       }
     } else {
       const horizDist = Math.cos(orbitPitch) * baseEffDist;
-      camY = Math.max(groundY + 0.65, groundY + 0.5 + Math.sin(orbitPitch) * baseEffDist);
+      camY = Math.max(targetY + 0.65, targetY + 0.5 + Math.sin(orbitPitch) * baseEffDist);
       camX = targetX + Math.sin(orbitYaw) * horizDist;
       camZ = targetZ + Math.cos(orbitYaw) * horizDist;
     }
 
     const finalNormCamX = camX + sx;
-    const finalNormCamY = Math.max(groundY + (isSouls ? 0.52 : 0.65), camY + sy);
+    const finalNormCamY = Math.max(Math.max(targetY, groundY) + (isSouls ? 0.52 : 0.65), camY + sy);
     const finalNormCamZ = camZ + sz;
     const finalNormLookX = targetX + lockLookOffsetX + sx * 0.35;
     const finalNormLookY = pivotY + lockLookOffsetY;
@@ -4712,19 +4874,24 @@ export function createArenaWorld(canvas) {
     }
     camera.updateMatrixWorld();
 
-    heroAuraLight.position.set(targetX, 3.2, targetZ);
+    heroAuraLight.position.set(targetX, targetY + 3.2, targetZ);
 
     const snap = 0.5;
     const lx = Math.round(targetX / snap) * snap;
     const lz = Math.round(targetZ / snap) * snap;
-    if (isSouls) {
-      // ~50+ deg cool moonlit directional angle — casts crisp gothic shadows cleanly inside enclosed castle halls
-      dirLight.position.set(lx + 11.5, 22.0, lz + 9.5);
-    } else {
-      dirLight.position.set(lx + 14, 28, lz + 16);
+    if (lx !== lastDirSnapX || lz !== lastDirSnapZ || isSouls !== lastDirSnapSouls) {
+      lastDirSnapX = lx;
+      lastDirSnapZ = lz;
+      lastDirSnapSouls = isSouls;
+      if (isSouls) {
+        // ~50+ deg cool moonlit directional angle — casts crisp gothic shadows cleanly inside enclosed castle halls
+        dirLight.position.set(lx + 11.5, 22.0, lz + 9.5);
+      } else {
+        dirLight.position.set(lx + 14, 28, lz + 16);
+      }
+      dirLight.target.position.set(lx, 0, lz);
+      dirLight.target.updateMatrixWorld();
     }
-    dirLight.target.position.set(lx, 0, lz);
-    dirLight.target.updateMatrixWorld();
   }
 
   function addScreenShake(amount = 0.3) {
@@ -4766,6 +4933,15 @@ export function createArenaWorld(canvas) {
     return hit ? { x: aimHit.x, z: aimHit.z } : { x: targetX, z: targetZ };
   }
 
+  const _soulsUpdateOpts = {
+    playerX: 0,
+    playerZ: 0,
+    camX: 0,
+    camY: 0,
+    camZ: 0,
+    cutsceneState: null
+  };
+
   // ==========================================================================
   // Frame Update, Resize, Render & VFX Reset
   // ==========================================================================
@@ -4773,6 +4949,7 @@ export function createArenaWorld(canvas) {
     const safeDt = Math.min(Math.max(dt || 0.016, 0), 0.1);
     internalTime += safeDt;
     const t = Number.isFinite(elapsedTime) ? elapsedTime : internalTime;
+    const isSouls = cameraMode !== 'hub' && isSoulsBiome(currentBiome);
 
     if (cameraMode === 'hub') {
       applyHubCameraPose(safeDt, false);
@@ -4792,16 +4969,19 @@ export function createArenaWorld(canvas) {
     hemiLight.color.lerp(pal.hemiSky, atmLerp);
     hemiLight.groundColor.lerp(pal.hemiGround, atmLerp);
     dirLight.color.lerp(pal.dir, atmLerp);
-    plazaRuneMat.color.lerp(pal.plazaRune, atmLerp);
-    moteMat.color.lerp(pal.plazaRune, atmLerp);
-
-    plazaRuneMat.opacity = 0.44 + Math.sin(t * 2.5) * 0.12;
-    if (motesPoints.visible) {
-      motesPoints.position.y = Math.sin(t * 0.9) * 0.28;
-      motesPoints.rotation.y = t * 0.03;
+    if (!isSouls) {
+      plazaRuneMat.color.lerp(pal.plazaRune, atmLerp);
+      moteMat.color.lerp(pal.plazaRune, atmLerp);
+      plazaRuneMat.opacity = 0.44 + Math.sin(t * 2.5) * 0.12;
+      if (motesPoints.visible) {
+        motesPoints.position.y = Math.sin(t * 0.9) * 0.28;
+        motesPoints.rotation.y = t * 0.03;
+      }
     }
 
-    waterProjUniforms.uTime.value = t;
+    if (!isSouls || activeProjectiles.size > 0) {
+      waterProjUniforms.uTime.value = t;
+    }
 
     if (cameraMode === 'hub') {
       hubFlagUniforms.uTime.value = t;
@@ -4897,97 +5077,100 @@ export function createArenaWorld(canvas) {
       }
     }
 
-    // Flickering fires, rune lights & adaptive pseudo-bloom halos
-    const bloomScale = getBloomIntensityScale();
-    for (let i = 0; i < lanterns.length; i++) {
-      const l = lanterns[i];
-      if (l.parentGrp && !l.parentGrp.visible) continue;
-      const flicker = 0.88 + Math.sin(t * 9.5 + l.phase) * 0.08 + Math.sin(t * 23.0 + l.phase * 2.1) * 0.05;
-      if (l.pointLight) l.pointLight.intensity = l.baseIntensity * flicker;
-      if (l.bloomSprite && l.bloomMat) {
-        const bs = l.baseBloomScale * (0.94 + (flicker - 0.88) * 0.65);
-        l.bloomSprite.scale.set(bs, bs, 1);
-        l.bloomMat.opacity = l.baseBloomOpacity * bloomScale * (0.86 + (flicker - 0.88) * 1.1);
-      }
-      if (l.flameGrp) {
-        l.flameGrp.children.forEach((ch, idx) => {
-          if (idx >= 3) ch.scale.y = flicker;
-        });
+    // Flickering courtyard fires, rune lights & adaptive pseudo-bloom halos (skip cleanly in souls_citadel)
+    if (!isSouls && courtyardPropsGroup.visible) {
+      const bloomScale = getBloomIntensityScale();
+      for (let i = 0; i < lanterns.length; i++) {
+        const l = lanterns[i];
+        if (l.parentGrp && !l.parentGrp.visible) continue;
+        const flicker = 0.88 + Math.sin(t * 9.5 + l.phase) * 0.08 + Math.sin(t * 23.0 + l.phase * 2.1) * 0.05;
+        if (l.pointLight) l.pointLight.intensity = l.baseIntensity * flicker;
+        if (l.bloomSprite && l.bloomMat) {
+          const bs = l.baseBloomScale * (0.94 + (flicker - 0.88) * 0.65);
+          l.bloomSprite.scale.set(bs, bs, 1);
+          l.bloomMat.opacity = l.baseBloomOpacity * bloomScale * (0.86 + (flicker - 0.88) * 1.1);
+        }
+        if (l.flameGrp) {
+          l.flameGrp.children.forEach((ch, idx) => {
+            if (idx >= 3) ch.scale.y = flicker;
+          });
+        }
       }
     }
 
-    // Animate Misty Forest / Frost Ruins / Ash Citadel mist, glowing portal sigil, campfire & lanterns
-    if (cameraMode !== 'hub' && isMistyBiome(currentBiome) && mistyArena?.isLoaded()) {
+    // Animate Chapter 26 Dark Souls castle bonfire, braziers, fog wall, dynamic light pool, roof & cutscene doors
+    if (isSouls && soulsArena) {
+      _soulsUpdateOpts.playerX = lastHeroX;
+      _soulsUpdateOpts.playerZ = lastHeroZ;
+      _soulsUpdateOpts.camX = camera.position.x;
+      _soulsUpdateOpts.camY = camera.position.y;
+      _soulsUpdateOpts.camZ = camera.position.z;
+      _soulsUpdateOpts.cutsceneState = isBossDoorCutsceneActive() ? _cutsceneState : null;
+      soulsArena.update(safeDt, t, _soulsUpdateOpts);
+    } else if (cameraMode !== 'hub' && isMistyBiome(currentBiome) && mistyArena?.isLoaded()) {
+      // Animate Misty Forest / Frost Ruins / Ash Citadel mist, glowing portal sigil, campfire & lanterns
       mistyArena.update(safeDt, t);
     }
-    // Animate Chapter 26 Dark Souls prototype bonfire, braziers, fog wall, dynamic light pool, roof & cutscene doors
-    if (cameraMode !== 'hub' && isSoulsBiome(currentBiome) && soulsArena) {
-      soulsArena.update(safeDt, t, {
-        playerX: lastHeroX,
-        playerZ: lastHeroZ,
-        camX: camera.position.x,
-        camY: camera.position.y,
-        camZ: camera.position.z,
-        cutsceneState: isBossDoorCutsceneActive() ? _cutsceneState : null
-      });
-    }
 
-    // Chapters 16–20 (Frost Ruins): falling snowflakes & glacial ice crystals
-    if (frostSnowPoints.visible) {
-      const activeCount = lowSpecMode ? Math.round(FROST_SNOW_MAX * 0.5) : FROST_SNOW_MAX;
-      const arr = frostSnowGeo.attributes.position.array;
-      const halfSpan = B + 2;
-      for (let i = 0; i < activeCount; i++) {
-        const pIdx = i * 3;
-        const sIdx = i * 4;
-        const fallSpd = frostSnowSeeds[sIdx];
-        const swayAmp = frostSnowSeeds[sIdx + 1];
-        const ph = frostSnowSeeds[sIdx + 2];
-        const wind = frostSnowSeeds[sIdx + 3];
-        arr[pIdx] += (wind * 0.48 + Math.sin(t * 1.35 + ph) * swayAmp) * safeDt;
-        arr[pIdx + 1] -= fallSpd * safeDt;
-        arr[pIdx + 2] += (wind * 0.32 + Math.cos(t * 1.12 + ph * 1.3) * swayAmp * 0.85) * safeDt;
-        if (arr[pIdx + 1] < 0.08) {
-          arr[pIdx] = targetX + (Math.random() - 0.5) * (arenaSpan + 4);
-          arr[pIdx + 1] = 10.8 + Math.random() * 2.8;
-          arr[pIdx + 2] = targetZ + (Math.random() - 0.5) * (arenaSpan + 4);
-        } else {
-          if (arr[pIdx] > targetX + halfSpan) arr[pIdx] -= arenaSpan + 4;
-          else if (arr[pIdx] < targetX - halfSpan) arr[pIdx] += arenaSpan + 4;
-          if (arr[pIdx + 2] > targetZ + halfSpan) arr[pIdx + 2] -= arenaSpan + 4;
-          else if (arr[pIdx + 2] < targetZ - halfSpan) arr[pIdx + 2] += arenaSpan + 4;
+    // PvE weather loops (Frost Ruins snow & Ash Citadel embers): skip completely in souls_citadel!
+    if (!isSouls) {
+      // Chapters 16–20 (Frost Ruins): falling snowflakes & glacial ice crystals
+      if (frostSnowPoints.visible) {
+        const activeCount = lowSpecMode ? Math.round(FROST_SNOW_MAX * 0.5) : FROST_SNOW_MAX;
+        const arr = frostSnowGeo.attributes.position.array;
+        const halfSpan = B + 2;
+        for (let i = 0; i < activeCount; i++) {
+          const pIdx = i * 3;
+          const sIdx = i * 4;
+          const fallSpd = frostSnowSeeds[sIdx];
+          const swayAmp = frostSnowSeeds[sIdx + 1];
+          const ph = frostSnowSeeds[sIdx + 2];
+          const wind = frostSnowSeeds[sIdx + 3];
+          arr[pIdx] += (wind * 0.48 + Math.sin(t * 1.35 + ph) * swayAmp) * safeDt;
+          arr[pIdx + 1] -= fallSpd * safeDt;
+          arr[pIdx + 2] += (wind * 0.32 + Math.cos(t * 1.12 + ph * 1.3) * swayAmp * 0.85) * safeDt;
+          if (arr[pIdx + 1] < 0.08) {
+            arr[pIdx] = targetX + (Math.random() - 0.5) * (arenaSpan + 4);
+            arr[pIdx + 1] = 10.8 + Math.random() * 2.8;
+            arr[pIdx + 2] = targetZ + (Math.random() - 0.5) * (arenaSpan + 4);
+          } else {
+            if (arr[pIdx] > targetX + halfSpan) arr[pIdx] -= arenaSpan + 4;
+            else if (arr[pIdx] < targetX - halfSpan) arr[pIdx] += arenaSpan + 4;
+            if (arr[pIdx + 2] > targetZ + halfSpan) arr[pIdx + 2] -= arenaSpan + 4;
+            else if (arr[pIdx + 2] < targetZ - halfSpan) arr[pIdx + 2] += arenaSpan + 4;
+          }
         }
+        frostSnowGeo.attributes.position.needsUpdate = true;
       }
-      frostSnowGeo.attributes.position.needsUpdate = true;
-    }
 
-    // Chapters 21–25 (Ash Citadel): rising volcanic ash & glowing lava sparks
-    if (ashEmberPoints.visible) {
-      const activeCount = lowSpecMode ? Math.round(ASH_EMBER_MAX * 0.5) : ASH_EMBER_MAX;
-      const arr = ashEmberGeo.attributes.position.array;
-      const halfSpan = B + 2;
-      for (let i = 0; i < activeCount; i++) {
-        const pIdx = i * 3;
-        const sIdx = i * 4;
-        const riseSpd = ashEmberSeeds[sIdx];
-        const swirlAmp = ashEmberSeeds[sIdx + 1];
-        const ph = ashEmberSeeds[sIdx + 2];
-        const gust = ashEmberSeeds[sIdx + 3];
-        arr[pIdx] += (gust + Math.sin(t * 2.4 + ph) * swirlAmp) * safeDt;
-        arr[pIdx + 1] += riseSpd * safeDt;
-        arr[pIdx + 2] += (gust * 0.6 + Math.cos(t * 2.0 + ph * 1.4) * swirlAmp) * safeDt;
-        if (arr[pIdx + 1] > 11.4) {
-          arr[pIdx] = targetX + (Math.random() - 0.5) * (arenaSpan + 4);
-          arr[pIdx + 1] = 0.08 + Math.random() * 0.65;
-          arr[pIdx + 2] = targetZ + (Math.random() - 0.5) * (arenaSpan + 4);
-        } else {
-          if (arr[pIdx] > targetX + halfSpan) arr[pIdx] -= arenaSpan + 4;
-          else if (arr[pIdx] < targetX - halfSpan) arr[pIdx] += arenaSpan + 4;
-          if (arr[pIdx + 2] > targetZ + halfSpan) arr[pIdx + 2] -= arenaSpan + 4;
-          else if (arr[pIdx + 2] < targetZ - halfSpan) arr[pIdx + 2] += arenaSpan + 4;
+      // Chapters 21–25 (Ash Citadel): rising volcanic ash & glowing lava sparks
+      if (ashEmberPoints.visible) {
+        const activeCount = lowSpecMode ? Math.round(ASH_EMBER_MAX * 0.5) : ASH_EMBER_MAX;
+        const arr = ashEmberGeo.attributes.position.array;
+        const halfSpan = B + 2;
+        for (let i = 0; i < activeCount; i++) {
+          const pIdx = i * 3;
+          const sIdx = i * 4;
+          const riseSpd = ashEmberSeeds[sIdx];
+          const swirlAmp = ashEmberSeeds[sIdx + 1];
+          const ph = ashEmberSeeds[sIdx + 2];
+          const gust = ashEmberSeeds[sIdx + 3];
+          arr[pIdx] += (gust + Math.sin(t * 2.4 + ph) * swirlAmp) * safeDt;
+          arr[pIdx + 1] += riseSpd * safeDt;
+          arr[pIdx + 2] += (gust * 0.6 + Math.cos(t * 2.0 + ph * 1.4) * swirlAmp) * safeDt;
+          if (arr[pIdx + 1] > 11.4) {
+            arr[pIdx] = targetX + (Math.random() - 0.5) * (arenaSpan + 4);
+            arr[pIdx + 1] = 0.08 + Math.random() * 0.65;
+            arr[pIdx + 2] = targetZ + (Math.random() - 0.5) * (arenaSpan + 4);
+          } else {
+            if (arr[pIdx] > targetX + halfSpan) arr[pIdx] -= arenaSpan + 4;
+            else if (arr[pIdx] < targetX - halfSpan) arr[pIdx] += arenaSpan + 4;
+            if (arr[pIdx + 2] > targetZ + halfSpan) arr[pIdx + 2] -= arenaSpan + 4;
+            else if (arr[pIdx + 2] < targetZ - halfSpan) arr[pIdx + 2] += arenaSpan + 4;
+          }
         }
+        ashEmberGeo.attributes.position.needsUpdate = true;
       }
-      ashEmberGeo.attributes.position.needsUpdate = true;
     }
 
     // Animate active projectiles (spin arcane crystals, align tracer tails to velocity & emit comet sparks!)
@@ -5118,48 +5301,55 @@ export function createArenaWorld(canvas) {
       sm.mat.opacity = (1 - t) * (1 - t) * 0.44;
     }
 
-    // Update Pooled Instanced Particles
-    let anyParticleChanged = false;
-    for (let i = 0; i < MAX_PARTICLES; i++) {
-      const p = particles[i];
-      if (!p.active) continue;
-      anyParticleChanged = true;
+    // Update Pooled Instanced Particles (0 CPU/GPU cost when idle!)
+    if (activeParticleCount > 0) {
+      let anyParticleChanged = false;
+      for (let i = 0; i < MAX_PARTICLES; i++) {
+        const p = particles[i];
+        if (!p.active) continue;
+        anyParticleChanged = true;
 
-      p.age += safeDt;
-      if (p.age >= p.life) {
-        p.active = false;
-        particleMesh.setMatrixAt(i, zeroMatrix);
-        continue;
+        p.age += safeDt;
+        if (p.age >= p.life) {
+          p.active = false;
+          activeParticleCount -= 1;
+          particleMesh.setMatrixAt(i, zeroMatrix);
+          continue;
+        }
+
+        p.vy -= p.gravity * safeDt;
+        p.x += p.vx * safeDt;
+        p.y += p.vy * safeDt;
+        p.z += p.vz * safeDt;
+
+        const floorY = p.size * 0.5;
+        if (p.gravity > 0 && p.y < floorY) {
+          p.y = floorY;
+          p.vy = Math.abs(p.vy) * 0.34;
+          p.vx *= 0.72;
+          p.vz *= 0.72;
+        }
+
+        p.rx += p.vrx * safeDt;
+        p.ry += p.vry * safeDt;
+
+        const lifeLeft = 1 - p.age / p.life;
+        const scaleFactor = lifeLeft < 0.4 ? lifeLeft / 0.4 : 1.0;
+        const s = p.size * scaleFactor;
+
+        pDummy.position.set(p.x, p.y, p.z);
+        pDummy.rotation.set(p.rx, p.ry, p.rz);
+        pDummy.scale.set(s, s, s);
+        pDummy.updateMatrix();
+        particleMesh.setMatrixAt(i, pDummy.matrix);
       }
-
-      p.vy -= p.gravity * safeDt;
-      p.x += p.vx * safeDt;
-      p.y += p.vy * safeDt;
-      p.z += p.vz * safeDt;
-
-      const floorY = p.size * 0.5;
-      if (p.gravity > 0 && p.y < floorY) {
-        p.y = floorY;
-        p.vy = Math.abs(p.vy) * 0.34;
-        p.vx *= 0.72;
-        p.vz *= 0.72;
+      if (anyParticleChanged) {
+        particleMesh.instanceMatrix.needsUpdate = true;
       }
-
-      p.rx += p.vrx * safeDt;
-      p.ry += p.vry * safeDt;
-
-      const lifeLeft = 1 - p.age / p.life;
-      const scaleFactor = lifeLeft < 0.4 ? lifeLeft / 0.4 : 1.0;
-      const s = p.size * scaleFactor;
-
-      pDummy.position.set(p.x, p.y, p.z);
-      pDummy.rotation.set(p.rx, p.ry, p.rz);
-      pDummy.scale.set(s, s, s);
-      pDummy.updateMatrix();
-      particleMesh.setMatrixAt(i, pDummy.matrix);
-    }
-    if (anyParticleChanged) {
-      particleMesh.instanceMatrix.needsUpdate = true;
+      if (activeParticleCount <= 0) {
+        activeParticleCount = 0;
+        particleMesh.visible = false;
+      }
     }
 
     // Update Ejected Brass Shell Casings
@@ -5620,6 +5810,8 @@ export function createArenaWorld(canvas) {
       particles[i].active = false;
       particleMesh.setMatrixAt(i, zeroMatrix);
     }
+    activeParticleCount = 0;
+    particleMesh.visible = false;
     particleMesh.instanceMatrix.needsUpdate = true;
 
     while (activeMuzzleFlashes.length > 0) {
@@ -5734,6 +5926,7 @@ export function createArenaWorld(canvas) {
     resetCombatOrbit,
     setCameraMode,
     setArenaBiome,
+    prewarmSoulsShaders,
     getBiomeForLevel,
     isArenaCircular,
     isSoulsArena: () => isSoulsBiome(currentBiome),
@@ -5761,7 +5954,7 @@ export function createArenaWorld(canvas) {
     isPointInFlameTrap: (x, z, y = 0.6, r = 0.5) => Boolean(soulsArena?.isPointInFlameTrap?.(x, z, y, r)),
     getFlameTrapStates: () => soulsArena?.getFlameTrapStates?.() || [],
     isBossHallOccluded: (playerZ = 0) => Boolean(soulsArena?.isBossHallOccluded?.(playerZ)),
-    clampSoulsPosition: (x, z, r = 0.5) => soulsArena ? soulsArena.clampPosition(x, z, r) : { x, z },
+    clampSoulsPosition: (x, z, r = 0.5, opts = null) => soulsArena ? soulsArena.clampPosition(x, z, r, opts) : { x, z },
     getSoulsBonfirePos: () => soulsArena ? soulsArena.getBonfirePos() : { x: 0, z: 25 },
     setDebugColliders,
     setHubStageFocus,

@@ -19,8 +19,8 @@ import {
   RUN_UPGRADES,
   MAGE_TALENT_TREE,
   CLASS_TALENT_TREES
-} from './config.js?v=20261121z64';
-import { attachSeamlessLoop } from './ambientVideo.js?v=20261121z64';
+} from './config.js?v=20261121z68';
+import { attachSeamlessLoop } from './ambientVideo.js?v=20261121z68';
 import {
   CLASS_ORDER,
   CLASS_META,
@@ -36,18 +36,18 @@ import {
   resolveWeaponUpgradeCost,
   resolveMasteryList,
   normalizeActivePerks
-} from './ui/resolvers.js?v=20261121z64';
+} from './ui/resolvers.js?v=20261121z68';
 import {
   makeSvgNode,
   createWeaponSvg,
   createStatRuneSvg,
   createTalentRuneSvg,
   createBlessingRelicSvg
-} from './ui/svgIcons.js?v=20261121z64';
-import { createModalsController } from './ui/modals.js?v=20261121z64';
+} from './ui/svgIcons.js?v=20261121z68';
+import { createModalsController } from './ui/modals.js?v=20261121z68';
 
 // Backward-compatible facade re-exports (Wave 1/2 modularization)
-export { createWeaponSvg, createBlessingRelicSvg } from './ui/svgIcons.js?v=20261121z64';
+export { createWeaponSvg, createBlessingRelicSvg } from './ui/svgIcons.js?v=20261121z68';
 
 // ============================================================================
 // MAIN UI MANAGER FACTORY
@@ -262,6 +262,52 @@ export function createUIManager(initialCallbacks = {}) {
   hudMuteBtn.type = 'button';
   hudMuteBtn.title = 'Настройки звука';
 
+  const makeFullscreenSvg = (isFs = false) =>
+    isFs
+      ? `<svg viewBox="0 0 20 20" width="16" height="16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M7.5 3.2 V7.5 H3.2 M12.5 3.2 V7.5 H16.8 M7.5 16.8 V12.5 H3.2 M12.5 16.8 V12.5 H16.8" stroke="#fde093" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+      : `<svg viewBox="0 0 20 20" width="16" height="16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M3.2 7.5 V3.2 H7.5 M16.8 7.5 V3.2 H12.5 M3.2 12.5 V16.8 H7.5 M16.8 12.5 V16.8 H12.5" stroke="#fde093" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+  const fullscreenBtns = [];
+  function syncFullscreenButtons() {
+    const isFs = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+    for (const btn of fullscreenBtns) {
+      btn.replaceChildren(makeSvgNode(makeFullscreenSvg(isFs)));
+      btn.title = isFs ? 'Выйти из полноэкранного режима' : 'Открыть игру на весь экран';
+      btn.setAttribute('aria-pressed', isFs ? 'true' : 'false');
+    }
+  }
+  function toggleAppFullscreen() {
+    const doc = document;
+    const isFs = Boolean(doc.fullscreenElement || doc.webkitFullscreenElement);
+    if (isFs) {
+      const exit = doc.exitFullscreen || doc.webkitExitFullscreen;
+      if (exit) Promise.resolve(exit.call(doc)).catch(() => {});
+    } else {
+      const target = doc.documentElement || doc.body;
+      const req = target?.requestFullscreen || target?.webkitRequestFullscreen;
+      if (req) Promise.resolve(req.call(target)).catch(() => {});
+    }
+    setTimeout(() => {
+      syncFullscreenButtons();
+      window.dispatchEvent(new Event('resize'));
+    }, 120);
+  }
+  document.addEventListener('fullscreenchange', () => {
+    syncFullscreenButtons();
+    window.dispatchEvent(new Event('resize'));
+  });
+  document.addEventListener('webkitfullscreenchange', () => {
+    syncFullscreenButtons();
+    window.dispatchEvent(new Event('resize'));
+  });
+
+  const hudFullscreenBtn = el('button', 'hud-btn icon-btn hud-fullscreen-btn');
+  hudFullscreenBtn.type = 'button';
+  hudFullscreenBtn.title = 'Открыть игру на весь экран';
+  hudFullscreenBtn.setAttribute('aria-label', 'На весь экран');
+  hudFullscreenBtn.addEventListener('click', toggleAppFullscreen);
+  fullscreenBtns.push(hudFullscreenBtn);
+
   const hudHomeBtn = el('button', 'hud-btn icon-btn hud-pause-btn');
   hudHomeBtn.type = 'button';
   hudHomeBtn.title = 'Пауза [Esc]';
@@ -271,7 +317,8 @@ export function createUIManager(initialCallbacks = {}) {
     )
   );
 
-  hudActionsRow.append(hudTelegraphBtn, hudMuteBtn, hudHomeBtn);
+  hudActionsRow.append(hudTelegraphBtn, hudMuteBtn, hudFullscreenBtn, hudHomeBtn);
+  syncFullscreenButtons();
   hudTopRight.append(hudStatsPills, hudActionsRow);
 
   hudTopRow.append(hudTopLeft, hudTopCenter, hudTopRight);
@@ -1265,7 +1312,15 @@ export function createUIManager(initialCallbacks = {}) {
       </svg>`
     )
   );
-  hubTreasury.append(hubQuestsBtn, treasuryGoldPill, hubMuteBtn);
+  const hubFullscreenBtn = el('button', 'hub-gear-btn hub-fullscreen-btn');
+  hubFullscreenBtn.type = 'button';
+  hubFullscreenBtn.title = 'Открыть игру на весь экран';
+  hubFullscreenBtn.setAttribute('aria-label', 'На весь экран');
+  hubFullscreenBtn.addEventListener('click', toggleAppFullscreen);
+  fullscreenBtns.push(hubFullscreenBtn);
+  syncFullscreenButtons();
+
+  hubTreasury.append(hubQuestsBtn, treasuryGoldPill, hubFullscreenBtn, hubMuteBtn);
   hubHeader.append(hubProfilePlaque, hubTreasury);
 
   // --- Hub Body Container ---
@@ -2313,7 +2368,10 @@ export function createUIManager(initialCallbacks = {}) {
   });
   hudScreen.appendChild(soulsRipostePrompt);
 
-  function setSoulsInteractPrompt(visible, label = 'Открыть врата') {
+  let soulsInteractIconCache = '🚪';
+  let hudDerivedInteract = null;
+
+  function applySoulsInteractPromptState(visible, label = 'Открыть врата') {
     const show = Boolean(visible);
     const nextLabel = (label && String(label).trim()) || 'Открыть врата';
     if (show !== soulsInteractVisible) {
@@ -2323,7 +2381,37 @@ export function createUIManager(initialCallbacks = {}) {
     if (nextLabel !== soulsInteractLabel) {
       soulsInteractLabel = nextLabel;
       soulsInteractText.textContent = nextLabel;
+      const firstCp = nextLabel.codePointAt(0) || 0;
+      const hasLeadingEmoji = firstCp > 0x2000;
+      soulsInteractIcon.classList.toggle('hidden', hasLeadingEmoji);
+      if (!hasLeadingEmoji) {
+        const lower = nextLabel.toLowerCase();
+        const nextIcon = lower.includes('кост')
+          ? '🔥'
+          : lower.includes('алтар') || lower.includes('реликв')
+            ? '✨'
+            : '🚪';
+        if (nextIcon !== soulsInteractIconCache) {
+          soulsInteractIconCache = nextIcon;
+          soulsInteractIcon.textContent = nextIcon;
+        }
+      }
     }
+  }
+
+  function setSoulsInteractPrompt(visible, label = 'Открыть врата') {
+    const hasCustomLabel = Boolean(label && String(label).trim() && String(label).trim() !== 'Открыть врата');
+    if (hudDerivedInteract) {
+      const mergedVisible = Boolean(visible || hudDerivedInteract.visible);
+      const mergedLabel = hasCustomLabel
+        ? String(label).trim()
+        : mergedVisible
+          ? hudDerivedInteract.label
+          : 'Открыть врата';
+      applySoulsInteractPromptState(mergedVisible, mergedLabel);
+      return;
+    }
+    applySoulsInteractPromptState(visible, label);
   }
 
   function showSoulsBannerCue(text, kind = 'guard_counter') {
@@ -2424,6 +2512,7 @@ export function createUIManager(initialCallbacks = {}) {
     soulsPointerHint.classList.add('hidden');
     soulsCombatCue.classList.add('hidden');
     soulsInteractVisible = false;
+    hudDerivedInteract = null;
     soulsInteractPrompt.classList.add('hidden');
     soulsRipostePrompt.classList.add('hidden');
     touchAttackBtn.classList.remove('is-riposte-ready');
@@ -4313,6 +4402,23 @@ export function createUIManager(initialCallbacks = {}) {
     }
     if (isSoulsHud) {
       const sData = snapshot.souls;
+      const nearBonfire = Boolean(sData.canRestAtBonfire || sData.interactKind === 'bonfire');
+      const nearShrine = Boolean(sData.canClaimShrine || sData.interactKind === 'shrine');
+      const nearDoors = Boolean(sData.canOpenBossDoors || sData.interactKind === 'boss_doors');
+      const canInteractNow = Boolean(sData.canInteract || nearBonfire || nearShrine || nearDoors);
+      const dynInteractPrompt =
+        (sData.interactPromptRu && String(sData.interactPromptRu).trim()) ||
+        (sData.interactLabel && String(sData.interactLabel).trim()) ||
+        (nearBonfire
+          ? '🔥 Отдохнуть у Костра (Чекпоинт • 4/4 Фляги)'
+          : nearShrine
+            ? '✨ Принять благословение алтаря'
+            : 'Открыть врата');
+      hudDerivedInteract = {
+        visible: canInteractNow,
+        label: dynInteractPrompt
+      };
+      applySoulsInteractPromptState(canInteractNow, dynInteractPrompt);
       if (typeof sData.doorCutsceneActive === 'boolean') {
         setSoulsLetterbox(sData.doorCutsceneActive, {
           showBossTitleCard: Boolean(sData.showBossTitleCard),
@@ -4411,6 +4517,9 @@ export function createUIManager(initialCallbacks = {}) {
         hudFlaskBtn.classList.toggle('is-drinking', flDrink);
         touchFlaskBtn.classList.toggle('is-drinking', flDrink);
       }
+    } else if (hudDerivedInteract) {
+      hudDerivedInteract = null;
+      applySoulsInteractPromptState(false, 'Открыть врата');
     }
 
     // 1c. Target Lock-On Indicator [Q / СКМ] (Dark Souls Chapter XXVI only)

@@ -1,11 +1,12 @@
-// Souls-like 3D Swept Ribbon Weapon Trails & Physical Steel Clash Sparks
-// Pure Vanilla ES Module (Three.js r160) — Elden Ring / Dark Souls 3 combat VFX:
+// Souls-like 3D Swept Ribbon Weapon Trails & Physical Steel Clash Sparks (Wave 2 Ultra-Realism)
+// Pure Vanilla ES Module (Three.js r160) — Next-Gen Dark Souls 3 / Elden Ring Combat VFX:
 //   - Up to 6 simultaneous dynamic 3D swept blade ribbons in 1 SINGLE draw call (0 when idle)
-//   - Centripetal Catmull-Rom spline smoothing + blade-length arc preservation (silky even at 30 FPS)
-//   - 4 handcrafted GLSL styles: 'hero_steel', 'hero_heavy', 'mob_iron', 'boss_ember' (+ Phase 2 boost)
-//   - Premultiplied CustomBlending (simultaneous smoky silhouette + HDR glow, preserves canvas alpha = 1)
-//   - Velocity-stretched instanced metallic ricochet sparks + Sekiro-style impact starburst in 1 draw call
-//   - Zero per-frame heap allocations, dynamic lowSpec toggle without shader recompilation, 0 WebGL leaks
+//   - Zero-lag onBeforeRender sync + 3-point micro-jitter knot filter + Chebyshev 3D circular endpoint
+//     extrapolation + Centripetal Catmull-Rom (96 cross-sections PC / ~2.5 deg steps => 0 angular polygons!)
+//   - Physical air-shear streamlines + true blackbody incandescent razor edge (zero neon overexposure!)
+//   - Automatic tangential 3D micro-sparks peeling off heated edges on Heavy strikes & Boss Hammer
+//   - Dual-mass ballistic metallic ricochet sparks + crisp clash starburst in 1 instanced draw call
+//   - 0 ANGLE/HLSL X4000 warnings, 0 per-frame heap allocations, 0 WebGL leaks on dispose()
 
 import * as THREE from '../../vendor/three.module.js';
 
@@ -35,202 +36,229 @@ export const CLASH_SPARK_TIERS = Object.freeze({
 const STYLE_SPECS = Object.freeze({
   hero_steel: Object.freeze({
     id: 0,
-    life: 0.24,
+    life: 0.22,
     intensity: 1.0,
-    taper: 0.26,
-    buoyancy: 0.04,
-    widthPadTip: 0.03,
-    widthPadBase: 0.0
+    taper: 0.30,
+    buoyancy: 0.02,
+    widthPadTip: 0.015,
+    widthPadBase: 0.02,
+    edgeSparksPerMeter: 0.55,
+    edgeSparkMinSpeed: 13.0,
+    edgeSparkHot: [1.0, 0.97, 0.88],
+    edgeSparkMid: [0.95, 0.78, 0.44],
+    edgeSparkCool: [0.65, 0.42, 0.18]
   }),
   hero_heavy: Object.freeze({
     id: 1,
-    life: 0.32,
-    intensity: 1.22,
-    taper: 0.20,
-    buoyancy: 0.08,
-    widthPadTip: 0.09,
-    widthPadBase: -0.02
+    life: 0.30,
+    intensity: 1.18,
+    taper: 0.24,
+    buoyancy: 0.06,
+    widthPadTip: 0.05,
+    widthPadBase: 0.0,
+    edgeSparksPerMeter: 4.2,
+    edgeSparkMinSpeed: 4.2,
+    edgeSparkHot: [1.0, 0.98, 0.86],
+    edgeSparkMid: [1.0, 0.72, 0.22],
+    edgeSparkCool: [0.88, 0.26, 0.04]
   }),
   mob_iron: Object.freeze({
     id: 2,
-    life: 0.28,
-    intensity: 1.05,
-    taper: 0.28,
+    life: 0.26,
+    intensity: 1.0,
+    taper: 0.30,
     buoyancy: 0.02,
-    widthPadTip: 0.04,
-    widthPadBase: 0.0
+    widthPadTip: 0.02,
+    widthPadBase: 0.02,
+    edgeSparksPerMeter: 1.35,
+    edgeSparkMinSpeed: 9.2,
+    edgeSparkHot: [1.0, 0.88, 0.72],
+    edgeSparkMid: [0.95, 0.36, 0.12],
+    edgeSparkCool: [0.62, 0.10, 0.03]
   }),
   boss_ember: Object.freeze({
     id: 3,
-    life: 0.38,
+    life: 0.36,
     intensity: 1.0,
-    taper: 0.16,
-    buoyancy: 0.48,
-    widthPadTip: 0.16,
-    widthPadBase: -0.04
+    taper: 0.18,
+    buoyancy: 0.42,
+    widthPadTip: 0.11,
+    widthPadBase: -0.03,
+    edgeSparksPerMeter: 5.4,
+    edgeSparkMinSpeed: 3.2,
+    edgeSparkHot: [1.0, 0.95, 0.76],
+    edgeSparkMid: [1.0, 0.54, 0.10],
+    edgeSparkCool: [0.78, 0.12, 0.02]
   }),
   boss_ember_p2: Object.freeze({
     id: 3,
-    life: 0.46,
-    intensity: 1.58,
-    taper: 0.12,
-    buoyancy: 0.72,
-    widthPadTip: 0.24,
-    widthPadBase: -0.06
+    life: 0.44,
+    intensity: 1.52,
+    taper: 0.14,
+    buoyancy: 0.64,
+    widthPadTip: 0.16,
+    widthPadBase: -0.05,
+    edgeSparksPerMeter: 8.2,
+    edgeSparkMinSpeed: 2.6,
+    edgeSparkHot: [1.0, 0.98, 0.86],
+    edgeSparkMid: [1.0, 0.62, 0.14],
+    edgeSparkCool: [0.86, 0.16, 0.03]
   })
 });
 
 const CLASH_TIER_SPECS = Object.freeze({
   light: Object.freeze({
-    countDesktop: 12,
-    countMobile: 8,
+    countDesktop: 14,
+    countMobile: 9,
     countLowSpec: 6,
-    speedMin: 4.5,
-    speedMax: 8.6,
-    spreadRad: 0.72,
-    upwardBias: 0.35,
-    lifeMin: 0.20,
+    speedMin: 4.8,
+    speedMax: 9.2,
+    spreadRad: 0.68,
+    upwardBias: 0.34,
+    lifeMin: 0.18,
     lifeMax: 0.38,
-    gravity: 15.0,
-    drag: 1.8,
-    restitution: 0.45,
-    widthMin: 0.016,
-    widthMax: 0.028,
-    streakScale: 0.034,
-    flashSize: 0.32,
-    flashLife: 0.075,
-    hotColor: [1.0, 0.98, 0.86],
-    midColor: [1.0, 0.78, 0.32],
-    coolColor: [0.92, 0.32, 0.06]
+    gravity: 15.2,
+    drag: 2.0,
+    restitution: 0.46,
+    widthMin: 0.013,
+    widthMax: 0.023,
+    streakScale: 0.032,
+    flashSize: 0.24,
+    flashLife: 0.065,
+    hotColor: [1.0, 0.98, 0.88],
+    midColor: [0.98, 0.74, 0.28],
+    coolColor: [0.85, 0.28, 0.05]
   }),
   block: Object.freeze({
-    countDesktop: 22,
-    countMobile: 14,
+    countDesktop: 24,
+    countMobile: 15,
     countLowSpec: 10,
-    speedMin: 5.5,
-    speedMax: 11.2,
-    spreadRad: 0.88,
-    upwardBias: 0.42,
-    lifeMin: 0.26,
-    lifeMax: 0.50,
-    gravity: 14.5,
-    drag: 1.65,
-    restitution: 0.50,
-    widthMin: 0.020,
-    widthMax: 0.034,
-    streakScale: 0.040,
-    flashSize: 0.52,
-    flashLife: 0.095,
-    hotColor: [1.0, 0.99, 0.92],
-    midColor: [1.0, 0.80, 0.30],
-    coolColor: [0.95, 0.34, 0.05]
+    speedMin: 5.6,
+    speedMax: 11.6,
+    spreadRad: 0.84,
+    upwardBias: 0.40,
+    lifeMin: 0.24,
+    lifeMax: 0.52,
+    gravity: 14.8,
+    drag: 1.75,
+    restitution: 0.52,
+    widthMin: 0.015,
+    widthMax: 0.028,
+    streakScale: 0.036,
+    flashSize: 0.38,
+    flashLife: 0.080,
+    hotColor: [1.0, 0.98, 0.90],
+    midColor: [0.98, 0.76, 0.26],
+    coolColor: [0.88, 0.30, 0.05]
   }),
   parry: Object.freeze({
-    countDesktop: 40,
-    countMobile: 24,
+    countDesktop: 44,
+    countMobile: 26,
     countLowSpec: 16,
-    speedMin: 6.8,
-    speedMax: 15.2,
-    spreadRad: 1.22,
-    upwardBias: 0.52,
-    lifeMin: 0.34,
-    lifeMax: 0.68,
-    gravity: 13.5,
-    drag: 1.45,
-    restitution: 0.56,
-    widthMin: 0.022,
-    widthMax: 0.042,
-    streakScale: 0.046,
-    flashSize: 0.92,
-    flashLife: 0.135,
-    hotColor: [1.0, 1.0, 0.96],
-    midColor: [1.0, 0.88, 0.38],
-    coolColor: [1.0, 0.46, 0.08]
+    speedMin: 7.0,
+    speedMax: 15.6,
+    spreadRad: 1.18,
+    upwardBias: 0.50,
+    lifeMin: 0.32,
+    lifeMax: 0.72,
+    gravity: 13.8,
+    drag: 1.48,
+    restitution: 0.58,
+    widthMin: 0.017,
+    widthMax: 0.034,
+    streakScale: 0.042,
+    flashSize: 0.68,
+    flashLife: 0.115,
+    hotColor: [1.0, 0.99, 0.94],
+    midColor: [1.0, 0.84, 0.34],
+    coolColor: [0.94, 0.38, 0.06]
   }),
   heavy: Object.freeze({
-    countDesktop: 28,
+    countDesktop: 30,
     countMobile: 18,
     countLowSpec: 12,
-    speedMin: 6.5,
-    speedMax: 13.4,
-    spreadRad: 0.62,
+    speedMin: 6.4,
+    speedMax: 13.8,
+    spreadRad: 0.58,
     upwardBias: 0.34,
     lifeMin: 0.28,
-    lifeMax: 0.56,
-    gravity: 14.0,
-    drag: 1.5,
-    restitution: 0.48,
-    widthMin: 0.022,
-    widthMax: 0.038,
-    streakScale: 0.044,
-    flashSize: 0.68,
-    flashLife: 0.11,
+    lifeMax: 0.58,
+    gravity: 14.2,
+    drag: 1.55,
+    restitution: 0.50,
+    widthMin: 0.016,
+    widthMax: 0.030,
+    streakScale: 0.040,
+    flashSize: 0.48,
+    flashLife: 0.095,
     hotColor: [1.0, 0.97, 0.84],
-    midColor: [1.0, 0.72, 0.18],
-    coolColor: [0.96, 0.26, 0.04]
+    midColor: [1.0, 0.68, 0.18],
+    coolColor: [0.90, 0.24, 0.04]
   }),
   stone: Object.freeze({
-    countDesktop: 18,
+    countDesktop: 20,
     countMobile: 12,
     countLowSpec: 8,
     speedMin: 4.8,
-    speedMax: 10.4,
-    spreadRad: 1.05,
-    upwardBias: 0.48,
+    speedMax: 10.6,
+    spreadRad: 1.04,
+    upwardBias: 0.46,
     lifeMin: 0.24,
-    lifeMax: 0.48,
-    gravity: 16.0,
-    drag: 1.55,
-    restitution: 0.62,
-    widthMin: 0.017,
-    widthMax: 0.030,
-    streakScale: 0.036,
-    flashSize: 0.42,
-    flashLife: 0.085,
+    lifeMax: 0.52,
+    gravity: 16.2,
+    drag: 1.60,
+    restitution: 0.64,
+    widthMin: 0.014,
+    widthMax: 0.025,
+    streakScale: 0.034,
+    flashSize: 0.30,
+    flashLife: 0.075,
     hotColor: [1.0, 0.95, 0.78],
-    midColor: [1.0, 0.66, 0.22],
-    coolColor: [0.85, 0.24, 0.05]
+    midColor: [0.96, 0.62, 0.20],
+    coolColor: [0.78, 0.22, 0.04]
   }),
   boss: Object.freeze({
-    countDesktop: 46,
-    countMobile: 28,
+    countDesktop: 50,
+    countMobile: 30,
     countLowSpec: 18,
-    speedMin: 6.2,
-    speedMax: 15.8,
-    spreadRad: 1.32,
-    upwardBias: 0.62,
-    lifeMin: 0.40,
-    lifeMax: 0.82,
-    gravity: 13.0,
-    drag: 1.25,
-    restitution: 0.52,
-    widthMin: 0.028,
-    widthMax: 0.052,
-    streakScale: 0.048,
-    flashSize: 1.12,
-    flashLife: 0.15,
-    hotColor: [1.0, 0.94, 0.72],
-    midColor: [1.0, 0.50, 0.08],
-    coolColor: [0.78, 0.10, 0.02]
+    speedMin: 6.4,
+    speedMax: 16.0,
+    spreadRad: 1.28,
+    upwardBias: 0.58,
+    lifeMin: 0.38,
+    lifeMax: 0.86,
+    gravity: 13.2,
+    drag: 1.28,
+    restitution: 0.54,
+    widthMin: 0.020,
+    widthMax: 0.040,
+    streakScale: 0.044,
+    flashSize: 0.82,
+    flashLife: 0.130,
+    hotColor: [1.0, 0.95, 0.76],
+    midColor: [1.0, 0.52, 0.09],
+    coolColor: [0.76, 0.11, 0.02]
   })
 });
 
 // ============================================================================
-// Constants & Helpers
+// High-Polygon Smoothness Budgets & Constants
 // ============================================================================
 const DEFAULT_MAX_RIBBONS = 6;
-const RAW_SAMPLE_CAP = 24;
-const MAX_CROSS_SECTIONS_DESKTOP = 56;
-const MAX_CROSS_SECTIONS_MOBILE = 40;
-const MAX_CROSS_SECTIONS_LOWSPEC = 26;
+const RAW_SAMPLE_CAP = 28;
 
-const MAX_SPARKS_DESKTOP = 192;
-const MAX_SPARKS_MOBILE = 112;
+// 96 cross-sections per ribbon on PC (~2.5 deg angular resolution => 0 visible facets even in close-up!)
+const MAX_CROSS_SECTIONS_DESKTOP = 96;
+const MAX_CROSS_SECTIONS_MOBILE = 56;
+const MAX_CROSS_SECTIONS_LOWSPEC = 32;
+
+const MAX_SPARKS_DESKTOP = 256;
+const MAX_SPARKS_MOBILE = 128;
 const MAX_SPARKS_LOWSPEC = 64;
 
 const STROKE_TIME_GAP_SEC = 0.095;
-const STROKE_TELEPORT_DIST_SQ = 7.2; // > ~2.68m jump starts a clean stroke
-const MIN_SAMPLE_MOVE_SQ = 0.00025;  // ~1.6cm movement dedup
+const STROKE_TELEPORT_DIST_SQ = 7.2;
+const MIN_SAMPLE_MOVE_SQ = 0.00020;
 const MIN_BLADE_LEN_SQ = 1e-6;
 
 function detectMobileDevice() {
@@ -281,8 +309,8 @@ function resolveClashTier(tier) {
     if (k === 'guard' || k === 'shield' || k === 'deflect') return CLASH_TIER_SPECS.block;
     if (k === 'riposte' || k === 'stance_break' || k === 'perfect_parry') return CLASH_TIER_SPECS.parry;
     if (k === 'heavy_thrust' || k === 'guard_counter' || k === 'r2' || k === 'charged_r2') return CLASH_TIER_SPECS.heavy;
-    if (k === 'wall' || k === 'ground' || k === 'masonry' || k === 'rock') return CLASH_TIER_SPECS.stone;
-    if (k === 'boss_slam' || k === 'boss_ember' || k === 'slam') return CLASH_TIER_SPECS.boss;
+    if (k === 'wall' || k === 'ground' || k === 'masonry' || k === 'rock' || k === 'wall_slam') return CLASH_TIER_SPECS.stone;
+    if (k === 'boss_slam' || k === 'boss_ember' || k === 'slam' || k === 'boss_hammer_ground') return CLASH_TIER_SPECS.boss;
     if (k === 'sword_armor' || k === 'r1' || k === 'chip') return CLASH_TIER_SPECS.light;
   }
   return CLASH_TIER_SPECS.block;
@@ -322,9 +350,51 @@ function markAttrDirtyRange(attr, countFloats) {
 }
 
 // ============================================================================
-// Centripetal Catmull-Rom Evaluator (Barry-Goldman, alpha = 0.5, 0 allocations)
-// Guarantees C1 continuity with ZERO cusps/loops even under 30 FPS or hitstop.
+// Chebyshev 3D Circular-Arc Endpoint Extrapolation & Centripetal Catmull-Rom
 // ============================================================================
+// Extrapolates P_next from three points (A -> B -> C) along the exact 3D osculating circle
+// so leading & trailing swing edges never flatten into straight chords!
+function extrapolateCircularNext(
+  ax, ay, az,
+  bx, by, bz,
+  cx, cy, cz,
+  outArr
+) {
+  const v1x = bx - ax;
+  const v1y = by - ay;
+  const v1z = bz - az;
+  const v2x = cx - bx;
+  const v2y = cy - by;
+  const v2z = cz - bz;
+  const len1 = Math.hypot(v1x, v1y, v1z);
+  const len2 = Math.hypot(v2x, v2y, v2z);
+  if (len1 < 1e-4 || len2 < 1e-4) {
+    outArr[0] = cx + v2x;
+    outArr[1] = cy + v2y;
+    outArr[2] = cz + v2z;
+    return;
+  }
+  const u1x = v1x / len1;
+  const u1y = v1y / len1;
+  const u1z = v1z / len1;
+  const u2x = v2x / len2;
+  const u2y = v2y / len2;
+  const u2z = v2z / len2;
+  // Clamp turn angle at ~75 deg so sharp reversals never whip wildly
+  const cosTheta = clamp(u1x * u2x + u1y * u2y + u1z * u2z, 0.25, 1.0);
+  const k = 2.0 * cosTheta;
+  let u3x = k * u2x - u1x;
+  let u3y = k * u2y - u1y;
+  let u3z = k * u2z - u1z;
+  const u3Len = Math.hypot(u3x, u3y, u3z) || 1.0;
+  u3x /= u3Len;
+  u3y /= u3Len;
+  u3z /= u3Len;
+  outArr[0] = cx + u3x * len2;
+  outArr[1] = cy + u3y * len2;
+  outArr[2] = cz + u3z * len2;
+}
+
 function evalCentripetalCR3(
   p0x, p0y, p0z,
   p1x, p1y, p1z,
@@ -390,7 +460,8 @@ function evalCentripetalCR3(
 }
 
 // ============================================================================
-// GLSL Shaders — Unified 4-Style Swept Weapon Ribbon Material
+// GLSL Shaders — Physical Air-Shear & Blackbody Heated-Edge Weapon Ribbons
+// (100% ANGLE D3D11 X4000 warning-free: single-exit helpers, fully initialized vars)
 // ============================================================================
 const RIBBON_VERTEX_SHADER = /* glsl */ `
   attribute vec4 aTrail; // x: along (0=head..1=tail), y: width (0=hilt..1=tip), z: life (0..1), w: speed
@@ -416,9 +487,9 @@ const RIBBON_FRAGMENT_SHADER = /* glsl */ `
   varying vec4 vStyle;
 
   float hash21(vec2 p) {
-    p = fract(p * vec2(123.34, 456.21));
-    p += dot(p, p + 45.32);
-    return fract(p.x * p.y);
+    vec2 q = fract(p * vec2(123.34, 456.21));
+    q += dot(q, q + 45.32);
+    return fract(q.x * q.y);
   }
 
   float vnoise(vec2 p) {
@@ -432,17 +503,20 @@ const RIBBON_FRAGMENT_SHADER = /* glsl */ `
     return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
   }
 
-  float fbm2(vec2 p) {
+  float fbmAir(vec2 p) {
     float n = vnoise(p);
     if (uLowSpec < 0.5) {
-      n = n * 0.64 + vnoise(p * 2.17 + vec2(13.4, 7.1)) * 0.36;
+      float n2 = vnoise(p * 2.17 + vec2(13.4, 7.1));
+      float n3 = vnoise(p * 4.43 + vec2(5.9, 19.3));
+      n = n * 0.54 + n2 * 0.30 + n3 * 0.16;
     }
     return n;
   }
 
-  vec3 softRolloff(vec3 c) {
-    float peak = max(c.r, max(c.g, c.b));
-    return c / (1.0 + peak * 0.24);
+  // Natural ACES-inspired highlight shoulder: prevents neon/yellow clipping & preserves noble steel/fire tones
+  vec3 filmicCompress(vec3 c) {
+    vec3 x = max(c, vec3(0.0));
+    return (x * (1.0 + x * 0.18)) / (1.0 + x * 0.62 + vec3(dot(x, vec3(0.12))));
   }
 
   void main() {
@@ -456,146 +530,158 @@ const RIBBON_FRAGMENT_SHADER = /* glsl */ `
     float seed = vStyle.z;
     float arcU = vStyle.w;
 
-    // Swept crescent leading-edge entry (blade tip leads, hilt sweeps smoothly behind — zero blunt cutoff!)
-    float headIn = smoothstep(0.0, 0.045 + (1.0 - w) * 0.14, along);
-    float lifeFade = pow(max(0.0, 1.0 - life), 1.32);
-    float tailGeoFade = 1.0 - smoothstep(0.56, 1.0, along);
+    // Aerodynamic swept leading edge (razor tip leads cleanly, inner hilt trails softly behind)
+    float headIn = smoothstep(0.0, 0.028 + (1.0 - w) * 0.16, along);
+    float lifeFade = pow(max(0.0, 1.0 - life), 1.42);
+    float tailGeoFade = 1.0 - smoothstep(0.52, 1.0, along);
     float env = headIn * lifeFade * tailGeoFade;
-    if (env <= 0.002) discard;
-
-    // World-arc anchored turbulence so wisps stay physically locked in air where blade cut
-    float scroll = uTime * 2.9;
-    float nTurb = fbm2(vec2(arcU * 2.4 - scroll + seed, w * 3.6 + seed * 0.37));
-    float nShear = vnoise(vec2(arcU * 1.15 - uTime * 1.6 + seed * 1.7, w * 12.5));
 
     vec3 darkCol = vec3(0.0);
     vec3 glowCol = vec3(0.0);
     float absorb = 0.0;
 
-    if (styleId < 0.5) {
-      // ------------------------------------------------------------------
-      // 0: 'hero_steel' — Cold silvery-moonlight steel sheen + thin gold rim
-      // ------------------------------------------------------------------
-      float outerSoft = 1.0 - smoothstep(0.965, 1.0, w);
-      float innerCut = smoothstep(0.10 + life * 0.32, 0.66, w + (nTurb - 0.5) * 0.22);
-      float wisp = smoothstep(life * 0.56 - 0.14, life * 0.56 + 0.34, nTurb * 0.62 + w * 0.52);
-      float bodyMask = innerCut * outerSoft * wisp * env;
+    if (env > 0.002) {
+      // World-arc anchored turbulence + ultra-fine laminar air-shear streamlines
+      float scroll = uTime * 2.6;
+      float nTurb = fbmAir(vec2(arcU * 2.3 - scroll + seed, w * 3.5 + seed * 0.37));
+      float nShear = vnoise(vec2(arcU * 1.1 - uTime * 1.5 + seed * 1.7, w * 18.0));
+      float nFine = vnoise(vec2(arcU * 2.8 - uTime * 2.2 + seed * 0.6, w * 34.0));
+      float streamlines = 0.45 + 0.35 * smoothstep(0.25, 0.85, nShear) + 0.20 * smoothstep(0.35, 0.90, nFine);
 
-      float steelBand = smoothstep(0.66, 0.87, w) * (1.0 - smoothstep(0.91, 0.97, w)) * env;
-      float goldRim = smoothstep(0.875, 0.955, w) * (1.0 - smoothstep(0.975, 1.0, w)) * env;
-      float streaks = 0.58 + 0.42 * smoothstep(0.28, 0.85, nShear);
+      if (styleId < 0.5) {
+        // ------------------------------------------------------------------
+        // 0: 'hero_steel' — Gossamer translucent air-shear + tempered cold steel glint
+        // (Zero thick yellow border; physical moonlit steel slicing dark air)
+        // ------------------------------------------------------------------
+        float outerSoft = 1.0 - smoothstep(0.972, 1.0, w);
+        float innerCut = smoothstep(0.18 + life * 0.34, 0.78, w + (nTurb - 0.5) * 0.18);
+        float wisp = smoothstep(life * 0.58 - 0.12, life * 0.58 + 0.32, nTurb * 0.58 + w * 0.52);
+        float bodyMask = innerCut * outerSoft * wisp * env;
 
-      darkCol = vec3(0.10, 0.15, 0.25);
-      absorb = bodyMask * 0.28;
+        // Razor-thin specular steel edge + whisper-thin warm champagne glint near leading blade
+        float razorSteel = smoothstep(0.88, 0.968, w) * outerSoft * env;
+        float warmGlint = smoothstep(0.945, 0.985, w) * (1.0 - smoothstep(0.988, 1.0, w))
+                        * (1.0 - smoothstep(0.0, 0.52, along)) * env;
 
-      vec3 lunarSilver = vec3(0.54, 0.74, 1.00) * (0.48 + 0.52 * streaks);
-      vec3 steelEdge = vec3(1.18, 1.30, 1.50) * (0.72 + 0.32 * speed);
-      vec3 fineGold = vec3(1.85, 1.16, 0.22) * (0.88 + 0.36 * nShear);
+        darkCol = vec3(0.07, 0.10, 0.16);
+        absorb = bodyMask * 0.15;
 
-      glowCol = (lunarSilver * bodyMask * 0.78
-              + steelEdge * steelBand * 0.88
-              + fineGold * goldRim * 1.38) * intensity * (0.72 + 0.34 * speed);
+        vec3 airWake = vec3(0.42, 0.54, 0.72) * streamlines;
+        vec3 temperedEdge = vec3(0.86, 0.95, 1.10) * (0.68 + 0.32 * speed);
+        vec3 champagneRim = vec3(1.08, 0.82, 0.44) * (0.78 + 0.28 * nFine);
 
-    } else if (styleId < 1.5) {
-      // ------------------------------------------------------------------
-      // 1: 'hero_heavy' — Incandescent molten-gold piercing Heavy / Counter
-      // ------------------------------------------------------------------
-      float outerSoft = 1.0 - smoothstep(0.95, 1.0, w);
-      float innerCut = smoothstep(0.05 + life * 0.24, 0.52, w + (nTurb - 0.5) * 0.26);
-      float wisp = smoothstep(life * 0.52 - 0.16, life * 0.52 + 0.36, nTurb * 0.68 + w * 0.46);
-      float bodyMask = innerCut * outerSoft * wisp * env;
+        glowCol = (airWake * bodyMask * 0.46
+                + temperedEdge * razorSteel * 0.72
+                + champagneRim * warmGlint * 0.78) * intensity * (0.76 + 0.26 * speed);
 
-      float coreRidge = smoothstep(0.68, 0.92, w) * outerSoft * env;
-      float headFlare = (1.0 - smoothstep(0.0, 0.34, along)) * smoothstep(0.40, 0.92, w) * outerSoft * env;
-      float specks = smoothstep(0.75, 0.93, nTurb * nShear) * smoothstep(0.20, 0.95, w) * env;
+      } else if (styleId < 1.5) {
+        // ------------------------------------------------------------------
+        // 1: 'hero_heavy' — Compressed air-shear + tight incandescent heated cutting rim
+        // ------------------------------------------------------------------
+        float outerSoft = 1.0 - smoothstep(0.972, 1.0, w);
+        float innerCut = smoothstep(0.10 + life * 0.28, 0.64, w + (nTurb - 0.5) * 0.22);
+        float wisp = smoothstep(life * 0.54 - 0.14, life * 0.54 + 0.34, nTurb * 0.64 + w * 0.48);
+        float bodyMask = innerCut * outerSoft * wisp * env;
 
-      darkCol = vec3(0.32, 0.10, 0.02);
-      absorb = bodyMask * 0.36;
+        // Tight blackbody heated edge (cherry-bronze wake -> molten gold -> razor white-gold wire)
+        float heatedZone = smoothstep(0.76, 0.94, w) * outerSoft * env;
+        float incandescentWire = smoothstep(0.925, 0.982, w) * outerSoft
+                               * (1.0 - life * 0.45) * env;
+        float emberMotes = smoothstep(0.80, 0.96, nTurb * nFine) * smoothstep(0.45, 0.96, w) * env;
 
-      vec3 amberBody = mix(vec3(1.02, 0.36, 0.04), vec3(1.62, 0.94, 0.16), smoothstep(0.22, 0.84, w));
-      vec3 moltenCore = vec3(2.05, 1.62, 0.68);
-      vec3 sparkGold = vec3(2.1, 1.40, 0.35);
+        darkCol = vec3(0.16, 0.06, 0.015);
+        absorb = bodyMask * 0.24;
 
-      glowCol = (amberBody * bodyMask * (0.85 + 0.38 * nShear)
-              + moltenCore * (coreRidge * 0.88 + headFlare * 0.48)
-              + sparkGold * specks * 0.95) * intensity * (0.76 + 0.32 * speed);
+        vec3 bronzeWake = mix(vec3(0.58, 0.18, 0.03), vec3(0.96, 0.46, 0.09), smoothstep(0.25, 0.85, w)) * streamlines;
+        vec3 forgedGold = vec3(1.28, 0.76, 0.18);
+        vec3 whiteHotWire = vec3(1.52, 1.28, 0.82);
 
-    } else if (styleId < 2.5) {
-      // ------------------------------------------------------------------
-      // 2: 'mob_iron' — Grim crimson-steel sinister enemy slash trajectory
-      // ------------------------------------------------------------------
-      float outerSoft = 1.0 - smoothstep(0.95, 1.0, w);
-      float ragged = nTurb * 0.72 + nShear * 0.28;
-      float innerCut = smoothstep(0.10 + life * 0.28, 0.58, w + (ragged - 0.5) * 0.30);
-      float wisp = smoothstep(life * 0.55 - 0.12, life * 0.55 + 0.36, ragged * 0.70 + w * 0.44);
-      float bodyMask = innerCut * outerSoft * wisp * env;
+        glowCol = (bronzeWake * bodyMask * 0.58
+                + forgedGold * heatedZone * 0.76
+                + whiteHotWire * incandescentWire * 0.92
+                + forgedGold * emberMotes * 0.65) * intensity * (0.78 + 0.26 * speed);
 
-      float crimsonEdge = smoothstep(0.72, 0.94, w) * outerSoft * env;
-      float ironGlint = smoothstep(0.87, 0.955, w) * (1.0 - smoothstep(0.97, 1.0, w))
-                      * (1.0 - smoothstep(0.0, 0.42, along)) * env;
+      } else if (styleId < 2.5) {
+        // ------------------------------------------------------------------
+        // 2: 'mob_iron' — Smoky dark gunmetal wake + ominous blood-iron razor edge
+        // ------------------------------------------------------------------
+        float outerSoft = 1.0 - smoothstep(0.97, 1.0, w);
+        float ragged = nTurb * 0.68 + nShear * 0.32;
+        float innerCut = smoothstep(0.14 + life * 0.30, 0.68, w + (ragged - 0.5) * 0.24);
+        float wisp = smoothstep(life * 0.56 - 0.12, life * 0.56 + 0.34, ragged * 0.66 + w * 0.46);
+        float bodyMask = innerCut * outerSoft * wisp * env;
 
-      // Strong smoky blood-iron shadow silhouette for unmistakable combat readability!
-      darkCol = vec3(0.16, 0.015, 0.02);
-      absorb = bodyMask * 0.54;
+        float crimsonRim = smoothstep(0.82, 0.96, w) * outerSoft * env;
+        float coldIronWire = smoothstep(0.935, 0.982, w) * outerSoft
+                           * (1.0 - smoothstep(0.0, 0.45, along)) * env;
 
-      vec3 bloodBody = vec3(0.98, 0.10, 0.08) * (0.62 + 0.55 * nShear);
-      vec3 razorCrimson = vec3(1.52, 0.28, 0.10);
-      vec3 coldIron = vec3(1.08, 0.84, 0.80);
+        darkCol = vec3(0.09, 0.02, 0.025);
+        absorb = bodyMask * 0.38;
 
-      glowCol = (bloodBody * bodyMask * 0.92
-              + razorCrimson * crimsonEdge * 0.95
-              + coldIron * ironGlint * 0.95) * intensity * (0.76 + 0.32 * speed);
+        vec3 darkSteelWake = vec3(0.56, 0.11, 0.09) * streamlines;
+        vec3 bloodEmber = vec3(1.06, 0.22, 0.09);
+        vec3 coldIron = vec3(0.86, 0.74, 0.74);
 
-    } else {
-      // ------------------------------------------------------------------
-      // 3: 'boss_ember' — Thick blazing volcanic fire wake (+ Phase 2 boost)
-      // ------------------------------------------------------------------
-      float p2 = clamp((intensity - 1.0) * 1.65, 0.0, 1.0);
-      float fireScroll = uTime * (4.1 + p2 * 1.9);
-      float nFire = fbm2(vec2(arcU * 2.15 - fireScroll + seed, w * 3.1 - uTime * 1.55 + seed * 0.23));
-      float nLick = vnoise(vec2(arcU * 4.8 - fireScroll * 1.25 + seed * 0.9, w * 6.4));
+        glowCol = (darkSteelWake * bodyMask * 0.58
+                + bloodEmber * crimsonRim * 0.78
+                + coldIron * coldIronWire * 0.72) * intensity * (0.76 + 0.26 * speed);
 
-      float flameField = nFire * 0.62 + nLick * 0.38;
-      float jaggedOuter = 1.0 - smoothstep(0.82 - p2 * 0.04, 1.0, w + (0.5 - flameField) * 0.28);
-      float flameMask = smoothstep(0.16 + life * 0.44, 0.58 + life * 0.24, flameField * 0.78 + w * (0.46 + p2 * 0.14))
-                      * jaggedOuter * env;
+      } else {
+        // ------------------------------------------------------------------
+        // 3: 'boss_ember' — Sooty volcanic air wake + blackbody molten hammer rim
+        // ------------------------------------------------------------------
+        float p2 = clamp((intensity - 1.0) * 1.65, 0.0, 1.0);
+        float fireScroll = uTime * (3.6 + p2 * 1.6);
+        float nFire = fbmAir(vec2(arcU * 2.05 - fireScroll + seed, w * 3.0 - uTime * 1.4 + seed * 0.23));
+        float nLick = vnoise(vec2(arcU * 4.6 - fireScroll * 1.2 + seed * 0.9, w * 7.2));
 
-      // Charred smoky crimson border keeps tongues of fire sharp & volumetric (never white washout)
-      float smokeRim = smoothstep(0.06 + life * 0.34, 0.46 + life * 0.22, flameField * 0.74 + w * 0.40)
-                     * jaggedOuter * env;
-      darkCol = vec3(0.24, 0.025, 0.008);
-      absorb = smokeRim * (0.58 - p2 * 0.06);
+        float flameField = nFire * 0.62 + nLick * 0.38;
+        float jaggedOuter = 1.0 - smoothstep(0.86 - p2 * 0.03, 1.0, w + (0.5 - flameField) * 0.22);
+        float flameMask = smoothstep(0.18 + life * 0.42, 0.62 + life * 0.22, flameField * 0.74 + w * (0.46 + p2 * 0.12))
+                        * jaggedOuter * env;
 
-      float headHeat = (1.0 - smoothstep(0.0, 0.42, along)) * 0.24;
-      float heat = clamp(w * 0.66 + flameField * 0.42 - life * 0.48 + headHeat + p2 * 0.20, 0.0, 1.0);
-      vec3 magmaRed = vec3(0.98, 0.11, 0.015);
-      vec3 blazeOrange = vec3(1.68, 0.42, 0.03);
-      vec3 furnaceGold = vec3(2.05, 1.18, 0.22);
-      vec3 whiteCore = vec3(2.35, 1.88, 1.02);
+        // Deep charred soot smoke gives physical mass without washing out the cathedral
+        float smokeRim = smoothstep(0.07 + life * 0.32, 0.48 + life * 0.22, flameField * 0.70 + w * 0.42)
+                       * jaggedOuter * env;
+        darkCol = vec3(0.11, 0.02, 0.008);
+        absorb = smokeRim * (0.48 - p2 * 0.04);
 
-      vec3 fireCol = mix(magmaRed, blazeOrange, smoothstep(0.14, 0.54, heat));
-      fireCol = mix(fireCol, furnaceGold, smoothstep(0.56, 0.86, heat));
-      fireCol = mix(fireCol, whiteCore, smoothstep(0.86, 1.0, heat) * (0.35 + 0.65 * p2));
+        float headHeat = (1.0 - smoothstep(0.0, 0.40, along)) * 0.22;
+        float heat = clamp(w * 0.64 + flameField * 0.38 - life * 0.46 + headHeat + p2 * 0.18, 0.0, 1.0);
 
-      float coreEdge = smoothstep(0.74, 0.94, w) * jaggedOuter * (1.0 - life * 0.55) * (0.65 + 0.35 * (1.0 - along)) * env;
-      float emberSpecks = smoothstep(0.72 - p2 * 0.09, 0.91,
-        vnoise(vec2(arcU * 8.5 - uTime * 3.5 + seed, w * 11.0 - uTime * 4.2))) * smokeRim;
+        // True blackbody combustion palette (deep cherry -> forged orange -> molten gold -> white-hot wire)
+        vec3 deepCherry = vec3(0.68, 0.09, 0.015);
+        vec3 forgedOrange = vec3(1.22, 0.36, 0.035);
+        vec3 moltenRim = vec3(1.56, 0.88, 0.22);
+        vec3 furnaceWire = vec3(1.82, 1.44, 0.82);
 
-      glowCol = (fireCol * flameMask * (0.94 + 0.34 * p2)
-              + furnaceGold * coreEdge * (0.55 + 0.38 * p2)
-              + vec3(2.25, 1.12, 0.20) * emberSpecks * (1.05 + 0.55 * p2)) * (0.80 + 0.26 * speed);
+        vec3 fireCol = mix(deepCherry, forgedOrange, smoothstep(0.16, 0.58, heat)) * (0.72 + 0.38 * streamlines);
+        fireCol = mix(fireCol, moltenRim, smoothstep(0.62, 0.90, heat));
+
+        // Concentrated incandescent hammer edge (crisp molten rim, never a blown-out yellow sheet!)
+        float hotEdge = smoothstep(0.80, 0.955, w) * jaggedOuter * (1.0 - life * 0.50) * env;
+        float phaseWire = smoothstep(0.89, 0.975, w) * jaggedOuter * (1.0 - along * 0.65) * env;
+        float fineCinders = smoothstep(0.76 - p2 * 0.07, 0.94,
+          vnoise(vec2(arcU * 9.5 - uTime * 3.8 + seed, w * 14.0 - uTime * 4.4))) * smokeRim;
+
+        glowCol = (fireCol * flameMask * (0.78 + 0.28 * p2)
+                + moltenRim * hotEdge * (0.66 + 0.28 * p2)
+                + furnaceWire * phaseWire * (0.32 + 0.56 * p2)
+                + vec3(1.55, 0.78, 0.18) * fineCinders * (0.85 + 0.45 * p2)) * (0.80 + 0.24 * speed);
+      }
     }
 
-    vec3 outRgb = softRolloff(darkCol * absorb + glowCol);
-    float outAlpha = clamp(absorb, 0.0, 0.85);
-    if (outAlpha < 0.004 && max(outRgb.r, max(outRgb.g, outRgb.b)) < 0.004) discard;
-
+    vec3 outRgb = filmicCompress(darkCol * absorb + glowCol);
+    float outAlpha = clamp(absorb, 0.0, 0.82);
+    if (outAlpha < 0.003 && max(outRgb.r, max(outRgb.g, outRgb.b)) < 0.003) {
+      discard;
+    }
     gl_FragColor = vec4(outRgb, outAlpha);
   }
 `;
 
 // ============================================================================
-// GLSL Shaders — Instanced Velocity-Stretched Metallic Clash Sparks + Starburst
+// GLSL Shaders — Instanced Velocity-Stretched Metallic Sparks + Clash Starburst
 // ============================================================================
 const SPARK_VERTEX_SHADER = /* glsl */ `
   attribute vec4 iPosSize;   // xyz: world pos, w: width (or starburst size)
@@ -617,24 +703,23 @@ const SPARK_VERTEX_SHADER = /* glsl */ `
     float camDist = length(toCam);
     toCam = camDist > 1e-4 ? (toCam / camDist) : vec3(0.0, 0.0, 1.0);
 
-    vec3 worldPos;
+    vec3 worldPos = center;
+    vec2 uvOut = vec2(0.5, 0.5);
+
     if (iKind.x > 0.5) {
-      // Camera-facing Sekiro/Elden Ring metallic clash starburst
       vec3 worldUp = abs(toCam.y) > 0.96 ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 1.0, 0.0);
       vec3 right = normalize(cross(worldUp, toCam));
       vec3 up = cross(toCam, right);
-      // Slight deterministic rotation per impact flash using phase
       float ang = iKind.y * 6.2831853;
       float ca = cos(ang);
       float sa = sin(ang);
       vec3 rRot = right * ca - up * sa;
       vec3 uRot = right * sa + up * ca;
-      float lx = position.x;        // [-0.5, 0.5]
-      float ly = position.y + 0.5;  // [-0.5, 0.5]
+      float lx = position.x;
+      float ly = position.y + 0.5;
       worldPos = center + (rRot * lx + uRot * ly) * baseSize;
-      vUv = vec2(lx + 0.5, ly + 0.5);
+      uvOut = vec2(lx + 0.5, ly + 0.5);
     } else {
-      // Camera-aligned velocity-stretched molten steel needle
       vec3 dir = speed > 0.04 ? (vel / speed) : vec3(0.0, 1.0, 0.0);
       vec3 side = cross(toCam, dir);
       float sideLen = length(side);
@@ -645,12 +730,12 @@ const SPARK_VERTEX_SHADER = /* glsl */ `
       } else {
         side /= sideLen;
       }
-      float streakLen = clamp(speed * iVelLen.w, baseSize * 1.65, 0.78);
-      // position.x in [-0.5, 0.5], position.y in [-1.0, 0.0] (0=leading head, -1=trailing tail)
+      float streakLen = clamp(speed * iVelLen.w, baseSize * 1.65, 0.68);
       worldPos = center + side * (position.x * baseSize) + dir * (position.y * streakLen);
-      vUv = vec2(position.x + 0.5, -position.y); // u: [0..1] across width, v: [0=head..1=tail]
+      uvOut = vec2(position.x + 0.5, -position.y);
     }
 
+    vUv = uvOut;
     vColorLife = iColorLife;
     vKind = iKind;
     gl_Position = projectionMatrix * viewMatrix * vec4(worldPos, 1.0);
@@ -661,56 +746,57 @@ const SPARK_FRAGMENT_SHADER = /* glsl */ `
   precision highp float;
 
   uniform float uTime;
+  uniform float uLowSpec;
   varying vec2 vUv;
   varying vec4 vColorLife;
   varying vec2 vKind;
 
   void main() {
     float life = clamp(vColorLife.a, 0.0, 1.0);
-    if (life >= 1.0) discard;
-
     vec3 col = vColorLife.rgb;
-    float alpha = 0.0;
+    vec3 outCol = vec3(0.0);
+    float vis = 0.0;
 
-    if (vKind.x > 0.5) {
-      // Crisp 4-point metallic clash starburst + hot core
-      vec2 p = vUv * 2.0 - 1.0;
-      float r = length(p);
-      if (r > 1.0) discard;
+    if (life < 1.0) {
+      if (vKind.x > 0.5) {
+        vec2 p = vUv * 2.0 - 1.0;
+        float r = length(p);
+        if (r <= 1.0) {
+          float core = exp(-r * r * 18.0);
+          float rayX = exp(-abs(p.y) * 22.0) * exp(-abs(p.x) * 2.8);
+          float rayY = exp(-abs(p.x) * 22.0) * exp(-abs(p.y) * 2.8);
+          float rayD = 0.0;
+          if (uLowSpec < 0.5) {
+            vec2 d = vec2(p.x + p.y, p.x - p.y) * 0.7071;
+            rayD = (exp(-abs(d.y) * 26.0) * exp(-abs(d.x) * 4.2)
+                  + exp(-abs(d.x) * 26.0) * exp(-abs(d.y) * 4.2)) * 0.40;
+          }
+          float fade = pow(1.0 - life, 1.95);
+          vis = (core * 1.25 + (rayX + rayY) * 0.85 + rayD) * fade;
+          vec3 rawFlash = mix(col, vec3(1.0, 0.99, 0.95), clamp(core * 0.72, 0.0, 1.0)) * vis * 1.15;
+          outCol = rawFlash / (1.0 + rawFlash * 0.32);
+        }
+      } else {
+        float distX = abs(vUv.x - 0.5) * 2.0;
+        float tAlong = clamp(vUv.y, 0.0, 1.0);
+        float halfWidth = mix(0.92, 0.14, tAlong);
+        float across = 1.0 - smoothstep(0.0, halfWidth, distX);
+        float alongMask = (1.0 - smoothstep(0.0, 1.0, tAlong)) * smoothstep(0.0, 0.05, tAlong + 0.035);
+        float headBoost = exp(-tAlong * 8.0) * (1.0 - smoothstep(0.0, 0.48, distX));
+        float flicker = 0.84 + 0.16 * sin(uTime * 46.0 + vKind.y * 37.0);
+        float fade = pow(1.0 - life, 1.18);
 
-      float core = exp(-r * r * 14.0);
-      // Primary horizontal & vertical clash spikes
-      float rayX = exp(-abs(p.y) * 18.0) * exp(-abs(p.x) * 2.4);
-      float rayY = exp(-abs(p.x) * 18.0) * exp(-abs(p.y) * 2.4);
-      // Subtle 45-deg secondary spikes
-      vec2 d = vec2(p.x + p.y, p.x - p.y) * 0.7071;
-      float rayD = (exp(-abs(d.y) * 22.0) * exp(-abs(d.x) * 3.8)
-                  + exp(-abs(d.x) * 22.0) * exp(-abs(d.y) * 3.8)) * 0.45;
-
-      float fade = pow(1.0 - life, 1.85);
-      float burst = (core * 1.45 + (rayX + rayY) * 0.95 + rayD) * fade;
-      if (burst < 0.015) discard;
-      vec3 outCol = mix(col, vec3(1.0, 1.0, 0.98), clamp(core * 0.75, 0.0, 1.0)) * burst * 1.35;
-      gl_FragColor = vec4(outCol, 0.0);
-    } else {
-      // Tapered razor-sharp glowing metal spark needle
-      float distX = abs(vUv.x - 0.5) * 2.0; // [0..1]
-      float tAlong = clamp(vUv.y, 0.0, 1.0); // 0=hot head, 1=tapered tail
-      float halfWidth = mix(0.95, 0.16, tAlong);
-      float across = 1.0 - smoothstep(0.0, halfWidth, distX);
-      float alongMask = (1.0 - smoothstep(0.0, 1.0, tAlong)) * smoothstep(0.0, 0.06, tAlong + 0.04);
-      float headBoost = exp(-tAlong * 7.5) * (1.0 - smoothstep(0.0, 0.50, distX));
-      float flicker = 0.84 + 0.16 * sin(uTime * 46.0 + vKind.y * 37.0);
-      float fade = pow(1.0 - life, 1.15);
-
-      alpha = (across * alongMask * 0.92 + headBoost * 0.75) * fade * flicker;
-      if (alpha < 0.01) discard;
-
-      // White-hot molten tip transitioning to vivid gold/amber/fiery-orange needle tail
-      vec3 tailCol = col * mix(vec3(1.0, 0.95, 0.82), vec3(1.05, 0.48, 0.12), smoothstep(0.18, 0.88, tAlong));
-      vec3 outCol = mix(tailCol, vec3(1.0, 0.99, 0.94), clamp(headBoost * 0.78 * (1.0 - life * 0.6), 0.0, 1.0)) * alpha * 1.35;
-      gl_FragColor = vec4(outCol, 0.0);
+        vis = (across * alongMask * 0.90 + headBoost * 0.72) * fade * flicker;
+        vec3 tailCol = col * mix(vec3(1.0, 0.95, 0.82), vec3(1.02, 0.44, 0.10), smoothstep(0.16, 0.88, tAlong));
+        vec3 rawSpark = mix(tailCol, vec3(1.0, 0.98, 0.92), clamp(headBoost * 0.75 * (1.0 - life * 0.65), 0.0, 1.0)) * vis * 1.18;
+        outCol = rawSpark / (1.0 + rawSpark * 0.28);
+      }
     }
+
+    if (vis < 0.012) {
+      discard;
+    }
+    gl_FragColor = vec4(outCol, 0.0);
   }
 `;
 
@@ -739,15 +825,15 @@ export function createWeaponTrailSystem(scene, options = {}) {
       ? Math.round(options.maxSparks)
       : (isMobile ? MAX_SPARKS_MOBILE : MAX_SPARKS_DESKTOP),
     32,
-    384
+    512
   );
 
   let disposed = false;
   let elapsedTime = 0.0;
   let ribbonDirty = false;
+  let sparkDirty = false;
   let seedCounter = 1.0;
 
-  // Deterministic lightweight PRNG for spark bursts (zero allocations)
   let rngState = 0x51a7c3d9;
   function rand01() {
     rngState = (rngState * 1664525 + 1013904223) >>> 0;
@@ -777,8 +863,8 @@ export function createWeaponTrailSystem(scene, options = {}) {
       lastStyleId: -1,
       strokeSeed: 0.0,
       cumulativeArc: 0.0,
+      sparkAccum: 0.0,
       pendingBreak: false,
-      // Pre-allocated Structure-of-Arrays ring buffer
       bx: new Float32Array(RAW_SAMPLE_CAP),
       by: new Float32Array(RAW_SAMPLE_CAP),
       bz: new Float32Array(RAW_SAMPLE_CAP),
@@ -804,7 +890,6 @@ export function createWeaponTrailSystem(scene, options = {}) {
   }
   const actorToSlot = new Map();
 
-  // Unified Ribbon Geometry + ShaderMaterial (1 SINGLE draw call for all 6 ribbons!)
   const ribPosArr = new Float32Array(totalMaxVerts * 3);
   const ribTrailArr = new Float32Array(totalMaxVerts * 4);
   const ribStyleArr = new Float32Array(totalMaxVerts * 4);
@@ -853,28 +938,41 @@ export function createWeaponTrailSystem(scene, options = {}) {
   ribbonMesh.frustumCulled = false;
   ribbonMesh.renderOrder = 9;
   ribbonMesh.visible = false;
+  // Zero-lag flush right before WebGL draw if combat.js recorded segments after update(dt)!
+  ribbonMesh.onBeforeRender = function onBeforeRenderRibbon() {
+    if (!disposed && ribbonDirty) {
+      rebuildRibbonGeometry();
+    }
+  };
 
   if (scene && typeof scene.add === 'function') {
     scene.add(ribbonMesh);
   }
 
-  // Scratch buffers for Catmull-Rom & input parsing (zero per-frame allocations)
+  // Scratch buffers for knot micro-smoothing, circular extrapolation & Catmull-Rom (0 heap allocs)
   const _inBase = new Float32Array(3);
   const _inTip = new Float32Array(3);
   const _inPos = new Float32Array(3);
   const _inNorm = new Float32Array(3);
   const _crBase = new Float32Array(3);
   const _crTip = new Float32Array(3);
+  const _extrap = new Float32Array(3);
   const _segSubCounts = new Uint16Array(RAW_SAMPLE_CAP);
+  const _smBx = new Float32Array(RAW_SAMPLE_CAP);
+  const _smBy = new Float32Array(RAW_SAMPLE_CAP);
+  const _smBz = new Float32Array(RAW_SAMPLE_CAP);
+  const _smTx = new Float32Array(RAW_SAMPLE_CAP);
+  const _smTy = new Float32Array(RAW_SAMPLE_CAP);
+  const _smTz = new Float32Array(RAW_SAMPLE_CAP);
+  const _smLen = new Float32Array(RAW_SAMPLE_CAP);
 
   let lastActiveRibbons = 0;
   let lastActiveTriangles = 0;
 
   // --------------------------------------------------------------------------
-  // 2. Pre-allocated Instanced Clash Spark Pool (1 SINGLE draw call, 0 idle)
+  // 2. Pre-allocated Instanced Spark Pool (Clash + Heated Edge Trail Sparks)
   // --------------------------------------------------------------------------
   const sparkBaseGeo = new THREE.InstancedBufferGeometry();
-  // Unit quad: x in [-0.5, 0.5], y in [-1.0, 0.0]
   const quadPositions = new Float32Array([
     -0.5,  0.0, 0.0,
      0.5,  0.0, 0.0,
@@ -906,7 +1004,6 @@ export function createWeaponTrailSystem(scene, options = {}) {
   sparkBaseGeo.setAttribute('iKind', spkKindAttr);
   sparkBaseGeo.instanceCount = 0;
 
-  // CPU simulation SoA for active sparks (swap-remove O(1))
   let activeSparkCount = 0;
   const spX = new Float32Array(sparkPoolAlloc);
   const spY = new Float32Array(sparkPoolAlloc);
@@ -922,9 +1019,8 @@ export function createWeaponTrailSystem(scene, options = {}) {
   const spDrag = new Float32Array(sparkPoolAlloc);
   const spRest = new Float32Array(sparkPoolAlloc);
   const spFloorY = new Float32Array(sparkPoolAlloc);
-  const spKind = new Uint8Array(sparkPoolAlloc); // 0 = needle spark, 1 = starburst flash
+  const spKind = new Uint8Array(sparkPoolAlloc);
   const spPhase = new Float32Array(sparkPoolAlloc);
-  // 3-stop cooling colors per spark
   const spHotR = new Float32Array(sparkPoolAlloc);
   const spHotG = new Float32Array(sparkPoolAlloc);
   const spHotB = new Float32Array(sparkPoolAlloc);
@@ -961,6 +1057,11 @@ export function createWeaponTrailSystem(scene, options = {}) {
   sparkMesh.frustumCulled = false;
   sparkMesh.renderOrder = 10;
   sparkMesh.visible = false;
+  sparkMesh.onBeforeRender = function onBeforeRenderSparks() {
+    if (!disposed && sparkDirty) {
+      syncSparkBuffers();
+    }
+  };
 
   if (scene && typeof scene.add === 'function') {
     scene.add(sparkMesh);
@@ -979,6 +1080,7 @@ export function createWeaponTrailSystem(scene, options = {}) {
     slot.lastRecordTime = -100.0;
     slot.lastStyleId = -1;
     slot.cumulativeArc = 0.0;
+    slot.sparkAccum = 0.0;
     slot.pendingBreak = false;
   }
 
@@ -986,7 +1088,6 @@ export function createWeaponTrailSystem(scene, options = {}) {
     const existing = actorToSlot.get(actorId);
     if (existing) return existing;
 
-    // 1. Prefer completely empty slot
     for (let i = 0; i < maxRibbons; i++) {
       if (slots[i].count === 0) {
         resetSlot(slots[i]);
@@ -996,12 +1097,10 @@ export function createWeaponTrailSystem(scene, options = {}) {
       }
     }
 
-    // 2. Evict stalest slot (preferring non-hero/non-boss if busy)
     let victim = slots[0];
     let bestScore = Infinity;
     for (let i = 0; i < maxRibbons; i++) {
       const s = slots[i];
-      // Higher priority penalty keeps hero/boss ribbons alive over generic mobs
       const priorityBonus =
         s.lastStyleId === 0 || s.lastStyleId === 1 || s.lastStyleId === 3 ? 10.0 : 0.0;
       const score = s.lastRecordTime + priorityBonus;
@@ -1016,13 +1115,127 @@ export function createWeaponTrailSystem(scene, options = {}) {
     return victim;
   }
 
+  function allocateSparkSlot(cap) {
+    if (activeSparkCount < cap) {
+      const idx = activeSparkCount;
+      activeSparkCount += 1;
+      return idx;
+    }
+    let bestIdx = 0;
+    let maxNormAge = -1.0;
+    for (let i = 0; i < activeSparkCount; i++) {
+      const normAge = spAge[i] / (spMaxLife[i] || 0.1) + (spKind[i] === 0 ? 0.15 : 0.0);
+      if (normAge > maxNormAge) {
+        maxNormAge = normAge;
+        bestIdx = i;
+      }
+    }
+    return bestIdx;
+  }
+
+  // Emit delicate tangential 3D sparks peeling off heated blade/hammer edges during fast swings
+  function emitSwingEdgeSparks(
+    slot,
+    spec,
+    prevBx, prevBy, prevBz,
+    prevTx, prevTy, prevTz,
+    curBx, curBy, curBz,
+    curTx, curTy, curTz,
+    tipMoveDist,
+    effDt
+  ) {
+    const rateScale = lowSpec ? 0.35 : isMobile ? 0.65 : 1.0;
+    const rate = (spec.edgeSparksPerMeter || 0.0) * rateScale;
+    if (rate <= 0.01) return;
+
+    const tipSpeed = tipMoveDist / effDt;
+    if (tipSpeed < (spec.edgeSparkMinSpeed || 4.0)) return;
+
+    slot.sparkAccum = Math.min(4.0, slot.sparkAccum + tipMoveDist * rate);
+    const toSpawn = Math.floor(slot.sparkAccum);
+    if (toSpawn <= 0) return;
+    slot.sparkAccum -= toSpawn;
+
+    const cap = getActiveSparkCap();
+    const vTx = (curTx - prevTx) / effDt;
+    const vTy = (curTy - prevTy) / effDt;
+    const vTz = (curTz - prevTz) / effDt;
+
+    const hot = spec.edgeSparkHot;
+    const mid = spec.edgeSparkMid;
+    const cool = spec.edgeSparkCool;
+    const isBossStyle = spec.id === 3;
+
+    for (let n = 0; n < toSpawn; n++) {
+      const idx = allocateSparkSlot(cap);
+      const frac = (n + rand01()) / toSpawn;
+
+      // Interpolate along sub-step so 30 FPS swings shed sparks evenly along the curve
+      const ibx = prevBx + (curBx - prevBx) * frac;
+      const iby = prevBy + (curBy - prevBy) * frac;
+      const ibz = prevBz + (curBz - prevBz) * frac;
+      const itx = prevTx + (curTx - prevTx) * frac;
+      const ity = prevTy + (curTy - prevTy) * frac;
+      const itz = prevTz + (curTz - prevTz) * frac;
+
+      // Spawn along outer heated 72%..100% of blade
+      const bladeU = 0.72 + rand01() * 0.28;
+      const sx = ibx + (itx - ibx) * bladeU;
+      const sy = iby + (ity - iby) * bladeU;
+      const sz = ibz + (itz - ibz) * bladeU;
+
+      // Blade outward radial unit vector for slight centrifugal fling
+      let rdx = itx - ibx;
+      let rdy = ity - iby;
+      let rdz = itz - ibz;
+      const rLen = Math.hypot(rdx, rdy, rdz) || 1.0;
+      rdx /= rLen;
+      rdy /= rLen;
+      rdz /= rLen;
+
+      const carry = 0.28 + rand01() * 0.30;
+      const fling = 0.8 + rand01() * 1.6;
+      const turb = isBossStyle ? 1.45 : 0.85;
+
+      spX[idx] = sx + (rand01() - 0.5) * 0.03;
+      spY[idx] = Math.max(0.05, sy + (rand01() - 0.5) * 0.03);
+      spZ[idx] = sz + (rand01() - 0.5) * 0.03;
+
+      spVx[idx] = vTx * carry + rdx * fling + (rand01() - 0.5) * turb;
+      spVy[idx] = vTy * carry + rdy * fling + (isBossStyle ? 0.9 : 0.35) + (rand01() - 0.5) * turb;
+      spVz[idx] = vTz * carry + rdz * fling + (rand01() - 0.5) * turb;
+
+      spAge[idx] = 0.0;
+      spMaxLife[idx] = isBossStyle
+        ? (0.28 + rand01() * 0.38)
+        : (0.18 + rand01() * 0.26);
+      spSize[idx] = isBossStyle
+        ? (0.013 + rand01() * 0.014)
+        : (0.010 + rand01() * 0.010);
+      spStreak[idx] = isBossStyle ? 0.032 : 0.028;
+      spGrav[idx] = isBossStyle ? 7.8 : 11.5;
+      spDrag[idx] = isBossStyle ? 2.6 : 3.2;
+      spRest[idx] = 0.42;
+      spFloorY[idx] = 0.035;
+      spKind[idx] = 0;
+      spPhase[idx] = rand01();
+
+      const tv = 0.88 + rand01() * 0.24;
+      spHotR[idx] = hot[0] * tv; spHotG[idx] = hot[1] * tv; spHotB[idx] = hot[2] * tv;
+      spMidR[idx] = mid[0] * tv; spMidG[idx] = mid[1] * tv; spMidB[idx] = mid[2] * tv;
+      spCoolR[idx] = cool[0] * tv; spCoolG[idx] = cool[1] * tv; spCoolB[idx] = cool[2] * tv;
+    }
+
+    sparkDirty = true;
+    sparkMesh.visible = true;
+  }
+
   // --------------------------------------------------------------------------
   // Public API: recordBladeSegment & recordWeaponSegment & endSwing
   // --------------------------------------------------------------------------
   function recordBladeSegment(actorId, baseWorldVec3, tipWorldVec3, style = 'hero_steel', opts = null) {
     if (disposed || actorId === null || actorId === undefined) return false;
 
-    // Support direct pass-through of getWeaponSegmentWorld() object: { hiltX, hiltY, hiltZ, tipX, tipY, tipZ }
     let effStyle = style;
     let effOpts = opts;
     if (
@@ -1054,7 +1267,6 @@ export function createWeaponTrailSystem(scene, options = {}) {
       if (!readVec3Into(tipWorldVec3, _inTip, 0)) return false;
     }
 
-    // Validate non-degenerate blade segment and apply optional subtle style width padding
     let bx = _inBase[0];
     let by = _inBase[1];
     let bz = _inBase[2];
@@ -1099,31 +1311,37 @@ export function createWeaponTrailSystem(scene, options = {}) {
 
     let tipMoveDist = 0.0;
     let speedNorm = 0.85;
+    let effDt = dtSinceLast > 0.004 ? dtSinceLast : 0.016;
+    let prevBx = bx, prevBy = by, prevBz = bz;
+    let prevTx = tx, prevTy = ty, prevTz = tz;
 
     if (!startNewStroke && slot.count > 0) {
       const lastPhys = (slot.head + slot.count - 1) % RAW_SAMPLE_CAP;
-      const dbx = bx - slot.bx[lastPhys];
-      const dby = by - slot.by[lastPhys];
-      const dbz = bz - slot.bz[lastPhys];
-      const dtx = tx - slot.tx[lastPhys];
-      const dty = ty - slot.ty[lastPhys];
-      const dtz = tz - slot.tz[lastPhys];
+      prevBx = slot.bx[lastPhys];
+      prevBy = slot.by[lastPhys];
+      prevBz = slot.bz[lastPhys];
+      prevTx = slot.tx[lastPhys];
+      prevTy = slot.ty[lastPhys];
+      prevTz = slot.tz[lastPhys];
+
+      const dbx = bx - prevBx;
+      const dby = by - prevBy;
+      const dbz = bz - prevBz;
+      const dtx = tx - prevTx;
+      const dty = ty - prevTy;
+      const dtz = tz - prevTz;
       const baseMoveSq = dbx * dbx + dby * dby + dbz * dbz;
       const tipMoveSq = dtx * dtx + dty * dty + dtz * dtz;
 
-      // Teleport discontinuity guard
       if (baseMoveSq > STROKE_TELEPORT_DIST_SQ || tipMoveSq > STROKE_TELEPORT_DIST_SQ * 2.2) {
         startNewStroke = true;
       } else if (baseMoveSq < MIN_SAMPLE_MOVE_SQ && tipMoveSq < MIN_SAMPLE_MOVE_SQ) {
-        // Stationary / hitstop freeze frame: refresh newest point gently without stacking duplicate knots
-        slot.age[lastPhys] = Math.min(slot.age[lastPhys], 0.012);
+        slot.age[lastPhys] = Math.min(slot.age[lastPhys], 0.010);
         slot.lastRecordTime = elapsedTime;
         ribbonDirty = true;
         return true;
       } else {
         tipMoveDist = Math.sqrt(tipMoveSq);
-        const effDt = dtSinceLast > 0.004 ? dtSinceLast : 0.016;
-        // ~12 m/s blade tip speed -> speedNorm ~ 1.0
         speedNorm = clamp((tipMoveDist / effDt) / 11.5, 0.35, 1.5);
       }
     }
@@ -1133,13 +1351,23 @@ export function createWeaponTrailSystem(scene, options = {}) {
       seedCounter = (seedCounter + 17.31) % 997.0;
       slot.strokeSeed = seedCounter;
       slot.cumulativeArc = 0.0;
+      slot.sparkAccum = 0.0;
       slot.pendingBreak = false;
       speedNorm = 0.85;
     } else {
       slot.cumulativeArc += tipMoveDist;
+      if (tipMoveDist > 0.025 && !(effOpts && effOpts.noEdgeSparks)) {
+        emitSwingEdgeSparks(
+          slot, spec,
+          prevBx, prevBy, prevBz,
+          prevTx, prevTy, prevTz,
+          bx, by, bz,
+          tx, ty, tz,
+          tipMoveDist, effDt
+        );
+      }
     }
 
-    // Ring buffer insertion
     let writePhys;
     if (slot.count >= RAW_SAMPLE_CAP) {
       writePhys = slot.head;
@@ -1176,6 +1404,10 @@ export function createWeaponTrailSystem(scene, options = {}) {
     slot.lastRecordTime = elapsedTime;
     slot.lastStyleId = spec.id;
     ribbonDirty = true;
+    if (slot.count >= 2) {
+      // Ensure mesh is marked visible before Three.js scene traversal so onBeforeRender fires!
+      ribbonMesh.visible = true;
+    }
     return true;
   }
 
@@ -1193,11 +1425,13 @@ export function createWeaponTrailSystem(scene, options = {}) {
   }
 
   // --------------------------------------------------------------------------
-  // Ribbon Geometry Builder (Centripetal Catmull-Rom + Arc-Preserving Blade)
+  // Ribbon Geometry Builder (Knot Jitter Filter + Chebyshev Circle + Dense CR)
   // --------------------------------------------------------------------------
   function rebuildRibbonGeometry() {
     const crossBudget = getActiveCrossSectionBudget();
-    const maxSubPerSeg = lowSpec ? 3 : isMobile ? 4 : 6;
+    const maxSubPerSeg = lowSpec ? 4 : isMobile ? 7 : 12;
+    const stepTargetDist = lowSpec ? 0.18 : isMobile ? 0.095 : 0.052;
+    const stepTargetAng = lowSpec ? 0.16 : isMobile ? 0.085 : 0.044;
 
     let vCursor = 0;
     let iCursor = 0;
@@ -1211,7 +1445,6 @@ export function createWeaponTrailSystem(scene, options = {}) {
       let ribbonHasQuads = false;
       let ribbonSectionsUsed = 0;
 
-      // Count total valid stroke samples in this slot so multi-stroke combo tails share budget fairly
       let totalValidSamples = 0;
       {
         let scan = 0;
@@ -1226,7 +1459,6 @@ export function createWeaponTrailSystem(scene, options = {}) {
         }
       }
 
-      // Partition ring buffer into contiguous stroke runs (prevents stretched polygon bridges across combo swings)
       let runStart = 0;
       let remainingValidSamples = totalValidSamples;
       while (runStart < count) {
@@ -1246,7 +1478,6 @@ export function createWeaponTrailSystem(scene, options = {}) {
         const remainingBudget = crossBudget - ribbonSectionsUsed;
 
         if (runLen >= 2 && remainingBudget >= 2) {
-          // Fair proportional share of cross-section budget across active strokes in the same slot
           const otherSamples = Math.max(0, remainingValidSamples - runLen);
           const maxBudgetForRun = Math.max(2, remainingBudget - otherSamples);
           const fairShare = remainingValidSamples > 0
@@ -1254,45 +1485,75 @@ export function createWeaponTrailSystem(scene, options = {}) {
             : remainingBudget;
           const runBudget = clamp(Math.max(runLen, fairShare), 2, maxBudgetForRun);
 
-          // If raw run exceeds allowed budget, keep the newest (leading-edge) points of the stroke
           if (runLen > runBudget) {
             effRunStart = runEnd - runBudget;
             runLen = runBudget;
           }
 
+          // Stage 1: Copy stroke knots & apply gentle [0.16, 0.68, 0.16] blade-length-preserving
+          // micro-jitter filter to interior knots (eliminates skeletal keyframe facet kinks while
+          // keeping newest live blade edge k = runLen - 1 100% pinned!)
+          for (let m = 0; m < runLen; m++) {
+            const pm = (slot.head + effRunStart + m) % RAW_SAMPLE_CAP;
+            const rbx = slot.bx[pm], rby = slot.by[pm], rbz = slot.bz[pm];
+            const rtx = slot.tx[pm], rty = slot.ty[pm], rtz = slot.tz[pm];
+            _smLen[m] = Math.hypot(rtx - rbx, rty - rby, rtz - rbz);
+            _smBx[m] = rbx; _smBy[m] = rby; _smBz[m] = rbz;
+            _smTx[m] = rtx; _smTy[m] = rty; _smTz[m] = rtz;
+          }
+          if (runLen >= 3) {
+            for (let m = 1; m < runLen - 1; m++) {
+              const pPrev = (slot.head + effRunStart + m - 1) % RAW_SAMPLE_CAP;
+              const pCur  = (slot.head + effRunStart + m) % RAW_SAMPLE_CAP;
+              const pNext = (slot.head + effRunStart + m + 1) % RAW_SAMPLE_CAP;
+              const bx = 0.16 * slot.bx[pPrev] + 0.68 * slot.bx[pCur] + 0.16 * slot.bx[pNext];
+              const by = 0.16 * slot.by[pPrev] + 0.68 * slot.by[pCur] + 0.16 * slot.by[pNext];
+              const bz = 0.16 * slot.bz[pPrev] + 0.68 * slot.bz[pCur] + 0.16 * slot.bz[pNext];
+              let tx = 0.16 * slot.tx[pPrev] + 0.68 * slot.tx[pCur] + 0.16 * slot.tx[pNext];
+              let ty = 0.16 * slot.ty[pPrev] + 0.68 * slot.ty[pCur] + 0.16 * slot.ty[pNext];
+              let tz = 0.16 * slot.tz[pPrev] + 0.68 * slot.tz[pCur] + 0.16 * slot.tz[pNext];
+              const dx = tx - bx;
+              const dy = ty - by;
+              const dz = tz - bz;
+              const dLen = Math.hypot(dx, dy, dz);
+              if (dLen > 1e-4) {
+                const s = _smLen[m] / dLen;
+                tx = bx + dx * s;
+                ty = by + dy * s;
+                tz = bz + dz * s;
+              }
+              _smBx[m] = bx; _smBy[m] = by; _smBz[m] = bz;
+              _smTx[m] = tx; _smTy[m] = ty; _smTz[m] = tz;
+            }
+          }
+
           const segCount = runLen - 1;
           let totalSubs = 0;
 
-          // Adaptive subdivision count per raw segment based on tip displacement & angular sweep
+          // Stage 2: High-density adaptive subdivision count per segment
           for (let j = 0; j < segCount; j++) {
-            const pA = (slot.head + effRunStart + j) % RAW_SAMPLE_CAP;
-            const pB = (slot.head + effRunStart + j + 1) % RAW_SAMPLE_CAP;
-
-            const dtx = slot.tx[pB] - slot.tx[pA];
-            const dty = slot.ty[pB] - slot.ty[pA];
-            const dtz = slot.tz[pB] - slot.tz[pA];
+            const dtx = _smTx[j + 1] - _smTx[j];
+            const dty = _smTy[j + 1] - _smTy[j];
+            const dtz = _smTz[j + 1] - _smTz[j];
             const tipStep = Math.hypot(dtx, dty, dtz);
 
-            // Blade direction dot product to detect fast 30 FPS angular sweeps
-            const bAx = slot.tx[pA] - slot.bx[pA];
-            const bAy = slot.ty[pA] - slot.by[pA];
-            const bAz = slot.tz[pA] - slot.bz[pA];
-            const bBx = slot.tx[pB] - slot.bx[pB];
-            const bBy = slot.ty[pB] - slot.by[pB];
-            const bBz = slot.tz[pB] - slot.bz[pB];
-            const lenA = Math.hypot(bAx, bAy, bAz) || 1.0;
-            const lenB = Math.hypot(bBx, bBy, bBz) || 1.0;
-            const cosAng = clamp((bAx * bBx + bAy * bBy + bAz * bBz) / (lenA * lenB), -1.0, 1.0);
+            const bAx = _smTx[j] - _smBx[j];
+            const bAy = _smTy[j] - _smBy[j];
+            const bAz = _smTz[j] - _smBz[j];
+            const bBx = _smTx[j + 1] - _smBx[j + 1];
+            const bBy = _smTy[j + 1] - _smBy[j + 1];
+            const bBz = _smTz[j + 1] - _smBz[j + 1];
+            const denom = (_smLen[j] * _smLen[j + 1]) || 1.0;
+            const cosAng = clamp((bAx * bBx + bAy * bBy + bAz * bBz) / denom, -1.0, 1.0);
             const angSweep = Math.acos(cosAng);
 
-            const subsDist = Math.ceil(tipStep / (lowSpec ? 0.28 : 0.16));
-            const subsAng = Math.ceil(angSweep / (lowSpec ? 0.24 : 0.13));
+            const subsDist = Math.ceil(tipStep / stepTargetDist);
+            const subsAng = Math.ceil(angSweep / stepTargetAng);
             const subs = clamp(Math.max(1, subsDist, subsAng), 1, maxSubPerSeg);
             _segSubCounts[j] = subs;
             totalSubs += subs;
           }
 
-          // Scale down subdivisions proportionally if stroke exceeds its fair section budget
           const maxAllowedSubs = Math.max(segCount, runBudget - 1);
           if (totalSubs > maxAllowedSubs) {
             const ratio = maxAllowedSubs / totalSubs;
@@ -1319,38 +1580,60 @@ export function createWeaponTrailSystem(scene, options = {}) {
           const runBaseVertex = vCursor;
           let emittedInRun = 0;
 
+          // Stage 3: Evaluate Centripetal Catmull-Rom with Chebyshev circular endpoint extrapolation
           for (let j = 0; j < segCount; j++) {
-            const idx1 = effRunStart + j;
-            const idx2 = idx1 + 1;
-            const p1 = (slot.head + idx1) % RAW_SAMPLE_CAP;
-            const p2 = (slot.head + idx2) % RAW_SAMPLE_CAP;
+            const p1 = (slot.head + effRunStart + j) % RAW_SAMPLE_CAP;
+            const p2 = (slot.head + effRunStart + j + 1) % RAW_SAMPLE_CAP;
 
             const hasPrev = j > 0;
             const hasNext = j + 1 < segCount;
-            const p0 = hasPrev ? (slot.head + idx1 - 1) % RAW_SAMPLE_CAP : p1;
-            const p3 = hasNext ? (slot.head + idx2 + 1) % RAW_SAMPLE_CAP : p2;
 
-            // Natural mirrored phantom endpoints for crisp tangents at blade head & tail tip
-            const b1x = slot.bx[p1], b1y = slot.by[p1], b1z = slot.bz[p1];
-            const b2x = slot.bx[p2], b2y = slot.by[p2], b2z = slot.bz[p2];
-            const b0x = hasPrev ? slot.bx[p0] : (2.0 * b1x - b2x);
-            const b0y = hasPrev ? slot.by[p0] : (2.0 * b1y - b2y);
-            const b0z = hasPrev ? slot.bz[p0] : (2.0 * b1z - b2z);
-            const b3x = hasNext ? slot.bx[p3] : (2.0 * b2x - b1x);
-            const b3y = hasNext ? slot.by[p3] : (2.0 * b2y - b1y);
-            const b3z = hasNext ? slot.bz[p3] : (2.0 * b2z - b1z);
+            const b1x = _smBx[j],     b1y = _smBy[j],     b1z = _smBz[j];
+            const b2x = _smBx[j + 1], b2y = _smBy[j + 1], b2z = _smBz[j + 1];
+            let b0x, b0y, b0z;
+            if (hasPrev) {
+              b0x = _smBx[j - 1]; b0y = _smBy[j - 1]; b0z = _smBz[j - 1];
+            } else if (segCount >= 2) {
+              extrapolateCircularNext(_smBx[2], _smBy[2], _smBz[2], b2x, b2y, b2z, b1x, b1y, b1z, _extrap);
+              b0x = _extrap[0]; b0y = _extrap[1]; b0z = _extrap[2];
+            } else {
+              b0x = 2.0 * b1x - b2x; b0y = 2.0 * b1y - b2y; b0z = 2.0 * b1z - b2z;
+            }
 
-            const t1x = slot.tx[p1], t1y = slot.ty[p1], t1z = slot.tz[p1];
-            const t2x = slot.tx[p2], t2y = slot.ty[p2], t2z = slot.tz[p2];
-            const t0x = hasPrev ? slot.tx[p0] : (2.0 * t1x - t2x);
-            const t0y = hasPrev ? slot.ty[p0] : (2.0 * t1y - t2y);
-            const t0z = hasPrev ? slot.tz[p0] : (2.0 * t1z - t2z);
-            const t3x = hasNext ? slot.tx[p3] : (2.0 * t2x - t1x);
-            const t3y = hasNext ? slot.ty[p3] : (2.0 * t2y - t1y);
-            const t3z = hasNext ? slot.tz[p3] : (2.0 * t2z - t1z);
+            let b3x, b3y, b3z;
+            if (hasNext) {
+              b3x = _smBx[j + 2]; b3y = _smBy[j + 2]; b3z = _smBz[j + 2];
+            } else if (segCount >= 2) {
+              extrapolateCircularNext(_smBx[j - 1], _smBy[j - 1], _smBz[j - 1], b1x, b1y, b1z, b2x, b2y, b2z, _extrap);
+              b3x = _extrap[0]; b3y = _extrap[1]; b3z = _extrap[2];
+            } else {
+              b3x = 2.0 * b2x - b1x; b3y = 2.0 * b2y - b1y; b3z = 2.0 * b2z - b1z;
+            }
 
-            const len1 = Math.hypot(t1x - b1x, t1y - b1y, t1z - b1z);
-            const len2 = Math.hypot(t2x - b2x, t2y - b2y, t2z - b2z);
+            const t1x = _smTx[j],     t1y = _smTy[j],     t1z = _smTz[j];
+            const t2x = _smTx[j + 1], t2y = _smTy[j + 1], t2z = _smTz[j + 1];
+            let t0x, t0y, t0z;
+            if (hasPrev) {
+              t0x = _smTx[j - 1]; t0y = _smTy[j - 1]; t0z = _smTz[j - 1];
+            } else if (segCount >= 2) {
+              extrapolateCircularNext(_smTx[2], _smTy[2], _smTz[2], t2x, t2y, t2z, t1x, t1y, t1z, _extrap);
+              t0x = _extrap[0]; t0y = _extrap[1]; t0z = _extrap[2];
+            } else {
+              t0x = 2.0 * t1x - t2x; t0y = 2.0 * t1y - t2y; t0z = 2.0 * t1z - t2z;
+            }
+
+            let t3x, t3y, t3z;
+            if (hasNext) {
+              t3x = _smTx[j + 2]; t3y = _smTy[j + 2]; t3z = _smTz[j + 2];
+            } else if (segCount >= 2) {
+              extrapolateCircularNext(_smTx[j - 1], _smTy[j - 1], _smTz[j - 1], t1x, t1y, t1z, t2x, t2y, t2z, _extrap);
+              t3x = _extrap[0]; t3y = _extrap[1]; t3z = _extrap[2];
+            } else {
+              t3x = 2.0 * t2x - t1x; t3y = 2.0 * t2y - t1y; t3z = 2.0 * t2z - t1z;
+            }
+
+            const len1 = _smLen[j];
+            const len2 = _smLen[j + 1];
 
             const life1 = clamp(slot.age[p1] / slot.maxLife[p1], 0.0, 1.0);
             const life2 = clamp(slot.age[p2] / slot.maxLife[p2], 0.0, 1.0);
@@ -1384,7 +1667,6 @@ export function createWeaponTrailSystem(scene, options = {}) {
               let ty = _crTip[1];
               let tz = _crTip[2];
 
-              // Preserve true rigid blade length across sharp 30 FPS circular swings (zero chord pinching!)
               const targetLen = len1 + (len2 - len1) * u;
               let bdx = tx - bx;
               let bdy = ty - by;
@@ -1401,7 +1683,6 @@ export function createWeaponTrailSystem(scene, options = {}) {
               }
 
               const life = life1 + (life2 - life1) * u;
-              // along: 0.0 at newest blade leading edge (emittedInRun = totalSectionsInRun - 1), 1.0 at tail tip (0)
               const along = totalSectionsInRun > 1
                 ? 1.0 - emittedInRun / (totalSectionsInRun - 1)
                 : 0.0;
@@ -1411,19 +1692,16 @@ export function createWeaponTrailSystem(scene, options = {}) {
               const taperAmt = (taper1 + (taper2 - taper1) * u) * life * life;
               const riseY = (buoy1 + (buoy2 - buoy1) * u) * life * life;
 
-              // Crescent scythe taper: inner hilt edge drifts smoothly toward blade tip as trail ages
               if (taperAmt > 1e-4) {
                 bx += bdx * taperAmt;
                 by += bdy * taperAmt;
                 bz += bdz * taperAmt;
               }
-              // Thermal buoyancy rise (makes Boss flame wake curl organically upward!)
               if (riseY > 1e-4) {
                 by += riseY * 0.55;
                 ty += riseY;
               }
 
-              // Emit base vertex (vWidth = 0)
               const pOff0 = vCursor * 3;
               const aOff0 = vCursor * 4;
               ribPosArr[pOff0] = bx;
@@ -1438,7 +1716,6 @@ export function createWeaponTrailSystem(scene, options = {}) {
               ribStyleArr[aOff0 + 2] = seed;
               ribStyleArr[aOff0 + 3] = arcU;
 
-              // Emit tip vertex (vWidth = 1)
               const pOff1 = pOff0 + 3;
               const aOff1 = aOff0 + 4;
               ribPosArr[pOff1] = tx;
@@ -1459,7 +1736,6 @@ export function createWeaponTrailSystem(scene, options = {}) {
             }
           }
 
-          // Emit triangle strip indices for this contiguous stroke
           if (emittedInRun >= 2) {
             for (let q = 0; q < emittedInRun - 1; q++) {
               if (iCursor + 6 > totalMaxIndices) break;
@@ -1510,30 +1786,10 @@ export function createWeaponTrailSystem(scene, options = {}) {
   // --------------------------------------------------------------------------
   // Public API: spawnClashSparks(pos, normalDir, tier, opts)
   // --------------------------------------------------------------------------
-  function allocateSparkSlot(cap) {
-    if (activeSparkCount < cap) {
-      const idx = activeSparkCount;
-      activeSparkCount += 1;
-      return idx;
-    }
-    // Pool full: recycle oldest non-flash spark (or oldest overall)
-    let bestIdx = 0;
-    let maxNormAge = -1.0;
-    for (let i = 0; i < activeSparkCount; i++) {
-      const normAge = spAge[i] / (spMaxLife[i] || 0.1) + (spKind[i] === 0 ? 0.15 : 0.0);
-      if (normAge > maxNormAge) {
-        maxNormAge = normAge;
-        bestIdx = i;
-      }
-    }
-    return bestIdx;
-  }
-
   function spawnClashSparks(pos, normalDir = null, tier = 'block', opts = null) {
     if (disposed) return 0;
     if (!readVec3Into(pos, _inPos, 0)) return 0;
 
-    // Build orthonormal tangent basis around impact normalDir (fallback: +Y)
     let nx = 0.0;
     let ny = 1.0;
     let nz = 0.0;
@@ -1546,7 +1802,6 @@ export function createWeaponTrailSystem(scene, options = {}) {
       }
     }
 
-    // Orthonormal tangent vectors (t1, t2) perpendicular to (nx, ny, nz)
     const refX = Math.abs(ny) > 0.92 ? 1.0 : 0.0;
     const refY = Math.abs(ny) > 0.92 ? 0.0 : 1.0;
     const refZ = 0.0;
@@ -1582,7 +1837,7 @@ export function createWeaponTrailSystem(scene, options = {}) {
 
     let spawned = 0;
 
-    // 1. Spawn point-of-contact metallic starburst flash
+    // 1. Crisp point-of-contact metallic starburst flash
     {
       const fi = allocateSparkSlot(cap);
       spX[fi] = px + nx * 0.03;
@@ -1593,7 +1848,7 @@ export function createWeaponTrailSystem(scene, options = {}) {
       spVz[fi] = 0.0;
       spAge[fi] = 0.0;
       spMaxLife[fi] = spec.flashLife;
-      spSize[fi] = spec.flashSize * (0.90 + rand01() * 0.24);
+      spSize[fi] = spec.flashSize * (0.90 + rand01() * 0.22);
       spStreak[fi] = 0.0;
       spGrav[fi] = 0.0;
       spDrag[fi] = 0.0;
@@ -1607,12 +1862,12 @@ export function createWeaponTrailSystem(scene, options = {}) {
       spawned += 1;
     }
 
-    // 2. Spawn physical ballistic metallic ricochet needles
+    // 2. Dual-mass ballistic metallic ricochet sparks (70% fast razor chips + 30% heavy bouncing slag)
     for (let i = 0; i < sparkCount; i++) {
       const idx = allocateSparkSlot(cap);
-      // Cone + tangential steel ricochet spray
+      const isHeavyChip = (i % 10) >= 7;
+
       const phi = rand01() * Math.PI * 2.0;
-      // Bias slightly toward rim of cone for dramatic fan silhouette
       const theta = Math.pow(rand01(), 0.65) * spec.spreadRad;
       const sinT = Math.sin(theta);
       const cosT = Math.cos(theta);
@@ -1627,8 +1882,10 @@ export function createWeaponTrailSystem(scene, options = {}) {
       dy /= dLen;
       dz /= dLen;
 
-      const spd = spec.speedMin + Math.pow(rand01(), 0.78) * (spec.speedMax - spec.speedMin);
-      const jitter = 0.035;
+      const spdBase = spec.speedMin + Math.pow(rand01(), 0.78) * (spec.speedMax - spec.speedMin);
+      const spd = isHeavyChip ? spdBase * 0.76 : spdBase;
+      const jitter = 0.032;
+
       spX[idx] = px + (rand01() - 0.5) * jitter;
       spY[idx] = Math.max(floorY + 0.01, py + (rand01() - 0.5) * jitter);
       spZ[idx] = pz + (rand01() - 0.5) * jitter;
@@ -1637,12 +1894,12 @@ export function createWeaponTrailSystem(scene, options = {}) {
       spVz[idx] = dz * spd;
 
       spAge[idx] = 0.0;
-      spMaxLife[idx] = spec.lifeMin + rand01() * (spec.lifeMax - spec.lifeMin);
-      spSize[idx] = spec.widthMin + rand01() * (spec.widthMax - spec.widthMin);
-      spStreak[idx] = spec.streakScale * (0.78 + rand01() * 0.55);
-      spGrav[idx] = spec.gravity * (0.86 + rand01() * 0.28);
-      spDrag[idx] = spec.drag * (0.8 + rand01() * 0.4);
-      spRest[idx] = spec.restitution * (0.82 + rand01() * 0.34);
+      spMaxLife[idx] = (spec.lifeMin + rand01() * (spec.lifeMax - spec.lifeMin)) * (isHeavyChip ? 1.32 : 0.92);
+      spSize[idx] = (spec.widthMin + rand01() * (spec.widthMax - spec.widthMin)) * (isHeavyChip ? 1.24 : 0.95);
+      spStreak[idx] = spec.streakScale * (0.78 + rand01() * 0.52);
+      spGrav[idx] = spec.gravity * (isHeavyChip ? 1.12 : 0.92);
+      spDrag[idx] = spec.drag * (isHeavyChip ? 0.72 : 1.15);
+      spRest[idx] = spec.restitution * (isHeavyChip ? 1.08 : 0.92);
       spFloorY[idx] = floorY;
       spKind[idx] = 0;
       spPhase[idx] = rand01();
@@ -1691,6 +1948,7 @@ export function createWeaponTrailSystem(scene, options = {}) {
   }
 
   function syncSparkBuffers() {
+    sparkDirty = false;
     if (activeSparkCount <= 0) {
       sparkBaseGeo.instanceCount = 0;
       sparkMesh.visible = false;
@@ -1702,10 +1960,9 @@ export function createWeaponTrailSystem(scene, options = {}) {
       const o4 = i * 4;
       const o2 = i * 2;
 
-      // Flash expands sharply on impact; metallic needles stay crisp and shrink subtly near burnout
       const effSize = spKind[i] === 1
-        ? spSize[i] * (0.45 + 0.85 * Math.sqrt(life01))
-        : spSize[i] * (1.0 - life01 * 0.42);
+        ? spSize[i] * (0.45 + 0.80 * Math.sqrt(life01))
+        : spSize[i] * (1.0 - life01 * 0.44);
 
       spkPosSizeArr[o4] = spX[i];
       spkPosSizeArr[o4 + 1] = spY[i];
@@ -1717,17 +1974,16 @@ export function createWeaponTrailSystem(scene, options = {}) {
       spkVelLenArr[o4 + 2] = spVz[i];
       spkVelLenArr[o4 + 3] = spStreak[i];
 
-      // Realistic incandescent steel cooling curve: white-hot -> gold -> amber/ember
       let r;
       let g;
       let b;
-      if (life01 < 0.28) {
-        const k = life01 / 0.28;
+      if (life01 < 0.26) {
+        const k = life01 / 0.26;
         r = spHotR[i] + (spMidR[i] - spHotR[i]) * k;
         g = spHotG[i] + (spMidG[i] - spHotG[i]) * k;
         b = spHotB[i] + (spMidB[i] - spHotB[i]) * k;
       } else {
-        const k = (life01 - 0.28) / 0.72;
+        const k = (life01 - 0.26) / 0.74;
         r = spMidR[i] + (spCoolR[i] - spMidR[i]) * k;
         g = spMidG[i] + (spCoolG[i] - spMidG[i]) * k;
         b = spMidB[i] + (spCoolB[i] - spMidB[i]) * k;
@@ -1761,7 +2017,6 @@ export function createWeaponTrailSystem(scene, options = {}) {
     ribbonMat.uniforms.uTime.value = elapsedTime;
     sparkMat.uniforms.uTime.value = elapsedTime;
 
-    // 1. Age ribbon samples & prune expired tails
     let anyRibbonSamples = false;
     if (safeDt > 0.0) {
       for (let sIdx = 0; sIdx < maxRibbons; sIdx++) {
@@ -1773,7 +2028,6 @@ export function createWeaponTrailSystem(scene, options = {}) {
           slot.age[phys] += safeDt;
         }
 
-        // Pop expired samples from oldest end
         while (slot.count > 0) {
           const oldest = slot.head;
           if (slot.age[oldest] >= slot.maxLife[oldest]) {
@@ -1784,7 +2038,6 @@ export function createWeaponTrailSystem(scene, options = {}) {
           }
         }
 
-        // If only 1 lonely sample remains and actor stopped swinging, let it expire cleanly
         if (slot.count === 0) {
           resetSlot(slot);
         } else {
@@ -1805,7 +2058,6 @@ export function createWeaponTrailSystem(scene, options = {}) {
       rebuildRibbonGeometry();
     }
 
-    // 2. Step ballistic spark physics + stone floor ricochet
     if (activeSparkCount > 0 && safeDt > 0.0) {
       let i = 0;
       while (i < activeSparkCount) {
@@ -1826,14 +2078,13 @@ export function createWeaponTrailSystem(scene, options = {}) {
           let ny = spY[i] + vy * safeDt;
           let nz = spZ[i] + vz * safeDt;
 
-          // Physical ricochet bounce off cathedral stone floor!
           const floorY = spFloorY[i];
           if (ny < floorY) {
             ny = floorY;
-            if (vy < -0.35) {
+            if (vy < -0.32) {
               vy = -vy * spRest[i];
-              vx = vx * 0.72 + (rand01() - 0.5) * 1.15;
-              vz = vz * 0.72 + (rand01() - 0.5) * 1.15;
+              vx = vx * 0.72 + (rand01() - 0.5) * 1.10;
+              vz = vz * 0.72 + (rand01() - 0.5) * 1.10;
             } else {
               vy = 0.0;
               vx *= 0.65;
@@ -1852,6 +2103,8 @@ export function createWeaponTrailSystem(scene, options = {}) {
         i += 1;
       }
 
+      syncSparkBuffers();
+    } else if (sparkDirty) {
       syncSparkBuffers();
     }
   }
@@ -1883,6 +2136,7 @@ export function createWeaponTrailSystem(scene, options = {}) {
     activeSparkCount = 0;
     sparkBaseGeo.instanceCount = 0;
     sparkMesh.visible = false;
+    sparkDirty = false;
   }
 
   function setLowSpec(enabled) {
@@ -1892,7 +2146,6 @@ export function createWeaponTrailSystem(scene, options = {}) {
     ribbonMat.uniforms.uLowSpec.value = lowSpec ? 1.0 : 0.0;
     sparkMat.uniforms.uLowSpec.value = lowSpec ? 1.0 : 0.0;
 
-    // Immediately clamp active sparks if shrinking down to lowSpec cap
     const cap = getActiveSparkCap();
     if (activeSparkCount > cap) {
       activeSparkCount = cap;
@@ -1927,6 +2180,9 @@ export function createWeaponTrailSystem(scene, options = {}) {
     activeSparkCount = 0;
     lastActiveRibbons = 0;
     lastActiveTriangles = 0;
+
+    ribbonMesh.onBeforeRender = function noop() {};
+    sparkMesh.onBeforeRender = function noop() {};
 
     if (ribbonMesh.parent) {
       ribbonMesh.parent.remove(ribbonMesh);

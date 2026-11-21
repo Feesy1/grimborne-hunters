@@ -5,15 +5,16 @@
 //   - Monumental animated twin oak-and-iron Boss Doors: ./souls/soulsCastleDoors.js
 //   - High-detail 3D Props (Hero Bonfire w/ skull/bones/Coiled Sword, 8-bar caged braziers w/ solid colliders,
 //     21 wall bracket lanterns, melted dripping-wax candles, swaying banners & Relic Shrine): ./souls/soulsCastleProps.js
-//   - Shared procedural PBR albedo + deep Sobel normalMap (1.45 PC / 1.12 Mobile) + roughnessMap: ./souls/soulsPbrTextures.js
-//   - Dynamic nearest-light PointLight pool (4 PC / 2 Mobile / 1 LowSpec), 100% GPU embers/smoke & sky dome
+//   - Shared procedural PBR albedo + matte anti-shimmer Sobel normalMap (0.88 PC / 0.78 Mobile) + roughnessMap: ./souls/soulsPbrTextures.js
+//   - Dynamic nearest-light PointLight pool (2 PC / 2 Mobile / 1 LowSpec), 100% GPU embers/smoke & sky dome
 //   - 100% invisible shadow-only 12-tri proxy replacing 58.5k-tri throne in shadow map pass
 
 import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { DRACOLoader } from '../vendor/DRACOLoader.js';
 import { mergeGeometries } from '../vendor/BufferGeometryUtils.js';
-import { createSoulsPbrTextures } from './souls/soulsPbrTextures.js?v=20261121z64';
+import { createSoulsPbrTextures } from './souls/soulsPbrTextures.js?v=20261121z68';
+import * as CastleLayout from './souls/soulsCastleLayout.js?v=20261121z68';
 import {
   SOULS_CASTLE_CONSTANTS,
   SOULS_CASTLE_BONFIRE,
@@ -37,22 +38,26 @@ import {
   clampCastlePosition,
   getCastleSurfaceType,
   getCastleStaticColliders
-} from './souls/soulsCastleLayout.js?v=20261121z64';
-import { createWallFlameJetTraps } from './souls/soulsFireVfx.js?v=20261121z64';
-import { createSoulsCastleDoors } from './souls/soulsCastleDoors.js?v=20261121z64';
+} from './souls/soulsCastleLayout.js?v=20261121z68';
+import { createWallFlameJetTraps } from './souls/soulsFireVfx.js?v=20261121z68';
+import { createSoulsCastleDoors } from './souls/soulsCastleDoors.js?v=20261121z68';
 import {
   createHeroBonfire3D,
   createGothicLanternBraziers3D,
   createMeltedCandleClusters3D,
   createCastleBannersAndShrines3D
-} from './souls/soulsCastleProps.js?v=20261121z64';
-import { createSoulsCastleRoof } from './souls/soulsCastleRoof.js?v=20261121z64';
-import { createCastleAtmosphere } from './souls/soulsAtmosphere.js?v=20261121z64';
+} from './souls/soulsCastleProps.js?v=20261121z68';
+import { createSoulsCastleRoof } from './souls/soulsCastleRoof.js?v=20261121z68';
+import { createCastleAtmosphere } from './souls/soulsAtmosphere.js?v=20261121z68';
+import {
+  createSoulsFireShadowRig,
+  buildFireSourcesFromCastleLayout
+} from './souls/soulsLightingRig.js?v=20261121z68';
 
 const sharedDracoLoader = new DRACOLoader();
 sharedDracoLoader.setDecoderPath('./vendor/draco/');
 
-const THRONE_GLB_URL = './assets/env/souls_throne.glb?v=20261121z64';
+const THRONE_GLB_URL = './assets/env/souls_throne.glb?v=20261121z68';
 
 const BOSS_CENTER_Z = SOULS_CASTLE_CONSTANTS.BOSS_CENTER_Z;
 const BOSS_RADIUS = SOULS_CASTLE_CONSTANTS.BOSS_RADIUS;
@@ -395,13 +400,142 @@ function createDistantCastleKeepGeometry() {
   return mergeBucket(parts, 0);
 }
 
+// Continuous wide (~2.4m) beveled royal crimson-and-gold velvet ceremonial runner draped
+// seamlessly from the Throne base down both dais steps and all the way to the Boss Doors.
+// UVs: u in [0..1] across width (woven gold-filigree borders cleanly frame both edges),
+//      v tiled evenly by real surface arc-length along treads, risers & cathedral aisle.
+function createRoyalRunnerCarpetGeometry(tx, tz, bossDoorZ) {
+  const CARPET_WIDTH = 2.40;
+  const HALF_W = CARPET_WIDTH * 0.5;
+  const HEM_BEVEL_X = 0.024;
+  const SHOULDER_INSET = 0.045;
+  const REPEAT_LEN = 2.40; // 1:1 square texel ratio matching CARPET_WIDTH
+
+  const upperStepTopY = 0.505;
+  const lowerStepTopY = 0.257;
+  const floorBaseY = -0.002;
+  const thick = 0.022;
+
+  const upperTopY = upperStepTopY + thick; // 0.527
+  const lowerTopY = lowerStepTopY + thick; // 0.279
+  const aisleTopY = thick;                 // 0.022m proud off stone floor
+
+  const zStart = tz + 1.560;        // Tucked cleanly against Throne front plinth on upper step
+  const zUpperLip = tz + 2.495;     // Front trim lip of upper dais step
+  const zLowerLip = tz + 3.490;     // Front trim lip of lower dais step
+  const zAisleEnd = bossDoorZ - 1.15; // Stops cleanly before Boss Door stone threshold sill
+
+  const stations = [
+    // North beveled hem tucked against Throne plinth
+    { topY: upperStepTopY - 0.002, topZ: zStart,                    baseY: upperStepTopY - 0.002, baseZ: zStart,                    pinched: true },
+    { topY: upperTopY,             topZ: zStart + 0.022,            baseY: upperStepTopY - 0.002, baseZ: zStart + 0.022,            pinched: false },
+    // Upper dais tread + nosing guard
+    { topY: upperTopY,             topZ: zUpperLip - 0.018,         baseY: upperStepTopY - 0.002, baseZ: zUpperLip - 0.018,         pinched: false },
+    { topY: upperTopY,             topZ: zUpperLip,                 baseY: upperStepTopY - 0.002, baseZ: zUpperLip,                 pinched: false },
+    // Upper stair nosing bevel & vertical riser draped down onto lower step
+    { topY: upperStepTopY,         topZ: zUpperLip + thick,         baseY: upperStepTopY - 0.010, baseZ: zUpperLip,                 pinched: false },
+    { topY: lowerTopY,             topZ: zUpperLip + thick,         baseY: lowerStepTopY - 0.002, baseZ: zUpperLip,                 pinched: false },
+    // Inner crease guard + lower dais tread + nosing guard
+    { topY: lowerTopY,             topZ: zUpperLip + thick + 0.022, baseY: lowerStepTopY - 0.002, baseZ: zUpperLip + thick + 0.022, pinched: false },
+    { topY: lowerTopY,             topZ: zLowerLip - 0.018,         baseY: lowerStepTopY - 0.002, baseZ: zLowerLip - 0.018,         pinched: false },
+    { topY: lowerTopY,             topZ: zLowerLip,                 baseY: lowerStepTopY - 0.002, baseZ: zLowerLip,                 pinched: false },
+    // Lower stair nosing bevel & vertical riser draped down onto Boss Hall stone floor
+    { topY: lowerStepTopY,         topZ: zLowerLip + thick,         baseY: lowerStepTopY - 0.010, baseZ: zLowerLip,                 pinched: false },
+    { topY: aisleTopY,             topZ: zLowerLip + thick,         baseY: floorBaseY,            baseZ: zLowerLip,                 pinched: false },
+    // Inner crease guard onto cathedral floor
+    { topY: aisleTopY,             topZ: zLowerLip + thick + 0.024, baseY: floorBaseY,            baseZ: zLowerLip + thick + 0.024, pinched: false }
+  ];
+
+  // Subdivide the long cathedral aisle so shadow & firelight shading interpolate smoothly
+  const aisleStartZ = zLowerLip + thick + 0.024;
+  const aisleLen = Math.max(0.5, zAisleEnd - aisleStartZ);
+  const aisleSegs = Math.max(6, Math.round(aisleLen / 2.2));
+  for (let i = 1; i <= aisleSegs; i++) {
+    const zi = aisleStartZ + (aisleLen * i) / aisleSegs;
+    stations.push({ topY: aisleTopY, topZ: zi, baseY: floorBaseY, baseZ: zi, pinched: false });
+  }
+  // South beveled woven end hem right in front of the Boss Doors threshold
+  stations.push({ topY: floorBaseY, topZ: zAisleEnd + 0.024, baseY: floorBaseY, baseZ: zAisleEnd + 0.024, pinched: true });
+
+  // 7-point lateral cross-section across width (u in [0..1] cleanly frames both gold-filigree borders)
+  const lateralOffsets = [
+    { x: tx - HALF_W - HEM_BEVEL_X,    u: 0.002, isBase: true  },
+    { x: tx - HALF_W,                  u: 0.014, isBase: false },
+    { x: tx - HALF_W + SHOULDER_INSET, u: 0.032, isBase: false },
+    { x: tx,                           u: 0.500, isBase: false },
+    { x: tx + HALF_W - SHOULDER_INSET, u: 0.968, isBase: false },
+    { x: tx + HALF_W,                  u: 0.986, isBase: false },
+    { x: tx + HALF_W + HEM_BEVEL_X,    u: 0.998, isBase: true  }
+  ];
+  const cols = lateralOffsets.length;
+  const rows = stations.length;
+
+  const positions = new Float32Array(rows * cols * 3);
+  const uvs = new Float32Array(rows * cols * 2);
+
+  let arcLen = 0;
+  for (let r = 0; r < rows; r++) {
+    const st = stations[r];
+    if (r > 0) {
+      const prev = stations[r - 1];
+      arcLen += Math.hypot(st.topZ - prev.topZ, st.topY - prev.topY);
+    }
+    const v = arcLen / REPEAT_LEN;
+    for (let c = 0; c < cols; c++) {
+      const lat = lateralOffsets[c];
+      const useBase = st.pinched || lat.isBase;
+      const vi = r * cols + c;
+      positions[vi * 3] = lat.x;
+      positions[vi * 3 + 1] = useBase ? st.baseY : st.topY;
+      positions[vi * 3 + 2] = useBase ? st.baseZ : st.topZ;
+      uvs[vi * 2] = lat.u;
+      uvs[vi * 2 + 1] = v;
+    }
+  }
+
+  const indices = [];
+  for (let r = 0; r < rows - 1; r++) {
+    for (let c = 0; c < cols - 1; c++) {
+      const a = r * cols + c;
+      const b = (r + 1) * cols + c;
+      const d = r * cols + (c + 1);
+      const e = (r + 1) * cols + (c + 1);
+      indices.push(a, b, e, a, e, d);
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+// Safe fallback matching the physical Throne dais stone steps if soulsCastleLayout.js hasn't exported getCastleFloorHeight yet
+function fallbackCastleFloorHeight(x = 0, z = 0) {
+  if (!Number.isFinite(x) || !Number.isFinite(z)) return 0;
+  const dx = Math.abs(x - SOULS_THRONE_CONFIG.x);
+  const dz = z - SOULS_THRONE_CONFIG.z;
+  if ((dx <= 2.39 && dz >= 1.555 && dz <= 2.495) || (dx <= 0.83 && dz >= 1.16 && dz <= 1.60)) {
+    return SOULS_THRONE_CONFIG.footrestY ?? 0.50;
+  }
+  if (dx <= 3.04 && dz >= 2.41 && dz <= 3.49) {
+    return SOULS_THRONE_CONFIG.lowerStepY ?? 0.25;
+  }
+  if (dx <= 3.74 && dz >= -2.49 && dz <= 2.39) {
+    return 0.06;
+  }
+  return 0;
+}
+
 // ============================================================================
 // Main Souls Arena Factory (Compact Enclosed Gothic Castle + Modular Props & Doors)
 // ============================================================================
 export function createSoulsArena(options = {}) {
   const isMobile = options.isMobile !== undefined ? Boolean(options.isMobile) : detectMobileDevice();
   let lowSpecMode = Boolean(options.lowSpec);
-  const stoneNormalStrength = isMobile ? 1.12 : 1.45;
+  const stoneNormalStrength = isMobile ? 0.78 : 0.88;
 
   const group = new THREE.Group();
   group.visible = false;
@@ -416,16 +550,17 @@ export function createSoulsArena(options = {}) {
   const pbr = createSoulsPbrTextures({ isMobile });
 
   // ==========================================================================
-  // Shared Deep-Relief PBR Materials (normalScale 1.45 PC / 1.12 Mobile!)
+  // Shared Matte Anti-Shimmer PBR Materials (normalScale 0.88 PC / 0.78 Mobile!)
   // ==========================================================================
   const stoneFloorMat = trackMat(new THREE.MeshStandardMaterial({
     map: pbr.floorAlbedo,
     normalMap: lowSpecMode ? null : pbr.floorNormal,
     normalScale: new THREE.Vector2(stoneNormalStrength, stoneNormalStrength),
     roughnessMap: pbr.floorRoughness,
-    color: 0xc2c8d8,
+    color: 0xc4cad9,
     roughness: 1.0,
-    metalness: 0.08
+    metalness: 0.05,
+    envMapIntensity: 0.42
   }));
 
   const darkStoneMat = trackMat(new THREE.MeshStandardMaterial({
@@ -433,9 +568,10 @@ export function createSoulsArena(options = {}) {
     normalMap: lowSpecMode ? null : pbr.ashlarNormal,
     normalScale: new THREE.Vector2(stoneNormalStrength, stoneNormalStrength),
     roughnessMap: pbr.ashlarRoughness,
-    color: 0x5c6274,
+    color: 0x868fa6,
     roughness: 1.0,
-    metalness: 0.09
+    metalness: 0.05,
+    envMapIntensity: 0.34
   }));
 
   const trimStoneMat = trackMat(new THREE.MeshStandardMaterial({
@@ -443,24 +579,31 @@ export function createSoulsArena(options = {}) {
     normalMap: lowSpecMode ? null : pbr.ashlarNormal,
     normalScale: new THREE.Vector2(stoneNormalStrength * 0.92, stoneNormalStrength * 0.92),
     roughnessMap: pbr.ashlarRoughness,
-    color: 0x8991a7,
-    roughness: 0.95,
-    metalness: 0.12
+    color: 0x9099b0,
+    roughness: 0.96,
+    metalness: 0.06,
+    envMapIntensity: 0.34
   }));
 
   const ironMat = trackMat(new THREE.MeshStandardMaterial({
     normalMap: lowSpecMode ? null : pbr.ironNormal,
-    normalScale: new THREE.Vector2(0.95, 0.95),
+    normalScale: new THREE.Vector2(0.75, 0.75),
     roughnessMap: pbr.ironRoughness,
-    color: 0x2c303a,
-    roughness: 0.90,
-    metalness: 0.85
+    color: 0x363b47,
+    roughness: 0.92,
+    metalness: 0.72,
+    envMapIntensity: 0.45
   }));
 
   const daisRunnerMat = trackMat(new THREE.MeshStandardMaterial({
-    color: 0x671720,
-    roughness: 0.90,
-    metalness: 0.06
+    map: pbr.carpetAlbedo || null,
+    normalMap: lowSpecMode ? null : (pbr.carpetNormal || null),
+    normalScale: new THREE.Vector2(0.85, 0.85),
+    roughnessMap: pbr.carpetRoughness || null,
+    color: pbr.carpetAlbedo ? 0xffffff : 0x671720,
+    roughness: 0.94,
+    metalness: 0.04,
+    envMapIntensity: 0.25
   }));
 
   const normalMappedMats = [
@@ -469,6 +612,9 @@ export function createSoulsArena(options = {}) {
     { mat: trimStoneMat, map: pbr.ashlarNormal },
     { mat: ironMat, map: pbr.ironNormal }
   ];
+  if (pbr.carpetNormal) {
+    normalMappedMats.push({ mat: daisRunnerMat, map: pbr.carpetNormal });
+  }
 
   // ==========================================================================
   // 0. Gothic Night Sky Dome (Pale Ashen Moon visible high above Castle Walls) [1 DC]
@@ -608,6 +754,7 @@ export function createSoulsArena(options = {}) {
   }
 
   // Boss Cathedral Carved Stone Medallion Ring + Extended Radial Floor Ribs (scale with the enlarged +21% hall)
+  // Kept flush/low (top <= 0.011m) so stone inlays never slice through the 0.022m royal velvet runner!
   const ringSegs = 16;
   const ringInnerR = 4.88 * BOSS_HALL_SCALE;
   const ringOuterR = 9.8 * BOSS_HALL_SCALE;
@@ -616,17 +763,17 @@ export function createSoulsArena(options = {}) {
     const a = (i / ringSegs) * Math.PI * 2;
     const rx = Math.cos(a) * ringInnerR;
     const rz = BOSS_CENTER_Z + Math.sin(a) * ringInnerR;
-    trimStoneParts.push(makeTranslatedGeo(new THREE.BoxGeometry(1.88 * BOSS_HALL_SCALE, 0.045, 0.56), rx, 0.02, rz, 0, -a + Math.PI / 2, 0));
+    trimStoneParts.push(makeTranslatedGeo(new THREE.BoxGeometry(1.88 * BOSS_HALL_SCALE, 0.016, 0.56), rx, 0.002, rz, 0, -a + Math.PI / 2, 0));
     const ox = Math.cos(a) * ringOuterR;
     const oz = BOSS_CENTER_Z + Math.sin(a) * ringOuterR;
-    darkStoneParts.push(makeTranslatedGeo(new THREE.BoxGeometry(3.85 * BOSS_HALL_SCALE, 0.032, 0.44), ox, 0.014, oz, 0, -a + Math.PI / 2, 0));
+    darkStoneParts.push(makeTranslatedGeo(new THREE.BoxGeometry(3.85 * BOSS_HALL_SCALE, 0.014, 0.44), ox, 0.001, oz, 0, -a + Math.PI / 2, 0));
     if (i % 2 === 0) {
       const sx = Math.cos(a) * ribMidR;
       const sz = BOSS_CENTER_Z + Math.sin(a) * ribMidR;
-      darkStoneParts.push(makeTranslatedGeo(new THREE.BoxGeometry(0.36, 0.030, 9.6 * BOSS_HALL_SCALE), sx, 0.013, sz, 0, -a + Math.PI / 2, 0));
+      darkStoneParts.push(makeTranslatedGeo(new THREE.BoxGeometry(0.36, 0.014, 9.6 * BOSS_HALL_SCALE), sx, 0.001, sz, 0, -a + Math.PI / 2, 0));
     }
   }
-  trimStoneParts.push(makeTranslatedGeo(new THREE.CylinderGeometry(1.05 * BOSS_HALL_SCALE, 1.18 * BOSS_HALL_SCALE, 0.05, 8), 0, 0.022, BOSS_CENTER_Z));
+  trimStoneParts.push(makeTranslatedGeo(new THREE.CylinderGeometry(1.05 * BOSS_HALL_SCALE, 1.18 * BOSS_HALL_SCALE, 0.016, 8), 0, 0.003, BOSS_CENTER_Z));
 
   const bossRuneMat = trackMat(new THREE.MeshBasicMaterial({
     color: 0xd97706,
@@ -641,10 +788,10 @@ export function createSoulsArena(options = {}) {
     bossRuneMat
   );
   bossRing.rotation.x = -Math.PI / 2;
-  bossRing.position.set(0, 0.038, BOSS_CENTER_Z);
+  bossRing.position.set(0, 0.030, BOSS_CENTER_Z);
   group.add(bossRing);
 
-  // Ceremonial Stepped Throne Dais & Crimson Runners (exact IK heights matching SOULS_CASTLE_THRONE_CONFIG!)
+  // Ceremonial Stepped Throne Dais & Continuous Royal Crimson-Velvet Runner (exact IK heights matching SOULS_CASTLE_THRONE_CONFIG!)
   const tx = SOULS_THRONE_CONFIG.x;
   const tz = SOULS_THRONE_CONFIG.z;
   darkStoneParts.push(makeTranslatedGeo(new THREE.BoxGeometry(7.2, 0.08, 4.6), tx, 0.02, tz - 0.05));
@@ -654,58 +801,86 @@ export function createSoulsArena(options = {}) {
   trimStoneParts.push(makeTranslatedGeo(new THREE.BoxGeometry(4.78, 0.08, 0.94), tx, 0.465, tz + 2.025));
   darkStoneParts.push(makeTranslatedGeo(new THREE.BoxGeometry(5.90, 0.25, 1.00), tx, 0.125, tz + 2.95));
   trimStoneParts.push(makeTranslatedGeo(new THREE.BoxGeometry(6.08, 0.07, 1.08), tx, 0.222, tz + 2.95));
-  carpetParts.push(makeTranslatedGeo(new THREE.BoxGeometry(1.48, 0.016, 1.24), tx, 0.508, tz + 1.82));
-  carpetParts.push(makeTranslatedGeo(new THREE.BoxGeometry(1.62, 0.016, 1.02), tx, 0.258, tz + 2.95));
-  // Long crimson processional runner from the dais steps all the way to the Boss Doors (follows tz / BOSS_DOOR_Z)
-  {
-    const runnerStartZ = tz + 3.45;
-    const runnerEndZ = BOSS_DOOR_Z - 1.2;
-    carpetParts.push(
-      makeTranslatedGeo(
-        new THREE.BoxGeometry(1.74, 0.014, runnerEndZ - runnerStartZ),
-        tx, 0.012, (runnerStartZ + runnerEndZ) * 0.5
-      )
-    );
-  }
+  // Single continuous, wide (2.40m), beveled woven crimson-and-gold velvet runner draped over both steps to the Boss Doors
+  carpetParts.push(createRoyalRunnerCarpetGeometry(tx, tz, BOSS_DOOR_Z));
 
-  // Edge-hugging shattered gothic masonry rubble & toppled broken column drums (anchored to layout rooms)
+  // Edge-hugging shattered gothic masonry rubble & toppled broken column drums
+  // Aligned 1:1 with canonical SOULS_CASTLE_RUBBLE from soulsCastleLayout.js (with safe fallback)
   const alcoveMidX = (SOULS_CASTLE_CONSTANTS.EAST_ALCOVE_MIN_X + SOULS_CASTLE_CONSTANTS.EAST_ALCOVE_MAX_X) * 0.5;
   const courtyardWallX = SOULS_CASTLE_CONSTANTS.COURTYARD_MAX_X - 1.0;
   const corridorWallX = SOULS_CASTLE_CONSTANTS.CORRIDOR_HALF_W - 0.9;
   const hallRubbleX = BOSS_RADIUS - 2.4;
-  const rubbleSpecs = [
-    [-courtyardWallX, SOULS_CASTLE_CONSTANTS.COURTYARD_MAX_Z - 1.4, 0.52, 0.28, 0.44, 0.5],
-    [courtyardWallX, SOULS_CASTLE_CONSTANTS.COURTYARD_MAX_Z - 2.0, 0.48, 0.26, 0.42, -0.6],
-    [-courtyardWallX, SOULS_CASTLE_CONSTANTS.COURTYARD_MIN_Z + 3.2, 0.54, 0.30, 0.42, 0.8],
-    [courtyardWallX, SOULS_CASTLE_CONSTANTS.COURTYARD_MIN_Z + 3.6, 0.46, 0.24, 0.40, -0.4],
-    [-corridorWallX, 9.0, 0.50, 0.26, 0.40, 0.6],
-    [corridorWallX, -9.4, 0.48, 0.24, 0.38, -0.5],
-    [alcoveMidX + 2.8, SOULS_CASTLE_CONSTANTS.EAST_ALCOVE_MIN_Z + 1.2, 0.48, 0.26, 0.40, 0.4],
-    [alcoveMidX + 2.8, SOULS_CASTLE_CONSTANTS.EAST_ALCOVE_MAX_Z - 1.2, 0.44, 0.24, 0.38, -0.7],
-    [-hallRubbleX, BOSS_CENTER_Z - 4.2, 0.62, 0.34, 0.50, 0.7],
-    [hallRubbleX, BOSS_CENTER_Z + 4.2, 0.56, 0.30, 0.46, -0.4]
+  const fallbackRubbleSpecs = [
+    { kind: 'rubble_box', x: -courtyardWallX, z: SOULS_CASTLE_CONSTANTS.COURTYARD_MAX_Z - 1.4, w: 0.52, h: 0.28, d: 0.44, rotY: 0.5 },
+    { kind: 'rubble_box', x:  courtyardWallX, z: SOULS_CASTLE_CONSTANTS.COURTYARD_MAX_Z - 2.0, w: 0.48, h: 0.26, d: 0.42, rotY: -0.6 },
+    { kind: 'rubble_box', x: -courtyardWallX, z: SOULS_CASTLE_CONSTANTS.COURTYARD_MIN_Z + 3.2, w: 0.54, h: 0.30, d: 0.42, rotY: 0.8 },
+    { kind: 'rubble_box', x:  courtyardWallX, z: SOULS_CASTLE_CONSTANTS.COURTYARD_MIN_Z + 3.6, w: 0.46, h: 0.24, d: 0.40, rotY: -0.4 },
+    { kind: 'rubble_box', x: -corridorWallX,  z: 9.0,  w: 0.50, h: 0.26, d: 0.40, rotY: 0.6 },
+    { kind: 'rubble_box', x:  corridorWallX,  z: -9.4, w: 0.48, h: 0.24, d: 0.38, rotY: -0.5 },
+    { kind: 'rubble_box', x: alcoveMidX + 2.8, z: SOULS_CASTLE_CONSTANTS.EAST_ALCOVE_MIN_Z + 1.2, w: 0.48, h: 0.26, d: 0.40, rotY: 0.4 },
+    { kind: 'rubble_box', x: alcoveMidX + 2.8, z: SOULS_CASTLE_CONSTANTS.EAST_ALCOVE_MAX_Z - 1.2, w: 0.44, h: 0.24, d: 0.38, rotY: -0.7 },
+    { kind: 'rubble_box', x: -hallRubbleX, z: BOSS_CENTER_Z - 4.2, w: 0.62, h: 0.34, d: 0.50, rotY: 0.7 },
+    { kind: 'rubble_box', x:  hallRubbleX, z: BOSS_CENTER_Z + 4.2, w: 0.56, h: 0.30, d: 0.46, rotY: -0.4 },
+    { kind: 'fallen_column', x: -hallRubbleX, y: 0.42, z: BOSS_CENTER_Z + 5.6, rTop: 0.48, rBot: 0.52, length: 1.38, rotX: Math.PI * 0.48, rotY: 0.55, rotZ: 0.12 },
+    { kind: 'fallen_column', x:  hallRubbleX, y: 0.40, z: BOSS_CENTER_Z - 5.2, rTop: 0.46, rBot: 0.50, length: 1.30, rotX: Math.PI * 0.49, rotY: -0.72, rotZ: -0.08 }
   ];
-  for (const [rx, rz, rw, rh, rd, rrot] of rubbleSpecs) {
-    darkStoneParts.push(makeTranslatedGeo(new THREE.BoxGeometry(rw, rh, rd), rx, rh * 0.45, rz, 0.08, rrot, -0.06));
+  const rubbleList =
+    Array.isArray(CastleLayout.SOULS_CASTLE_RUBBLE) && CastleLayout.SOULS_CASTLE_RUBBLE.length > 0
+      ? CastleLayout.SOULS_CASTLE_RUBBLE
+      : fallbackRubbleSpecs;
+  for (let i = 0; i < rubbleList.length; i++) {
+    const item = rubbleList[i];
+    if (!item) continue;
+    if (Array.isArray(item)) {
+      const [rx, rz, rw, rh, rd, rrot] = item;
+      darkStoneParts.push(makeTranslatedGeo(new THREE.BoxGeometry(rw, rh, rd), rx, rh * 0.45, rz, 0.08, rrot, -0.06));
+      continue;
+    }
+    const kindStr = String(item.kind || item.shape || item.type || '').toLowerCase();
+    const isCylinder =
+      kindStr.includes('column') ||
+      kindStr.includes('drum') ||
+      kindStr.includes('cyl') ||
+      item.rTop != null ||
+      item.rBot != null;
+    if (isCylinder) {
+      const rTop = Number.isFinite(item.rTop) ? item.rTop : (Number.isFinite(item.radiusTop) ? item.radiusTop : (Number.isFinite(item.radius) ? item.radius * 0.72 : 0.47));
+      const rBot = Number.isFinite(item.rBot) ? item.rBot : (Number.isFinite(item.radiusBottom) ? item.radiusBottom : rTop + 0.04);
+      const cLen = Number.isFinite(item.length) ? item.length : (Number.isFinite(item.len) ? item.len : (Number.isFinite(item.height) ? item.height : 1.34));
+      const cy = Number.isFinite(item.y) ? item.y : (rBot * 0.82);
+      const rx = Number.isFinite(item.rotX) ? item.rotX : (Number.isFinite(item.rx) ? item.rx : Math.PI * 0.485);
+      const ry = Number.isFinite(item.rotY) ? item.rotY : (Number.isFinite(item.ry) ? item.ry : (Number.isFinite(item.rot) ? item.rot : 0.55));
+      const rz = Number.isFinite(item.rotZ) ? item.rotZ : (Number.isFinite(item.rz) ? item.rz : 0.08);
+      const radialSegs = Number.isFinite(item.radialSegs) ? Math.max(5, Math.round(item.radialSegs)) : 9;
+      darkStoneParts.push(makeTranslatedGeo(new THREE.CylinderGeometry(rTop, rBot, cLen, radialSegs), item.x, cy, item.z, rx, ry, rz));
+    } else {
+      const rw = Number.isFinite(item.w) ? item.w : (Number.isFinite(item.width) ? item.width : 0.50);
+      const rh = Number.isFinite(item.h) ? item.h : (Number.isFinite(item.height) ? item.height : 0.28);
+      const rd = Number.isFinite(item.d) ? item.d : (Number.isFinite(item.depth) ? item.depth : 0.42);
+      const cy = Number.isFinite(item.y) ? item.y : rh * 0.45;
+      const rx = Number.isFinite(item.rotX) ? item.rotX : (Number.isFinite(item.rx) ? item.rx : 0.08);
+      const ry = Number.isFinite(item.rotY) ? item.rotY : (Number.isFinite(item.ry) ? item.ry : (Number.isFinite(item.rot) ? item.rot : 0));
+      const rz = Number.isFinite(item.rotZ) ? item.rotZ : (Number.isFinite(item.rz) ? item.rz : -0.06);
+      darkStoneParts.push(makeTranslatedGeo(new THREE.BoxGeometry(rw, rh, rd), item.x, cy, item.z, rx, ry, rz));
+    }
   }
-  darkStoneParts.push(makeTranslatedGeo(new THREE.CylinderGeometry(0.48, 0.52, 1.38, 9), -hallRubbleX, 0.42, BOSS_CENTER_Z + 5.6, Math.PI * 0.48, 0.55, 0.12));
-  darkStoneParts.push(makeTranslatedGeo(new THREE.CylinderGeometry(0.46, 0.50, 1.30, 9),  hallRubbleX, 0.40, BOSS_CENTER_Z - 5.2, Math.PI * 0.49, -0.72, -0.08));
 
   const darkStoneBatch = new THREE.Mesh(trackGeo(mergeBucket(darkStoneParts, 3.2)), darkStoneMat);
-  darkStoneBatch.castShadow = true;
+  darkStoneBatch.castShadow = false;
   darkStoneBatch.receiveShadow = true;
   group.add(darkStoneBatch);
 
   const trimStoneBatch = new THREE.Mesh(trackGeo(mergeBucket(trimStoneParts, 3.0)), trimStoneMat);
-  trimStoneBatch.castShadow = true;
+  trimStoneBatch.castShadow = false;
   trimStoneBatch.receiveShadow = true;
   group.add(trimStoneBatch);
 
   const crimsonCarpetBatch = new THREE.Mesh(trackGeo(mergeBucket(carpetParts, 0)), daisRunnerMat);
+  crimsonCarpetBatch.castShadow = false;
   crimsonCarpetBatch.receiveShadow = true;
   group.add(crimsonCarpetBatch);
 
-  // Camera-safe auto-fade wall groups (South, West, East) [3 DC]
+  // Camera-safe solid stone upper wall groups (South, West, East) [3 DC]
   const fadeWallEntries = [];
   for (const [kind, bucket] of [['south', fadeSouthParts], ['west', fadeWestParts], ['east', fadeEastParts]]) {
     if (!bucket.length) continue;
@@ -714,15 +889,16 @@ export function createSoulsArena(options = {}) {
       normalMap: lowSpecMode ? null : pbr.ashlarNormal,
       normalScale: new THREE.Vector2(stoneNormalStrength * 0.95, stoneNormalStrength * 0.95),
       roughnessMap: pbr.ashlarRoughness,
-      color: 0x676e82,
+      color: 0x8a93aa,
       roughness: 1.0,
-      metalness: 0.10,
+      metalness: 0.05,
+      envMapIntensity: 0.34,
       transparent: false,
       opacity: 1.0
     }));
     normalMappedMats.push({ mat, map: pbr.ashlarNormal });
     const mesh = new THREE.Mesh(trackGeo(mergeBucket(bucket, 3.2)), mat);
-    mesh.castShadow = true;
+    mesh.castShadow = false;
     mesh.receiveShadow = true;
     group.add(mesh);
     fadeWallEntries.push({ kind, mesh, mat, curOpacity: 1.0 });
@@ -741,9 +917,10 @@ export function createSoulsArena(options = {}) {
       normalMap: lowSpecMode ? null : pbr.ashlarNormal,
       normalScale: new THREE.Vector2(stoneNormalStrength * 0.92, stoneNormalStrength * 0.92),
       roughnessMap: pbr.ashlarRoughness,
-      color: 0x7e869d,
-      roughness: 0.95,
-      metalness: 0.12,
+      color: 0x9099b0,
+      roughness: 0.96,
+      metalness: 0.06,
+      envMapIntensity: 0.34,
       transparent: true,
       opacity: 1.0
     }));
@@ -762,7 +939,7 @@ export function createSoulsArena(options = {}) {
   const brokenPillars = SOULS_CASTLE_PILLARS.filter((p) => p.broken);
 
   const pillarBaseGeo = trackGeo(createPillarBaseGeometry());
-  const pillarShaftGeo = trackGeo(createFlutedShaftGeometry(0.54, 0.62, 5.2, 12));
+  const pillarShaftGeo = trackGeo(createFlutedShaftGeometry(0.54, 0.62, 5.2, isMobile ? 12 : 28));
   const pillarCapGeo = trackGeo(createPillarCapitalGeometry());
   const pillarBrokenCapGeo = trackGeo(createBrokenPillarCapGeometry());
 
@@ -878,6 +1055,7 @@ export function createSoulsArena(options = {}) {
   let fogGateSealed = false;
   let lastDoorShudder = 0;
   let wasCutsceneDriven = false;
+  let throneOccluded = false;
 
   function getBossDoorState() {
     return castleDoors.getState();
@@ -887,6 +1065,17 @@ export function createSoulsArena(options = {}) {
   }
   function openBossDoors() {
     fogGateSealed = false;
+    if (wasCutsceneDriven) {
+      wasCutsceneDriven = false;
+      castleDoors.applyCutsceneState?.(null, 0.016);
+    }
+    throneOccluded = false;
+    if (throneGrp) throneGrp.visible = true;
+    castleDoors.group.visible = true;
+    if (castleDoors.getState() === 'sealed') {
+      thresholdGlowMesh.visible = false;
+      thresholdGlowUniforms.uOpacity.value = 0.0;
+    }
     return castleDoors.openDoors();
   }
   function sealBossDoors() {
@@ -907,6 +1096,8 @@ export function createSoulsArena(options = {}) {
     castleDoors.resetDoors(Boolean(keepOpen));
     castleDoors.group.visible = true;
     if (keepOpen) {
+      throneOccluded = false;
+      if (throneGrp) throneGrp.visible = true;
       thresholdGlowMesh.visible = true;
       thresholdGlowMesh.scale.set(1.0, 1.0, 1.0);
       thresholdGlowMesh.position.z = BOSS_DOOR_Z + 0.95;
@@ -921,7 +1112,15 @@ export function createSoulsArena(options = {}) {
     if (Boolean(sealed)) {
       sealBossDoors();
     } else {
-      resetBossDoors(false);
+      fogGateSealed = false;
+      const curState = castleDoors.getState();
+      if (curState === 'opening' || curState === 'open') {
+        castleDoors.group.visible = true;
+        throneOccluded = false;
+        if (throneGrp) throneGrp.visible = true;
+      } else {
+        resetBossDoors(false);
+      }
     }
   }
 
@@ -1037,15 +1236,14 @@ export function createSoulsArena(options = {}) {
   });
   group.add(castleAtmo.group);
 
-  // Canonical static colliders from soulsCastleLayout.js (Bonfire + 10 Pillars + ALL 12 Braziers + East Shrine + 4 Alcove Racks!)
-  const staticColliders = getCastleStaticColliders().map((c) => ({
-    id: c.id,
-    kind: c.kind,
-    x: c.x,
-    z: c.z,
-    r: c.radius,
-    radius: c.radius
-  }));
+  // Canonical static colliders from soulsCastleLayout.js (Bonfire, Pillars, Braziers, Shrines, Rubble, Door Jambs & Throne!)
+  const staticColliders = getCastleStaticColliders().map((c) => {
+    if (c.halfW != null && c.halfD != null) {
+      return { ...c, id: c.id, kind: c.kind, x: c.x, z: c.z, halfW: c.halfW, halfD: c.halfD };
+    }
+    const r = Number.isFinite(c.radius) ? c.radius : (Number.isFinite(c.r) ? c.r : 0.55);
+    return { ...c, id: c.id, kind: c.kind, x: c.x, z: c.z, r, radius: r };
+  });
 
   // ==========================================================================
   // 7. Dynamic Nearest-Light PointLight Pool (4 PC / 2 Mobile / 1 LowSpec!)
@@ -1083,7 +1281,7 @@ export function createSoulsArena(options = {}) {
   const domeMoonFillIdx = virtualLights.findIndex((vl) => vl.id === 'dome_moon_fill');
   const _tmpLightColor = new THREE.Color();
 
-  const MAX_POOL_LIGHTS = isMobile ? 2 : 4;
+  const MAX_POOL_LIGHTS = isMobile ? 2 : 2;
   let activePoolCount = lowSpecMode ? 1 : MAX_POOL_LIGHTS;
   const lightPool = [];
   for (let i = 0; i < MAX_POOL_LIGHTS; i++) {
@@ -1128,7 +1326,6 @@ export function createSoulsArena(options = {}) {
   // P1 occlusion culling state: the Throne (182k-tri hall content) is hidden while the Boss Doors are closed & player is far.
   // A short warm-up window after the GLB lands keeps it visible for a few frames so its shaders compile BEFORE the cutscene.
   let throneWarmFrames = 0;
-  let throneOccluded = false;
   const throneLoader = new GLTFLoader();
   throneLoader.setDRACOLoader(sharedDracoLoader);
   throneLoader.load(
@@ -1177,6 +1374,17 @@ export function createSoulsArena(options = {}) {
   group.add(flameTraps.group);
 
   // ==========================================================================
+  // 8c. Physically-Based Dynamic Fire Shadow Rig (./souls/soulsLightingRig.js)
+  //     2 real shadow-casting fire PointLights (1024+512 PCFSoft, decay=2) on PC!
+  // ==========================================================================
+  const fireShadowRig = createSoulsFireShadowRig(group, {
+    isMobile,
+    lowSpec: lowSpecMode,
+    sources: buildFireSourcesFromCastleLayout(SOULS_CASTLE_ZONES),
+    bossDoorZ: BOSS_DOOR_Z
+  });
+
+  // ==========================================================================
   // 9. Towering Distant Gothic Castle Keep Spires Above Roofline [1 DC]
   // ==========================================================================
   const distantRuinsMat = trackMat(new THREE.MeshLambertMaterial({
@@ -1197,27 +1405,27 @@ export function createSoulsArena(options = {}) {
   const alcoveCz = (SOULS_CASTLE_CONSTANTS.EAST_ALCOVE_MIN_Z + SOULS_CASTLE_CONSTANTS.EAST_ALCOVE_MAX_Z) * 0.5;
   const corrMidZ = (SOULS_CASTLE_CONSTANTS.CORRIDOR_MIN_Z + SOULS_CASTLE_CONSTANTS.CORRIDOR_MAX_Z) * 0.5;
   const decalSpecs = [
-    // Shattered battle cracks
+    // Shattered battle cracks (zero flat printed blood splats!)
     { q: 0, x:  0.4, z: SOULS_CASTLE_CONSTANTS.COURTYARD_MIN_Z + 4.0, s: 3.4, rot: 0.3 },
     { q: 0, x: -1.4, z: corrMidZ + 3.0, s: 2.6, rot: 1.1 },
     { q: 0, x: alcoveCx - 1.6, z: alcoveCz, s: 3.0, rot: 0.7 },
     { q: 0, x:  0.0, z: BOSS_CENTER_Z + 0.4, s: 5.2 * BOSS_HALL_SCALE, rot: 0.5 },
     { q: 0, x: -5.4 * BOSS_HALL_SCALE, z: BOSS_CENTER_Z + 2.7 * BOSS_HALL_SCALE, s: 3.8, rot: 2.1 },
     { q: 0, x:  4.8 * BOSS_HALL_SCALE, z: BOSS_CENTER_Z - 2.0 * BOSS_HALL_SCALE, s: 4.1, rot: -0.7 },
-    // Old dried blood
-    { q: 1, x:  0.8, z: SOULS_CASTLE_CONSTANTS.COURTYARD_MIN_Z + 3.8, s: 2.2, rot: 0.4 },
-    { q: 1, x: -1.1, z: corrMidZ - 4.0, s: 2.1, rot: 2.2 },
-    { q: 1, x: relic0.x - 2.2, z: relic0.z + 0.4, s: 2.4, rot: 1.4 },
-    { q: 1, x:  1.4, z: BOSS_DOOR_Z + 6.0, s: 2.1, rot: -0.9 },
-    { q: 1, x: -3.2, z: BOSS_DOOR_Z - 4.0, s: 2.8, rot: 1.3 },
-    { q: 1, x:  3.6, z: BOSS_CENTER_Z + 3.0, s: 2.5, rot: -1.4 },
-    // Scorched ash & wax circles
+    // Scorched ash & wax circles (Bonfire Sanctuary, Relic Shrine, Boss Doors & Flame Gauntlet)
     { q: 3, x: BONFIRE_POS.x, z: BONFIRE_POS.z, s: 4.2, rot: 0.0 },
     { q: 3, x: relic0.x, z: relic0.z, s: 3.0, rot: 0.4 },
     { q: 3, x: -3.5, z: BOSS_DOOR_Z + 1.6, s: 1.9, rot: 0.7 },
     { q: 3, x:  3.5, z: BOSS_DOOR_Z + 1.6, s: 1.9, rot: -0.6 },
     { q: 3, x: tx - 2.8, z: tz + 1.4, s: 2.1, rot: 1.2 },
-    { q: 3, x: tx + 2.8, z: tz + 1.4, s: 2.1, rot: -1.1 }
+    { q: 3, x: tx + 2.8, z: tz + 1.4, s: 2.1, rot: -1.1 },
+    ...SOULS_CASTLE_FLAME_TRAPS.map((tr, idx) => ({
+      q: 3,
+      x: (tr.x || 0) * 0.35,
+      z: tr.z || 14.0,
+      s: 2.6,
+      rot: idx * 0.8
+    }))
   ];
   // Moss tufts hugging the base of every structural pillar (auto-follows SOULS_CASTLE_PILLARS)
   for (let pi = 0; pi < SOULS_CASTLE_PILLARS.length; pi++) {
@@ -1237,7 +1445,7 @@ export function createSoulsArena(options = {}) {
     }
     p.rotateX(-Math.PI / 2);
     p.rotateY(d.rot);
-    p.translate(d.x, 0.018, d.z);
+    p.translate(d.x, 0.009, d.z);
     decalParts.push(p);
   }
   const decalMat = trackMat(new THREE.MeshBasicMaterial({
@@ -1442,6 +1650,7 @@ export function createSoulsArena(options = {}) {
     castleRoof.setLowSpec(lowSpecMode);
     castleAtmo.setLowSpec(lowSpecMode);
     flameTraps.setLowSpec(lowSpecMode);
+    fireShadowRig?.setLowSpecMode?.(lowSpecMode);
   }
 
   // ==========================================================================
@@ -1453,11 +1662,19 @@ export function createSoulsArena(options = {}) {
     const allowBossHall =
       clampOpts && typeof clampOpts.allowBossHall === 'boolean'
         ? clampOpts.allowBossHall
-        : (fogGateSealed || z < -10.8);
+        : (fogGateSealed || z < BOSS_DOOR_Z - 0.5);
     return clampCastlePosition(x, z, radius, {
+      ...(clampOpts && typeof clampOpts === 'object' ? clampOpts : null),
       bossDoorState: dState,
       allowBossHall
     });
+  }
+
+  function getFloorHeight(x = 0, z = 0) {
+    if (typeof CastleLayout.getCastleFloorHeight === 'function') {
+      return CastleLayout.getCastleFloorHeight(x, z);
+    }
+    return fallbackCastleFloorHeight(x, z);
   }
 
   function getSurfaceType(x = 0, z = 0) {
@@ -1606,6 +1823,15 @@ export function createSoulsArena(options = {}) {
     castleRoof.update(t, safeDt, hasCam ? _camPosScratch : null);
     _atmoFrameOpts.doorOpenProgress = dProg;
     castleAtmo.update(t, safeDt, _atmoFrameOpts);
+    fireShadowRig?.update?.(safeDt, t, {
+      focusX,
+      focusZ,
+      camX,
+      camZ,
+      doorOpenProgress: dProg,
+      cutsceneActive,
+      trapSources: flameTraps.getActiveTrapLightSources?.() || null
+    });
 
     const minSightZ = Math.min(camZ, focusZ) - 1.2;
     const maxSightZ = Math.max(camZ, focusZ) + 1.8;
@@ -1651,39 +1877,11 @@ export function createSoulsArena(options = {}) {
 
     // Fade upper perimeter side/alcove walls ONLY if camera swings outside them (limits derived from layout constants)
     const SC = SOULS_CASTLE_CONSTANTS;
-    const inEastAlcove =
-      focusX > SC.EAST_ALCOVE_MIN_X - 0.8 &&
-      focusZ < SC.EAST_ALCOVE_MAX_Z + 1.0 &&
-      focusZ > SC.EAST_ALCOVE_MIN_Z - 0.5;
-    const camInCourtyard = camZ >= SC.COURTYARD_MIN_Z;
-    const sideLimit = (camInCourtyard ? SC.COURTYARD_MAX_X : SC.CORRIDOR_HALF_W) - 0.75;
+    // 3. Keep castle walls solid & opaque (authentic Elden Ring spring-arm collision, zero mid-walk shader recompilation hitches!)
     for (let i = 0; i < fadeWallEntries.length; i++) {
       const fw = fadeWallEntries[i];
-      let targetOp = 1.0;
-      if (hasCam) {
-        if (fw.kind === 'south') {
-          // Alcove south wall (z = EAST_ALCOVE_MAX_Z): only fades if hero is inside the alcove and camera is outside it
-          if (inEastAlcove && camZ > SC.EAST_ALCOVE_MAX_Z + 0.6) targetOp = 0.08;
-        } else if (fw.kind === 'west') {
-          if (camZ > BOSS_DOOR_Z && camX < -sideLimit) targetOp = 0.08;
-        } else if (fw.kind === 'east') {
-          if (!inEastAlcove && camZ > BOSS_DOOR_Z && camX > sideLimit) targetOp = 0.08;
-          if (
-            inEastAlcove &&
-            camX < SC.CORRIDOR_HALF_W - 0.5 &&
-            (camZ > SC.EAST_ARCH_MAX_Z + 0.6 || camZ < SC.EAST_ARCH_MIN_Z - 0.6)
-          ) targetOp = 0.08;
-        }
-      }
-      fw.curOpacity += (targetOp - fw.curOpacity) * fadeLerp;
-      const needAlpha = fw.curOpacity < 0.98;
-      if (fw.mat.transparent !== needAlpha) {
-        fw.mat.transparent = needAlpha;
-        fw.mat.depthWrite = !needAlpha;
-        fw.mat.needsUpdate = true;
-      }
-      fw.mat.opacity = fw.curOpacity;
-      fw.mesh.visible = fw.curOpacity > 0.04;
+      fw.curOpacity = 1.0;
+      fw.mesh.visible = true;
     }
 
     // 4. Dynamic Nearest-Light PointLight Pool (4 PC / 2 Mobile / 1 LowSpec, 0 shader recompiles!)
@@ -1847,6 +2045,7 @@ export function createSoulsArena(options = {}) {
 
   function dispose() {
     throneDisposed = true;
+    fireShadowRig?.dispose?.();
     flameTraps.dispose();
     castleRoof.dispose();
     castleAtmo.dispose();
@@ -1868,6 +2067,7 @@ export function createSoulsArena(options = {}) {
     group,
     getColliders,
     clampPosition,
+    getFloorHeight,
     getSurfaceType,
     getBossDoorState,
     getDoorShudderIntensity,

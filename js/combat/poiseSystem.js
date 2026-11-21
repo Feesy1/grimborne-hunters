@@ -4,7 +4,7 @@
 //      - Hyper-Armor during active boss/elite windups, swings, leaps, whirlwinds, roars & throne rise.
 //      - Outside Hyper-Armor (idle/stalk/walk/recover), hits accumulate micro-poise up to poiseMax,
 //        triggering one crisp Hit_React (boss) or Hit_A (mob) and immediately arming poiseImmunitySec
-//        (~2.85s boss, ~1.5s Souls mobs) so spamming LMB can NEVER stunlock enemies.
+//        (~4.4s boss, ~2.6s Souls mobs) so spamming LMB can NEVER stunlock enemies.
 //      - Main stagger/staggerMax (Stance Break -> Stagger_Kneel) remains strictly independent and
 //        breaks through any Hyper-Armor at 100%; Hit_React never interrupts Stagger_Kneel/Recover.
 //   2) Enemy / Boss -> Player (Warrior):
@@ -15,10 +15,10 @@
 export const POISE_PROFILES = Object.freeze({
   souls_boss: Object.freeze({
     id: 'souls_boss',
-    poiseMax: 72,
-    poiseRegenDelaySec: 2.6,
-    poiseRegenRate: 24,
-    poiseImmunitySec: 2.85,
+    poiseMax: 175,
+    poiseRegenDelaySec: 2.0,
+    poiseRegenRate: 34,
+    poiseImmunitySec: 4.4,
     microStunSec: 0.38,
     hitClip: 'Hit_React',
     hitSpeed: 1.65,
@@ -66,10 +66,10 @@ export const POISE_PROFILES = Object.freeze({
   }),
   souls_mob: Object.freeze({
     id: 'souls_mob',
-    poiseMax: 28,
-    poiseRegenDelaySec: 1.8,
-    poiseRegenRate: 18,
-    poiseImmunitySec: 1.5,
+    poiseMax: 68,
+    poiseRegenDelaySec: 1.6,
+    poiseRegenRate: 24,
+    poiseImmunitySec: 2.6,
     microStunSec: 0.32,
     hitClip: 'Hit_A',
     hitSpeed: 1.85,
@@ -78,7 +78,7 @@ export const POISE_PROFILES = Object.freeze({
     joltScaleNormal: 0.70,
     joltScaleHyperArmor: 0.40,
     joltScaleBreak: 1.0,
-    interruptsActiveAttack: true
+    interruptsActiveAttack: false
   }),
   mob: Object.freeze({
     id: 'mob',
@@ -129,15 +129,15 @@ export const PLAYER_MICROSTUN_DEFAULTS = Object.freeze({
 
 // Elden Ring Stance Break (Poise Damage) table per player attack class
 export const STANCE_DAMAGE_TABLE = Object.freeze({
-  r1: 7,
-  r1Finisher: 18,
-  r2: 18,
-  chargedR2: 30,
-  rollingR1: 6,
-  runningR1: 7,
+  r1: 5,
+  r1Finisher: 13,
+  r2: 15,
+  chargedR2: 26,
+  rollingR1: 5,
+  runningR1: 5,
   jumpR2: 22,
-  guardCounter: 30,
-  parry: 55
+  guardCounter: 24,
+  parry: 82
 });
 
 // Elden Ring stance regeneration rate (points/sec after regen delay elapses)
@@ -224,7 +224,8 @@ export const STAGGER_KNEEL_STATES = new Set([
   'stagger_kneel',
   'kneel',
   'kneeling',
-  'staggered'
+  'staggered',
+  'riposte_victim'
 ]);
 
 export const STAGGER_RECOVER_STATES = new Set([
@@ -242,6 +243,10 @@ export const BOSS_HYPER_ARMOR_STATES = new Set([
   'strike',
   'combo',
   'combo_swing',
+  'aaa_combo',
+  'combo_sweep_1',
+  'combo_backhand_2',
+  'combo_slam_3',
   'overhead_cleave',
   'heavy_cleave',
   'sweep_combo',
@@ -275,15 +280,20 @@ export const NON_HYPER_ARMOR_STATES = new Set([
   '',
   'idle',
   'stalk',
+  'stalk_advance',
+  'menacing_advance',
   'walk',
   'walking',
   'approach',
   'circle',
   'circling',
+  'circle_strafe',
+  'predatory_circle',
   'neutral_spacing',
   'strafe',
   'retreat',
   'recover',
+  'recover_heft',
   'recovery',
   'hit_react',
   'micro_stun'

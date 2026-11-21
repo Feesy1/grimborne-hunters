@@ -1,22 +1,27 @@
-// Elden Ring-Style Corpse Ash-and-Ember Dissolve VFX Module (Three.js r160, Vanilla ES)
-// Chapter 26 — «Abandoned Knight Rift» (0 DOM dependencies, WebGL2 & Mobile safe)
+// Elden Ring-Style Corpse Ash-and-Ember Dissolve VFX Module — Wave 2 Next-Gen Coal & Vortex Edition
+// Pure Vanilla ES Module (Three.js r160, 0 DOM dependencies, WebGL2 / ANGLE D3D11 / Mobile safe)
 //
 // Exports:
 //   - applyEldenDissolveToModel(root, progress01, opts?)
-//       Injects a 3D procedural noise dissolve shader via `onBeforeCompile` on safely cloned
-//       per-corpse materials (leaving shared living-enemy materials untouched!) while preserving
-//       USE_SKINNING, normalMap, emissiveMap, `applySoulsRimLight`, and `soulsBossVisuals`.
-//       As `progress01` sweeps 0 -> 1, the vaporizing edge chars and blazes with molten
-//       golden-orange embers (#ffbe42 -> #ff4500) before vanishing completely into ash.
+//       Injects a 3-scale 3D noise + ridged coal-fissure dissolve shader via `onBeforeCompile`
+//       on safely cloned per-corpse materials (leaving shared living-enemy materials untouched!)
+//       while preserving USE_SKINNING, normalMap, emissiveMap, `applySoulsRimLight`, and
+//       `soulsBossVisuals`. Features a physically-grounded 4-zone smoldering charcoal rim:
+//         1) Matte scorched soot band ahead of the burn front
+//         2) Cracked dark-crimson smoldering coal bed (ridged multifractal veins)
+//         3) Razor-thin blackbody molten ember lip (#ff4500 -> #ffbe42) with crawling micro-cinders
+//         4) Darkened hollow charred interior on backfaces (!gl_FrontFacing) — zero blown-out wash!
 //   - resetEldenDissolveFromModel(root) / disposeEldenDissolveFromModel(root)
 //       Restores original mesh materials & `castShadow` and disposes temporary cloned materials
 //       (safe for enemy object pooling — 0 GPU leaks).
 //   - isModelEldenDissolving(root)
 //       Returns whether `root` currently has active dissolve state attached.
 //   - createDissolveAshSystem(scene, { isMobile, lowSpec, maxParticles })
-//       Strictly 1-Draw-Call GPU-driven InstancedBufferGeometry particle system using
-//       premultiplied dual-mode blending (NormalBlending fluttering dark-grey ash flakes +
-//       luminous Additive golden-orange rising sparks in a single draw call; 0 DC when idle).
+//       Strictly 1-Draw-Call GPU InstancedBufferGeometry Rankine-vortex particle system combining
+//       3 distinct sub-species in a single premultiplied dual-mode draw call (0 DC when idle):
+//         1) Fine micro-ash dust motes swirling in the rising thermal column
+//         2) Jagged tumbling charcoal-crust flakes with cooling ember rims
+//         3) Velocity-tangent blackbody sparks (#ffd97d -> #ffbe42 -> #ff4500 -> #7a1202)
 //       API: `.emitCorpseAsh(x, y, z, radius, intensity, opts?)`, `.update(dt)`,
 //       `.clearAll()`, `.setLowSpec(enabled)`, `.getActiveCount()`, `.getDrawCallCount()`, `.dispose()`.
 
@@ -25,8 +30,9 @@ import * as THREE from '../../vendor/three.module.js';
 // ============================================================================
 // Constants & Reusable Scratch Objects (Zero Per-Frame Allocations)
 // ============================================================================
-const DISSOLVE_CACHE_TAG = 'elden_dissolve_v1';
+const DISSOLVE_CACHE_TAG = 'elden_dissolve_v2';
 const _tmpOrigin = new THREE.Vector3();
+const _tmpWorldScale = new THREE.Vector3();
 
 const corpseDissolveState = new WeakMap();
 
@@ -105,7 +111,8 @@ function safeCloneMaterialWithHooks(srcMat) {
 }
 
 // ============================================================================
-// Compact, Mobile-Safe, ANGLE/D3D11 Warning-Free 3D Dissolve GLSL Chunks
+// Next-Gen Smoldering Coal & Ash Filigree 3D Dissolve GLSL Chunks
+// (Sin-free mediump-safe hash, unrolled 0-loop FBM -> 0 ANGLE X4000 warnings!)
 // ============================================================================
 const GLSL_DISSOLVE_VERT_COMMON = /* glsl */ `
 varying vec3 vEldenDissolveWorldPos;
@@ -158,10 +165,16 @@ float edValueNoise3( vec3 p ) {
   return mix( nxy0, nxy1, u.z );
 }
 
-float edDissolveFbm( vec3 p ) {
-  float a = edValueNoise3( p );
-  float b = edValueNoise3( p * 2.31 + vec3( 17.3, 9.1, 23.7 ) );
-  return a * 0.62 + b * 0.38;
+// 3-scale jagged ash-crust + ridged coal-crack erosion field in [0, 1]
+vec2 edCoalErosionField( vec3 p ) {
+  float nMacro = edValueNoise3( p );
+  float nFlake = edValueNoise3( p * 2.47 + vec3( 17.3, 9.1, 23.7 ) );
+  float nFine  = edValueNoise3( p * 5.63 + vec3( -11.4, 29.2, 7.8 ) );
+  // Sharp ridged coal fissure signal: 1.0 along glowing cracks, 0.0 on dark ash plates
+  float ridge = 1.0 - abs( nFine * 2.0 - 1.0 );
+  float crack = ridge * ridge;
+  float field = nMacro * 0.54 + nFlake * 0.31 + nFine * 0.15;
+  return vec2( field, crack );
 }
 `;
 
@@ -173,33 +186,61 @@ if ( uEldenDissolve > 0.0005 ) {
   float edSafeH = max( uEldenHeight, 0.25 );
   float edHeightNorm = clamp( edRel.y / edSafeH, 0.0, 1.0 );
   float edRadial = clamp( length( edRel.xz ) / max( edSafeH * 0.72, 0.40 ), 0.0, 1.0 );
-  float edNoise = edDissolveFbm( edRel * uEldenNoiseScale );
-  float edField = clamp( edNoise * 0.74 + ( 1.0 - edRadial ) * 0.14 + edHeightNorm * 0.12, 0.0, 1.0 );
 
+  vec2 edSample = edCoalErosionField( edRel * uEldenNoiseScale );
+  float edNoise = edSample.x;
+  float edCoalCrack = edSample.y;
+
+  float edField = clamp( edNoise * 0.76 + ( 1.0 - edRadial ) * 0.13 + edHeightNorm * 0.11, 0.0, 1.0 );
   float edCut = uEldenDissolve * 1.08 - 0.04;
   float edDist = edField - edCut;
   if ( edDist < 0.0 ) discard;
 
   float edW = max( uEldenEdgeWidth, 0.02 );
-  float edFadeIn = smoothstep( 0.0, 0.10, uEldenDissolve );
-  float edBand = 1.0 - smoothstep( 0.0, edW, edDist );
-  float edCore = 1.0 - smoothstep( 0.0, edW * 0.28, edDist );
-  float edChar = ( 1.0 - smoothstep( 0.0, edW * 1.75, edDist ) ) * edFadeIn;
+  float edFadeIn = smoothstep( 0.0, 0.09, uEldenDissolve );
 
-  // Living ember crackle along the burning contour (upward-drifting fine grain)
-  float edCrackle = edValueNoise3( edRel * ( uEldenNoiseScale * 3.1 ) + vec3( 0.0, -uEldenTime * 1.9, 0.0 ) );
-  float edSparkBoost = 0.78 + 0.44 * edCrackle;
+  // 4-Zone Physical Smoldering Coal Rim:
+  //   edSootBand : wide matte scorched-charcoal zone ahead of the burn line (kills shiny metal/plastic look)
+  //   edCoalBand : cracked cherry-crimson coal bed threaded with glowing fissures
+  //   edLipBand  : crisp molten amber-orange crumbling edge (#ff4500 -> #ffbe42)
+  //   edCinderLip: razor-thin incandescent micro-cinder sparks right on the vaporizing lip
+  float edSootBand  = ( 1.0 - smoothstep( 0.0, edW * 1.95, edDist ) ) * edFadeIn;
+  float edCoalBand  = ( 1.0 - smoothstep( 0.0, edW * 0.92, edDist ) ) * edFadeIn;
+  float edLipBand   = ( 1.0 - smoothstep( 0.0, edW * 0.40, edDist ) ) * edFadeIn;
+  float edCinderLip = ( 1.0 - smoothstep( 0.0, edW * 0.15, edDist ) ) * edFadeIn;
 
-  // Linear-space golden-orange ember ramp (#ff4500 -> #ffbe42 -> incandescent white-gold)
-  vec3 edColDeep = vec3( 1.0, 0.062, 0.004 );
-  vec3 edColGold = vec3( 1.0, 0.515, 0.055 );
-  vec3 edColHot  = vec3( 1.0, 0.860, 0.400 );
-  vec3 edEmber = mix( edColDeep, edColGold, smoothstep( 0.18, 0.80, edBand ) );
-  edEmber = mix( edEmber, edColHot, clamp( edCore * ( 0.58 + 0.42 * edCrackle ), 0.0, 1.0 ) );
+  // Upward-crawling micro-cinder cellular flicker along the crumbling coal edge
+  float edSparkGrain = edValueNoise3( edRel * ( uEldenNoiseScale * 6.8 ) + vec3( 0.0, -uEldenTime * 2.4, uEldenTime * 0.7 ) );
+  float edCinderDots = smoothstep( 0.46, 0.88, edSparkGrain );
+  float edBreath = 0.84 + 0.16 * sin( uEldenTime * 5.6 + edCoalCrack * 6.2831 );
 
-  // Char the surface just ahead of the flame front, then add HDR golden-orange glow
-  outgoingLight *= mix( 1.0, 0.18, edChar * ( 1.0 - edBand * 0.58 ) );
-  outgoingLight += edEmber * ( ( edBand * 1.85 + edCore * 1.45 ) * edSparkBoost * edFadeIn * uEldenEmberIntensity );
+  // Authentic blackbody coal & ember palette in linear RGB (noble contrast, zero neon/white blowout!)
+  vec3 edColCherry = vec3( 0.36, 0.014, 0.001 ); // deep smoldering cherry coal
+  vec3 edColFlame  = vec3( 0.98, 0.115, 0.008 ); // molten ember orange (#ff4500 linear)
+  vec3 edColAmber  = vec3( 1.00, 0.485, 0.052 ); // rich Elden gold (#ffbe42 linear)
+  vec3 edColSpark  = vec3( 1.00, 0.800, 0.310 ); // tiny hot white-gold cinder pinpoint
+
+  if ( !gl_FrontFacing ) {
+    // Hollow interior of armor/body: dark charred soot with dim smoldering coal veins
+    outgoingLight *= 0.09;
+    vec3 edInnerCoal = mix( edColCherry, edColFlame, edCoalCrack * 0.75 + edLipBand * 0.45 );
+    outgoingLight += edInnerCoal * ( ( edCoalBand * ( 0.35 + 0.65 * edCoalCrack ) + edLipBand * 0.75 ) * edBreath * uEldenEmberIntensity );
+  } else {
+    // 1. Matte soot charring & grey ash-crust frosting ahead of the burning edge
+    float edAshFrost = smoothstep( 0.55, 0.92, edSparkGrain ) * edSootBand * ( 1.0 - edLipBand );
+    outgoingLight *= mix( 1.0, 0.12, edSootBand * 0.88 );
+    outgoingLight += vec3( 0.032, 0.029, 0.028 ) * edAshFrost;
+
+    // 2. Cracked glowing coal veins + crisp molten amber lip + pinpoint micro-cinders
+    float edVeinMask = edCoalBand * ( 0.28 + 0.72 * edCoalCrack );
+    vec3 edCoalGlow = mix( edColCherry, edColFlame, clamp( edCoalCrack * 0.72 + edLipBand * 0.55, 0.0, 1.0 ) );
+    vec3 edLipGlow  = mix( edColFlame, edColAmber, smoothstep( 0.15, 0.85, edLipBand ) );
+    edLipGlow = mix( edLipGlow, edColSpark, edCinderLip * edCinderDots );
+
+    float edGlowEnergy = ( edVeinMask * 0.78 + edLipBand * 1.18 + edCinderLip * edCinderDots * 0.95 ) * edBreath * uEldenEmberIntensity;
+    vec3 edFinalEmber = mix( edCoalGlow, edLipGlow, clamp( edLipBand * 1.15, 0.0, 1.0 ) );
+    outgoingLight += edFinalEmber * edGlowEnergy;
+  }
 }
 #include <opaque_fragment>
 `;
@@ -215,7 +256,7 @@ function patchClonedMaterialForDissolve(clonedMat, uniforms) {
     typeof clonedMat.customProgramCacheKey === 'function';
   const prevCacheKey = hadOwnCacheKey ? clonedMat.customProgramCacheKey : null;
 
-  // DoubleSide reveals the glowing interior ember contours as holes burn through armor
+  // DoubleSide reveals the charred hollow interior & smoldering coal veins as armor crumbles
   clonedMat.side = THREE.DoubleSide;
 
   clonedMat.customProgramCacheKey = () => {
@@ -257,8 +298,16 @@ function estimateModelMetricHeight(root, opts) {
   if (Number.isFinite(Number(opts?.height)) && Number(opts.height) > 0.2) {
     return Number(opts.height);
   }
-  const sy = Math.abs(root?.scale?.y || 1);
-  return Math.max(0.9, Math.min(5.5, 1.8 * sy));
+  if (root && typeof root.getWorldScale === 'function') {
+    root.getWorldScale(_tmpWorldScale);
+    const wy = Math.abs(_tmpWorldScale.y || 1);
+    // Tripo unit rigs have local height ~0.82m scaled by ~2.15 (mob ~1.8m) or ~5.2 (boss ~3.7m);
+    // unscaled root wrappers have wy ~1.0 (height ~1.8m) or ~1.83 (boss ~3.3m).
+    if (wy > 3.4) return Math.min(5.2, wy * 0.72);
+    if (wy > 1.6 && wy <= 3.4) return 1.85;
+    return Math.max(1.1, Math.min(4.5, 1.8 * wy));
+  }
+  return 1.8;
 }
 
 function initCorpseDissolveRecord(root, opts) {
@@ -266,7 +315,7 @@ function initCorpseDissolveRecord(root, opts) {
   root.getWorldPosition(_tmpOrigin);
 
   const height = estimateModelMetricHeight(root, opts);
-  const defaultNoiseScale = height > 2.6 ? 3.6 : 5.4;
+  const defaultNoiseScale = height > 2.6 ? 4.4 : 6.4;
   const noiseScale = Number.isFinite(Number(opts?.noiseScale))
     ? Math.max(0.5, Number(opts.noiseScale))
     : defaultNoiseScale;
@@ -381,7 +430,7 @@ export function isModelEldenDissolving(root) {
 }
 
 /**
- * Applies smooth 3D-noise Elden Ring ash/ember dissolution (`progress01`: 0 -> 1)
+ * Applies smooth 3D-noise Elden Ring smoldering coal & ash dissolution (`progress01`: 0 -> 1)
  * to a dying 3D character model (`root`), keeping living enemies on shared materials
  * 100% untouched and preserving `USE_SKINNING` + `applySoulsRimLight` + `soulsBossVisuals`.
  *
@@ -426,6 +475,12 @@ export function applyEldenDissolveToModel(root, progress01, opts = null) {
     rec.uniforms.uEldenEdgeWidth.value = Math.max(0.03, Math.min(0.40, Number(opts.edgeWidth)));
   }
 
+  // Keep current world origin synced while early death collapse settles (p < 0.25)
+  if (p < 0.25) {
+    root.updateWorldMatrix(true, false);
+    root.getWorldPosition(rec.uniforms.uEldenOrigin.value);
+  }
+
   // Keep dissolve materials bound even if a hit-flash timer resets mesh.material mid-death,
   // and fade out opaque shadow casting once the corpse is mostly vaporized.
   const keepShadow = p < 0.35;
@@ -442,7 +497,7 @@ export function applyEldenDissolveToModel(root, progress01, opts = null) {
 }
 
 // ============================================================================
-// 1-Draw-Call GPU Instanced Dissolve Ash & Golden Embers Particle System
+// 1-Draw-Call GPU Rankine-Vortex Fine Ash, Charcoal Flakes & Cooling Sparks
 // ============================================================================
 const ASH_VERT_SHADER = /* glsl */ `
 uniform float uTime;
@@ -450,13 +505,47 @@ uniform float uPixelScale;
 
 attribute vec4 aSpawnPosTime; // xyz = world spawn pos, w = spawnTime
 attribute vec4 aVelLife;      // xyz = initial velocity, w = lifetime sec
-attribute vec4 aStyle;        // x = base size (m), y = isEmber (0 ash | 1 spark), z = seed [0..1], w = swirlAmp
+attribute vec4 aStyle;        // x = base size (m), y = kind [0..1] (<0.34 fine dust, <0.68 flake, >=0.68 spark), z = seed [0..1], w = swirlAmp
+attribute vec2 aVortexCenter; // xy = corpse world XZ center for coherent helical Rankine vortex!
 
 varying vec2 vUv;
 varying float vAlpha;
-varying float vIsEmber;
+varying float vKind;
 varying float vLifeT;
 varying float vSeed;
+
+vec3 evalVortexWorldPos( float age, float t, float isSpark, float seed, float swirlAmp ) {
+  float dragK = isSpark > 0.5 ? 1.25 : 1.75;
+  float drag = ( 1.0 - exp( -age * dragK ) ) / dragK;
+  float buoyancy = ( isSpark > 0.5 ? 0.52 : 0.24 ) * age * age;
+
+  // Coherent helical Rankine-vortex rotation around the corpse XZ center:
+  // inner particles orbit faster, pulling gently inward in the updraft core before dispersing aloft!
+  vec2 rel0 = aSpawnPosTime.xz - aVortexCenter.xy;
+  float r0 = length( rel0 );
+  float spinSign = fract( seed * 13.37 ) > 0.18 ? 1.0 : -1.0;
+  float omega = spinSign * ( 1.75 + 0.85 / ( 0.32 + r0 ) ) * ( isSpark > 0.5 ? 1.18 : 0.92 );
+  float theta = age * omega * smoothstep( 0.0, 0.18, t );
+  float radialPinch = mix( 1.0, 0.62, smoothstep( 0.05, 0.48, t ) ) * mix( 1.0, 1.48, smoothstep( 0.52, 1.0, t ) );
+
+  float ct = cos( theta );
+  float st = sin( theta );
+  vec2 spunRel = vec2( rel0.x * ct - rel0.y * st, rel0.x * st + rel0.y * ct ) * radialPinch;
+
+  // Secondary micro-turbulence curl eddy
+  float eddyFreq = ( isSpark > 0.5 ? 4.4 : 2.6 ) + seed * 2.2;
+  float eddyPhase = age * eddyFreq + seed * 6.2831853;
+  float eddyEnv = smoothstep( 0.0, 0.25, t ) * ( 1.0 - 0.30 * t );
+  vec2 eddy = vec2(
+    cos( eddyPhase ) * swirlAmp * eddyEnv,
+    sin( eddyPhase * 0.89 + seed * 3.14159 ) * swirlAmp * eddyEnv
+  );
+
+  vec3 wp = vec3( 0.0 );
+  wp.xz = aVortexCenter.xy + spunRel + aVelLife.xz * drag + eddy;
+  wp.y = aSpawnPosTime.y + aVelLife.y * age + buoyancy;
+  return wp;
+}
 
 void main() {
   vUv = uv;
@@ -466,58 +555,58 @@ void main() {
 
   if ( age < 0.0 || t >= 1.0 || aStyle.x <= 0.0001 ) {
     vAlpha = 0.0;
-    vIsEmber = 0.0;
+    vKind = 0.0;
     vLifeT = 1.0;
     vSeed = 0.0;
     gl_Position = vec4( 2.0, 2.0, 2.0, 1.0 );
     return;
   }
 
-  float isEmber = aStyle.y;
+  float kind = aStyle.y;
+  float isSpark = kind >= 0.68 ? 1.0 : 0.0;
   float seed = aStyle.z;
   float swirlAmp = aStyle.w;
 
-  // Smooth aerodynamic drag on initial burst + rising thermal draft + helical cathedral air swirl
-  float drag = ( 1.0 - exp( -age * ( isEmber > 0.5 ? 1.15 : 1.65 ) ) ) / ( isEmber > 0.5 ? 1.15 : 1.65 );
-  float buoyancy = ( isEmber > 0.5 ? 0.42 : 0.16 ) * age * age;
-  float swirlFreq = ( isEmber > 0.5 ? 3.2 : 1.9 ) + seed * 1.8;
-  float swirlPhase = age * swirlFreq + seed * 6.2831853;
-  float swirlEnv = smoothstep( 0.0, 0.30, t ) * ( 1.0 - 0.35 * t );
+  vec3 worldPos = evalVortexWorldPos( age, t, isSpark, seed, swirlAmp );
+  vec4 mvCenter = modelViewMatrix * vec4( worldPos, 1.0 );
 
-  vec3 worldPos = aSpawnPosTime.xyz;
-  worldPos.x += aVelLife.x * drag + cos( swirlPhase ) * swirlAmp * swirlEnv;
-  worldPos.z += aVelLife.z * drag + sin( swirlPhase * 0.87 + seed * 3.14159 ) * swirlAmp * swirlEnv;
-  worldPos.y += aVelLife.y * age + buoyancy;
-
-  // Size envelope: crisp pop-in, gentle shrink as ash/embers burn out
-  float popIn = smoothstep( 0.0, 0.11, t );
-  float fadeOut = 1.0 - smoothstep( 0.48, 1.0, t );
-  float sizeCurve = popIn * mix( 1.0, 0.32, smoothstep( 0.35, 1.0, t ) );
+  // Size envelope: crisp emergence, gradual burn-down into fine dust
+  float popIn = smoothstep( 0.0, 0.09, t );
+  float fadeOut = 1.0 - smoothstep( 0.44, 1.0, t );
+  float sizeCurve = popIn * mix( 1.0, 0.28, smoothstep( 0.32, 1.0, t ) );
   float baseSize = aStyle.x * sizeCurve * uPixelScale;
 
-  // Tumbling spin for ash flakes; subtle vertical velocity streak for rising golden sparks
-  float rot = ( seed * 6.2831853 ) + age * ( isEmber > 0.5 ? 0.55 : mix( -3.6, 3.6, fract( seed * 7.13 ) ) );
-  float cs = cos( rot );
-  float sn = sin( rot );
-
   vec2 localPos = position.xy;
-  if ( isEmber > 0.5 ) {
-    localPos.x *= baseSize * 0.78;
-    localPos.y *= baseSize * 1.48;
+  if ( isSpark > 0.5 ) {
+    // Align glowing spark streak strictly along its true 3D screen-space helical velocity!
+    float dtSample = 0.022;
+    vec3 nextWorldPos = evalVortexWorldPos( age + dtSample, min( 1.0, ( age + dtSample ) / life ), isSpark, seed, swirlAmp );
+    vec4 mvNext = modelViewMatrix * vec4( nextWorldPos, 1.0 );
+    vec2 mvVel = mvNext.xy - mvCenter.xy;
+    float velLen = length( mvVel );
+    vec2 dir = velLen > 0.0001 ? ( mvVel / velLen ) : vec2( 0.0, 1.0 );
+    vec2 perp = vec2( -dir.y, dir.x );
+    float streakStretch = clamp( 1.45 + velLen * 18.0, 1.45, 3.25 );
+    localPos = perp * ( position.x * baseSize * 0.58 ) + dir * ( position.y * baseSize * streakStretch );
   } else {
+    // Tumbling 3D flutter for charcoal flakes & fine ash motes
+    float spinSpeed = mix( -4.4, 4.4, fract( seed * 7.13 ) );
+    float rot = seed * 6.2831853 + age * spinSpeed;
+    float cs = cos( rot );
+    float sn = sin( rot );
     float rx = localPos.x * cs - localPos.y * sn;
     float ry = localPos.x * sn + localPos.y * cs;
-    // Slight flutter foreshortening so flat ash flakes shimmer as they turn in mid-air
-    float flutter = 0.52 + 0.48 * abs( cos( age * ( 2.6 + seed * 3.4 ) + seed * 12.0 ) );
-    localPos.x = rx * baseSize * 1.15;
+    float flutter = kind < 0.34
+      ? 0.88
+      : ( 0.42 + 0.58 * abs( cos( age * ( 3.1 + seed * 3.8 ) + seed * 12.0 ) ) );
+    localPos.x = rx * baseSize * ( kind < 0.34 ? 0.95 : 1.18 );
     localPos.y = ry * baseSize * flutter;
   }
 
-  vec4 mvCenter = modelViewMatrix * vec4( worldPos, 1.0 );
   mvCenter.xy += localPos;
 
   vAlpha = popIn * fadeOut;
-  vIsEmber = isEmber;
+  vKind = kind;
   vLifeT = t;
   vSeed = seed;
   gl_Position = projectionMatrix * mvCenter;
@@ -529,7 +618,7 @@ uniform float uTime;
 
 varying vec2 vUv;
 varying float vAlpha;
-varying float vIsEmber;
+varying float vKind;
 varying float vLifeT;
 varying float vSeed;
 
@@ -540,47 +629,66 @@ void main() {
   float r = length( p );
   if ( r >= 1.0 ) discard;
 
-  if ( vIsEmber < 0.5 ) {
-    // Organic irregular flaky ash silhouette (NormalBlending via premultiplied alpha!)
+  if ( vKind < 0.34 ) {
+    // 1. Fine Micro-Ash Soot & Slate Dust Mote (soft atmospheric speck, NormalBlending)
+    float softMask = pow( max( 1.0 - r, 0.0 ), 1.75 );
+    if ( softMask <= 0.015 ) discard;
+
+    vec3 sootCol = mix( vec3( 0.16, 0.15, 0.17 ), vec3( 0.44, 0.42, 0.41 ), fract( vSeed * 9.17 ) );
+    float warmBirth = ( 1.0 - smoothstep( 0.0, 0.20, vLifeT ) ) * ( 1.0 - r );
+    sootCol = mix( sootCol, vec3( 0.78, 0.28, 0.04 ), warmBirth * 0.45 );
+
+    float a = clamp( softMask * vAlpha * 0.68, 0.0, 1.0 );
+    gl_FragColor = vec4( sootCol * a, a );
+  } else if ( vKind < 0.68 ) {
+    // 2. Jagged Tumbling Charcoal-Crust Flake with Smoldering Rim (NormalBlending + glowing coal edge)
     float ang = atan( p.y, p.x );
-    float edgeR = 0.68
-      + 0.17 * sin( ang * 3.0 + vSeed * 6.2831853 )
-      + 0.11 * cos( ang * 5.0 - vSeed * 11.73 );
-    float mask = 1.0 - smoothstep( edgeR - 0.28, edgeR, r );
+    float edgeR = 0.66
+      + 0.16 * sin( ang * 3.0 + vSeed * 6.2831853 )
+      + 0.11 * cos( ang * 5.0 - vSeed * 11.73 )
+      + 0.06 * sin( ang * 7.0 + vSeed * 19.41 );
+    float mask = 1.0 - smoothstep( edgeR - 0.22, edgeR, r );
     if ( mask <= 0.015 ) discard;
 
-    // Charcoal-grey to pale silver-ash flake with subtle fading ember glow right after detaching
-    vec3 darkAsh = vec3( 0.24, 0.23, 0.25 );
-    vec3 paleAsh = vec3( 0.58, 0.56, 0.54 );
-    vec3 ashCol = mix( darkAsh, paleAsh, fract( vSeed * 5.37 ) );
-    float freshEmber = ( 1.0 - smoothstep( 0.0, 0.26, vLifeT ) ) * ( 1.0 - r * 0.7 );
-    ashCol = mix( ashCol, vec3( 0.96, 0.44, 0.08 ), freshEmber * 0.62 );
+    vec3 darkCrust = vec3( 0.14, 0.13, 0.15 );
+    vec3 greyAsh   = vec3( 0.50, 0.48, 0.46 );
+    vec3 ashCol = mix( darkCrust, greyAsh, fract( vSeed * 5.37 ) );
 
-    float a = clamp( mask * vAlpha * 0.84, 0.0, 1.0 );
-    gl_FragColor = vec4( ashCol * a, a );
+    // Smoldering coal rim right along one edge of the freshly-peeled ash flake, cooling as it rises
+    float rimBand = smoothstep( edgeR - 0.30, edgeR - 0.04, r );
+    float coolCurve = 1.0 - smoothstep( 0.0, 0.44, vLifeT );
+    float sideBias = 0.5 + 0.5 * cos( ang - vSeed * 6.2831853 );
+    float emberRim = rimBand * coolCurve * ( 0.35 + 0.65 * sideBias );
+    vec3 rimCol = mix( vec3( 0.92, 0.18, 0.02 ), vec3( 1.0, 0.62, 0.14 ), emberRim );
+
+    float a = clamp( mask * vAlpha * 0.86, 0.0, 1.0 );
+    vec3 premult = ashCol * a + rimCol * ( emberRim * mask * vAlpha * 0.65 );
+    gl_FragColor = vec4( premult, a );
   } else {
-    // Blazing golden-orange rising spark (#fff2b2 -> #ffbe42 -> #ff4500), luminous additive via premultiplied alpha!
-    float core = exp( -r * r * 6.4 );
-    float halo = pow( max( 1.0 - r, 0.0001 ), 2.25 );
-    float flicker = 0.76 + 0.24 * sin( uTime * ( 10.5 + vSeed * 8.5 ) + vSeed * 41.0 );
+    // 3. Velocity-Tangent Blackbody Spark (#ffd97d -> #ffbe42 -> #ff4500 -> cooling cherry coal)
+    float core = exp( -r * r * 7.8 );
+    float halo = pow( max( 1.0 - r, 0.0001 ), 2.6 );
+    float flicker = 0.78 + 0.22 * sin( uTime * ( 13.0 + vSeed * 11.0 ) + vSeed * 47.0 );
 
-    vec3 colHot  = vec3( 1.0, 0.95, 0.68 );
-    vec3 colGold = vec3( 1.0, 0.745, 0.259 ); // #ffbe42
-    vec3 colDeep = vec3( 1.0, 0.271, 0.020 ); // #ff4500
+    vec3 colHot    = vec3( 1.00, 0.90, 0.56 ); // #ffe58f pinpoint birth
+    vec3 colGold   = vec3( 1.00, 0.72, 0.22 ); // #ffbe42 golden mid
+    vec3 colOrange = vec3( 0.98, 0.27, 0.02 ); // #ff4500 molten orange
+    vec3 colCherry = vec3( 0.48, 0.07, 0.01 ); // cooling cherry-red cinder tip
 
-    vec3 emberCol = mix( colHot, colGold, smoothstep( 0.0, 0.35, vLifeT ) );
-    emberCol = mix( emberCol, colDeep, smoothstep( 0.42, 0.92, vLifeT ) );
+    vec3 emberCol = mix( colHot, colGold, smoothstep( 0.0, 0.28, vLifeT ) );
+    emberCol = mix( emberCol, colOrange, smoothstep( 0.28, 0.68, vLifeT ) );
+    emberCol = mix( emberCol, colCherry, smoothstep( 0.68, 1.00, vLifeT ) );
 
-    vec3 rgb = emberCol * ( ( core * 1.90 + halo * 0.82 ) * vAlpha * flicker );
-    float a = clamp( ( core * 0.14 + halo * 0.04 ) * vAlpha, 0.0, 0.22 );
+    vec3 rgb = emberCol * ( ( core * 1.55 + halo * 0.58 ) * vAlpha * flicker );
+    float a = clamp( ( core * 0.12 + halo * 0.03 ) * vAlpha, 0.0, 0.20 );
     gl_FragColor = vec4( rgb, a );
   }
 }
 `;
 
 /**
- * Creates a strictly 1-draw-call GPU instanced particle system of rising grey ash flakes
- * and luminous golden-orange embers (`#ffbe42 -> #ff4500`) drifting up from dissolving corpses.
+ * Creates a strictly 1-draw-call GPU instanced Rankine-vortex particle system of fine ash dust,
+ * jagged charcoal flakes, and velocity-tangent blackbody sparks drifting up from dissolving corpses.
  *
  * @param {THREE.Scene|THREE.Object3D|null} scene
  * @param {object} [opts]  `{ isMobile, lowSpec, maxParticles }`
@@ -589,9 +697,9 @@ export function createDissolveAshSystem(scene = null, opts = {}) {
   const isMobile = opts?.isMobile !== undefined ? Boolean(opts.isMobile) : detectMobileDevice();
   let lowSpec = Boolean(opts?.lowSpec);
 
-  const defaultMax = lowSpec ? 120 : isMobile ? 220 : 420;
+  const defaultMax = lowSpec ? 200 : isMobile ? 440 : 960;
   const maxParticles = Number.isFinite(Number(opts?.maxParticles))
-    ? Math.max(32, Math.min(1024, Math.floor(Number(opts.maxParticles))))
+    ? Math.max(32, Math.min(2048, Math.floor(Number(opts.maxParticles))))
     : defaultMax;
 
   // Base unit billboard quad (4 vertices, 2 triangles)
@@ -615,6 +723,7 @@ export function createDissolveAshSystem(scene = null, opts = {}) {
   const spawnPosTimeArr = new Float32Array(maxParticles * 4);
   const velLifeArr = new Float32Array(maxParticles * 4);
   const styleArr = new Float32Array(maxParticles * 4);
+  const vortexCenterArr = new Float32Array(maxParticles * 2);
 
   // Initialize all slots expired so nothing renders until emitCorpseAsh() is called
   for (let i = 0; i < maxParticles; i++) {
@@ -626,24 +735,27 @@ export function createDissolveAshSystem(scene = null, opts = {}) {
   const spawnPosTimeAttr = new THREE.InstancedBufferAttribute(spawnPosTimeArr, 4);
   const velLifeAttr = new THREE.InstancedBufferAttribute(velLifeArr, 4);
   const styleAttr = new THREE.InstancedBufferAttribute(styleArr, 4);
+  const vortexCenterAttr = new THREE.InstancedBufferAttribute(vortexCenterArr, 2);
   spawnPosTimeAttr.setUsage(THREE.DynamicDrawUsage);
   velLifeAttr.setUsage(THREE.DynamicDrawUsage);
   styleAttr.setUsage(THREE.DynamicDrawUsage);
+  vortexCenterAttr.setUsage(THREE.DynamicDrawUsage);
 
   instGeo.setAttribute('aSpawnPosTime', spawnPosTimeAttr);
   instGeo.setAttribute('aVelLife', velLifeAttr);
   instGeo.setAttribute('aStyle', styleAttr);
+  instGeo.setAttribute('aVortexCenter', vortexCenterAttr);
   instGeo.instanceCount = 0;
 
   const uniforms = {
     uTime: { value: 0.0 },
-    uPixelScale: { value: lowSpec ? 0.92 : 1.0 }
+    uPixelScale: { value: lowSpec ? 0.90 : 1.0 }
   };
 
   // Premultiplied dual-mode blending:
-  //   - Ash flakes output (rgb * a, a) -> crisp NormalBlending dark charcoal/grey flakes
-  //   - Golden embers output (rgb * glow, ~0.08) -> vibrant Additive luminous sparks
-  // Both render together inside ONE single draw call (1 DC)!
+  //   - Fine ash & charcoal flakes output (rgb * a + rim, a) -> crisp NormalBlending + coal edge
+  //   - Velocity-tangent sparks output (rgb * glow, ~0.06) -> luminous Additive blackbody sparks
+  // All 3 sub-species render together inside ONE single draw call (1 DC)!
   const material = new THREE.ShaderMaterial({
     uniforms,
     vertexShader: ASH_VERT_SHADER,
@@ -688,6 +800,22 @@ export function createDissolveAshSystem(scene = null, opts = {}) {
   let emitFrac = 0.0;
   let disposed = false;
 
+  // Finds an expired slot near writeCursor first so continuous 55ms streams never clip rising vortex tips
+  function acquireSlot(slotLimit) {
+    for (let probe = 0; probe < 8; probe++) {
+      const cand = (writeCursor + probe) % slotLimit;
+      const st = spawnPosTimeArr[cand * 4 + 3];
+      const lf = velLifeArr[cand * 4 + 3];
+      if (elapsedTime >= st + lf) {
+        writeCursor = (cand + 1) % slotLimit;
+        return cand;
+      }
+    }
+    const idx = writeCursor;
+    writeCursor = (writeCursor + 1) % slotLimit;
+    return idx;
+  }
+
   function emitCorpseAsh(x, y, z, radius = 0.75, intensity = 1.0, emitOpts = null) {
     if (disposed) return 0;
 
@@ -697,14 +825,16 @@ export function createDissolveAshSystem(scene = null, opts = {}) {
     const safeR = Number.isFinite(Number(radius)) ? Math.max(0.18, Math.min(6.0, Number(radius))) : 0.75;
     const safeInt = Number.isFinite(Number(intensity)) ? Math.max(0, Number(intensity)) : 1.0;
 
+    const slotLimit = lowSpec ? Math.min(maxParticles, 200) : maxParticles;
     let spawnCount = 0;
     if (emitOpts && Number.isFinite(Number(emitOpts.count))) {
-      spawnCount = Math.max(0, Math.min(maxParticles, Math.floor(Number(emitOpts.count))));
+      spawnCount = Math.max(0, Math.min(slotLimit, Math.floor(Number(emitOpts.count))));
     } else {
-      const baseBurst = lowSpec ? 12 : isMobile ? 22 : 38;
-      const budgetCap = lowSpec ? Math.min(maxParticles, 120) : maxParticles;
+      // Calibrated for both 55ms periodic combat pulses (intensity ~1.5 -> ~26 fine motes/pulse)
+      // and single bursts, filling a tall 960-particle swirling vortex without premature overwrite!
+      const baseBurst = lowSpec ? 8 : isMobile ? 14 : 20;
       const raw = safeInt * baseBurst + emitFrac;
-      spawnCount = Math.min(budgetCap, Math.floor(raw));
+      spawnCount = Math.min(slotLimit, Math.floor(raw));
       emitFrac = raw - Math.floor(raw);
     }
 
@@ -713,45 +843,63 @@ export function createDissolveAshSystem(scene = null, opts = {}) {
     const emberRatio =
       emitOpts && Number.isFinite(Number(emitOpts.emberRatio))
         ? clamp01(emitOpts.emberRatio)
-        : 0.44;
+        : 0.36;
     const riseScale =
       emitOpts && Number.isFinite(Number(emitOpts.riseScale))
         ? Math.max(0.25, Number(emitOpts.riseScale))
         : 1.0;
-    const sizeScale = Math.max(0.75, Math.min(2.2, 0.75 + safeR * 0.28));
-    const slotLimit = lowSpec ? Math.min(maxParticles, 120) : maxParticles;
+    // Finer, crisper particle grain (+200% detail — fine ash specks + pinpoint cinders, zero big blobs!)
+    const sizeScale = Math.max(0.72, Math.min(1.65, 0.72 + safeR * 0.20));
 
     for (let i = 0; i < spawnCount; i++) {
-      const idx = writeCursor;
-      writeCursor = (writeCursor + 1) % slotLimit;
+      const idx = acquireSlot(slotLimit);
       if (idx + 1 > highWaterCount) highWaterCount = idx + 1;
 
-      const isEmber = nextRand() < emberRatio ? 1.0 : 0.0;
+      // Sub-species encoding in [0..1]:
+      //   [0.00..0.33] fine micro-ash dust
+      //   [0.34..0.67] jagged charcoal-crust flake
+      //   [0.68..1.00] velocity-tangent blackbody spark
+      const roll = nextRand();
+      let kind;
+      if (roll < emberRatio) {
+        kind = 0.70 + nextRand() * 0.29;
+      } else if (nextRand() < 0.48) {
+        kind = nextRand() * 0.32;
+      } else {
+        kind = 0.35 + nextRand() * 0.31;
+      }
+      const isSpark = kind >= 0.68;
+      const isFineDust = kind < 0.34;
+
       const angle = nextRand() * Math.PI * 2.0;
-      // Bias radial spread across the fallen corpse silhouette
-      const dist = Math.sqrt(nextRand()) * safeR;
-      const heightSpread = Math.max(0.22, safeR * 0.55);
+      const dist = Math.pow(nextRand(), 0.58) * safeR;
+      const heightSpread = Math.max(0.20, safeR * 0.52);
 
       const px = cx + Math.cos(angle) * dist;
-      const py = cy + 0.04 + nextRand() * heightSpread;
+      const py = cy + 0.03 + nextRand() * heightSpread;
       const pz = cz + Math.sin(angle) * dist;
 
-      // Slight time stagger prevents flat planar rings on large burst spawns
-      const spawnT = elapsedTime + nextRand() * 0.10;
-      const life = isEmber > 0.5
-        ? 0.95 + nextRand() * 1.05
-        : 1.35 + nextRand() * 1.25;
+      const spawnT = elapsedTime + nextRand() * 0.08;
+      const life = isSpark
+        ? 0.90 + nextRand() * 0.95
+        : isFineDust
+          ? 1.45 + nextRand() * 1.15
+          : 1.25 + nextRand() * 1.10;
 
-      const radialSpeed = (0.14 + nextRand() * 0.52) * (isEmber > 0.5 ? 1.15 : 0.75);
-      const vx = Math.cos(angle) * radialSpeed + (nextRand() - 0.5) * 0.25;
-      const vz = Math.sin(angle) * radialSpeed + (nextRand() - 0.5) * 0.25;
-      const vy = (isEmber > 0.5 ? 0.72 + nextRand() * 1.15 : 0.36 + nextRand() * 0.68) * riseScale;
+      // Initial tangential + gentle upward velocity feeding smoothly into the Rankine vortex
+      const tangSpeed = (0.22 + nextRand() * 0.48) * (isSpark ? 1.25 : 0.85);
+      const outSpeed = (0.06 + nextRand() * 0.24) * (isSpark ? 1.10 : 0.65);
+      const vx = -Math.sin(angle) * tangSpeed + Math.cos(angle) * outSpeed + (nextRand() - 0.5) * 0.16;
+      const vz =  Math.cos(angle) * tangSpeed + Math.sin(angle) * outSpeed + (nextRand() - 0.5) * 0.16;
+      const vy = (isSpark ? 0.85 + nextRand() * 1.25 : isFineDust ? 0.48 + nextRand() * 0.72 : 0.42 + nextRand() * 0.68) * riseScale;
 
-      const baseSize = isEmber > 0.5
-        ? (0.045 + nextRand() * 0.055) * sizeScale
-        : (0.055 + nextRand() * 0.085) * sizeScale;
+      const baseSize = isSpark
+        ? (0.018 + nextRand() * 0.022) * sizeScale
+        : isFineDust
+          ? (0.024 + nextRand() * 0.032) * sizeScale
+          : (0.034 + nextRand() * 0.044) * sizeScale;
       const seed = nextRand();
-      const swirlAmp = (isEmber > 0.5 ? 0.14 + nextRand() * 0.22 : 0.18 + nextRand() * 0.30) * Math.min(1.6, 0.75 + safeR * 0.3);
+      const swirlAmp = (isSpark ? 0.10 + nextRand() * 0.16 : 0.12 + nextRand() * 0.22) * Math.min(1.5, 0.75 + safeR * 0.25);
 
       const o = idx * 4;
       spawnPosTimeArr[o]     = px;
@@ -765,9 +913,13 @@ export function createDissolveAshSystem(scene = null, opts = {}) {
       velLifeArr[o + 3] = life;
 
       styleArr[o]     = baseSize;
-      styleArr[o + 1] = isEmber;
+      styleArr[o + 1] = kind;
       styleArr[o + 2] = seed;
       styleArr[o + 3] = swirlAmp;
+
+      const vo = idx * 2;
+      vortexCenterArr[vo]     = cx;
+      vortexCenterArr[vo + 1] = cz;
 
       const expT = spawnT + life;
       if (expT > maxExpireTime) maxExpireTime = expT;
@@ -776,6 +928,7 @@ export function createDissolveAshSystem(scene = null, opts = {}) {
     spawnPosTimeAttr.needsUpdate = true;
     velLifeAttr.needsUpdate = true;
     styleAttr.needsUpdate = true;
+    vortexCenterAttr.needsUpdate = true;
 
     instGeo.instanceCount = Math.min(highWaterCount, slotLimit);
     mesh.visible = instGeo.instanceCount > 0;
@@ -814,8 +967,8 @@ export function createDissolveAshSystem(scene = null, opts = {}) {
 
   function setLowSpec(enabled) {
     lowSpec = Boolean(enabled);
-    uniforms.uPixelScale.value = lowSpec ? 0.92 : 1.0;
-    const slotLimit = lowSpec ? Math.min(maxParticles, 120) : maxParticles;
+    uniforms.uPixelScale.value = lowSpec ? 0.90 : 1.0;
+    const slotLimit = lowSpec ? Math.min(maxParticles, 200) : maxParticles;
     if (instGeo.instanceCount > slotLimit) {
       instGeo.instanceCount = slotLimit;
     }

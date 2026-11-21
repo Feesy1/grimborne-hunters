@@ -5,7 +5,7 @@ import {
   ARENA_HALF_SIZE,
   CLASSES,
   ENEMY_TYPES
-} from '../config.js?v=20261121z64';
+} from '../config.js?v=20261121z68';
 
 export const TWO_PI = Math.PI * 2;
 // Keep the player just inside the decorative fence ring (HALF_SIZE - 1.6).
@@ -239,6 +239,7 @@ export function createCombatBridge({ world, models, progression } = {}) {
   }
 
   function emitTelegraphZone(x, z, radius = 2.0, duration = 0.65, color = 0xef4444) {
+    if (world?.isSoulsArena?.()) return { cancel() {} };
     if (typeof world?.spawnTelegraphZone === 'function') {
       return world.spawnTelegraphZone({ x, z, radius, color, duration });
     }
@@ -251,6 +252,7 @@ export function createCombatBridge({ world, models, progression } = {}) {
   }
 
   function emitDangerZone(x, z, radius, duration = 1.1, color = 0x9333ea) {
+    if (world?.isSoulsArena?.()) return;
     if (typeof world?.spawnTelegraphZone === 'function') {
       world.spawnTelegraphZone({ x, z, radius, color, duration });
       return;

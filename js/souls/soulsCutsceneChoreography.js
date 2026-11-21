@@ -1,40 +1,31 @@
 // Full Narrative First-Boss Intro Cutscene Choreography for Chapter 26 — «Abandoned Knight Rift»
 // Pure Vanilla ES Module (Browser / V8 / Node compatible, zero external engine dependencies).
 //
-// Synchronized 1:1 with:
-//   - Expanded Castle Layout (`soulsCastleLayout.js`: 36 m corridor, BOSS_DOOR_Z = -16.0,
-//     enlarged R = 16.0 m Throne Hall centered at (0, -31.2), Hero Entry = -21.2,
-//     Obsidian Throne sitZ = -40.9 -> riseZ = -39.6 -> standZ = -37.4).
-//   - Outward-Pulling Doors (`doorPullDirection = +1` into +Z corridor, 0° -> 82°) scraping
-//     over forged iron floor rails with live orange-white friction sparks (`doorScrapeSparkIntensity`).
-//   - Mastered English Boss Voiceover (`boss_intro_vo_01..07.mp3`) + Elden Ring-style Russian
+// 100% Dynamically Anchored to `soulsCastleLayout.js`:
+//   - All camera spline knots, door hinges, silent Hero pull/entry path, and Obsidian Throne
+//     coordinates are computed strictly from `SOULS_CASTLE_CONSTANTS.BOSS_DOOR_Z`,
+//     `SOULS_CASTLE_CONSTANTS.BOSS_CENTER_Z`, and `SOULS_CASTLE_THRONE_CONFIG`
+//     (`heroEntryZ`, `sitZ`, `riseZ`, `standZ`) — zero hardcoded world-Z literals!
+//   - Outward-Pulling Doors (`doorPullDirection = +1` into +Z sanctuary/corridor, 0° -> 82°)
+//     scraping over forged iron floor rails with live friction sparks (`doorScrapeSparkIntensity`).
+//   - 7-Clip Dark English Master Voiceover (`boss_intro_vo_01..07.mp3`) + Elden Ring-style Russian
 //     subtitles + 30-FPS jaw lip-sync (`soulsBossLipSyncData.js`: `BOSS_VO_DURATIONS_SEC`,
 //     `sampleBossMouthOpen`).
-//   - Boss Acting Clips (`Troll_Tripo.glb`: `Throne_Intro_Dialogue` 20.000 s + calm
-//     `Throne_Intro_StandUp` 3.400 s, ZERO roar, ZERO camera shake during dialogue!).
+//   - Boss Acting Clips (`Rift_Boss_Tripo.glb`: `Throne_Intro_Dialogue` 20.000 s + calm
+//     `Throne_Intro_StandUp` 3.400 s with Warhammer pickup beside Throne armrest, ZERO roar,
+//     ZERO Hero cutaway during dialogue, ZERO closing door-slam audio/shake cue!).
 
 import {
   SOULS_CASTLE_CONSTANTS,
   SOULS_CASTLE_THRONE_CONFIG
-} from './soulsCastleLayout.js?v=20261121z64';
+} from './soulsCastleLayout.js?v=20261121z68';
 import {
   BOSS_VO_DURATIONS_SEC,
   sampleBossMouthOpen
-} from './soulsBossLipSyncData.js?v=20261121z64';
+} from './soulsBossLipSyncData.js?v=20261121z68';
 
 const DEG_TO_RAD = Math.PI / 180;
 const BOSS_SPEAKER_RU = 'РЫЦАРЬ ПЕПЛА';
-
-// Canonical castle coordinates derived directly from soulsCastleLayout.js
-const DOOR_Z = SOULS_CASTLE_CONSTANTS.BOSS_DOOR_Z;          // -16.0
-const BOSS_CENTER_Z = SOULS_CASTLE_CONSTANTS.BOSS_CENTER_Z; // -31.2
-const HERO_PUSH_Z = DOOR_Z + 0.95;                          // -15.05 (hands right at pull-rings)
-const HERO_PULL_BACK_Z = DOOR_Z + 2.35;                     // -13.65 (straining backward pulling outward)
-const HERO_FINAL_Z = SOULS_CASTLE_THRONE_CONFIG.heroEntryZ; // -21.20
-const BOSS_SIT_Z = SOULS_CASTLE_THRONE_CONFIG.sitZ;         // -40.90
-const BOSS_RISE_Z = SOULS_CASTLE_THRONE_CONFIG.riseZ;       // -39.60
-const BOSS_FINAL_Z = SOULS_CASTLE_THRONE_CONFIG.standZ;     // -37.40
-const BOSS_FACE_Z = BOSS_SIT_Z + 0.40;                      // -40.50
 
 const ACT1_MAX_DOOR_DEG = 12.0;
 const MAX_DOOR_ANGLE_DEG = 82.0;
@@ -49,7 +40,7 @@ const VO_SPECS = [
   {
     index: 1,
     start: 6.20,
-    text: 'Ещё один, да?', // live chuckle is already baked into the audio
+    text: 'Ещё один, да?',
     textEn: '[chuckle] Another one, eh?'
   },
   {
@@ -66,25 +57,25 @@ const VO_SPECS = [
   },
   {
     index: 4,
-    start: 19.00, // scoff/chuckle baked into audio + lean back on the Throne (`armorShiftCue: 1` at 19.10 s)
+    start: 19.00,
     text: 'О, не делай такое удивлённое лицо. Многие приходили до тебя — полные бравады.',
     textEn: "[scoff/chuckle] Oh, don't look so surprised. Many have come before you, full of bravado."
   },
   {
     index: 5,
-    start: 25.85, // 28.5–30.5 s: calm look at the silent Hero -> tight portrait of the Boss
+    start: 25.85,
     text: 'Но со временем все они постигают истинный смысл терпения... и тишины.',
     textEn: 'They learn, eventually, the true meaning of patience... and silence.'
   },
   {
     index: 6,
-    start: 32.55, // `armorShiftCue: 2` at 33.20 s, majestic pull-back to full height
+    start: 32.55,
     text: 'А теперь, если позволишь, у меня есть и другие... дела.',
     textEn: "Now, if you'll excuse me, I have other... arrangements to attend to."
   },
   {
     index: 7,
-    start: 39.40, // plays OVER the calm `Throne_Intro_StandUp` (37.85–41.25 s) + Gothic title card
+    start: 39.40,
     text: 'Чувствуй себя как дома.',
     textEn: 'Enjoy your stay.'
   }
@@ -120,9 +111,8 @@ const VO3 = BOSS_INTRO_DIALOGUE_CUES[2];
 const VO4 = BOSS_INTRO_DIALOGUE_CUES[3];
 const VO5 = BOSS_INTRO_DIALOGUE_CUES[4];
 const VO6 = BOSS_INTRO_DIALOGUE_CUES[5];
-const VO7 = BOSS_INTRO_DIALOGUE_CUES[6];
 
-// Live chuckle shoulder-shake windows (the chuckle itself is part of the mastered audio of VO 1 & VO 4)
+// Live chuckle shoulder-shake windows (the chuckle itself is baked into VO 1 & VO 4 audio)
 const CHUCKLE_WINDOWS = Object.freeze([
   Object.freeze({ start: VO1.start, end: round3(VO1.start + 0.90) }),
   Object.freeze({ start: VO4.start, end: round3(VO4.start + 0.90) })
@@ -147,6 +137,155 @@ const LETTERBOX_OUT_START = round3(TOTAL_DURATION - 1.15); // 42.05 s
 
 export const BOSS_DOOR_CUTSCENE_DURATION = TOTAL_DURATION;
 export const BOSS_DOOR_CUTSCENE_SKIP_TIME = 1.50;
+
+// ============================================================================
+// Dynamic Layout Rig Builder (100% Parametric on BOSS_DOOR_Z & Throne Config)
+// ============================================================================
+
+function computeCamTangents(knots) {
+  const n = knots.length;
+  const out = new Array(n);
+
+  function calcTangent(prevVal, curVal, nextVal, dtPrev, dtNext, damp, monotoneOnly) {
+    if (damp <= 0 || dtPrev <= 0 || dtNext <= 0) return 0;
+    const mPrev = (curVal - prevVal) / dtPrev;
+    const mNext = (nextVal - curVal) / dtNext;
+    if (monotoneOnly) {
+      if (mPrev * mNext <= 0) return 0;
+      const w1 = 2 * dtNext + dtPrev;
+      const w2 = dtNext + 2 * dtPrev;
+      return damp * (w1 + w2) / (w1 / mPrev + w2 / mNext);
+    }
+    return damp * 0.5 * (mPrev + mNext);
+  }
+
+  for (let i = 0; i < n; i++) {
+    const k = knots[i];
+    if (i === 0 || i === n - 1) {
+      out[i] = Object.freeze({ vx: 0, vy: 0, vz: 0, lvx: 0, lvy: 0, lvz: 0, vfov: 0 });
+      continue;
+    }
+    const prev = knots[i - 1];
+    const next = knots[i + 1];
+    const dtPrev = k.t - prev.t;
+    const dtNext = next.t - k.t;
+    out[i] = Object.freeze({
+      vx: calcTangent(prev.px, k.px, next.px, dtPrev, dtNext, k.dp, false),
+      vy: calcTangent(prev.py, k.py, next.py, dtPrev, dtNext, k.dp, false),
+      vz: calcTangent(prev.pz, k.pz, next.pz, dtPrev, dtNext, k.dp, false),
+      lvx: calcTangent(prev.lx, k.lx, next.lx, dtPrev, dtNext, k.dl, false),
+      lvy: calcTangent(prev.ly, k.ly, next.ly, dtPrev, dtNext, k.dl, false),
+      lvz: calcTangent(prev.lz, k.lz, next.lz, dtPrev, dtNext, k.dl, false),
+      vfov: calcTangent(prev.fov, k.fov, next.fov, dtPrev, dtNext, k.dp, true)
+    });
+  }
+  return Object.freeze(out);
+}
+
+/**
+ * Builds a complete, frozen spatial rig + C1 Hermite camera spline strictly from
+ * `constants` (`SOULS_CASTLE_CONSTANTS`) and `throneConfig` (`SOULS_CASTLE_THRONE_CONFIG`).
+ * Works identically for any `BOSS_DOOR_Z` shift without a single hardcoded Z literal.
+ */
+export function buildBossDoorCutsceneRig(
+  constants = SOULS_CASTLE_CONSTANTS,
+  throneConfig = SOULS_CASTLE_THRONE_CONFIG
+) {
+  const doorZ = Number.isFinite(constants?.BOSS_DOOR_Z) ? constants.BOSS_DOOR_Z : -32.0;
+  const portalHalfW = Number.isFinite(constants?.BOSS_PORTAL_HALF_W) ? constants.BOSS_PORTAL_HALF_W : 3.15;
+  const bossRadius = Number.isFinite(constants?.BOSS_RADIUS) ? constants.BOSS_RADIUS : 16.0;
+  const bossCenterZ = Number.isFinite(constants?.BOSS_CENTER_Z) ? constants.BOSS_CENTER_Z : doorZ - 15.2;
+
+  const heroPushZ = round3(doorZ + 0.95);     // Hands right at the forged pull-rings
+  const heroPullBackZ = round3(doorZ + 2.35); // Full-weight backward pull as outward leaves swing open
+  const heroFinalZ = Number.isFinite(throneConfig?.heroEntryZ)
+    ? throneConfig.heroEntryZ
+    : Number.isFinite(constants?.BOSS_HERO_ENTRY_Z)
+      ? constants.BOSS_HERO_ENTRY_Z
+      : round3(doorZ - 5.20);
+
+  const bossSitZ = Number.isFinite(throneConfig?.sitZ) ? throneConfig.sitZ : round3(doorZ - 24.90);
+  const bossRiseZ = Number.isFinite(throneConfig?.riseZ) ? throneConfig.riseZ : round3(doorZ - 23.60);
+  const bossFinalZ = Number.isFinite(throneConfig?.standZ) ? throneConfig.standZ : round3(doorZ - 21.40);
+  const bossFaceZ = round3(bossSitZ + 0.40);
+
+  const defaultNormalCamPos = Object.freeze({ x: 0.0, y: 3.45, z: round3(heroFinalZ + 3.80) });
+  const defaultNormalCamLook = Object.freeze({ x: 0.0, y: 1.35, z: heroFinalZ });
+
+  // Single-take C1 Hermite camera spline (0.00 – 41.60 s), 100% parametric on layout anchors
+  const camKnots = Object.freeze([
+    // Act 1 (0.00–2.30 s): Intimate low side angle on Hero's hands & forged iron floor rail
+    { t: 0.00,               px:  2.15, py: 1.25, pz: doorZ + 3.40, lx:  0.00, ly: 1.35, lz: doorZ + 0.15, fov: 46.0, dp: 0.0, dl: 0.0 },
+    { t: 1.15,               px:  2.08, py: 1.40, pz: doorZ + 3.78, lx:  0.00, ly: 1.72, lz: doorZ + 0.30, fov: 44.5, dp: 0.8, dl: 0.5 },
+    { t: ACT1_END,           px:  1.72, py: 1.62, pz: doorZ + 4.10, lx:  0.00, ly: 1.88, lz: doorZ + 0.20, fov: 43.0, dp: 0.7, dl: 0.5 },
+
+    // Act 2 (2.30–5.80 s): Outward doors scrape wide (12°->82°); camera glides down center aisle into Throne Hall
+    { t: 3.30,               px:  0.72, py: 1.88, pz: doorZ + 3.45, lx:  0.00, ly: 2.08, lz: doorZ - 8.50, fov: 45.2, dp: 0.9, dl: 0.8 },
+    { t: 4.55,               px:  0.88, py: 2.06, pz: doorZ - 0.85, lx:  0.00, ly: 2.28, lz: doorZ - 18.0, fov: 44.5, dp: 0.9, dl: 0.8 },
+    { t: ACT2_END,           px:  1.65, py: 2.18, pz: heroFinalZ - 1.00, lx: 0.00, ly: 2.48, lz: bossFaceZ, fov: 42.0, dp: 0.8, dl: 0.3 },
+
+    // Act 3 — Continuous Boss-Only Throne Framing (5.80–37.85 s): ZERO cutaway away from the Boss!
+    // VO 1 (6.20–8.09 s): Boss slowly turns head toward the entering Hero
+    { t: VO1.start,          px:  1.92, py: 2.22, pz: heroFinalZ - 3.60, lx:  0.00, ly: 2.52, lz: bossFaceZ,         fov: 40.5, dp: 0.9,  dl: 0.2 },
+
+    // VO 2 (8.65–12.53 s): calm moderate approach toward the illuminated Obsidian Throne
+    { t: VO2.start,          px:  1.85, py: 2.30, pz: heroFinalZ - 6.80, lx:  0.00, ly: 2.54, lz: bossFaceZ,         fov: 39.0, dp: 0.9,  dl: 0.2 },
+    { t: VO3.start,          px:  1.55, py: 2.44, pz: bossSitZ + 7.70,   lx:  0.00, ly: 2.54, lz: bossFaceZ,         fov: 36.5, dp: 0.9,  dl: 0.2 },
+
+    // VO 3 (13.15–18.34 s): graceful theatrical semicircle across the Throne front
+    { t: round3((VO3.start + VO3.end) * 0.5),
+                             px: -0.25, py: 2.52, pz: bossSitZ + 7.10,   lx:  0.00, ly: 2.55, lz: bossFaceZ,         fov: 35.8, dp: 1.0,  dl: 0.2 },
+
+    // VO 4 (19.00–25.21 s): scoff/chuckle + regal lean back (3/4 right-armrest view showing Warhammer beside Throne)
+    { t: VO4.start,          px: -2.05, py: 2.48, pz: bossSitZ + 6.70,   lx:  0.00, ly: 2.55, lz: bossFaceZ,         fov: 35.5, dp: 0.8,  dl: 0.2 },
+    { t: round3((VO4.start + VO4.end) * 0.5),
+                             px: -1.65, py: 2.54, pz: bossSitZ + 6.20,   lx:  0.00, ly: 2.53, lz: bossFaceZ - 0.15,  fov: 34.8, dp: 0.75, dl: 0.2 },
+
+    // VO 5 (25.85–31.86 s): unbroken slow theatrical orbit & dramatic close-in on Boss ("patience... and silence")
+    { t: VO5.start,          px:  0.30, py: 2.50, pz: bossSitZ + 6.40,   lx:  0.00, ly: 2.54, lz: bossFaceZ - 0.05,  fov: 34.4, dp: 0.9,  dl: 0.2 },
+    { t: TURNING_POINT_START,px:  1.45, py: 2.46, pz: bossSitZ + 5.95,   lx:  0.00, ly: 2.55, lz: bossFaceZ,         fov: 33.2, dp: 0.8,  dl: 0.2 },
+    { t: TURNING_POINT_END,  px:  1.22, py: 2.49, pz: bossSitZ + 5.38,   lx:  0.00, ly: 2.57, lz: bossFaceZ,         fov: 31.8, dp: 0.75, dl: 0.2 },
+
+    // VO 6 (32.55–37.57 s): tasteful closer portrait framing on Boss's shadowed face & grin, then majestic pull-back to FULL HEIGHT
+    { t: VO6.start,          px:  0.72, py: 2.52, pz: bossSitZ + 4.95,   lx:  0.00, ly: 2.57, lz: bossFaceZ + 0.02,  fov: 30.6, dp: 0.75, dl: 0.2 },
+    { t: round3(VO6.start + 1.60),
+                             px:  0.18, py: 2.52, pz: bossSitZ + 4.80,   lx:  0.00, ly: 2.56, lz: bossFaceZ + 0.05,  fov: 29.8, dp: 0.65, dl: 0.2 },
+    { t: round3(VO6.start + 2.65),
+                             px: -0.35, py: 2.48, pz: bossSitZ + 5.50,   lx: -0.05, ly: 2.48, lz: bossFaceZ + 0.15,  fov: 31.8, dp: 0.65, dl: 0.3 },
+    { t: round3(VO6.start + 4.00),
+                             px: -0.82, py: 2.38, pz: bossSitZ + 8.80,   lx: -0.10, ly: 2.30, lz: bossSitZ + 0.90,   fov: 37.2, dp: 0.85, dl: 0.7 },
+    { t: BOSS_STANDUP_START, px: -1.05, py: 2.28, pz: bossSitZ + 11.95,  lx: -0.12, ly: 2.18, lz: bossSitZ + 1.35,   fov: 42.0, dp: 0.65, dl: 0.5 },
+
+    // Act 4 Stand-Up (37.85–41.60 s) + VO 7 (39.40–40.69 s) + Title Card:
+    // Full-height heroic framing so the Boss rising off the Obsidian Throne, reaching over to grab
+    // the Warhammer standing beside his right armrest (~39.80 s), and hefting it into combat stance read clearly!
+    { t: round3((BOSS_STANDUP_START + ACT4_END) * 0.5),
+                             px: -0.65, py: 2.22, pz: bossFinalZ + 9.75, lx: -0.12, ly: 2.34, lz: bossFinalZ - 1.15, fov: 43.2, dp: 0.75, dl: 0.6 },
+    { t: ACT4_END,           px:  0.65, py: 2.18, pz: bossFinalZ + 10.50,lx:  0.00, ly: 2.38, lz: bossFinalZ,        fov: 44.0, dp: 0.0,  dl: 0.0 }
+  ]);
+
+  const camTangents = computeCamTangents(camKnots);
+
+  return Object.freeze({
+    doorZ,
+    portalHalfW,
+    bossRadius,
+    bossCenterZ,
+    heroPushZ,
+    heroPullBackZ,
+    heroFinalZ,
+    bossSitZ,
+    bossRiseZ,
+    bossFinalZ,
+    bossFaceZ,
+    defaultNormalCamPos,
+    defaultNormalCamLook,
+    camKnots,
+    camTangents
+  });
+}
+
+const DEFAULT_RIG = buildBossDoorCutsceneRig(SOULS_CASTLE_CONSTANTS, SOULS_CASTLE_THRONE_CONFIG);
 
 export const BOSS_DOOR_CUTSCENE_ACTS = Object.freeze({
   DURATION: BOSS_DOOR_CUTSCENE_DURATION,
@@ -184,19 +323,19 @@ export const BOSS_DOOR_CUTSCENE_ACTS = Object.freeze({
   TITLE_CARD_END,
   LETTERBOX_OUT_START,
   HERO_PUSH_X: 0.0,
-  HERO_PUSH_Z,
-  HERO_PULL_BACK_Z,
+  HERO_PUSH_Z: DEFAULT_RIG.heroPushZ,
+  HERO_PULL_BACK_Z: DEFAULT_RIG.heroPullBackZ,
   HERO_WALK_START_TIME: 3.15,
   HERO_FINAL_X: 0.0,
-  HERO_FINAL_Z,
+  HERO_FINAL_Z: DEFAULT_RIG.heroFinalZ,
   HERO_FACING: Math.PI,
-  BOSS_CENTER_Z,
-  BOSS_SIT_Z,
-  BOSS_RISE_Z,
-  BOSS_FINAL_Z,
-  BOSS_FACE_Z,
+  BOSS_CENTER_Z: DEFAULT_RIG.bossCenterZ,
+  BOSS_SIT_Z: DEFAULT_RIG.bossSitZ,
+  BOSS_RISE_Z: DEFAULT_RIG.bossRiseZ,
+  BOSS_FINAL_Z: DEFAULT_RIG.bossFinalZ,
+  BOSS_FACE_Z: DEFAULT_RIG.bossFaceZ,
   BOSS_DIALOGUE_CLIP_DURATION: 20.0,
-  DOOR_Z,
+  DOOR_Z: DEFAULT_RIG.doorZ,
   ACT1_MAX_DOOR_DEG,
   MAX_DOOR_ANGLE_DEG,
   DEFAULT_NORMAL_FOV: 52.0,
@@ -204,118 +343,8 @@ export const BOSS_DOOR_CUTSCENE_ACTS = Object.freeze({
   BOSS_SUBTITLE_RU: 'СУДИЯ РУИН'
 });
 
-const DEFAULT_NORMAL_CAM_POS = Object.freeze({ x: 0.0, y: 3.45, z: HERO_FINAL_Z + 3.8 });
-const DEFAULT_NORMAL_CAM_LOOK = Object.freeze({ x: 0.0, y: 1.35, z: HERO_FINAL_Z });
-
-// ============================================================================
-// Smooth Single-Take Camera Spline Knots (0.00 – 41.60 s)
-// Calibrated to expanded castle geometry (BOSS_DOOR_Z = -16.0, BOSS_CENTER_Z = -31.2,
-// HERO_FINAL_Z = -21.2, BOSS_SIT_Z = -40.9, outward +Z doors 0° -> 82°).
-// Guaranteed C1 continuity, zero harsh cuts, >1.3 m door clearance, zero wall clips.
-// ============================================================================
-const CAM_KNOTS = Object.freeze([
-  // Act 1 (0.00–2.30 s): Intimate low side angle on Hero's hands & forged iron floor rail (+2.15, 1.25, -12.60)
-  { t: 0.00,               px:  2.15, py: 1.25, pz: DOOR_Z + 3.40, lx:  0.00, ly: 1.35, lz: DOOR_Z + 0.15, fov: 46.0, dp: 0.0, dl: 0.0 },
-  { t: 1.15,               px:  2.08, py: 1.40, pz: DOOR_Z + 3.78, lx:  0.00, ly: 1.72, lz: DOOR_Z + 0.30, fov: 44.5, dp: 0.8, dl: 0.5 },
-  { t: ACT1_END,           px:  1.72, py: 1.62, pz: DOOR_Z + 4.10, lx:  0.00, ly: 1.88, lz: DOOR_Z + 0.20, fov: 43.0, dp: 0.7, dl: 0.5 },
-
-  // Act 2 (2.30–5.80 s): Outward doors scrape wide (12°->82°); camera glides down center aisle into Throne Hall
-  { t: 3.30,               px:  0.72, py: 1.88, pz: DOOR_Z + 3.45, lx:  0.00, ly: 2.08, lz: DOOR_Z - 8.50, fov: 45.2, dp: 0.9, dl: 0.8 },
-  { t: 4.55,               px:  0.88, py: 2.06, pz: DOOR_Z - 0.85, lx:  0.00, ly: 2.28, lz: DOOR_Z - 18.0, fov: 44.5, dp: 0.9, dl: 0.8 },
-  { t: ACT2_END,           px:  1.65, py: 2.18, pz: HERO_FINAL_Z - 1.00, lx: 0.00, ly: 2.48, lz: BOSS_FACE_Z, fov: 42.0, dp: 0.8, dl: 0.3 },
-
-  // Throne focus + VO 1 (6.20–8.09 s): Boss slowly turns head toward the entering Hero
-  { t: VO1.start,          px:  1.92, py: 2.22, pz: HERO_FINAL_Z - 3.60, lx: 0.00, ly: 2.52, lz: BOSS_FACE_Z, fov: 40.5, dp: 0.9, dl: 0.2 },
-
-  // VO 2 (8.65–12.53 s): calm moderate approach toward the illuminated Obsidian Throne
-  { t: VO2.start,          px:  1.85, py: 2.30, pz: HERO_FINAL_Z - 6.80, lx: 0.00, ly: 2.54, lz: BOSS_FACE_Z, fov: 39.0, dp: 0.9, dl: 0.2 },
-  { t: VO3.start,          px:  1.55, py: 2.44, pz: BOSS_SIT_Z + 7.70,   lx: 0.00, ly: 2.54, lz: BOSS_FACE_Z, fov: 36.5, dp: 0.9, dl: 0.2 },
-
-  // VO 3 (13.15–18.34 s): graceful theatrical semicircle across the Throne front
-  { t: round3((VO3.start + VO3.end) * 0.5),
-                           px: -0.25, py: 2.52, pz: BOSS_SIT_Z + 7.10,   lx: 0.00, ly: 2.55, lz: BOSS_FACE_Z, fov: 35.8, dp: 1.0, dl: 0.2 },
-
-  // VO 4 (19.00–25.21 s): scoff/chuckle + lean back on the backrest (closer 3/4 left view)
-  { t: VO4.start,          px: -2.05, py: 2.48, pz: BOSS_SIT_Z + 6.70,   lx: 0.00, ly: 2.55, lz: BOSS_FACE_Z, fov: 35.5, dp: 0.8, dl: 0.2 },
-  { t: round3((VO4.start + VO4.end) * 0.5),
-                           px: -1.65, py: 2.54, pz: BOSS_SIT_Z + 6.20,   lx: 0.00, ly: 2.53, lz: BOSS_FACE_Z - 0.15, fov: 34.8, dp: 0.7, dl: 0.2 },
-
-  // VO 5 (25.85–31.86 s): unhurried predatory orbit back to right-3/4 before the turning point
-  { t: VO5.start,          px:  0.30, py: 2.50, pz: BOSS_SIT_Z + 6.90,   lx: 0.00, ly: 2.54, lz: BOSS_FACE_Z - 0.05, fov: 35.6, dp: 1.0, dl: 0.2 },
-  { t: TURNING_POINT_START,px:  1.85, py: 2.36, pz: BOSS_SIT_Z + 9.10,   lx: 0.00, ly: 2.54, lz: BOSS_FACE_Z, fov: 37.0, dp: 0.4, dl: 0.1 },
-
-  // Turning Point A (28.5–30.1 s): unbroken Steadicam turn to the silent, stoic Hero at (0, -21.20)
-  { t: round3(TURNING_POINT_START + 0.42),
-                           px:  2.35, py: 2.02, pz: BOSS_CENTER_Z + 2.80, lx: -4.50, ly: 2.02, lz: BOSS_CENTER_Z + 0.70, fov: 37.6, dp: 0.8, dl: 0.8 },
-  { t: round3(TURNING_POINT_START + 0.85),
-                           px:  2.45, py: 1.80, pz: HERO_FINAL_Z - 4.20,  lx:  0.00, ly: 1.54, lz: HERO_FINAL_Z, fov: 38.0, dp: 0.15, dl: 0.05 },
-  { t: round3(TURNING_POINT_START + 1.60),
-                           px:  2.25, py: 1.84, pz: HERO_FINAL_Z - 4.80,  lx:  0.00, ly: 1.54, lz: HERO_FINAL_Z, fov: 38.0, dp: 0.15, dl: 0.05 },
-
-  // Turning Point B (30.1–31.6 s): smooth crane return into tight portrait close-up (FOV 31°) on the Boss's face
-  { t: round3(TURNING_POINT_END + 0.70),
-                           px:  1.78, py: 2.20, pz: BOSS_CENTER_Z + 0.40, lx: -4.60, ly: 2.18, lz: BOSS_CENTER_Z - 0.40, fov: 34.5, dp: 0.8, dl: 0.8 },
-  { t: round3(TURNING_POINT_END + 1.25),
-                           px:  1.10, py: 2.50, pz: BOSS_SIT_Z + 5.45,   lx:  0.00, ly: 2.58, lz: BOSS_FACE_Z, fov: 31.0, dp: 0.25, dl: 0.1 },
-
-  // VO 6 (32.55–37.57 s): tight close-up showing jaw lip-sync & cold irritation, then majestic pull-back to FULL HEIGHT
-  { t: round3(VO6.start + 1.60),
-                           px:  0.52, py: 2.52, pz: BOSS_SIT_Z + 4.85,   lx:  0.00, ly: 2.56, lz: BOSS_FACE_Z + 0.05, fov: 29.8, dp: 0.6, dl: 0.2 },
-  { t: round3(VO6.start + 2.55),
-                           px:  0.18, py: 2.50, pz: BOSS_SIT_Z + 5.10,   lx:  0.00, ly: 2.48, lz: BOSS_FACE_Z + 0.15, fov: 31.0, dp: 0.3, dl: 0.2 },
-  { t: round3(VO6.start + 3.80),
-                           px:  0.60, py: 2.42, pz: BOSS_SIT_Z + 8.70,   lx:  0.00, ly: 2.30, lz: BOSS_SIT_Z + 0.95, fov: 36.8, dp: 0.9, dl: 0.8 },
-  { t: BOSS_STANDUP_START, px:  1.05, py: 2.32, pz: BOSS_SIT_Z + 12.30,  lx:  0.00, ly: 2.15, lz: BOSS_SIT_Z + 1.40, fov: 42.0, dp: 0.5, dl: 0.5 },
-
-  // Act 4 Stand-Up (37.85–41.25 s) + VO 7 (39.40–40.69 s) + Title Card: calm monumental rise & 2 dais steps
-  { t: round3((BOSS_STANDUP_START + ACT4_END) * 0.5),
-                           px:  1.20, py: 2.24, pz: BOSS_FINAL_Z + 9.70, lx:  0.00, ly: 2.40, lz: BOSS_FINAL_Z - 1.10, fov: 43.2, dp: 0.8, dl: 0.7 },
-  { t: ACT4_END,           px:  1.25, py: 2.16, pz: BOSS_FINAL_Z + 10.60, lx: 0.00, ly: 2.38, lz: BOSS_FINAL_Z, fov: 44.0, dp: 0.0, dl: 0.0 }
-]);
-
-// Precompute exact C1 Hermite tangents once at module load (zero runtime allocations!)
-const CAM_TANGENTS = (() => {
-  const n = CAM_KNOTS.length;
-  const out = new Array(n);
-
-  function calcTangent(prevVal, curVal, nextVal, dtPrev, dtNext, damp, monotoneOnly) {
-    if (damp <= 0 || dtPrev <= 0 || dtNext <= 0) return 0;
-    const mPrev = (curVal - prevVal) / dtPrev;
-    const mNext = (nextVal - curVal) / dtNext;
-    if (monotoneOnly) {
-      if (mPrev * mNext <= 0) return 0;
-      const w1 = 2 * dtNext + dtPrev;
-      const w2 = dtNext + 2 * dtPrev;
-      return damp * (w1 + w2) / (w1 / mPrev + w2 / mNext);
-    }
-    return damp * 0.5 * (mPrev + mNext);
-  }
-
-  for (let i = 0; i < n; i++) {
-    const k = CAM_KNOTS[i];
-    if (i === 0 || i === n - 1) {
-      out[i] = Object.freeze({ vx: 0, vy: 0, vz: 0, lvx: 0, lvy: 0, lvz: 0, vfov: 0 });
-      continue;
-    }
-    const prev = CAM_KNOTS[i - 1];
-    const next = CAM_KNOTS[i + 1];
-    const dtPrev = k.t - prev.t;
-    const dtNext = next.t - k.t;
-    out[i] = Object.freeze({
-      vx: calcTangent(prev.px, k.px, next.px, dtPrev, dtNext, k.dp, false),
-      vy: calcTangent(prev.py, k.py, next.py, dtPrev, dtNext, k.dp, false),
-      vz: calcTangent(prev.pz, k.pz, next.pz, dtPrev, dtNext, k.dp, false),
-      lvx: calcTangent(prev.lx, k.lx, next.lx, dtPrev, dtNext, k.dl, false),
-      lvy: calcTangent(prev.ly, k.ly, next.ly, dtPrev, dtNext, k.dl, false),
-      lvz: calcTangent(prev.lz, k.lz, next.lz, dtPrev, dtNext, k.dl, false),
-      vfov: calcTangent(prev.fov, k.fov, next.fov, dtPrev, dtNext, k.dp, true)
-    });
-  }
-  return Object.freeze(out);
-})();
-
 // Monotonic acting timeline for `Throne_Intro_Dialogue` (20.000 s, u ∈ [0..1])
-// Synced 1:1 with the 8 acting beats in Troll_Tripo.glb, the 0.75 s chuckle slot & all VO lines.
+// Synced 1:1 with the 8 acting beats in Troll_Tripo.glb & all VO lines.
 const DIALOGUE_U_KNOTS = Object.freeze([
   { t: 0.00,               u: 0.000 }, // Seated relaxed on the Throne (Beat 1)
   { t: ACT2_END,           u: 0.050 }, // Subtle idle breathing while the doors close
@@ -390,10 +419,12 @@ function readVec3Z(v, fallback) {
 
 const _camSample = { px: 0, py: 0, pz: 0, lx: 0, ly: 0, lz: 0, fov: 44.0 };
 
-function sampleCameraSpline(t) {
-  const n = CAM_KNOTS.length;
-  if (t <= CAM_KNOTS[0].t) {
-    const k = CAM_KNOTS[0];
+function sampleCameraSpline(t, rig) {
+  const knots = rig.camKnots;
+  const tangents = rig.camTangents;
+  const n = knots.length;
+  if (t <= knots[0].t) {
+    const k = knots[0];
     _camSample.px = k.px;
     _camSample.py = k.py;
     _camSample.pz = k.pz;
@@ -403,7 +434,7 @@ function sampleCameraSpline(t) {
     _camSample.fov = k.fov;
     return _camSample;
   }
-  const last = CAM_KNOTS[n - 1];
+  const last = knots[n - 1];
   if (t >= last.t) {
     _camSample.px = last.px;
     _camSample.py = last.py;
@@ -419,9 +450,9 @@ function sampleCameraSpline(t) {
   let hi = n - 2;
   while (lo <= hi) {
     const mid = (lo + hi) >> 1;
-    if (t < CAM_KNOTS[mid].t) {
+    if (t < knots[mid].t) {
       hi = mid - 1;
-    } else if (t > CAM_KNOTS[mid + 1].t) {
+    } else if (t > knots[mid + 1].t) {
       lo = mid + 1;
     } else {
       lo = mid;
@@ -429,10 +460,10 @@ function sampleCameraSpline(t) {
     }
   }
   const i = lo < 0 ? 0 : lo > n - 2 ? n - 2 : lo;
-  const k0 = CAM_KNOTS[i];
-  const k1 = CAM_KNOTS[i + 1];
-  const m0 = CAM_TANGENTS[i];
-  const m1 = CAM_TANGENTS[i + 1];
+  const k0 = knots[i];
+  const k1 = knots[i + 1];
+  const m0 = tangents[i];
+  const m1 = tangents[i + 1];
   const dt = Math.max(1e-6, k1.t - k0.t);
   const s = clamp01((t - k0.t) / dt);
 
@@ -488,8 +519,8 @@ function evaluateBoltLift01(t) {
  *   0.00 – 2.30 s: strained breakaway crack 0° -> 12° (~0.1463) starting at 0.60 s
  *   2.30 – 4.60 s: heavy scraping outward swing 12° -> 82° (1.0) along forged iron floor rails
  *   4.60 – 5.35 s: resting wide open at 82° while Hero finishes entering Throne Hall
- *   5.35 – 5.75 s: heavy scraping slam back to 0° behind Hero (`doorSlam` at 5.35 s,
- *                  `doorFullyClosed = true` cleanly by 5.78 s!)
+ *   5.35 – 5.75 s: smooth silent off-screen closure back to 0° behind Hero (`doorClosed` /
+ *                  `doorFullyClosed = true` cleanly by 5.75 s, zero slam SFX/shake!)
  */
 function evaluateDoorAngle01(t) {
   if (t < BOSS_DOOR_CUTSCENE_ACTS.DOOR_PUSH_TIME) {
@@ -511,10 +542,7 @@ function evaluateDoorAngle01(t) {
     return clamp01(ACT1_DOOR_NORM * (0.47 + 0.53 * resist));
   }
   if (t < 4.32) {
-    // Act 2 (2.30 – 4.32 s): C1-smooth pull-and-inertia outward swing (12° -> 82°):
-    //   2.30 – 2.91 s (u < 0.30): Hero strains backward, accelerating leaves 12° -> 32°
-    //   2.91 – 4.32 s (u >= 0.30): heavy momentum scrapes wide across iron rails 32° -> 82°
-    //   (already >65° wide before camera or Hero passes the outward tips!)
+    // Act 2 (2.30 – 4.32 s): C1-smooth pull-and-inertia outward swing (12° -> 82°)
     const u = (t - ACT1_END) / 2.02;
     let s;
     if (u < 0.30) {
@@ -537,16 +565,10 @@ function evaluateDoorAngle01(t) {
   if (t < BOSS_DOOR_CUTSCENE_ACTS.DOOR_SLAM_TIME) {
     return 1.0;
   }
-  if (t < 5.71) {
-    // Heavy scraping slam shut (82° -> 0° over 0.36 s)
-    const u = (t - BOSS_DOOR_CUTSCENE_ACTS.DOOR_SLAM_TIME) / 0.36;
-    const closeEase = u * u * (2.6 - 1.6 * u);
-    return clamp01(1.0 - closeEase);
-  }
-  if (t < 5.82) {
-    // Brief clamped stone-rabbet recoil (< 0.004 after 5.79 s)
-    const u = (t - 5.71) / 0.11;
-    return clamp01(Math.sin(u * Math.PI) * (1.0 - u) * 0.008);
+  if (t < 5.75) {
+    // Smooth, monotonic silent off-screen closure (82° -> 0° over 0.40 s, zero rabbet bounce)
+    const u = (t - BOSS_DOOR_CUTSCENE_ACTS.DOOR_SLAM_TIME) / 0.40;
+    return clamp01(1.0 - smoothstep(u));
   }
   return 0.0;
 }
@@ -554,9 +576,8 @@ function evaluateDoorAngle01(t) {
 /**
  * Live iron-on-iron rail friction spark intensity (0..1) beneath the bottom edges of both leaves:
  *   - 0.60–2.30 s: initial sparks as leaves tear loose across the forged floor plate (0.20..0.55)
- *   - 2.30–4.55 s: rich orange-white sparks during heavy outward scraping swing (12° -> 82°)
- *   - 5.35–5.76 s: intense closing rail-scrape spark shower as doors thunder shut
- *   - 0.0 outside active door rail motion!
+ *   - 2.30–4.60 s: rich orange-white sparks during heavy outward scraping swing (12° -> 82°)
+ *   - 0.0 from 4.60 s onward (off-screen door closure is silent and spark-free!).
  */
 function evaluateDoorScrapeSparkIntensity(t) {
   if (t < BOSS_DOOR_CUTSCENE_ACTS.DOOR_PUSH_TIME) return 0.0;
@@ -570,16 +591,12 @@ function evaluateDoorScrapeSparkIntensity(t) {
     const tail = 1.0 - smoothstep((u - 0.78) / 0.22);
     return clamp01((0.35 + 0.62 * surge) * tail);
   }
-  if (t >= BOSS_DOOR_CUTSCENE_ACTS.DOOR_SLAM_TIME && t < 5.78) {
-    const u = (t - BOSS_DOOR_CUTSCENE_ACTS.DOOR_SLAM_TIME) / (5.78 - BOSS_DOOR_CUTSCENE_ACTS.DOOR_SLAM_TIME);
-    return clamp01(Math.sin(u * Math.PI) * 0.96);
-  }
   return 0.0;
 }
 
 /**
- * Physical leaf & iron hinge shudder intensity (0..1) — strictly 0.0 from 5.88 s onward
- * so the entire Boss monologue has zero vibration.
+ * Physical leaf & iron hinge shudder intensity (0..1) — strictly 0.0 from 4.62 s onward
+ * so off-screen closure and the entire Boss monologue have zero vibration/rumble.
  */
 function evaluateDoorShudder(t) {
   if (t < 0.05) return 0.0;
@@ -596,24 +613,18 @@ function evaluateDoorShudder(t) {
   if (t < 4.62) {
     return clamp01(pulseBell(t, 4.30, 4.62) * 0.20);
   }
-  if (t >= BOSS_DOOR_CUTSCENE_ACTS.DOOR_SLAM_TIME && t < 5.88) {
-    const preWind = t < 5.71 ? ((t - BOSS_DOOR_CUTSCENE_ACTS.DOOR_SLAM_TIME) / 0.36) * 0.26 : 0.0;
-    const impact = t >= 5.68 ? Math.pow(clamp01(1.0 - (t - 5.68) / 0.20), 1.8) * 0.80 : 0.0;
-    return clamp01(Math.max(preWind, impact));
-  }
   return 0.0;
 }
 
 /**
- * Monotonic stone-dust burst stage (0..4):
+ * Monotonic stone-dust burst stage (0..3):
  *   0: pre-touch
  *   1: bolt clank & keystone dust (t >= 0.12 s)
  *   2: outward breakaway crack 0° -> 12° dust (t >= 0.68 s)
  *   3: heavy rail-scrape swing dust cloud (t >= 2.35 s)
- *   4: door closure shockwave burst (t >= 5.35 s)
+ *   (Intentionally omits stage 4 closing-slam burst during dialogue.)
  */
 function evaluateDustBurstStage(t) {
-  if (t >= BOSS_DOOR_CUTSCENE_ACTS.DOOR_SLAM_TIME) return 4;
   if (t >= 2.35) return 3;
   if (t >= 0.68) return 2;
   if (t >= 0.12) return 1;
@@ -621,14 +632,14 @@ function evaluateDustBurstStage(t) {
 }
 
 /**
- * Monotonic door audio stage (0 | 1 | 2 | 3 | 5) matching soulsSpatialAudio & soulsGameFeel:
+ * Monotonic door audio stage (0 | 1 | 2 | 3) matching soulsSpatialAudio & soulsGameFeel:
  *   1: bolt (0.05 s)
  *   2: outward pull strain (0.60 s)
  *   3: heavy scraping swing open (2.30 s)
- *   5: doors close behind hero (5.35 s) — intentionally skips roar stage (4)
+ *   (Intentionally omits roar stage 4 and closing slam stage 5 so NO door-close noise or
+ *    jarring slam shake triggers during the Boss intro cutscene!)
  */
 function evaluateAudioCueStage(t) {
-  if (t >= BOSS_DOOR_CUTSCENE_ACTS.DOOR_SLAM_TIME) return 5;
   if (t >= BOSS_DOOR_CUTSCENE_ACTS.DOOR_OPEN_TIME) return 3;
   if (t >= BOSS_DOOR_CUTSCENE_ACTS.DOOR_PUSH_TIME) return 2;
   if (t >= BOSS_DOOR_CUTSCENE_ACTS.DOOR_BOLT_TIME) return 1;
@@ -637,9 +648,10 @@ function evaluateAudioCueStage(t) {
 
 /**
  * Restrained, filmic camera shake (0..1):
- *   - Delicate micro-tremor ONLY on door shift/rail scrape (0.08–3.50 s), door close (5.35–5.88 s),
+ *   - Delicate micro-tremor ONLY on door shift/rail scrape (0.08–3.50 s)
  *     and the Boss's 2 heavy footsteps descending the Throne dais (BOSS_STEP1_TIME & BOSS_STEP2_TIME).
- *   - Strictly 0.0 during the entire 34-second dialogue (5.88 – 40.07 s) and combat return!
+ *   - Strictly 0.0 during off-screen door closure, the entire Boss dialogue (3.50 – 40.07 s),
+ *     and combat return!
  */
 function evaluateCameraShake(t) {
   if (t <= 0.05 || t >= BOSS_DOOR_CUTSCENE_DURATION) return 0.0;
@@ -650,12 +662,6 @@ function evaluateCameraShake(t) {
     const pullHeave = pulseBell(t, 2.28, 3.00) * 0.28;
     const railTail = t >= 2.65 && t < 3.50 ? lerp(0.14, 0.0, (t - 2.65) / 0.85) : 0.0;
     return clamp01(Math.max(boltClank, shiftStrain, pullHeave, railTail));
-  }
-
-  if (t >= BOSS_DOOR_CUTSCENE_ACTS.DOOR_SLAM_TIME && t < 5.88) {
-    const preClose = t < 5.71 ? lerp(0.07, 0.18, (t - BOSS_DOOR_CUTSCENE_ACTS.DOOR_SLAM_TIME) / 0.36) : 0.0;
-    const thud = t >= 5.66 ? Math.pow(clamp01(1.0 - (t - 5.66) / 0.22), 1.8) * 0.42 : 0.0;
-    return clamp01(Math.max(preClose, thud));
   }
 
   if (t >= BOSS_STEP1_TIME - 0.02 && t < BOSS_STEP2_TIME + 0.32) {
@@ -670,21 +676,19 @@ function evaluateCameraShake(t) {
 const _heroScratch = { x: 0, z: 0, mode: 'ready', effort: 0 };
 
 /**
- * Silent Hero trajectory:
- *   0.00 – 2.30 s: right at the iron pull-rings (z = -15.05 -> -14.70), straining backward (`push`)
- *   2.30 – 3.15 s: full-body pull backward (z = -14.70 -> -13.65, `push`) as outward leaves break wide
- *   3.15 – 5.75 s: confident resolute stride into the illuminated Throne Hall (z = -13.65 -> -21.20,
- *                  `walk_in`, 4 stone footsteps `heroStepCue 1..4`)
- *   5.75 – 43.20 s: stoic silent combat stance at (0, -21.20) facing the Throne (`ready`)
+ * Silent Hero trajectory strictly relative to `rig` (`heroPushZ -> heroPullBackZ -> heroFinalZ`):
+ *   0.00 – 2.30 s: right at the iron pull-rings, straining backward (`push`)
+ *   2.30 – 3.15 s: full-body pull backward (`push`) as outward leaves break wide
+ *   3.15 – 5.75 s: confident resolute stride into the illuminated Throne Hall (`walk_in`, 4 steps)
+ *   5.75 – 43.20 s: stoic silent combat stance at `(0, heroFinalZ)` facing the Throne (`ready`)
  */
-function evaluateHeroTrack(t) {
+function evaluateHeroTrack(t, rig) {
   if (t < ACT1_END) {
-    const u = clamp01(t / ACT1_END);
     const ramp = smoothstep(t / 0.38);
     const strainBack = smoothstep(clamp01((t - 0.60) / (ACT1_END - 0.60)));
     const heaveWave = 0.5 + 0.5 * Math.sin(clamp01((t - 0.35) / 1.85) * Math.PI);
     _heroScratch.x = 0.0;
-    _heroScratch.z = lerp(HERO_PUSH_Z, HERO_PUSH_Z + 0.35, strainBack);
+    _heroScratch.z = lerp(rig.heroPushZ, rig.heroPushZ + 0.35, strainBack);
     _heroScratch.mode = 'push';
     _heroScratch.effort = clamp01(0.32 + 0.68 * ramp * (0.72 + 0.28 * heaveWave));
     return _heroScratch;
@@ -692,7 +696,7 @@ function evaluateHeroTrack(t) {
   if (t < BOSS_DOOR_CUTSCENE_ACTS.HERO_WALK_START_TIME) {
     const u = (t - ACT1_END) / (BOSS_DOOR_CUTSCENE_ACTS.HERO_WALK_START_TIME - ACT1_END);
     _heroScratch.x = 0.0;
-    _heroScratch.z = lerp(HERO_PUSH_Z + 0.35, HERO_PULL_BACK_Z, smoothstep(u));
+    _heroScratch.z = lerp(rig.heroPushZ + 0.35, rig.heroPullBackZ, smoothstep(u));
     _heroScratch.mode = 'push';
     _heroScratch.effort = clamp01(0.96 - 0.28 * u);
     return _heroScratch;
@@ -701,20 +705,20 @@ function evaluateHeroTrack(t) {
     const u = (t - BOSS_DOOR_CUTSCENE_ACTS.HERO_WALK_START_TIME)
       / (5.75 - BOSS_DOOR_CUTSCENE_ACTS.HERO_WALK_START_TIME);
     _heroScratch.x = 0.0;
-    _heroScratch.z = lerp(HERO_PULL_BACK_Z, HERO_FINAL_Z, easeInOutSine(u));
+    _heroScratch.z = lerp(rig.heroPullBackZ, rig.heroFinalZ, easeInOutSine(u));
     _heroScratch.mode = 'walk_in';
     _heroScratch.effort = 0.0;
     return _heroScratch;
   }
   _heroScratch.x = 0.0;
-  _heroScratch.z = HERO_FINAL_Z;
+  _heroScratch.z = rig.heroFinalZ;
   _heroScratch.mode = 'ready';
   _heroScratch.effort = 0.0;
   return _heroScratch;
 }
 
 /**
- * 4 measured stone footsteps while the silent Hero walks from z = -13.65 to z = -21.20 (3.15–5.75 s).
+ * 4 measured stone footsteps while the silent Hero walks from `heroPullBackZ` to `heroFinalZ` (3.15–5.75 s).
  */
 function evaluateHeroStepCue(t) {
   if (t >= 5.42) return 4;
@@ -772,24 +776,24 @@ function evaluateBossStandupU(t) {
 }
 
 /**
- * Synchronized Boss root Z matching `Throne_Intro_StandUp` (`-40.90 -> -39.60 -> -37.40`).
+ * Synchronized Boss root Z matching `Throne_Intro_StandUp` (`bossSitZ -> bossRiseZ -> bossFinalZ`).
  */
-function evaluateBossTargetZ(standupU) {
+function evaluateBossTargetZ(standupU, rig) {
   const u = clamp01(standupU);
-  if (u <= 0.24) return BOSS_SIT_Z;
+  if (u <= 0.24) return rig.bossSitZ;
   if (u <= 0.52) {
     const s = smoothstep((u - 0.24) / 0.28);
-    return lerp(BOSS_SIT_Z, BOSS_RISE_Z, s);
+    return lerp(rig.bossSitZ, rig.bossRiseZ, s);
   }
   if (u <= 0.86) {
     const s = smoothstep((u - 0.52) / 0.34);
-    return lerp(BOSS_RISE_Z, BOSS_FINAL_Z, s);
+    return lerp(rig.bossRiseZ, rig.bossFinalZ, s);
   }
-  return BOSS_FINAL_Z;
+  return rig.bossFinalZ;
 }
 
 /**
- * Active voiceover cue entry (null during pauses, chuckle slot, or outside dialogue).
+ * Active voiceover cue entry (null during pauses or outside dialogue).
  */
 function findActiveDialogueCue(t) {
   for (let i = 0; i < BOSS_INTRO_DIALOGUE_CUES.length; i++) {
@@ -829,7 +833,7 @@ function evaluateLetterbox01(t) {
 // ============================================================================
 
 /**
- * Computes a deterministic, restrained multi-frequency camera tremor offset for door shift/close
+ * Computes a deterministic, restrained multi-frequency camera tremor offset for door opening shift
  * and Throne dais footsteps (returns strict zeros whenever shake === 0 during the dialogue).
  *
  * @param {number} elapsed - Seconds since cutscene start.
@@ -872,9 +876,9 @@ export function computeBossDoorCutsceneShakeOffset(elapsed, shake, out = null) {
  * @param {number} elapsed - Elapsed time in seconds (0 .. BOSS_DOOR_CUTSCENE_DURATION).
  * @param {{ x: number, y: number, z: number }|number[]|null} [startCamPos] - Camera position at t = 0.
  * @param {{ x: number, y: number, z: number }|number[]|null} [startCamLook] - Camera lookAt at t = 0.
- * @param {{ x: number, y: number, z: number }|number[]|null} [normalCamPos] - Normal combat camera behind hero at z = -21.20.
- * @param {{ x: number, y: number, z: number }|number[]|null} [normalCamLook] - Normal combat camera lookAt for hero at z = -21.20.
- * @param {{ normalFov?: number, startFov?: number, out?: object }|null} [options] - Optional FOV/scratch-output overrides.
+ * @param {{ x: number, y: number, z: number }|number[]|null} [normalCamPos] - Normal combat camera behind hero at `(0, heroFinalZ)`.
+ * @param {{ x: number, y: number, z: number }|number[]|null} [normalCamLook] - Normal combat camera lookAt for hero at `(0, heroFinalZ)`.
+ * @param {{ normalFov?: number, startFov?: number, out?: object, rig?: object }|null} [options] - Optional FOV/scratch/rig overrides.
  */
 export function evaluateBossDoorCutscene(
   elapsed,
@@ -884,6 +888,8 @@ export function evaluateBossDoorCutscene(
   normalCamLook = null,
   options = null
 ) {
+  const rig = options && options.rig && Array.isArray(options.rig.camKnots) ? options.rig : DEFAULT_RIG;
+
   const rawElapsed = Number(elapsed);
   const safeElapsed = Number.isFinite(rawElapsed) ? Math.max(0, rawElapsed) : 0;
   const t = Math.min(safeElapsed, BOSS_DOOR_CUTSCENE_DURATION);
@@ -897,8 +903,9 @@ export function evaluateBossDoorCutscene(
   const startFovRaw = Number(options?.startFov);
   const hasStartFov = Number.isFinite(startFovRaw) && startFovRaw > 10 && startFovRaw < 120;
 
-  const k0 = CAM_KNOTS[0];
-  const kEnd = CAM_KNOTS[CAM_KNOTS.length - 1];
+  const knots = rig.camKnots;
+  const k0 = knots[0];
+  const kEnd = knots[knots.length - 1];
 
   const sPosX = readVec3X(startCamPos, k0.px);
   const sPosY = readVec3Y(startCamPos, k0.py);
@@ -908,13 +915,13 @@ export function evaluateBossDoorCutscene(
   const sLookY = readVec3Y(startCamLook, k0.ly);
   const sLookZ = readVec3Z(startCamLook, k0.lz);
 
-  const nPosX = readVec3X(normalCamPos, DEFAULT_NORMAL_CAM_POS.x);
-  const nPosY = readVec3Y(normalCamPos, DEFAULT_NORMAL_CAM_POS.y);
-  const nPosZ = readVec3Z(normalCamPos, DEFAULT_NORMAL_CAM_POS.z);
+  const nPosX = readVec3X(normalCamPos, rig.defaultNormalCamPos.x);
+  const nPosY = readVec3Y(normalCamPos, rig.defaultNormalCamPos.y);
+  const nPosZ = readVec3Z(normalCamPos, rig.defaultNormalCamPos.z);
 
-  const nLookX = readVec3X(normalCamLook, DEFAULT_NORMAL_CAM_LOOK.x);
-  const nLookY = readVec3Y(normalCamLook, DEFAULT_NORMAL_CAM_LOOK.y);
-  const nLookZ = readVec3Z(normalCamLook, DEFAULT_NORMAL_CAM_LOOK.z);
+  const nLookX = readVec3X(normalCamLook, rig.defaultNormalCamLook.x);
+  const nLookY = readVec3Y(normalCamLook, rig.defaultNormalCamLook.y);
+  const nLookZ = readVec3Z(normalCamLook, rig.defaultNormalCamLook.z);
 
   let camPosX;
   let camPosY;
@@ -939,7 +946,7 @@ export function evaluateBossDoorCutscene(
     camLookZ = nLookZ;
     fov = normalFov;
   } else if (t >= ACT4_END) {
-    // Act 5: Silky smootherstep return into combat chase camera behind hero at z = -21.20
+    // Act 5: Silky smootherstep return into combat chase camera behind hero at (0, heroFinalZ)
     act = 5;
     actId = 'combat_handoff';
     const span = BOSS_DOOR_CUTSCENE_DURATION - ACT4_END;
@@ -957,7 +964,7 @@ export function evaluateBossDoorCutscene(
     fov = lerp(kEnd.fov, normalFov, w);
   } else {
     // Acts 1–4: Single unbroken C1 Hermite camera spline
-    const sample = sampleCameraSpline(t);
+    const sample = sampleCameraSpline(t, rig);
 
     if (t < ACT1_END) {
       act = 1;
@@ -1004,11 +1011,11 @@ export function evaluateBossDoorCutscene(
   const shake = finished ? 0.0 : evaluateCameraShake(t);
   const doorShudder = finished ? 0.0 : evaluateDoorShudder(t);
   const doorScrapeSparkIntensity = finished ? 0.0 : evaluateDoorScrapeSparkIntensity(t);
-  const hero = evaluateHeroTrack(t);
+  const hero = evaluateHeroTrack(t, rig);
 
   const bossDialogueU = evaluateBossDialogueU(t);
   const bossStandupU = evaluateBossStandupU(t);
-  const bossTargetZ = evaluateBossTargetZ(bossStandupU);
+  const bossTargetZ = evaluateBossTargetZ(bossStandupU, rig);
   const bossRiseTrigger = t >= BOSS_STANDUP_START;
   const bossTrigger = bossRiseTrigger ? 'intro_standup' : 'none';
   const bossAnimPhase =
@@ -1039,8 +1046,12 @@ export function evaluateBossDoorCutscene(
   const heroStepCue = evaluateHeroStepCue(t);
   const bossStepCue = evaluateBossStepCue(t);
 
-  const doorSlam = t >= BOSS_DOOR_CUTSCENE_ACTS.DOOR_SLAM_TIME;
-  const doorFullyClosed = Boolean(finished || (doorSlam && doorAngle01 <= 0.005));
+  const doorClosing = t >= BOSS_DOOR_CUTSCENE_ACTS.DOOR_SLAM_TIME;
+  const doorFullyClosed = Boolean(finished || (doorClosing && doorAngle01 <= 0.005));
+  const doorClosed = doorFullyClosed;
+  // Silent off-screen Boss Hall closure: keep `doorSlam` false throughout the cutscene so neither
+  // `soulsGameFeel.js` (`act4_door_slam`) nor audio listeners fire a jarring closing slam cue!
+  const doorSlam = false;
 
   const showBossTitleCard = !finished && t >= TITLE_CARD_START && t < TITLE_CARD_END;
   const letterbox01 = evaluateLetterbox01(t);
@@ -1076,7 +1087,7 @@ export function evaluateBossDoorCutscene(
   out.canSkip = canSkip;
   out.finished = finished;
 
-  // Narrative dialogue, lip-sync, chuckle, outward rail doors & step cues (#402 + #428)
+  // Narrative dialogue, lip-sync, chuckle, outward rail doors & step cues
   out.subtitleSpeaker = subtitleSpeaker;
   out.subtitleText = subtitleText;
   out.voiceCueIndex = voiceCueIndex;
@@ -1085,6 +1096,7 @@ export function evaluateBossDoorCutscene(
   out.bossChuckleCue = bossChuckleCue;
   out.doorScrapeSparkIntensity = doorScrapeSparkIntensity;
   out.doorPullDirection = BOSS_DOOR_CUTSCENE_ACTS.DOOR_PULL_DIRECTION;
+  out.doorClosed = doorClosed;
   out.doorFullyClosed = doorFullyClosed;
   out.armorShiftCue = armorShiftCue;
   out.heroStepCue = heroStepCue;
@@ -1093,8 +1105,8 @@ export function evaluateBossDoorCutscene(
   out.bossDialogueU = bossDialogueU;
   out.bossStandupU = bossStandupU;
   out.bossTargetZ = bossTargetZ;
-  out.heroFinalZ = HERO_FINAL_Z;
-  out.bossFinalZ = BOSS_FINAL_Z;
+  out.heroFinalZ = rig.heroFinalZ;
+  out.bossFinalZ = rig.bossFinalZ;
 
   // Extended choreography & FX fields
   out.act = act;
@@ -1121,7 +1133,7 @@ export function evaluateBossDoorCutscene(
 
 /**
  * Returns the canonical post-skip end state when skipped after 1.50 s ([Esc]/[Space]/tap):
- * hero at (0, -21.20) in 'ready' stance, Boss standing at (0, -37.40) in 'ready' stance,
+ * hero at `(0, heroFinalZ)` in 'ready' stance, Boss standing at `(0, bossFinalZ)` in 'ready' stance,
  * doors fully closed & sealed (`doorFullyClosed = true`), voice/lip-sync/subtitles/title-card/
  * letterbox dismissed, camera & FOV restored to combat normal.
  */

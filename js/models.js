@@ -8,7 +8,7 @@ import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { DRACOLoader } from '../vendor/DRACOLoader.js';
 import { clone as cloneSkinned } from '../vendor/SkeletonUtils.js';
-import { WEAPONS } from './config.js?v=20261121z64';
+import { WEAPONS } from './config.js?v=20261121z68';
 import {
   getGeo,
   getMat,
@@ -17,29 +17,29 @@ import {
   createAnimController,
   setBoneRelEuler,
   solveMixamoArmIK
-} from './models/shared.js?v=20261121z64';
+} from './models/shared.js?v=20261121z68';
 import {
   getWarriorWeaponMountConfig,
   createWarriorStanceState,
   applyWarriorWeaponStance,
   applyWarriorAttackOverlay
-} from './models/warriorStances.js?v=20261121z64';
+} from './models/warriorStances.js?v=20261121z68';
 import {
   computeFootSyncPlaybackRate,
   computeCombatPostureDynamics,
   applyCombatPostureToObject3D,
   applyCombatRecoilImpulse
-} from './souls/soulsPhysicsFeel.js?v=20261121z64';
-import { createActorContactShadowMesh } from './souls/soulsAtmosphere.js?v=20261121z64';
+} from './souls/soulsPhysicsFeel.js?v=20261121z68';
+import { createActorContactShadowMesh } from './souls/soulsAtmosphere.js?v=20261121z68';
 import {
   applyEldenDissolveToModel,
   resetEldenDissolveFromModel
-} from './souls/soulsDissolveVfx.js?v=20261121z64';
+} from './souls/soulsDissolveVfx.js?v=20261121z68';
 
 const MODEL_PATHS = {
   gunslinger_tripo: './assets/models/Gunslinger_Tripo.glb?v=20261120z34',
   // New clean warrior with Mixamo "Sword And Shield Run" baked in as Running_A + custom diagonal Slash v4 + 60 FPS Turn_180 + 60 FPS Combat_Roll + 60 FPS Heavy_Thrust + 60 FPS Door_Push.
-  warrior_run: './assets/models/Warrior_Run.glb?v=20261121z64',
+  warrior_run: './assets/models/Warrior_Run.glb?v=20261121z68',
 
   sword_tripo: './assets/models/Sword_Tripo.glb?v=20261120z34',
   shield_custom: './assets/models/Shield_Custom.glb?v=20261120z34',
@@ -60,10 +60,11 @@ const MODEL_PATHS = {
   mimic_tripo: './assets/models/Mimic_Tripo.glb?v=20261120z34',
   chest_disguise_tripo: './assets/models/Chest_Disguise_Tripo.glb?v=20261120z34',
   lich_tripo: './assets/models/Lich_Tripo.glb?v=20261120z34',
-  troll_tripo: './assets/models/Troll_Tripo.glb?v=20261121z64',
-  rift_executioner: './assets/models/Rift_Executioner_Tripo.glb?v=20261121z64',
-  rift_vanguard: './assets/models/Rift_Vanguard_Tripo.glb?v=20261121z64',
-  rift_acolyte: './assets/models/Rift_Acolyte_Tripo.glb?v=20261121z64',
+  troll_tripo: './assets/models/Troll_Tripo.glb?v=20261121z68',
+  rift_boss: './assets/models/Rift_Boss_Tripo.glb?v=20261121z68',
+  rift_executioner: './assets/models/Rift_Executioner_Tripo.glb?v=20261121z68',
+  rift_vanguard: './assets/models/Rift_Vanguard_Tripo.glb?v=20261121z68',
+  rift_acolyte: './assets/models/Rift_Acolyte_Tripo.glb?v=20261121z68',
   succubus_tripo: './assets/models/Succubus_Tripo.glb?v=20261120z34',
   spider_tripo: './assets/models/Spider_Tripo.glb?v=20261120z34',
   barbarian: './assets/models/Barbarian.glb?v=20261120z34',
@@ -130,13 +131,16 @@ const SOULS_RIM_ENEMY_TYPES = new Set([
 const SOULS_RIFT_ENEMY_MAP = {
   iron_knight: 'rift_executioner',
   cursed_footman: 'rift_vanguard',
-  bone_archer: 'rift_acolyte'
+  bone_archer: 'rift_acolyte',
+  boss_warden: 'rift_boss',
+  boss_troll: 'rift_boss'
 };
 
 const SOULS_RIFT_BIOME_KEYS = [
   'rift_executioner',
   'rift_vanguard',
   'rift_acolyte',
+  'rift_boss',
   'troll_tripo'
 ];
 
@@ -1112,7 +1116,8 @@ function loadSingleModelKey(key) {
           const isRiftTripo =
             key === 'rift_executioner' ||
             key === 'rift_vanguard' ||
-            key === 'rift_acolyte';
+            key === 'rift_acolyte' ||
+            key === 'rift_boss';
           const isTripoMonster =
             key === 'zombie_tripo' ||
             key === 'tree_tripo' ||
@@ -1132,16 +1137,22 @@ function loadSingleModelKey(key) {
               return;
             }
             if (node.isMesh) {
-              node.castShadow = true;
+              const isDecorativeHelmetShell =
+                key === 'rift_executioner' && /Helmet_Shell/i.test(node.name || '');
+              node.castShadow = !isDecorativeHelmetShell;
               node.receiveShadow = true;
               node.frustumCulled = false;
               if (isRiftTripo && node.material) {
                 // Preserve Cycles PBR materials (albedo + ORM + normal + emissiveMap + emissiveStrength) intact!
-                node.receiveShadow = false;
+                // Enable real dynamic shadows on the Boss (`rift_boss`) so cathedral firelight & columns shadow him cleanly!
+                node.receiveShadow = key === 'rift_boss';
                 const srcMats = Array.isArray(node.material) ? node.material : [node.material];
                 for (let mi = 0; mi < srcMats.length; mi++) {
                   const m = srcMats[mi];
                   if (!m) continue;
+                  if (key === 'rift_boss' && m.aoMap) {
+                    m.aoMapIntensity = 1.05;
+                  }
                   for (const t of [m.map, m.normalMap, m.roughnessMap, m.metalnessMap, m.aoMap, m.emissiveMap]) {
                     if (t) {
                       t.anisotropy = maxAniso;
@@ -7520,6 +7531,25 @@ const ENEMY_MODEL_CFG = {
       tip: [0.12, 0.14, 0.45]
     }
   },
+  rift_boss: {
+    key: 'rift_boss',
+    scale: 2.05,
+    moveClip: 'Walking',
+    idleClip: 'Idle',
+    atkClip: 'Heavy_Cleave',
+    weapon: null,
+    tint: null,
+    eye: null,
+    isBossVisual: true,
+    isRiftTripo: true,
+    physicsType: 'boss_troll',
+    moveSpeedAnim: 1.0,
+    contactShadowRadius: 2.15,
+    weaponBoneSegment: {
+      hilt: [0.00, 0.02, 0.00],
+      tip: [0.04, 0.08, 0.50]
+    }
+  },
   boss_ashlord: {
     key: 'barbarian',
     scale: 2.28,
@@ -7575,7 +7605,155 @@ const enemyMeshPool = new Map();
 let enemyInstanceSeq = 0;
 const _enemyWepHilt = new THREE.Vector3();
 const _enemyWepTip = new THREE.Vector3();
+const _wepCalMatA = new THREE.Matrix4();
+const _wepCalMatB = new THREE.Matrix4();
+const _wepCalVec = new THREE.Vector3();
 const SOFT_HIT_FLASH_TINT = new THREE.Color(0xffdcb0);
+
+// One-time bind-pose calibration for dedicated weapon bones (e.g. Rift Boss `mixamorig:WeaponHammer`):
+// measures exact shaft hilt & hammer-head tip in targetBone local space regardless of Blender bone axes.
+function calibrateWeaponBoneSegment(instRoot, targetBone) {
+  if (!instRoot || !targetBone) return null;
+  let namedHammerMesh = null;
+  let fallbackSkinnedMesh = null;
+  let fallbackSkinnedIdx = -1;
+  instRoot.traverse((n) => {
+    if (!n.isMesh || !n.geometry?.attributes?.position) return;
+    const nm = n.name || '';
+    if (n.isSkinnedMesh && n.skeleton && Array.isArray(n.skeleton.bones)) {
+      const bIdx = n.skeleton.bones.indexOf(targetBone);
+      if (bIdx >= 0 && n.skeleton.boneInverses?.[bIdx]) {
+        if (/Warhammer|Hammer|Weapon/i.test(nm)) {
+          namedHammerMesh = { mesh: n, bIdx, filterWeight: false };
+        } else if (!fallbackSkinnedMesh) {
+          fallbackSkinnedMesh = n;
+          fallbackSkinnedIdx = bIdx;
+        }
+      }
+    } else if (!namedHammerMesh && /Warhammer|Hammer/i.test(nm)) {
+      namedHammerMesh = { mesh: n, bIdx: -1, filterWeight: false };
+    }
+  });
+
+  const target =
+    namedHammerMesh ||
+    (fallbackSkinnedMesh ? { mesh: fallbackSkinnedMesh, bIdx: fallbackSkinnedIdx, filterWeight: true } : null);
+  if (!target) return null;
+
+  const { mesh, bIdx, filterWeight } = target;
+  const posAttr = mesh.geometry.attributes.position;
+  const count = posAttr.count || 0;
+  if (count < 4) return null;
+
+  const skinIdx = filterWeight ? mesh.geometry.attributes.skinIndex : null;
+  const skinW = filterWeight ? mesh.geometry.attributes.skinWeight : null;
+  if (filterWeight && (!skinIdx || !skinW)) return null;
+
+  if (bIdx >= 0) {
+    _wepCalMatA.multiplyMatrices(mesh.skeleton.boneInverses[bIdx], mesh.bindMatrix);
+  } else {
+    targetBone.updateWorldMatrix(true, false);
+    mesh.updateWorldMatrix(true, false);
+    _wepCalMatB.copy(targetBone.matrixWorld).invert();
+    _wepCalMatA.multiplyMatrices(_wepCalMatB, mesh.matrixWorld);
+  }
+
+  const stride = Math.max(1, Math.floor(count / 1200));
+  const matchesBone = (i) => {
+    if (!filterWeight) return true;
+    let wSum = 0;
+    if (skinIdx.getX(i) === bIdx) wSum += skinW.getX(i);
+    if (skinIdx.getY(i) === bIdx) wSum += skinW.getY(i);
+    if (skinIdx.getZ(i) === bIdx) wSum += skinW.getZ(i);
+    if (skinIdx.getW(i) === bIdx) wSum += skinW.getW(i);
+    return wSum >= 0.45;
+  };
+
+  let minX = Infinity, maxX = -Infinity;
+  let minY = Infinity, maxY = -Infinity;
+  let minZ = Infinity, maxZ = -Infinity;
+  let matchedCount = 0;
+  for (let i = 0; i < count; i += stride) {
+    if (!matchesBone(i)) continue;
+    _wepCalVec.fromBufferAttribute(posAttr, i).applyMatrix4(_wepCalMatA);
+    if (!Number.isFinite(_wepCalVec.x) || !Number.isFinite(_wepCalVec.y) || !Number.isFinite(_wepCalVec.z)) continue;
+    matchedCount++;
+    if (_wepCalVec.x < minX) minX = _wepCalVec.x;
+    if (_wepCalVec.x > maxX) maxX = _wepCalVec.x;
+    if (_wepCalVec.y < minY) minY = _wepCalVec.y;
+    if (_wepCalVec.y > maxY) maxY = _wepCalVec.y;
+    if (_wepCalVec.z < minZ) minZ = _wepCalVec.z;
+    if (_wepCalVec.z > maxZ) maxZ = _wepCalVec.z;
+  }
+  if (matchedCount < 4) return null;
+
+  const spanX = maxX - minX;
+  const spanY = maxY - minY;
+  const spanZ = maxZ - minZ;
+  let axis = 1;
+  let axisMin = minY;
+  let axisSpan = spanY;
+  if (spanX >= spanY && spanX >= spanZ) {
+    axis = 0;
+    axisMin = minX;
+    axisSpan = spanX;
+  } else if (spanZ >= spanX && spanZ >= spanY) {
+    axis = 2;
+    axisMin = minZ;
+    axisSpan = spanZ;
+  }
+  if (axisSpan < 0.15) return null;
+
+  const loCut = axisMin + axisSpan * 0.18;
+  const hiCut = axisMin + axisSpan * 0.82;
+  let loX = 0, loY = 0, loZ = 0, loN = 0;
+  let hiX = 0, hiY = 0, hiZ = 0, hiN = 0;
+  for (let i = 0; i < count; i += stride) {
+    if (!matchesBone(i)) continue;
+    _wepCalVec.fromBufferAttribute(posAttr, i).applyMatrix4(_wepCalMatA);
+    if (!Number.isFinite(_wepCalVec.x)) continue;
+    const coord = axis === 0 ? _wepCalVec.x : axis === 1 ? _wepCalVec.y : _wepCalVec.z;
+    if (coord <= loCut) {
+      loX += _wepCalVec.x; loY += _wepCalVec.y; loZ += _wepCalVec.z; loN++;
+    } else if (coord >= hiCut) {
+      hiX += _wepCalVec.x; hiY += _wepCalVec.y; hiZ += _wepCalVec.z; hiN++;
+    }
+  }
+  if (loN < 1 || hiN < 1) return null;
+  loX /= loN; loY /= loN; loZ /= loN;
+  hiX /= hiN; hiY /= hiN; hiZ /= hiN;
+
+  let loSpread = 0;
+  let hiSpread = 0;
+  for (let i = 0; i < count; i += stride) {
+    if (!matchesBone(i)) continue;
+    _wepCalVec.fromBufferAttribute(posAttr, i).applyMatrix4(_wepCalMatA);
+    if (!Number.isFinite(_wepCalVec.x)) continue;
+    const coord = axis === 0 ? _wepCalVec.x : axis === 1 ? _wepCalVec.y : _wepCalVec.z;
+    if (coord <= loCut) {
+      const d0 = axis === 0 ? (_wepCalVec.y - loY) : (_wepCalVec.x - loX);
+      const d1 = axis === 2 ? (_wepCalVec.y - loY) : (_wepCalVec.z - loZ);
+      loSpread += d0 * d0 + d1 * d1;
+    } else if (coord >= hiCut) {
+      const d0 = axis === 0 ? (_wepCalVec.y - hiY) : (_wepCalVec.x - hiX);
+      const d1 = axis === 2 ? (_wepCalVec.y - hiY) : (_wepCalVec.z - hiZ);
+      hiSpread += d0 * d0 + d1 * d1;
+    }
+  }
+  loSpread /= loN;
+  hiSpread /= hiN;
+
+  const loOriginDistSq = loX * loX + loY * loY + loZ * loZ;
+  const hiOriginDistSq = hiX * hiX + hiY * hiY + hiZ * hiZ;
+  const loIsHead =
+    loSpread > hiSpread * 1.25 ||
+    (hiSpread <= loSpread * 1.25 && loOriginDistSq > hiOriginDistSq);
+  const hilt = loIsHead ? [hiX, hiY, hiZ] : [loX, loY, loZ];
+  const tip = loIsHead ? [loX, loY, loZ] : [hiX, hiY, hiZ];
+  const lenSq = (tip[0] - hilt[0]) ** 2 + (tip[1] - hilt[1]) ** 2 + (tip[2] - hilt[2]) ** 2;
+  if (!Number.isFinite(lenSq) || lenSq < 0.04) return null;
+  return { hilt, tip };
+}
 
 // Delicate warm steel/gold hit-flash variant for AAA Rift Tripo enemies & Tripo Bosses:
 // keeps albedo/normal/ORM/emissive maps intact (no flat white cardboard!), warms the albedo
@@ -7665,8 +7843,12 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
   let hasDedicatedIdleClip = false;
   let procRig = null;
   let handR = null;
+  let weaponHammerBone = null;
+  let calibratedWeaponBoneSeg = null;
+  let headBone = null;
   let jawBone = null;
   let mouthOpen01 = 0;
+  let headSpeechDamped = 0;
   let jawAdditiveApplied = false;
   const jawPreAdditiveQ = new THREE.Quaternion();
   let dissolveActive = false;
@@ -7717,7 +7899,6 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
       root.add(inst);
 
       let handL = null;
-      let headBone = null;
       let chestBone = null;
       let foundEyeMesh = false;
 
@@ -7744,8 +7925,15 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
       inst.traverse((n) => {
         const nm = n.name || '';
         if (n.isMesh) {
-          n.castShadow = allowEnemyShadows;
-          n.receiveShadow = false;
+          // Zero-visual-loss perf fix: disable shadow-pass on decorative 45.5k-tri Helmet_Shell meshes on rift_executioner
+          // while keeping castShadow = true on main armored body meshes & receiveShadow = true on the Boss (`rift_boss`)!
+          const isDecorativeHelmetShell =
+            cfg.key === 'rift_executioner' && /Helmet_Shell/i.test(nm);
+          n.castShadow = allowEnemyShadows && !isDecorativeHelmetShell;
+          n.receiveShadow = cfg.key === 'rift_boss';
+        }
+        if (/^mixamorig:?WeaponHammer$/i.test(nm) && (!weaponHammerBone || n.isBone)) {
+          weaponHammerBone = n;
         }
         if (
           /^handslot\.?r$/i.test(nm) ||
@@ -7891,6 +8079,10 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
           }
         }
       });
+
+      if (weaponHammerBone) {
+        calibratedWeaponBoneSeg = calibrateWeaponBoneSegment(inst, weaponHammerBone);
+      }
 
       if (!isRiftTripo && !foundEyeMesh && !usesCustomHead && headBone && cfg.eye) {
         const visorForward = cfg.key === 'knight';
@@ -8253,7 +8445,10 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
   let lastPostureDead = false;
   let lastAttackClipPlayed = cfg.atkClip || 'Attack_Slash_1';
 
-  const isColossalBossPhysics = Boolean(cfg.isBossVisual && (cfg.physicsType === 'boss_troll' || cfg.key === 'troll_tripo'));
+  const isColossalBossPhysics = Boolean(
+    cfg.isBossVisual &&
+      (cfg.physicsType === 'boss_troll' || cfg.key === 'troll_tripo' || cfg.key === 'rift_boss')
+  );
   const physicsActorState = {
     uid: enemyUid,
     type: cfg.physicsType || canonicalType,
@@ -8353,10 +8548,14 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
 
   function getWeaponSegmentWorld() {
     root.updateMatrixWorld(true);
-    if (handR && cfg.weaponBoneSegment) {
-      const seg = cfg.weaponBoneSegment;
-      _enemyWepHilt.set(seg.hilt[0], seg.hilt[1], seg.hilt[2]).applyMatrix4(handR.matrixWorld);
-      _enemyWepTip.set(seg.tip[0], seg.tip[1], seg.tip[2]).applyMatrix4(handR.matrixWorld);
+    const activeWeaponBone = weaponHammerBone || handR;
+    const activeWeaponSeg = weaponHammerBone
+      ? (calibratedWeaponBoneSeg || cfg.weaponBoneSegment)
+      : cfg.weaponBoneSegment;
+    if (activeWeaponBone && activeWeaponSeg) {
+      const seg = activeWeaponSeg;
+      _enemyWepHilt.set(seg.hilt[0], seg.hilt[1], seg.hilt[2]).applyMatrix4(activeWeaponBone.matrixWorld);
+      _enemyWepTip.set(seg.tip[0], seg.tip[1], seg.tip[2]).applyMatrix4(activeWeaponBone.matrixWorld);
       if (
         Number.isFinite(_enemyWepHilt.x) &&
         Number.isFinite(_enemyWepHilt.y) &&
@@ -8400,8 +8599,9 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
     let hx = root.position.x + fwdX * 0.25;
     let hy = root.position.y + (cfg.isBossVisual ? 1.9 : 1.05);
     let hz = root.position.z + fwdZ * 0.25;
-    if (handR) {
-      handR.getWorldPosition(_enemyWepHilt);
+    const fallbackWepBone = weaponHammerBone || handR;
+    if (fallbackWepBone) {
+      fallbackWepBone.getWorldPosition(_enemyWepHilt);
       if (Number.isFinite(_enemyWepHilt.x) && Number.isFinite(_enemyWepHilt.y) && Number.isFinite(_enemyWepHilt.z)) {
         hx = _enemyWepHilt.x;
         hy = _enemyWepHilt.y;
@@ -8419,20 +8619,38 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
     };
   }
 
-  // Additive live Boss jaw lip-sync (mixamorig:Jaw local +X): undone before every mixer evaluation and
-  // re-applied after it, so the jaw NEVER accumulates drift (even on clips without a Jaw track).
+  // Additive live Boss jaw & gentle damped head-speech accent: undone before every mixer evaluation and
+  // re-applied after it, so neither bone EVER accumulates drift or stretches the face mask UVs.
+  let headAdditiveApplied = false;
+  const headPreAdditiveQ = new THREE.Quaternion();
   function restoreJawAdditive() {
     if (jawAdditiveApplied && jawBone) {
       jawBone.quaternion.copy(jawPreAdditiveQ);
     }
+    if (headAdditiveApplied && headBone) {
+      headBone.quaternion.copy(headPreAdditiveQ);
+    }
     jawAdditiveApplied = false;
+    headAdditiveApplied = false;
   }
 
   function applyJawAdditive() {
-    if (!jawBone || isDying || mouthOpen01 <= 0.001) return;
-    jawPreAdditiveQ.copy(jawBone.quaternion);
-    jawBone.rotateX(mouthOpen01 * 0.32);
-    jawAdditiveApplied = true;
+    if (isDying || (mouthOpen01 <= 0.001 && headSpeechDamped <= 0.001)) return;
+    if (jawBone && mouthOpen01 > 0.001) {
+      jawPreAdditiveQ.copy(jawBone.quaternion);
+      // Keep rift_boss jaw subtle & non-distorting (0.045 rad max — ZERO rubber-band UV stretching on painted grin!)
+      const maxJawRad = cfg.key === 'rift_boss' ? 0.045 : 0.11;
+      jawBone.rotateX(mouthOpen01 * maxJawRad);
+      jawAdditiveApplied = true;
+    }
+    if (headBone && cfg.key === 'rift_boss') {
+      const headWeight = headSpeechDamped > 0.001 ? headSpeechDamped : mouthOpen01;
+      if (headWeight > 0.001) {
+        headPreAdditiveQ.copy(headBone.quaternion);
+        headBone.rotateX(-headWeight * 0.035);
+        headAdditiveApplied = true;
+      }
+    }
   }
 
   function stopCutsceneInternal() {
@@ -8498,11 +8716,14 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
     contactShadow,
     getWeaponSegmentWorld,
     hasJawBone: Boolean(jawBone),
-    // Real-time Boss lip-sync: open01 (0..1) -> mixamorig:Jaw.rotateX(+open01 * 0.32 rad) layered after the mixer.
+    // Real-time Boss lip-sync: clean non-distorting jaw articulation + gentle damped head speech accent layered after the mixer.
     setBossMouthOpen(open01 = 0) {
       const v = Number(open01);
       mouthOpen01 = Number.isFinite(v) ? (v < 0 ? 0 : v > 1 ? 1 : v) : 0;
-      if (!jawBone) return false;
+      headSpeechDamped = mouthOpen01 <= 0.001
+        ? 0
+        : (headSpeechDamped + (mouthOpen01 - headSpeechDamped) * 0.35);
+      if (!jawBone && !(headBone && cfg.key === 'rift_boss')) return false;
       restoreJawAdditive();
       applyJawAdditive();
       return true;
@@ -8839,6 +9060,7 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
       stopClampedInternal();
       restoreJawAdditive();
       mouthOpen01 = 0;
+      headSpeechDamped = 0;
       resetEldenDissolveFromModel(spawnedInst || root);
       dissolveActive = false;
       physicsActorState.isDying = false;
