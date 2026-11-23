@@ -9,7 +9,7 @@ import {
   LEVELS,
   getLevelDef,
   RUN_UPGRADES
-} from './config.js?v=20261121z68';
+} from './config.js?v=20261123z71';
 import {
   TWO_PI,
   ARENA_PLAYER_LIMIT,
@@ -21,7 +21,7 @@ import {
   lerpAngle,
   resolveArenaBiomeForLevel,
   createCombatBridge
-} from './combat/bridge.js?v=20261121z68';
+} from './combat/bridge.js?v=20261123z71';
 import {
   updateBossAI,
   updateSoulsBossAI,
@@ -31,7 +31,7 @@ import {
   cancelSoulsBossTelegraph,
   applySoulsBossParry,
   SOULS_BOSS_MULTI_PARRY
-} from './combat/bossAi.js?v=20261121z68';
+} from './combat/bossAi.js?v=20261123z71';
 import {
   createPoiseController,
   STANCE_DAMAGE_TABLE,
@@ -40,25 +40,25 @@ import {
   getPlayerHitstunSpec,
   SOULS_GUARD_CFG,
   computeBlockedStaminaCost
-} from './combat/poiseSystem.js?v=20261121z68';
+} from './combat/poiseSystem.js?v=20261123z71';
 import {
   SOULS_ROLL_CFG,
   getSoulsRollIframes,
   sampleSoulsRollStepDist,
   sampleAttackLungeStep,
   createAliveStanceSmoother
-} from './souls/soulsLocomotion.js?v=20261121z68';
+} from './souls/soulsLocomotion.js?v=20261123z71';
 import {
   SOULS_STAMINA_CFG,
   createSoulsStaminaController,
   createSoulsActionBuffer
-} from './souls/soulsStaminaBuffer.js?v=20261121z68';
+} from './souls/soulsStaminaBuffer.js?v=20261123z71';
 import {
   SOULS_ATTACK_SPECS,
   getSoulsAttackSpec,
   computeSoulsDamage,
   testSweptBladeHits
-} from './souls/soulsHitboxDamage.js?v=20261121z68';
+} from './souls/soulsHitboxDamage.js?v=20261123z71';
 import {
   initSoulsMobState,
   stepSoulsMobAi,
@@ -66,7 +66,7 @@ import {
   onSoulsMobInterrupted,
   resetSoulsPackCoordinator,
   releaseSoulsAttackToken
-} from './souls/soulsMobAi.js?v=20261121z68';
+} from './souls/soulsMobAi.js?v=20261123z71';
 import {
   SOULS_CASTLE_CONSTANTS,
   SOULS_CASTLE_BONFIRE,
@@ -85,31 +85,31 @@ import {
   canInteractWithBossDoor,
   findInteractableRelic,
   clampCastlePosition
-} from './souls/soulsCastleLayout.js?v=20261121z68';
+} from './souls/soulsCastleLayout.js?v=20261123z71';
 import {
   createDissolveAshSystem
-} from './souls/soulsDissolveVfx.js?v=20261121z68';
+} from './souls/soulsDissolveVfx.js?v=20261123z71';
 import {
   enhanceSoulsBossModel,
   updateSoulsBossVisuals,
   disposeSoulsBossVisuals
-} from './souls/soulsBossVisuals.js?v=20261121z68';
+} from './souls/soulsBossVisuals.js?v=20261123z71';
 import {
   createSoulsGameFeel,
   getImpactSparkBurst
-} from './souls/soulsGameFeel.js?v=20261121z68';
+} from './souls/soulsGameFeel.js?v=20261123z71';
 import {
   BOSS_DOOR_CUTSCENE_DURATION,
   BOSS_DOOR_CUTSCENE_ACTS
-} from './souls/soulsCutsceneChoreography.js?v=20261121z68';
+} from './souls/soulsCutsceneChoreography.js?v=20261123z71';
 import {
   resetActorPhysics,
   applyKnockbackImpulse,
   stepActorPhysicsBody
-} from './souls/soulsPhysicsFeel.js?v=20261121z68';
+} from './souls/soulsPhysicsFeel.js?v=20261123z71';
 import {
   createWeaponTrailSystem
-} from './souls/soulsWeaponTrails.js?v=20261121z68';
+} from './souls/soulsWeaponTrails.js?v=20261123z71';
 
 export function createCombatController({
   world,
@@ -1290,7 +1290,7 @@ export function createCombatController({
           emitShockwave(soulsBossSpawn.x, soulsBossSpawn.z, 7.5, 0xf59e0b, 0.55);
           emitParticles(soulsBossSpawn.x, 1.4, soulsBossSpawn.z, 0xfbbf24, 24, 6.8, 0.16);
         }
-        floatText('⚔️ РЕВАНШ НА АРЕНЕ • СУДИЯ РУИН ПРОБУЖДАЕТСЯ!', player.x, player.z - 1.2, '#fbbf24');
+        floatText('РЕВАНШ НА АРЕНЕ • СУДИЯ РУИН ПРОБУЖДАЕТСЯ!', player.x, player.z - 1.2, '#e2b768');
       } else {
         // Chapter 26 Dark Souls / Elden Ring: spawn in Awakening Hall (Zone 1) or at lit Pre-Boss Bonfire Checkpoint (Zone 5)!
         const keepCheckpoint = Boolean(souls.bonfireCheckpointLit);
@@ -2899,13 +2899,6 @@ export function createCombatController({
         const impulseMag = Math.max(isHeavyHit ? 4.4 : 2.6, kMag * (isHeavyHit ? 1.05 : 0.72));
         applyKnockbackImpulse(enemy, kx, kz, impulseMag, { isHeavy: isHeavyHit });
       }
-      enemy.model?.handle?.applyRecoilImpulse?.({
-        kind: isKneelRiposte || wasParryRiposte ? 'parry' : 'hitRecoil',
-        dirX: kx,
-        dirZ: kz,
-        intensity: isKneelRiposte || wasParryRiposte ? 1.4 : isHeavyHit ? 1.15 : 0.82,
-        isHeavy: isHeavyHit
-      });
       if (!isProjectile) {
         const pullC = Math.min(enemy.isBoss ? 1.15 : 0.32, (enemy.radius || 0.45) * 0.65);
         const hLen = kMag > 0.01 ? kMag : 1;
@@ -2918,8 +2911,9 @@ export function createCombatController({
             : 'light';
         spawnSoulsClashSparks(enemy.x + cNx * pullC, 0.96, enemy.z + cNz * pullC, cNx, 0.32, cNz, sparkTier);
       }
-      enemy.vx += kx * resistMult * 0.12;
-      enemy.vz += kz * resistMult * 0.12;
+      // Souls units use stepActorPhysicsBody (physVx/physVz); never accumulate into legacy e.vx/e.vz!
+      enemy.vx = 0;
+      enemy.vz = 0;
     } else {
       enemy.vx += kx * resistMult;
       enemy.vz += kz * resistMult;
@@ -2980,10 +2974,11 @@ export function createCombatController({
             });
           }
         } else {
-          // Classic responsive PvE hit flinch (no Dark Souls poise/microstun overhead!)
-          enemy.model?.handle?.playHitFlinch?.();
+          // Classic responsive PvE hit flinch (single recoil impulse — zero double-snap!)
           enemy.model?.handle?.triggerHitReact?.({
             playClip: false,
+            dirX: kx,
+            dirZ: kz,
             joltScale: isCrit || isComboFinisher ? 0.92 : 0.68
           });
         }
@@ -3327,7 +3322,8 @@ export function createCombatController({
               radius: enemy.radius || 0.75,
               ashAccum: 0,
               age: 0,
-              duration: 3.2
+              collapseDur: enemy.isSoulsBoss ? 2.10 : 1.75,
+              duration: enemy.isSoulsBoss ? 3.60 : 3.20
             }
           : { model: enemy.model, isSoulsBoss: Boolean(enemy.isSoulsBoss), age: 0, duration: 0.66 }
       );
@@ -4060,7 +4056,7 @@ export function createCombatController({
           const clampedP = resolveObstaclesAndBounds(player.x, player.z, player.radius, ARENA_PLAYER_LIMIT);
           player.x = clampedP.x;
           player.z = clampedP.z;
-          const clampedE = resolveObstaclesAndBounds(e.x, e.z, (e.radius || 0.55) * 0.85, ARENA_ENTITY_LIMIT);
+          const clampedE = resolveObstaclesAndBounds(e.x, e.z, e.radius || 0.55, ARENA_ENTITY_LIMIT);
           e.x = clampedE.x;
           e.z = clampedE.z;
           if (syncVisuals && e.model?.obj) {
@@ -7423,7 +7419,6 @@ export function createCombatController({
               world?.addScreenShake?.(0.15, 0.10);
             }
           }
-          heroModel?.obj?.updateMatrixWorld?.(true);
           atk.prevSeg =
             heroModel?.handle?.getWeaponSegmentWorld?.() ||
             heroModel?.obj?.userData?.getWeaponSegmentWorld?.() ||
@@ -7432,7 +7427,6 @@ export function createCombatController({
 
         // Active hitbox window: test swept blade capsule across [startup, startup + active]
         if (atk.elapsed >= activeStart && prevElapsed <= activeEnd) {
-          heroModel?.obj?.updateMatrixWorld?.(true);
           const curSeg =
             heroModel?.handle?.getWeaponSegmentWorld?.() ||
             heroModel?.obj?.userData?.getWeaponSegmentWorld?.() ||
@@ -7499,7 +7493,6 @@ export function createCombatController({
           const trailStart = Math.max(0, activeStart - 0.045);
           const trailEnd = activeEnd + 0.095;
           if (atk.elapsed >= trailStart && atk.elapsed <= trailEnd) {
-            heroModel?.obj?.updateMatrixWorld?.(true);
             const trailSeg =
               heroModel?.handle?.getWeaponSegmentWorld?.() ||
               heroModel?.obj?.userData?.getWeaponSegmentWorld?.() ||
@@ -7751,10 +7744,11 @@ export function createCombatController({
         continue;
       }
       if (dc.isSoulslikeCorpse) {
-        if (dc.age < 1.75) {
+        const cDur = dc.collapseDur || 1.75;
+        if (dc.age < cDur) {
           dc.model.handle?.updateDying?.(dt, 0, 0);
         } else {
-          const dissolve01 = clamp((dc.age - 1.75) / 1.45, 0, 1);
+          const dissolve01 = clamp((dc.age - cDur) / Math.max(0.4, dc.duration - cDur), 0, 1);
           dc.model.handle?.updateDying?.(dt, 0, dissolve01);
           dc.ashAccum = (dc.ashAccum || 0) + dt;
           if (dc.ashAccum >= 0.055) {
@@ -8140,12 +8134,17 @@ export function createCombatController({
         e.model.obj.rotation.z = 0;
       }
 
-      // Apply knockback velocity with crisp damping
-      e.x += e.vx * dt;
-      e.z += e.vz * dt;
-      const damp = Math.exp(-10 * dt);
-      e.vx *= damp;
-      e.vz *= damp;
+      // Apply knockback velocity with crisp damping (PvE units ONLY; Souls units use stepActorPhysicsBody physVx/physVz!)
+      if (!e.isSoulsUnit) {
+        e.x += e.vx * dt;
+        e.z += e.vz * dt;
+        const damp = Math.exp(-10 * dt);
+        e.vx *= damp;
+        e.vz *= damp;
+      } else {
+        e.vx = 0;
+        e.vz = 0;
+      }
 
       // Dark Souls Poise, microstun & anti-stunlock immunity timers (strictly Dark Souls / Souls units)
       if (isSoulslike || e.isSoulsUnit) {
@@ -8298,32 +8297,33 @@ export function createCombatController({
         }
 
         if (isSoulslike && (souls.bossAwakened || soulsDoorCutsceneActive) && !e.isSoulsBoss) {
-          // Sealed Boss Doors integrity: castle/alcove guards stay behind sealed doors (never enter 1v1 Throne Hall!)
+          // Sealed Boss Doors culling: hide & freeze corridor guards behind sealed Boss Doors
+          // (saves ~304k skinned triangles & 5×65-bone AnimationMixers during the entire Boss fight!)
           releaseSoulsAttackToken(e);
           e.soulsState = 'idle';
           e.soulsTimer = 0.5;
-          if (e.vz < 0) e.vz = 0;
-          const sealedGuardPos = clampCastlePosition(e.x, e.z, e.radius || 0.55, {
-            bossDoorState: 'sealed',
-            allowBossHall: false,
-            ignoreThrone: false
-          });
-          e.x = sealedGuardPos.x;
-          e.z = sealedGuardPos.z;
-          e.facing = lerpAngle(e.facing, Math.PI, dt * 3);
           if (e._trailRecording) {
             weaponTrails?.endSwing?.(e.uid);
             e._trailRecording = false;
           }
-          e.model?.handle?.setLocomotionState?.({ mode: 'idle', moveLocalX: 0, moveLocalZ: 0, turnDelta: 0, actualSpeed: 0 });
-          e.model?.handle?.setCombatPostureState?.({ combatPhase: 'neutral', combatPhase01: 0, moveType: null });
           if (e.model?.obj) {
-            const guardGroundY = sampleSmoothGroundY(e, e.x, e.z, dt, false);
-            e.model.obj.position.set(e.x, guardGroundY, e.z);
-            e.model.obj.rotation.y = e.facing;
-            animateEntityModel(e.model, dt, false, 0, false, false, elapsedTime);
+            e.model.obj.visible = false;
           }
           continue;
+        }
+
+        // Distance culling for dormant Souls corridor mobs > 38m from hero (keeps GPU & CPU lean!)
+        if (isSoulslike && !e.isSoulsBoss) {
+          const distToHeroSq = (player.x - e.x) * (player.x - e.x) + (player.z - e.z) * (player.z - e.z);
+          if (!e.soulsAwake && distToHeroSq > 38 * 38) {
+            if (e.model?.obj && e.model.obj.visible) {
+              e.model.obj.visible = false;
+            }
+            continue;
+          }
+          if (e.model?.obj && !e.model.obj.visible) {
+            e.model.obj.visible = true;
+          }
         }
 
         // Step mass-based physics body & wall-slam bounce (soulsPhysicsFeel.js)
@@ -8365,16 +8365,23 @@ export function createCombatController({
               bState === 'aaa_combo' ||
               bState === 'delayed_crush' ||
               bState === 'leap_slam' ||
+              bState === 'whirl_windup' ||
               bState === 'whirl_spin';
             const bPhase =
-              bState === 'stagger_kneel' || bState === 'stagger_recover' || bState === 'riposte_victim'
+              bState === 'stagger_kneel' || bState === 'stagger_recover' || bState === 'riposte_victim' || bState === 'recover'
                 ? 'recover'
                 : bAttacking
-                  ? (e.bossSubState === 'active' ? 'active' : e.bossSubState === 'recover' ? 'recover' : 'windup')
+                  ? (e.soulsPosturePhase || 'windup')
                   : 'neutral';
+            const bPhase01 =
+              bPhase === 'neutral'
+                ? 0
+                : Number.isFinite(e.soulsPosturePhase01)
+                  ? e.soulsPosturePhase01
+                  : 0.5;
             e.model?.handle?.setCombatPostureState?.({
               combatPhase: bPhase,
-              combatPhase01: bPhase === 'neutral' ? 0 : 0.65,
+              combatPhase01: bPhase01,
               moveType: bAttacking ? bState : null
             });
           }
@@ -8444,15 +8451,14 @@ export function createCombatController({
           }
           soulsMoving = Boolean(ai.isMoving && !ai.hasRootMotionStep && (ai.combatPhase === 'neutral' || !ai.combatPhase));
           soulsAnimSpeedMult = ai.animSpeedMult ?? (soulsMoving ? 0.95 : 0);
+          e._pendingSoulsLocoMode = ai.strafeAnimMode || (soulsMoving ? 'combat_walk' : 'idle');
+          e._pendingSoulsLocoLocalX = ai.moveLocalX || 0;
+          e._pendingSoulsLocoLocalZ = ai.moveLocalZ || 0;
+          e._pendingSoulsLocoTurnDelta = ai.turnDelta || 0;
+          e._pendingSoulsLocoCmdVx = ai.vx || 0;
+          e._pendingSoulsLocoCmdVz = ai.vz || 0;
+          e._hasPendingSoulsLoco = true;
 
-          // Sync AAA locomotion (8-mode strafe/patrol/turn) & dynamic combat posture curves to `models.js`
-          e.model?.handle?.setLocomotionState?.({
-            mode: ai.strafeAnimMode || (soulsMoving ? 'combat_walk' : 'idle'),
-            moveLocalX: ai.moveLocalX || 0,
-            moveLocalZ: ai.moveLocalZ || 0,
-            turnDelta: ai.turnDelta || 0,
-            actualSpeed: Math.hypot(ai.vx || 0, ai.vz || 0)
-          });
           e.model?.handle?.setCombatPostureState?.({
             combatPhase: ai.combatPhase || 'neutral',
             combatPhase01: ai.combatPhase01 || 0,
@@ -8467,7 +8473,8 @@ export function createCombatController({
             const sAng = Number.isFinite(sm.strikeAngle) ? sm.strikeAngle : Math.atan2(sx, sz);
             if (sm.isRanged) {
               if (sm.releaseAnimClip && sm.releaseAnimClip !== sm.attackAnimClip) {
-                triggerModelAttack(e.model, sm.releaseAnimClip, Math.max(0.28, (sm.active || 0.08) + (sm.recovery || 0.36)));
+                // Play Shot_Release at crisp ~1.0x (impact @ 0.20s, total 0.80s < 1.08s recover) so legs NEVER freeze on walk resume!
+                triggerModelAttack(e.model, sm.releaseAnimClip, 0.22);
               }
               const spd = sm.projectileSpeed || 17.5;
               spawnProjectile({
@@ -8508,6 +8515,32 @@ export function createCombatController({
           });
           e.x = castleSideClamp.x;
           e.z = castleSideClamp.z;
+
+          // Compute TRUE post-clamp velocity & feed real (vx, vz) into setLocomotionState (kills wall treadmill skating!)
+          if (e._hasPendingSoulsLoco) {
+            e._hasPendingSoulsLoco = false;
+            let postVx = e._soulsPostSmoothVx || 0;
+            let postVz = e._soulsPostSmoothVz || 0;
+            if (dt >= 0.004) {
+              const rawVx = (e.x - prevEx) / dt;
+              const rawVz = (e.z - prevEz) / dt;
+              const a = 1 - Math.exp(-20 * dt);
+              postVx += (rawVx - postVx) * a;
+              postVz += (rawVz - postVz) * a;
+              e._soulsPostSmoothVx = postVx;
+              e._soulsPostSmoothVz = postVz;
+            }
+            const postSpd = Math.hypot(postVx, postVz);
+            e.model?.handle?.setLocomotionState?.({
+              mode: postSpd < 0.08 && soulsMoving ? 'idle' : e._pendingSoulsLocoMode,
+              vx: postVx,
+              vz: postVz,
+              moveLocalX: e._pendingSoulsLocoLocalX,
+              moveLocalZ: e._pendingSoulsLocoLocalZ,
+              turnDelta: e._pendingSoulsLocoTurnDelta,
+              actualSpeed: postSpd
+            });
+          }
         } else {
           const bossHallClamp = clampBossCastlePos(
             e.x,
@@ -8544,7 +8577,7 @@ export function createCombatController({
           if (e.isSoulsBoss) {
             updateSoulsBossVisuals(e.model.obj, dt, {
               phase2Enraged: Boolean(e.phase2Enraged || e.hp < e.maxHp * 0.5),
-              isWindup: Boolean(e.soulsState === 'windup' || e.bossSubState === 'windup' || e.currentAttackMeta),
+              isWindup: Boolean(e.soulsPosturePhase === 'windup' || e.soulsState === 'whirl_windup'),
               isStaggered: Boolean(e.soulsState === 'stagger_kneel' || (e.stunTimer || 0) > 0 || isStaggeredNow),
               elapsed: elapsedTime
             });
@@ -8845,24 +8878,27 @@ export function createCombatController({
         // --- ARCHETYPE 5: FRONTLINE WALKERS (`plague_zombie`, `ember_skeleton`, `cursed_footman`, `toxic_slime`, `phantom_ghost`) ---
         else {
           e.facing = lerpAngle(e.facing, angToPlayer, dt * 9);
-          if ((e.emergeTimer || 0) <= 0) {
-            e.x += (dx / dist) * moveSpeed * dt;
-            e.z += (dz / dist) * moveSpeed * dt;
+          const stopDist = player.radius + e.radius + 0.14;
+          const isMidSwing = (e.meleeWindupAnimTimer || 0) > 0.20 || (e.contactCooldown || 0) > 0.44;
+          if ((e.emergeTimer || 0) <= 0 && dist > stopDist && !isMidSwing) {
+            const stepMax = Math.min(moveSpeed * dt, dist - stopDist);
+            e.x += (dx / dist) * stepMax;
+            e.z += (dz / dist) * stepMax;
           }
         }
       }
 
-      // Soft neighbor separation so hordes surround organically
+      // Soft neighbor separation so hordes surround organically (damped 0.24 prevents buzzing jitter!)
       for (let j = i - 1; j >= 0 && j >= i - 10; j--) {
         const other = enemies[j];
         if (!other || other.hp <= 0) continue;
         const sdx = e.x - other.x;
         const sdz = e.z - other.z;
-        const minSep = (e.radius + other.radius) * 0.88;
+        const minSep = (e.radius + other.radius) * 0.90;
         const distSq = sdx * sdx + sdz * sdz;
         if (distSq > 0.0001 && distSq < minSep * minSep) {
           const d = Math.sqrt(distSq);
-          const push = (minSep - d) * 0.45;
+          const push = (minSep - d) * 0.24;
           const px = (sdx / d) * push;
           const pz = (sdz / d) * push;
           if (!e.isBoss) {
@@ -8876,7 +8912,7 @@ export function createCombatController({
         }
       }
 
-      const resolvedEnemy = resolveObstaclesAndBounds(e.x, e.z, e.radius * 0.75, ARENA_ENTITY_LIMIT);
+      const resolvedEnemy = resolveObstaclesAndBounds(e.x, e.z, e.radius, ARENA_ENTITY_LIMIT);
       e.x = resolvedEnemy.x;
       e.z = resolvedEnemy.z;
 
@@ -8933,7 +8969,7 @@ export function createCombatController({
           const prog = 1 - e.emergeTimer / Math.max(0.01, e.emergeDuration || 0.85);
           const smooth = prog * prog * (3 - 2 * prog);
           e.model.obj.position.y = -1.9 * (1 - smooth);
-        } else if ((e.waterLiftTimer || 0) <= 0) {
+        } else if ((e.waterLiftTimer || 0) <= 0 && e.bossSubState !== 'leaping') {
           e.model.obj.position.y = isSoulslike ? sampleSmoothGroundY(e, e.x, e.z, dt, false) : 0;
         }
         e.model.obj.rotation.y = e.facing;
@@ -9123,16 +9159,6 @@ export function createCombatController({
         ? +clamp(1 - player.reloadTimer / player.reloadDuration, 0, 1).toFixed(3)
         : 0;
 
-    const activePerksList = Object.entries(perks)
-      .filter(([, stacks]) => stacks > 0)
-      .map(([id, stacks]) => {
-        const def = RUN_UPGRADES.find((u) => u.id === id);
-        return {
-          id,
-          nameRu: def?.nameRu || id,
-          stacks
-        };
-      });
     const elapsedWholeSec = Math.floor(elapsedRunTime);
     const endlessMm = String(Math.floor(elapsedWholeSec / 60)).padStart(2, '0');
     const endlessSs = String(elapsedWholeSec % 60).padStart(2, '0');
@@ -9189,8 +9215,8 @@ export function createCombatController({
           ? souls.bossDefeated
             ? '🔥 Локация зачищена • [Esc] Меню / В Хаб'
             : souls.bossAwakened
-              ? '💀 ДУЭЛЬ: СУДИЯ РУИН'
-              : `🔥 ${souls.zoneTitleRu || 'Abandoned Knight Rift'} • Иди на север`
+              ? 'СУДИЯ РУИН'
+              : (souls.zoneTitleRu === 'Тронный Зал' ? 'Тронный Зал' : 'Иди на север')
           : isEndless
             ? `♾️ Волна ${endlessWave} • ${endlessMm}:${endlessSs} • ☠️ ${kills}`
             : finaleStarted

@@ -3,7 +3,7 @@
 // reinforcement, presence EQ to cut through orchestral boss music, transparent soft-limiter,
 // optional music ducking hook, anti-spam protection, and zero-dependency Web Audio fallbacks.
 
-const ASSET_VER = '20261121z68';
+const ASSET_VER = '20261123z71';
 
 export const SOULS_ENEMY_AUDIO_MANIFEST = Object.freeze({
   // New Pass-1 ElevenLabs / Studio Boss & Heavy Mob Assets (highest priority)
@@ -498,15 +498,26 @@ export function createSoulsEnemyAudio({
       });
   }
 
+  let preloadStarted = false;
+  const _manifestEntries = Object.entries(SOULS_ENEMY_AUDIO_MANIFEST);
   function preload(audioCtx) {
+    if (preloadStarted) return;
     const ctx = resolveAudioContext(audioCtx);
     if (!ctx || typeof fetch === 'undefined') return;
+    preloadStarted = true;
 
-    const entries = Object.entries(SOULS_ENEMY_AUDIO_MANIFEST);
-    for (let i = 0; i < entries.length; i++) {
-      const [key, url] = entries[i];
+    // Stagger 32 enemy WAV fetches/decodes (2 at a time) so entering Souls never spikes CPU!
+    let idx = 0;
+    const pump = () => {
+      if (idx >= _manifestEntries.length) return;
+      const [key, url] = _manifestEntries[idx++];
       preloadKey(ctx, key, url);
-    }
+      if (idx < _manifestEntries.length) {
+        setTimeout(pump, 24);
+      }
+    };
+    pump();
+    setTimeout(pump, 12);
   }
 
   function pickFirstReadyKey(keys) {

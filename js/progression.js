@@ -12,7 +12,7 @@ import {
   MAGE_TALENT_TREE,
   CLASS_TALENT_TREES,
   DAILY_QUEST_TEMPLATES
-} from './config.js?v=20261121z68';
+} from './config.js?v=20261123z71';
 
 export const WEAPON_MAX_SHOP_LEVEL = WEAPON_MAX_LEVEL || 12;
 

@@ -10,7 +10,7 @@
 // across Hub Front, Combat Isometric, Right-Side Profile, and Running_A mid-stride views.
 
 import * as THREE from '../../vendor/three.module.js';
-import { solveMixamoArmIK } from './shared.js?v=20261121z68';
+import { solveMixamoArmIK } from './shared.js?v=20261123z71';
 
 const MOUNT_PIVOT_POS = Object.freeze({ x: -0.0235, y: 0.0415, z: -0.0086 });
 const MOUNT_PIVOT_ROT = Object.freeze({ x: -1.04, y: 0.24, z: -1.52 });
@@ -279,7 +279,7 @@ function setBoneModelQuat(node, targetModelQ, blend) {
   } else {
     node.quaternion.copy(_qTargetLocal);
   }
-  node.updateMatrixWorld(true);
+  node.updateWorldMatrix(true, false);
 }
 
 function rotateBoneModelAxis(node, axisModel, angleRad, blend) {
@@ -295,7 +295,7 @@ function setClavicleModelRot(entry, yawY, rollZ, blend) {
   const node = entry.node;
   _qPrevLocal.copy(node.quaternion);
   node.quaternion.copy(entry.restQ);
-  node.updateMatrixWorld(true);
+  node.updateWorldMatrix(true, false);
 
   getBoneModelQuat(node, _qBoneModel);
   _qYaw.setFromAxisAngle(_UNIT_Y, yawY);
@@ -312,7 +312,7 @@ function setClavicleModelRot(entry, yawY, rollZ, blend) {
   } else {
     node.quaternion.copy(_qTargetLocal);
   }
-  node.updateMatrixWorld(true);
+  node.updateWorldMatrix(true, false);
 }
 
 function resolveRigContext(skeletonOrRig) {
@@ -547,7 +547,7 @@ export function applyWarriorWeaponStance(skeletonOrRig, weaponId, dt = 0.016, op
       // Zweihander / Spear: Lock LeftHand directly onto the mounted weapon's left grip socket outside torso!
       let hasGripW = false;
       if (rig.leftGripSocket) {
-        mx.RightHand.node.updateMatrixWorld(true);
+        rig.leftGripSocket.updateWorldMatrix(true, false);
         rig.leftGripSocket.getWorldPosition(_vTargetLW);
         hasGripW = true;
       } else if (mountCfg.leftGripY !== null) {

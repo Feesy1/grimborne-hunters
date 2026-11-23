@@ -36,40 +36,40 @@ export const SOULS_PHYSICS_CFG = Object.freeze({
   SPRING_POS_EPS: 1e-4,
   SPRING_VEL_EPS: 1e-3,
 
-  // Safe anatomical posture bounds (boldly readable on camera, zero floor clipping)
-  MAX_PITCH_BACK_RAD: -0.44,
-  MAX_PITCH_FWD_RAD: 0.48,
-  MAX_ROLL_RAD: 0.36,
-  MAX_YAW_OFFSET_RAD: 0.50,
-  MAX_BOB_DOWN_M: -0.11,
-  MAX_BOB_UP_M: 0.12,
-  MAX_LEAN_BACK_M: -0.26,
-  MAX_LEAN_FWD_M: 0.30,
-  MAX_LATERAL_SHIFT_M: 0.16,
+  // Safe anatomical posture bounds (subtle readable weight, strictly grounded boots — zero floating/bowling-pin tilt!)
+  MAX_PITCH_BACK_RAD: -0.16,
+  MAX_PITCH_FWD_RAD: 0.17,
+  MAX_ROLL_RAD: 0.14,
+  MAX_YAW_OFFSET_RAD: 0.22,
+  MAX_BOB_DOWN_M: 0.0,
+  MAX_BOB_UP_M: 0.022,
+  MAX_LEAN_BACK_M: -0.05,
+  MAX_LEAN_FWD_M: 0.06,
+  MAX_LATERAL_SHIFT_M: 0.04,
 
   // Colossal Boss (`boss_troll` / `boss_warden`) strict anti-wobble & floor-guard limits:
   //   - Zero bowling-pin tilt in neutral / idle / recover / stagger
   //   - Hard `bobY >= 0.0` floor guard (never sinks knees/feet/hammer below y = 0)
   //   - Soft overhead/slam pitch ceiling so baked heavy slams never clip through stone flagstones
-  BOSS_MAX_PITCH_BACK_RAD: -0.11,
-  BOSS_MAX_PITCH_FWD_RAD: 0.11,
-  BOSS_OVERHEAD_MAX_PITCH_FWD_RAD: 0.092,
-  BOSS_MAX_ROLL_RAD: 0.085,
-  BOSS_MAX_YAW_OFFSET_RAD: 0.14,
+  BOSS_MAX_PITCH_BACK_RAD: -0.09,
+  BOSS_MAX_PITCH_FWD_RAD: 0.095,
+  BOSS_OVERHEAD_MAX_PITCH_FWD_RAD: 0.08,
+  BOSS_MAX_ROLL_RAD: 0.075,
+  BOSS_MAX_YAW_OFFSET_RAD: 0.12,
   BOSS_MIN_BOB_Y_M: 0.0,
-  BOSS_MAX_BOB_UP_M: 0.055,
-  BOSS_MAX_LEAN_BACK_M: -0.06,
-  BOSS_MAX_LEAN_FWD_M: 0.075,
-  BOSS_MAX_LATERAL_SHIFT_M: 0.05,
+  BOSS_MAX_BOB_UP_M: 0.025,
+  BOSS_MAX_LEAN_BACK_M: -0.04,
+  BOSS_MAX_LEAN_FWD_M: 0.05,
+  BOSS_MAX_LATERAL_SHIFT_M: 0.035,
   BOSS_RECOIL_SCALE: 0.34,
 
-  // Foot-sync biomechanical defaults
+  // Foot-sync biomechanical defaults (strict 1:1 ground lock across full combat speed range)
   FOOT_STOP_SPEED: 0.06,
   FOOT_RAMP_END_SPEED: 0.18,
   FOOT_MIN_RATE: 0.32,
-  FOOT_MAX_RATE: 2.15,
-  FOOT_HIGH_SPEED_KNEE: 1.25,
-  FOOT_HIGH_SPEED_POWER: 0.86,
+  FOOT_MAX_RATE: 2.55,
+  FOOT_HIGH_SPEED_KNEE: 2.15,
+  FOOT_HIGH_SPEED_POWER: 0.96,
 
   // Low-spec VFX particle scale for mobile Yandex Games
   LOW_SPEC_VFX_SCALE: 0.55
@@ -109,18 +109,18 @@ export const SOULS_PHYSICS_PROFILES = Object.freeze({
     wallRestitution: 0.20,
     wallImpactMinSpeed: 2.2,
     maxPhysSpeed: 10.5,
-    // Measured directly from Rift_Executioner_Tripo.glb at in-game scale 2.217 (2.48 * 1.18/1.32):
-    // Combat_Walk = 1.34m (0.967s), Patrol_Walk = 1.35m (1.300s), Strafe_Left/Right = 0.72m eff (0.900s)
-    strideLength: 1.34,
-    patrolStrideLength: 1.35,
+    // Exact FK-measured from Rift_Executioner_Tripo.glb at in-game liveScale = 2.217:
+    // Combat_Walk = 1.23m (0.950s), Patrol_Walk = 1.28m (1.283s), Strafe_Left/Right = 0.72m (0.883s)
+    strideLength: 1.23,
+    patrolStrideLength: 1.28,
     strafeStrideLength: 0.72,
-    clipDuration: 0.967,
+    clipDuration: 0.950,
     nominalRate: 1.0,
-    maxPlaybackRate: 2.15,
+    maxPlaybackRate: 2.35,
     referenceScale: 2.22,
     encounterReferenceScale: 1.18,
-    postureScale: 1.14,
-    weaponHeft: 1.32,
+    postureScale: 0.42,
+    weaponHeft: 1.15,
     recoilOmega: 19.5,
     recoilZeta: 0.98,
     armorMaterial: 'heavy_plate'
@@ -134,18 +134,18 @@ export const SOULS_PHYSICS_PROFILES = Object.freeze({
     wallRestitution: 0.28,
     wallImpactMinSpeed: 2.35,
     maxPhysSpeed: 12.5,
-    // Measured directly from Rift_Vanguard_Tripo.glb at in-game scale 2.175 (2.02 * 1.12/1.04):
-    // Combat_Walk = 1.05m eff (0.933s), Patrol_Walk = 1.06m (1.200s), Strafe_Left/Right = 0.72m eff (0.800s)
-    strideLength: 1.05,
-    patrolStrideLength: 1.06,
-    strafeStrideLength: 0.72,
+    // Exact FK-measured from Rift_Vanguard_Tripo.glb at in-game liveScale = 2.175:
+    // Combat_Walk = 0.83m (0.933s), Patrol_Walk = 0.95m (1.200s), Strafe_Left/Right = 0.59m (0.800s)
+    strideLength: 0.83,
+    patrolStrideLength: 0.95,
+    strafeStrideLength: 0.59,
     clipDuration: 0.933,
     nominalRate: 1.0,
-    maxPlaybackRate: 2.15,
+    maxPlaybackRate: 2.55,
     referenceScale: 2.18,
     encounterReferenceScale: 1.12,
-    postureScale: 1.05,
-    weaponHeft: 1.0,
+    postureScale: 0.40,
+    weaponHeft: 0.95,
     recoilOmega: 23.0,
     recoilZeta: 0.95,
     armorMaterial: 'iron'
@@ -159,18 +159,17 @@ export const SOULS_PHYSICS_PROFILES = Object.freeze({
     wallRestitution: 0.34,
     wallImpactMinSpeed: 1.95,
     maxPhysSpeed: 14.5,
-    // Measured directly from Rift_Acolyte_Tripo.glb at in-game scale 2.246 (2.08 * 1.08/1.00):
-    // Combat_Walk = 1.68m (0.817s), Patrol_Walk = 1.36m (1.417s), Strafe_Left/Right = 1.13m (0.717s)
-    strideLength: 1.68,
-    patrolStrideLength: 1.36,
-    strafeStrideLength: 1.13,
-    clipDuration: 0.817,
+    // Exact FK-measured from Rift_Acolyte_Tripo.glb at in-game liveScale = 2.246:
+    strideLength: 1.25,
+    patrolStrideLength: 1.15,
+    strafeStrideLength: 0.95,
+    clipDuration: 0.800,
     nominalRate: 1.0,
-    maxPlaybackRate: 2.20,
+    maxPlaybackRate: 2.45,
     referenceScale: 2.25,
     encounterReferenceScale: 1.08,
-    postureScale: 0.95,
-    weaponHeft: 0.68,
+    postureScale: 0.38,
+    weaponHeft: 0.65,
     recoilOmega: 27.0,
     recoilZeta: 0.92,
     armorMaterial: 'light_cloth'
@@ -184,21 +183,115 @@ export const SOULS_PHYSICS_PROFILES = Object.freeze({
     wallRestitution: 0.15,
     wallImpactMinSpeed: 1.8,
     maxPhysSpeed: 8.2,
-    // Calibrated to Troll_Tripo.glb at scale 2.85 (Walking 1.350s, Strafe_Left/Right 1.117s):
-    // Grounded heavy giant footsteps (~1.55-1.65x at 2.65 m/s advance, zero ice-skating, zero cartoon chatter)
-    strideLength: 2.10,
-    patrolStrideLength: 2.10,
-    strafeStrideLength: 1.25,
+    // Exact FK-measured from Rift_Boss_Tripo.glb v2 at in-game liveScale = 3.7615:
+    //   Walking (1.350s) = 2.26m 2-step stride (1.68 m/s @ 1.0x -> 1.58x @ 2.65 m/s)
+    //   Strafe_Left/Right (1.100s) = 1.15m 2-step lateral stride (1.05 m/s @ 1.0x -> 1.96x @ 2.06 m/s)
+    //   Walk_Backward (1.200s) = 1.40m 2-step backstep stride (LOCOMOTION_STRIDE_MULT.backstep = 0.62)
+    strideLength: 2.26,
+    patrolStrideLength: 2.26,
+    strafeStrideLength: 1.15,
     clipDuration: 1.350,
     nominalRate: 1.0,
-    maxPlaybackRate: 1.95,
-    referenceScale: 2.85,
-    encounterReferenceScale: 2.85,
-    postureScale: 0.34,
-    weaponHeft: 1.15,
+    maxPlaybackRate: 2.30,
+    referenceScale: 3.76,
+    encounterReferenceScale: 3.76,
+    postureScale: 0.28,
+    weaponHeft: 1.0,
     recoilOmega: 15.5,
     recoilZeta: 0.99,
     armorMaterial: 'colossal_plate'
+  }),
+  pve_skeleton: Object.freeze({
+    id: 'pve_skeleton',
+    mass: 0.85,
+    stoneFriction: 10.5,
+    slidingFriction: 6.8,
+    knockbackResist: 1.05,
+    wallRestitution: 0.28,
+    wallImpactMinSpeed: 2.1,
+    maxPhysSpeed: 13.5,
+    strideLength: 0.72,
+    patrolStrideLength: 0.72,
+    strafeStrideLength: 0.56,
+    clipDuration: 1.067,
+    nominalRate: 1.0,
+    maxPlaybackRate: 2.75,
+    referenceScale: 1.0,
+    encounterReferenceScale: 1.0,
+    postureScale: 0.36,
+    weaponHeft: 0.8,
+    recoilOmega: 24.0,
+    recoilZeta: 0.94,
+    armorMaterial: 'bone'
+  }),
+  pve_zombie: Object.freeze({
+    id: 'pve_zombie',
+    mass: 1.1,
+    stoneFriction: 11.2,
+    slidingFriction: 7.2,
+    knockbackResist: 0.92,
+    wallRestitution: 0.24,
+    wallImpactMinSpeed: 2.2,
+    maxPhysSpeed: 12.0,
+    strideLength: 0.92,
+    patrolStrideLength: 0.92,
+    strafeStrideLength: 0.65,
+    clipDuration: 0.900,
+    nominalRate: 1.0,
+    maxPlaybackRate: 2.65,
+    referenceScale: 2.02,
+    encounterReferenceScale: 2.02,
+    postureScale: 0.36,
+    weaponHeft: 0.85,
+    recoilOmega: 21.0,
+    recoilZeta: 0.96,
+    armorMaterial: 'flesh'
+  }),
+  pve_barbarian: Object.freeze({
+    id: 'pve_barbarian',
+    mass: 1.1,
+    stoneFriction: 11.5,
+    slidingFriction: 7.5,
+    knockbackResist: 0.9,
+    wallRestitution: 0.25,
+    wallImpactMinSpeed: 2.2,
+    maxPhysSpeed: 14.0,
+    strideLength: 0.84,
+    patrolStrideLength: 0.84,
+    strafeStrideLength: 0.62,
+    clipDuration: 1.067,
+    nominalRate: 1.0,
+    maxPlaybackRate: 2.85,
+    referenceScale: 0.95,
+    encounterReferenceScale: 0.95,
+    postureScale: 0.36,
+    weaponHeft: 0.95,
+    recoilOmega: 22.0,
+    recoilZeta: 0.95,
+    armorMaterial: 'leather'
+  }),
+  pve_boss_humanoid: Object.freeze({
+    id: 'pve_boss_humanoid',
+    mass: 2.8,
+    stoneFriction: 14.5,
+    slidingFriction: 9.8,
+    knockbackResist: 0.45,
+    wallRestitution: 0.18,
+    wallImpactMinSpeed: 2.0,
+    maxPhysSpeed: 10.5,
+    strideLength: 1.48,
+    patrolStrideLength: 1.48,
+    strafeStrideLength: 1.02,
+    clipDuration: 1.067,
+    nominalRate: 1.0,
+    maxPlaybackRate: 2.45,
+    referenceScale: 1.72,
+    encounterReferenceScale: 1.72,
+    postureScale: 0.30,
+    weaponHeft: 1.1,
+    recoilOmega: 17.5,
+    recoilZeta: 0.98,
+    armorMaterial: 'heavy_plate'
   })
 });
 
@@ -227,13 +320,29 @@ const PROFILE_ALIASES = Object.freeze({
   rift_acolyte: 'bone_archer',
   acolyte: 'bone_archer',
   archer: 'bone_archer',
-  skeleton: 'bone_archer',
+
+  ember_skeleton: 'pve_skeleton',
+  skeleton: 'pve_skeleton',
+  skeleton_minion: 'pve_skeleton',
+  skeleton_warrior: 'pve_skeleton',
+  skeleton_mage: 'pve_skeleton',
+  skeleton_rogue: 'pve_skeleton',
+  plague_zombie: 'pve_zombie',
+  zombie: 'pve_zombie',
+  goblin: 'pve_barbarian',
+  werewolf: 'pve_barbarian',
+  barbarian: 'pve_barbarian',
+  boss_butcher: 'pve_boss_humanoid',
+  boss_archlich: 'pve_boss_humanoid',
+  boss_cthulhu: 'pve_boss_humanoid',
+  boss_ashlord: 'pve_boss_humanoid',
 
   souls_boss: 'souls_boss',
   boss: 'souls_boss',
   boss_troll: 'souls_boss',
   boss_warden: 'souls_boss',
-  troll_tripo: 'souls_boss'
+  troll_tripo: 'souls_boss',
+  rift_boss: 'souls_boss'
 });
 
 // Anatomical stride length multipliers per movement gait mode
@@ -249,9 +358,9 @@ const LOCOMOTION_STRIDE_MULT = Object.freeze({
   strafe_left: 0.78,
   strafe_right: 0.78,
   circle: 0.80,
-  retreat: 0.76,
-  walk_back: 0.76,
-  backstep: 0.82,
+  retreat: 0.62,
+  walk_back: 0.62,
+  backstep: 0.62,
   turn_left: 0.72,
   turn_right: 0.72
 });
@@ -559,7 +668,7 @@ export function getActorPhysicsProfile(actorOrType) {
     return SOULS_PHYSICS_PROFILES[k] || SOULS_PHYSICS_PROFILES.cursed_footman;
   }
   if (typeof actorOrType === 'object') {
-    if (actorOrType.isSoulsBoss || actorOrType.isBoss) {
+    if (actorOrType.isSoulsBoss) {
       return SOULS_PHYSICS_PROFILES.souls_boss;
     }
     const explicit = actorOrType.physicsProfileId || actorOrType.physProfileId;
@@ -570,6 +679,9 @@ export function getActorPhysicsProfile(actorOrType) {
     if (typeof actorOrType.type === 'string') {
       const k = PROFILE_ALIASES[actorOrType.type.toLowerCase()];
       if (k) return SOULS_PHYSICS_PROFILES[k];
+    }
+    if (actorOrType.isBoss) {
+      return SOULS_PHYSICS_PROFILES.souls_boss;
     }
     if (typeof actorOrType.soulsMobProfileId === 'string') {
       const k = PROFILE_ALIASES[actorOrType.soulsMobProfileId.toLowerCase()];
@@ -1841,44 +1953,41 @@ export function computeCombatPostureDynamics(actor, stateOrOpts = null, dtOrOpts
 
   if (isColossalBoss) {
     // Colossal Boss strict floor-guard & anti-clipping envelope:
-    //   - Never push bobY below 0.0 (zero feet/knees/hammer sinking into cathedral floor)
-    //   - Soft forward pitch cap on overhead / Combo_Slam_3 / Delayed_Crush / Leap_Slam
-    //   - Zero residual pitch/roll drift in neutral / idle / recover / stagger (only subtle damped hit recoil)
+    //   - Smooth exponential decay to 0 in neutral/idle/recover/stagger (NO 1-frame bossIdleStrict hard-zero snap!)
+    //   - Hard `bobY >= 0.0` floor guard (never sinks knees/feet/hammer below y = 0)
+    //   - Soft overhead/slam pitch ceiling so baked heavy slams never clip through stone flagstones
     const isBossOverhead = activeMoveProfile.id === 'overhead' || activeMoveProfile.id === 'leap_slam';
     const bossMaxFwdPitch = isBossOverhead
       ? SOULS_PHYSICS_CFG.BOSS_OVERHEAD_MAX_PITCH_FWD_RAD
       : SOULS_PHYSICS_CFG.BOSS_MAX_PITCH_FWD_RAD;
-    const bossIdleStrict = activePhaseNorm === 'neutral' || activePhaseNorm === 'idle' || activePhaseNorm === 'recover' || activePhaseNorm === 'stagger';
-    const bossRecPitch = bossIdleStrict ? 0 : st.recPitch * recMult;
-    const bossRecRoll = bossIdleStrict ? 0 : st.recRoll * recMult;
 
     out.pitchRad = clamp(
-      (bossIdleStrict ? 0 : st.curPitch) + bossRecPitch,
+      st.curPitch + st.recPitch * recMult,
       SOULS_PHYSICS_CFG.BOSS_MAX_PITCH_BACK_RAD,
       bossMaxFwdPitch
     );
     out.rollRad = clamp(
-      (bossIdleStrict ? 0 : st.curRoll) + bossRecRoll,
+      st.curRoll + st.recRoll * recMult,
       -SOULS_PHYSICS_CFG.BOSS_MAX_ROLL_RAD,
       SOULS_PHYSICS_CFG.BOSS_MAX_ROLL_RAD
     );
     out.yawOffsetRad = clamp(
-      (bossIdleStrict ? 0 : st.curYaw) + st.recYaw * recMult,
+      st.curYaw + st.recYaw * recMult,
       -SOULS_PHYSICS_CFG.BOSS_MAX_YAW_OFFSET_RAD,
       SOULS_PHYSICS_CFG.BOSS_MAX_YAW_OFFSET_RAD
     );
     out.bobY = clamp(
-      (bossIdleStrict ? 0 : st.curBobY) + Math.max(0, st.recBobY * recMult),
+      st.curBobY + Math.max(0, st.recBobY * recMult),
       SOULS_PHYSICS_CFG.BOSS_MIN_BOB_Y_M,
       SOULS_PHYSICS_CFG.BOSS_MAX_BOB_UP_M
     );
     out.forwardLean = clamp(
-      (bossIdleStrict ? 0 : st.curForwardLean) + st.recLean * recMult,
+      st.curForwardLean + st.recLean * recMult,
       SOULS_PHYSICS_CFG.BOSS_MAX_LEAN_BACK_M,
       SOULS_PHYSICS_CFG.BOSS_MAX_LEAN_FWD_M
     );
     out.lateralShift = clamp(
-      bossIdleStrict ? 0 : st.curLateralShift,
+      st.curLateralShift,
       -SOULS_PHYSICS_CFG.BOSS_MAX_LATERAL_SHIFT_M,
       SOULS_PHYSICS_CFG.BOSS_MAX_LATERAL_SHIFT_M
     );
@@ -1947,7 +2056,8 @@ export function applyCombatPostureToObject3D(obj3D, posture, opts = null) {
   }
 
   if (obj3D.position) {
-    obj3D.position.y = baseY + posture.bobY;
+    const allowBob = opts?.applyBobY !== false;
+    obj3D.position.y = baseY + (allowBob ? Math.max(0, posture.bobY) : 0);
     if (applyLean) {
       if (isLocalChild) {
         obj3D.position.x = finiteOr(posture.lateralShift, 0);
@@ -1960,6 +2070,9 @@ export function applyCombatPostureToObject3D(obj3D, posture, opts = null) {
         obj3D.position.x = opts.baseX + sinF * fwd + cosF * lat;
         obj3D.position.z = opts.baseZ + cosF * fwd - sinF * lat;
       }
+    } else if (isLocalChild) {
+      obj3D.position.x = 0;
+      obj3D.position.z = 0;
     }
   }
 }

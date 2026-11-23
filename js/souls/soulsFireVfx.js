@@ -2430,42 +2430,43 @@ function appendCarvedStoneGargoyleHead(outParts, trap, isMobile = false) {
   const local = [];
 
   // A. Carved Gothic Ashlar Wall Medallion & Stepped Corbel Support Bracket (z = 0..0.18)
+  // Darkened charred forged-iron / soot-stained gothic basalt palette so gargoyles sit organically in castle walls!
   local.push(tagGargoyleStonePart(
     xformNozzleGeo(new THREE.CylinderGeometry(0.48, 0.52, 0.11, isMobile ? 8 : 12), 0, 0.02, 0.055, Math.PI * 0.5, Math.PI / 12, 0),
-    0x5d6475, 0x323642
+    0x2c313e, 0x161820
   ));
   // Pointed Gothic arch crown molding above medallion
   local.push(tagGargoyleStonePart(
     xformNozzleGeo(new THREE.ConeGeometry(0.40, 0.38, 4), 0, 0.52, 0.06, 0, Math.PI * 0.25, 0, 1.15, 1.0, 0.42),
-    0x687082, 0x3b404e
+    0x333947, 0x1a1d26
   ));
   // Stepped stone corbel console supporting the heavy gargoyle jaw from below
   local.push(tagGargoyleStonePart(
     xformNozzleGeo(new THREE.CylinderGeometry(0.28, 0.14, 0.36, 6), 0, -0.44, 0.15, 0.28, Math.PI / 6, 0),
-    0x505666, 0x282b34
+    0x272c37, 0x13151c
   ));
   // 4 carved stone rosette bosses around wall collar
   for (const [bx, by] of [[-0.36, 0.30], [0.36, 0.30], [-0.36, -0.28], [0.36, -0.28]]) {
     local.push(tagGargoyleStonePart(
       xformNozzleGeo(new THREE.DodecahedronGeometry(0.052, 0), bx, by, 0.10),
-      0x6e778b, 0x3c414f
+      0x3a4050, 0x1c202a
     ));
   }
 
   // B. Sculpted Gargoyle Cranium, Neck Collar & Recessed Soot-Charred Stone Throat (z = 0.08..0.44)
   local.push(tagGargoyleStonePart(
     xformNozzleGeo(new THREE.CylinderGeometry(0.30, 0.38, 0.28, seg), 0, 0.04, 0.20, Math.PI * 0.5, 0, 0),
-    0x596070, 0x2e323d, true
+    0x2b303c, 0x15171f, true
   ));
   // Sculpted bulbous cranium dome
   local.push(tagGargoyleStonePart(
     xformNozzleGeo(new THREE.SphereGeometry(0.29, seg, isMobile ? 6 : 9), 0, 0.18, 0.25, 0, 0, 0, 1.08, 0.88, 1.05),
-    0x676f82, 0x3a3f4d
+    0x323846, 0x191c25
   ));
   // Deep blackened stone furnace throat barrel
   local.push(tagGargoyleStonePart(
     xformNozzleGeo(new THREE.CylinderGeometry(0.20, 0.18, 0.34, seg, 1, true), 0, -0.02, 0.26, Math.PI * 0.5, 0, 0),
-    0x120b0a, 0x0b0707
+    0x0e0908, 0x080505
   ));
 
   // C. Fierce Scowling Supraorbital Brow Ridges, Deep Eye Sockets, Snarling Snout & Flared Nostrils
@@ -2473,81 +2474,81 @@ function appendCarvedStoneGargoyleHead(outParts, trap, isMobile = false) {
     // Heavy furrowed stone brow ridge angled in a fierce V-scowl
     local.push(tagGargoyleStonePart(
       xformNozzleGeo(new THREE.BoxGeometry(0.24, 0.095, 0.22), side * 0.14, 0.23, 0.36, 0.18, -side * 0.22, -side * 0.28),
-      0x70798e, 0x383d4b, true
+      0x394050, 0x1a1e28, true
     ));
     // Recessed dark eye-socket hood
     local.push(tagGargoyleStonePart(
       xformNozzleGeo(new THREE.SphereGeometry(0.068, 6, 5), side * 0.155, 0.175, 0.35, 0, 0, 0, 1.1, 0.8, 0.8),
-      0x1a1312, 0x120c0b
+      0x140e0d, 0x0c0808
     ));
     // Sculpted zygomatic cheekbone & swept bat-wing ear fin
     local.push(tagGargoyleStonePart(
       xformNozzleGeo(new THREE.ConeGeometry(0.11, 0.32, 5), side * 0.31, 0.08, 0.26, -0.25, 0, -side * 0.65),
-      0x60687a, 0x2f333f, true
+      0x2f3442, 0x161922, true
     ));
     local.push(tagGargoyleStonePart(
       xformNozzleGeo(new THREE.ConeGeometry(0.085, 0.30, 4), side * 0.36, 0.26, 0.18, -0.45, side * 0.2, -side * 0.78),
-      0x697184, 0x353a46
+      0x343a49, 0x181b24
     ));
     // Flared beast nostrils on snout tip
     local.push(tagGargoyleStonePart(
       xformNozzleGeo(new THREE.SphereGeometry(0.065, 6, 5), side * 0.095, 0.135, 0.46, 0, 0, 0, 1.0, 0.85, 1.15),
-      0x626a7c, 0x2a2628, true
+      0x303543, 0x171416, true
     ));
   }
 
   // Central ridged nasal bridge & snarling upper muzzle roof (z = 0.24..0.50)
   local.push(tagGargoyleStonePart(
     xformNozzleGeo(new THREE.CylinderGeometry(0.16, 0.25, 0.28, isMobile ? 6 : 8), 0, 0.13, 0.36, Math.PI * 0.44, Math.PI / 8, 0, 1.18, 1.0, 0.68),
-    0x6a7286, 0x2d292b, true
+    0x353b4a, 0x171416, true
   ));
 
-  // D. Multi-Segment Curved Stone Ram/Demon Horns (3 smooth arched segments per horn!)
+  // D. Multi-Segment Curved Forged-Iron / Basalt Demon Horns (3 smooth arched segments per horn!)
   for (const side of [-1, 1]) {
     // Base horn boss
     local.push(tagGargoyleStonePart(
       xformNozzleGeo(new THREE.CylinderGeometry(0.068, 0.088, 0.18, isMobile ? 6 : 8), side * 0.23, 0.34, 0.24, -0.35, 0, -side * 0.52),
-      0x5e6678, 0x363b47
+      0x2f3441, 0x1a1d26
     ));
     // Mid sweeping horn arc
     local.push(tagGargoyleStonePart(
       xformNozzleGeo(new THREE.CylinderGeometry(0.046, 0.068, 0.20, isMobile ? 6 : 8), side * 0.33, 0.47, 0.19, -0.15, 0, -side * 0.36),
-      0x6a7386, 0x3d4250
+      0x383e4d, 0x1f222d
     ));
     // Sharp forward-curling horn tip
     local.push(tagGargoyleStonePart(
       xformNozzleGeo(new THREE.ConeGeometry(0.046, 0.22, isMobile ? 6 : 8), side * 0.37, 0.62, 0.23, 0.38, 0, -side * 0.12),
-      0x768096, 0x454b5a
+      0x43495a, 0x242834
     ));
   }
 
-  // E. Gaping Roaring Lower Stone Jaw, Beard Scroll & 8 Carved Stone Fangs!
+  // E. Gaping Roaring Lower Jaw, Beard Scroll & 8 Smoked-Iron Fangs!
   local.push(tagGargoyleStonePart(
     xformNozzleGeo(new THREE.CylinderGeometry(0.19, 0.23, 0.26, isMobile ? 6 : 8), 0, -0.21, 0.34, Math.PI * 0.58, Math.PI / 8, 0, 1.14, 1.0, 0.58),
-    0x4e5464, 0x22242c, true
+    0x262a35, 0x12141a, true
   ));
   local.push(tagGargoyleStonePart(
     xformNozzleGeo(new THREE.ConeGeometry(0.10, 0.20, 5), 0, -0.34, 0.32, Math.PI * 0.88, 0, 0),
-    0x555c6e, 0x282b34
+    0x2b303c, 0x15171e
   ));
 
   // 2 long upper sabre canines + 2 lower tusks + 4 inner jagged teeth framing the fiery throat
   for (const side of [-1, 1]) {
     local.push(tagGargoyleStonePart(
       xformNozzleGeo(new THREE.ConeGeometry(0.036, 0.155, 5), side * 0.145, 0.055, 0.45, Math.PI * 0.96, 0, side * 0.08),
-      0x7c8498, 0x3b3536, true
+      0x504a42, 0x221d1c, true
     ));
     local.push(tagGargoyleStonePart(
       xformNozzleGeo(new THREE.ConeGeometry(0.025, 0.095, 4), side * 0.062, 0.075, 0.46, Math.PI * 0.96, 0, 0),
-      0x747c90, 0x383233, true
+      0x4a443d, 0x201b1a, true
     ));
     local.push(tagGargoyleStonePart(
       xformNozzleGeo(new THREE.ConeGeometry(0.032, 0.13, 5), side * 0.125, -0.125, 0.42, 0.12, 0, -side * 0.08),
-      0x767e92, 0x363132, true
+      0x4c463f, 0x1f1a19, true
     ));
     local.push(tagGargoyleStonePart(
       xformNozzleGeo(new THREE.ConeGeometry(0.022, 0.08, 4), side * 0.052, -0.14, 0.43, 0.12, 0, 0),
-      0x6e7688, 0x322d2e, true
+      0x45403a, 0x1c1817, true
     ));
   }
 
@@ -2627,7 +2628,7 @@ function createWallJetMultiLayerGeometry(isMobile = false) {
     parts.push(normalizeForMerge(plane, i * 1.19, (i % 2 === 0) ? 0.04 : -0.02, 0.0, 1.0));
   }
 
-  // Layer +1.0: High-pressure white-yellow blowtorch nozzle core spine (0..0.58 along jet)
+  // Layer +1.0: Short turbulent molten throat core (0..0.34 along jet — NO rigid white blowtorch cone!)
   const coreRibbons = isMobile ? 2 : 3;
   for (let i = 0; i < coreRibbons; i++) {
     const ang = (i / coreRibbons) * Math.PI + 0.38;
@@ -2638,12 +2639,12 @@ function createWallJetMultiLayerGeometry(isMobile = false) {
       const u = uv.getX(k);
       const v = uv.getY(k);
       const uCentered = (u - 0.5) * 2.0;
-      const rad = (0.14 + 0.24 * Math.sin(v * Math.PI * 0.82)) * (1.0 - v * 0.30);
-      pos.setXYZ(k, uCentered * rad, 0.0, v * 0.58);
+      const rad = (0.11 + 0.17 * Math.sin(v * Math.PI * 0.85)) * (1.0 - v * 0.48);
+      pos.setXYZ(k, uCentered * rad, 0.0, v * 0.34);
     }
     plane.rotateZ(ang);
     plane.computeVertexNormals();
-    parts.push(normalizeForMerge(plane, 0.65 + i * 1.88, 0.36, 1.0, 0.58));
+    parts.push(normalizeForMerge(plane, 0.65 + i * 1.88, 0.14, 1.0, 0.34));
   }
 
   return mergeFlameParts(parts);
@@ -3110,19 +3111,45 @@ export function createWallFlameJetTraps(trapSpecs = [], opts = {}) {
     };
   }
 
-  // DC #1: Merged High-Detail Carved Stone Gargoyle Heads (casts dynamic fire shadows on PC!)
+  // DC #1: Merged High-Detail Charred Forged-Iron & Basalt Gargoyle Heads w/ PBR Micro-Relief
   const nozzleParts = [];
   for (let i = 0; i < traps.length; i++) {
     appendCarvedStoneGargoyleHead(nozzleParts, traps[i], isMobile);
   }
   const nozzleGeo = regGeo(mergeGeometries(nozzleParts, false));
   for (let i = 0; i < nozzleParts.length; i++) nozzleParts[i].dispose();
+  if (nozzleGeo && nozzleGeo.attributes.position && nozzleGeo.attributes.normal) {
+    const nPos = nozzleGeo.attributes.position;
+    const nNorm = nozzleGeo.attributes.normal;
+    const nUv = new Float32Array(nPos.count * 2);
+    for (let k = 0; k < nPos.count; k++) {
+      const ax = Math.abs(nNorm.getX(k));
+      const ay = Math.abs(nNorm.getY(k));
+      const az = Math.abs(nNorm.getZ(k));
+      if (ay >= ax && ay >= az) {
+        nUv[k * 2] = nPos.getX(k) * 1.35;
+        nUv[k * 2 + 1] = nPos.getZ(k) * 1.35;
+      } else if (ax >= az) {
+        nUv[k * 2] = nPos.getZ(k) * 1.35;
+        nUv[k * 2 + 1] = nPos.getY(k) * 1.35;
+      } else {
+        nUv[k * 2] = nPos.getX(k) * 1.35;
+        nUv[k * 2 + 1] = nPos.getY(k) * 1.35;
+      }
+    }
+    nozzleGeo.setAttribute('uv', new THREE.BufferAttribute(nUv, 2));
+  }
 
+  const pbr = opts.pbr || null;
   const nozzleMat = regMat(new THREE.MeshStandardMaterial({
     color: 0xffffff,
     vertexColors: true,
-    roughness: 0.74,
-    metalness: 0.14
+    normalMap: (!lowSpec && pbr?.ironNormal) ? pbr.ironNormal : null,
+    normalScale: new THREE.Vector2(0.85, 0.85),
+    roughnessMap: pbr?.ironRoughness || null,
+    roughness: 0.88,
+    metalness: 0.36,
+    envMapIntensity: 0.48
   }));
   const nozzleMesh = new THREE.Mesh(nozzleGeo, nozzleMat);
   nozzleMesh.name = 'wall_flame_trap_gargoyles';
@@ -3149,11 +3176,11 @@ export function createWallFlameJetTraps(trapSpecs = [], opts = {}) {
     uTime: { value: 0.0 },
     uIntensity: { value: baseIntensity },
     uDetail: { value: (isMobile || lowSpec) ? 0.0 : 1.0 },
-    uColRim:   { value: toColorVec3(opts.rimColor,   0x961102) },
-    uColOuter: { value: toColorVec3(opts.outerColor, 0xe02804) },
-    uColMid:   { value: toColorVec3(opts.midColor,   0xff7c0a) },
-    uColHot:   { value: toColorVec3(opts.hotColor,   0xffdc48) },
-    uColCore:  { value: toColorVec3(opts.coreColor,  0xfffbe2) }
+    uColRim:   { value: toColorVec3(opts.rimColor,   0x6e0a02) },
+    uColOuter: { value: toColorVec3(opts.outerColor, 0xc82204) },
+    uColMid:   { value: toColorVec3(opts.midColor,   0xf4680a) },
+    uColHot:   { value: toColorVec3(opts.hotColor,   0xffba32) },
+    uColCore:  { value: toColorVec3(opts.coreColor,  0xfff0be) }
   };
 
   const jetMat = regMat(new THREE.ShaderMaterial({
@@ -3324,82 +3351,83 @@ export function createWallFlameJetTraps(trapSpecs = [], opts = {}) {
         float t = uTime * 6.2 + ph * 1.31;
 
         float ndv = clamp(abs(dot(normalize(vNormalV), normalize(vViewDir))), 0.0, 1.0);
-        float viewFade = mix(1.0, smoothstep(0.06, 0.44, ndv), 0.46);
-        float sideFade = smoothstep(0.0, 0.12, across) * smoothstep(1.0, 0.88, across);
+        // Stronger grazing-angle & lateral edge fade eliminates crisp almond ribbon plane seams!
+        float viewFade = mix(1.0, smoothstep(0.08, 0.54, ndv), 0.64);
+        float sideFade = smoothstep(0.0, 0.26, across) * smoothstep(1.0, 0.74, across);
 
-        vec2 warpCoord = vec2(across * 2.7 + ph * 0.41, along * 3.5 - t * 1.18);
+        vec2 warpCoord = vec2(across * 2.9 + ph * 0.41, along * 3.8 - t * 1.24);
         vec2 warpV = fireDomainWarp(warpCoord, uDetail);
         float wx = warpV.x;
         float wy = warpV.y;
-        float warpAmt = 0.18 + 0.60 * pow(max(along, 0.0), 0.76);
+        float warpAmt = 0.24 + 0.72 * pow(max(along, 0.0), 0.72);
 
         vec3 p3 = vec3(
-          vLocalPos.x * 1.45 + wx * warpAmt + sin(ph),
-          vLocalPos.y * 1.45 + wy * warpAmt + cos(ph),
-          vLocalPos.z * 0.92 - t * 1.60
+          vLocalPos.x * 1.55 + wx * warpAmt + sin(ph),
+          vLocalPos.y * 1.55 + wy * warpAmt + cos(ph),
+          vLocalPos.z * 0.96 - t * 1.68
         );
         vec2 p2 = vec2(
-          across * 4.8 + wx * warpAmt * 1.35 + ph * 0.73,
-          along * 4.5 - t * 2.30 + wy * warpAmt * 0.65
+          across * 5.2 + wx * warpAmt * 1.45 + ph * 0.73,
+          along * 4.8 - t * 2.38 + wy * warpAmt * 0.72
         );
         vec2 turb = fireTurbulenceFbm(p3, p2, uDetail);
         float fbm = turb.x;
         float filaments = turb.y;
 
-        float centerShift = (wx * 0.18 + (fbm - 0.5) * 0.22) * pow(max(along, 0.0), 0.92);
-        float halfW = mix(0.42, 0.19, pow(max(along, 0.0), 1.32)) + sin(along * 3.14159) * 0.10 + vWallSplash * 0.12;
-        float r = abs((across - 0.5) - centerShift) / max(halfW, 0.06);
+        float centerShift = (wx * 0.22 + (fbm - 0.5) * 0.28) * pow(max(along, 0.0), 0.84);
+        float halfW = mix(0.38, 0.22, pow(max(along, 0.0), 1.25)) + sin(along * 3.14159) * 0.11 + vWallSplash * 0.14;
+        float r = abs((across - 0.5) - centerShift) / max(halfW, 0.07);
 
-        float muzzleIn = smoothstep(0.0, 0.06, along);
-        float tipFeather = smoothstep(1.0, 0.80, along);
-        float tipOut = smoothstep(1.0, 0.16, along);
-        float colShape = clamp(1.0 - r * r, 0.0, 1.0);
-        float turbDrive = (fbm - 0.43) * mix(0.36, 1.18, pow(max(along, 0.0), 0.66));
-        float detachTip = smoothstep(0.54, 0.86, fbm) * smoothstep(0.38, 0.72, along) * smoothstep(0.98, 0.72, along) * smoothstep(1.45, 0.35, r) * 0.52;
-        float erosion = pow(max(along, 0.0), 1.26) * 0.54 - vWallSplash * 0.16;
+        float muzzleIn = smoothstep(0.0, 0.08, along);
+        float tipFeather = smoothstep(1.0, 0.74, along);
+        float tipOut = smoothstep(1.0, 0.14, along);
+        float colShape = pow(clamp(1.0 - r * r, 0.0, 1.0), 1.25);
+        float turbDrive = (fbm - 0.44) * mix(0.52, 1.40, pow(max(along, 0.0), 0.58));
+        float detachTip = smoothstep(0.52, 0.84, fbm) * smoothstep(0.32, 0.68, along) * smoothstep(0.98, 0.70, along) * smoothstep(1.50, 0.35, r) * 0.58;
+        float erosion = pow(max(along, 0.0), 1.18) * 0.56 - vWallSplash * 0.16;
 
-        float field = (colShape * (0.72 + 0.42 * tipOut) + turbDrive + detachTip - erosion) * muzzleIn * tipFeather;
+        float field = (colShape * (0.68 + 0.36 * tipOut) + turbDrive + detachTip - erosion) * muzzleIn * tipFeather;
 
         bool isCoreSpine = role > 0.5;
-        float flameEdge = isCoreSpine ? smoothstep(0.16, 0.54, field) : smoothstep(0.06, 0.36, field);
-        float smokeBillow = isCoreSpine ? 0.0 : (smoothstep(0.52, 0.95, along) * smoothstep(0.01, 0.18, field) * (1.0 - flameEdge * 0.85));
-        float alpha = clamp(pow(max(flameEdge, 0.0), 0.86) * 0.95 + smokeBillow * 0.34, 0.0, 1.0) * viewFade * sideFade;
+        float flameEdge = isCoreSpine ? smoothstep(0.24, 0.68, field) : smoothstep(0.11, 0.54, field);
+        float smokeBillow = isCoreSpine ? 0.0 : (smoothstep(0.46, 0.94, along) * smoothstep(0.02, 0.22, field) * (1.0 - flameEdge * 0.82));
+        float alpha = clamp(pow(max(flameEdge, 0.0), 0.94) * 0.86 + smokeBillow * 0.32, 0.0, 0.90) * viewFade * sideFade;
         if (isCoreSpine) {
-          alpha *= smoothstep(0.88, 0.12, along) * 0.90;
+          alpha *= smoothstep(0.76, 0.08, along) * 0.44;
         }
-        alpha *= smoothstep(0.02, 0.22, jetPow) * clamp(uIntensity, 0.0, 1.4);
+        alpha *= smoothstep(0.02, 0.22, jetPow) * clamp(uIntensity, 0.0, 1.35);
         if (alpha < 0.016) discard;
 
-        // Pressurized Planckian jet temperature: blinding white-yellow muzzle cone -> golden-amber -> crimson billows -> dark smoke
-        float nozzlePressureHot = smoothstep(0.42, 0.02, along) * (1.0 - smoothstep(0.0, 0.65, r)) * 0.38;
-        float coreZone = (1.0 - smoothstep(0.0, 0.74, r)) * smoothstep(0.84, 0.04, along);
+        // Calibrated Gothic Bonfire-matched temperature ramp: molten throat -> roaring amber-orange -> crimson licking tongues -> dark soot!
+        float nozzlePressureHot = smoothstep(0.30, 0.01, along) * (1.0 - smoothstep(0.0, 0.55, r)) * 0.24;
+        float coreZone = (1.0 - smoothstep(0.0, 0.64, r)) * smoothstep(0.72, 0.03, along);
         float temp = clamp(
-          smoothstep(0.05, 0.82, field) * 0.56
-          + coreZone * 0.48
+          smoothstep(0.08, 0.88, field) * 0.48
+          + coreZone * 0.28
           + nozzlePressureHot
-          + vWallSplash * 0.14
-          + (filaments - 0.44) * 0.30
-          + vMeta.y
-          + (isCoreSpine ? 0.36 : 0.0)
-          - smoothstep(0.46, 0.95, along) * 0.45,
+          + vWallSplash * 0.10
+          + (filaments - 0.46) * 0.34
+          + vMeta.y * 0.75
+          + (isCoreSpine ? 0.16 : 0.0)
+          - smoothstep(0.38, 0.92, along) * 0.46,
           0.0,
           1.0
         );
 
-        vec3 col = mix(uColRim, uColOuter, smoothstep(0.00, 0.25, temp));
-        col = mix(col, uColMid,  smoothstep(0.23, 0.54, temp));
-        col = mix(col, uColHot,  smoothstep(0.52, 0.80, temp));
-        col = mix(col, uColCore, smoothstep(0.78, 0.96, temp));
+        vec3 col = mix(uColRim, uColOuter, smoothstep(0.00, 0.28, temp));
+        col = mix(col, uColMid,  smoothstep(0.26, 0.58, temp));
+        col = mix(col, uColHot,  smoothstep(0.56, 0.84, temp));
+        col = mix(col, uColCore, smoothstep(0.84, 0.98, temp));
 
-        float tipCool = smoothstep(0.54, 0.95, along) * (1.0 - smoothstep(0.14, 0.52, temp));
-        vec3 sootSmoke = mix(vec3(0.26, 0.038, 0.018), vec3(0.09, 0.08, 0.085), smoothstep(0.68, 0.96, along));
-        col = mix(col, sootSmoke, clamp(tipCool * 0.64 + smokeBillow * 0.74, 0.0, 0.88));
+        float tipCool = smoothstep(0.48, 0.94, along) * (1.0 - smoothstep(0.14, 0.54, temp));
+        vec3 sootSmoke = mix(vec3(0.22, 0.032, 0.014), vec3(0.08, 0.075, 0.082), smoothstep(0.64, 0.96, along));
+        col = mix(col, sootSmoke, clamp(tipCool * 0.66 + smokeBillow * 0.78, 0.0, 0.90));
 
-        float hotStreak = smoothstep(0.54, 0.90, filaments) * smoothstep(0.20, 0.64, temp) * (1.0 - along * 0.34);
-        col = mix(col, uColCore, hotStreak * 0.30);
+        float hotStreak = smoothstep(0.60, 0.92, filaments) * smoothstep(0.30, 0.72, temp) * (1.0 - along * 0.48);
+        col = mix(col, uColCore, hotStreak * 0.22);
 
-        float boost = (0.95 + 0.12 * jetPow) * (isCoreSpine ? 1.08 : 1.0);
-        gl_FragColor = vec4(min(col * boost, vec3(1.10)), clamp(alpha, 0.0, 0.95));
+        float boost = (0.90 + 0.10 * jetPow) * (isCoreSpine ? 1.02 : 0.96);
+        gl_FragColor = vec4(min(col * boost, vec3(1.02)), clamp(alpha, 0.0, 0.88));
       }
     `
   }));

@@ -14,14 +14,14 @@ import {
   RUN_UPGRADES,
   MAGE_ELEMENTS,
   MAGE_ELEMENT_ORDER
-} from '../config.js?v=20261121z68';
+} from '../config.js?v=20261123z71';
 import {
   RANK_ROMAN,
   el,
   formatTimeMMSS,
   hexNumToCss,
   isWeaponHighlightChoice
-} from './resolvers.js?v=20261121z68';
+} from './resolvers.js?v=20261123z71';
 import {
   makeSvgNode,
   createWeaponSvg,
@@ -30,7 +30,7 @@ import {
   createMandalaSvg,
   createRuneHaloSvg,
   createBlessingRelicSvg
-} from './svgIcons.js?v=20261121z68';
+} from './svgIcons.js?v=20261123z71';
 
 export function createModalsController({
   root,
@@ -134,14 +134,28 @@ export function createModalsController({
     positionSoundPopover(anchorBtn);
   }
 
+  const makeSpeakerSvg = (level) => {
+    // Crisp antique-gold gothic SVG speaker icon (replaces harsh Windows blue emoji!)
+    const waves =
+      level === 0
+        ? '<path d="M15.8 9.2 L20.4 14.8 M20.4 9.2 L15.8 14.8" stroke="#c86b5c" stroke-width="1.8" stroke-linecap="round"/>'
+        : level === 1
+          ? '<path d="M15.6 9.4 C17 10.7 17 13.3 15.6 14.6" stroke="#e5c787" stroke-width="1.7" stroke-linecap="round"/>'
+          : '<path d="M15.4 9.2 C16.9 10.6 16.9 13.4 15.4 14.8 M18.1 6.8 C20.8 9.4 20.8 14.6 18.1 17.2" stroke="#e5c787" stroke-width="1.65" stroke-linecap="round"/>';
+    return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M4.5 9.5 H8.2 L12.8 5.5 V18.5 L8.2 14.5 H4.5 Z" fill="rgba(229,184,92,0.22)" stroke="#e5c787" stroke-width="1.6" stroke-linejoin="round"/>${waves}</svg>`;
+  };
+
   function syncMuteButtons() {
     const lang = getLang();
     const { muted, volume, musicVolume } = getAudioState();
     const effectiveVol = muted ? 0 : volume;
     const effectiveMusic = muted ? 0 : musicVolume;
     const anyAudio = effectiveVol > 0.001 || effectiveMusic > 0.001;
-    const icon = !anyAudio ? '🔇' : effectiveVol < 0.45 ? '🔉' : '🔊';
-    hudMuteBtn.textContent = icon;
+    const lvl = !anyAudio ? 0 : effectiveVol < 0.45 ? 1 : 2;
+    if (hudMuteBtn.dataset.volLvl !== String(lvl)) {
+      hudMuteBtn.dataset.volLvl = String(lvl);
+      hudMuteBtn.innerHTML = makeSpeakerSvg(lvl);
+    }
     hubMuteBtn.classList.toggle('is-muted-gear', !anyAudio);
 
     const mPct = Math.round(effectiveMusic * 100);

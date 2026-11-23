@@ -1,5 +1,5 @@
 // 6-Zone Non-Linear Gothic Castle Layout, Pre-Boss Bonfire Checkpoint, 5-Gargoyle Flame Gauntlet,
-// Exact Wall Line-of-Sight & Doorway Steering for `Abandoned Knight Rift` (?v=20261121z68).
+// Exact Wall Line-of-Sight & Doorway Steering for `Abandoned Knight Rift` (?v=20261123z71).
 // Pure zero-dependency ES module (Vanilla JS, V8/Browser/Node compatible).
 //
 // 6-Zone Non-Linear Progression (South +Z -> North -Z, zero "narrow corridor tube"):
@@ -1627,9 +1627,9 @@ export const SOULS_CASTLE_BRAZIERS = Object.freeze([
   Object.freeze({ id: 'brazier_alcove_n', roomId: 'east_alcove', x: 12.4, z: -6.9, scale: 0.92, radius: 0.52 }),
   Object.freeze({ id: 'brazier_alcove_s', roomId: 'east_alcove', x: 12.4, z: -1.1, scale: 0.92, radius: 0.52 }),
 
-  // Zone 5: Pre-Boss Sanctuary flanking Boss Doors
-  Object.freeze({ id: 'brazier_boss_door_w', roomId: 'pre_boss_sanctuary', x: -4.2, z: -30.4, scale: 1.08, radius: 0.60 }),
-  Object.freeze({ id: 'brazier_boss_door_e', roomId: 'pre_boss_sanctuary', x: 4.2, z: -30.4, scale: 1.08, radius: 0.60 }),
+  // Zone 5: Pre-Boss Sanctuary flanking Boss Doors (clear of Boss Gatehouse protruding stone jambs at z = -30.98!)
+  Object.freeze({ id: 'brazier_boss_door_w', roomId: 'pre_boss_sanctuary', x: -4.55, z: -29.35, scale: 1.08, radius: 0.60 }),
+  Object.freeze({ id: 'brazier_boss_door_e', roomId: 'pre_boss_sanctuary', x: 4.55, z: -29.35, scale: 1.08, radius: 0.60 }),
 
   // Zone 6: Boss Throne Hall ceremonial braziers
   Object.freeze({ id: 'brazier_boss_entry_w', roomId: 'boss_hall', x: -8.2, z: -36.4, scale: 1.1, radius: 0.62 }),
@@ -1712,8 +1712,8 @@ export const SOULS_CASTLE_CANDLE_CLUSTERS = Object.freeze([
   Object.freeze({ id: 'candles_shrine_n', roomId: 'east_alcove', x: 11.6, y: 0, z: -5.25, count: 5, radius: 0.4 }),
   Object.freeze({ id: 'candles_shrine_s', roomId: 'east_alcove', x: 11.6, y: 0, z: -2.75, count: 5, radius: 0.4 }),
   // Boss Door jambs `(z = -32.0)`
-  Object.freeze({ id: 'candles_door_w', roomId: 'pre_boss_sanctuary', x: -3.9, y: 0, z: -31.15, count: 4, radius: 0.36 }),
-  Object.freeze({ id: 'candles_door_e', roomId: 'pre_boss_sanctuary', x: 3.9, y: 0, z: -31.15, count: 4, radius: 0.36 }),
+  Object.freeze({ id: 'candles_door_w', roomId: 'pre_boss_sanctuary', x: -3.35, y: 0, z: -30.25, count: 4, radius: 0.36 }),
+  Object.freeze({ id: 'candles_door_e', roomId: 'pre_boss_sanctuary', x: 3.35, y: 0, z: -30.25, count: 4, radius: 0.36 }),
   // Obsidian Throne steps `(z = -55.6)`
   Object.freeze({ id: 'candles_throne_w', roomId: 'boss_hall', x: -3.2, y: 0.25, z: -55.6, count: 6, radius: 0.46 }),
   Object.freeze({ id: 'candles_throne_e', roomId: 'boss_hall', x: 3.2, y: 0.25, z: -55.6, count: 6, radius: 0.46 })
@@ -2253,25 +2253,39 @@ function segmentIntersectsAABB(x1, z1, x2, z2, box) {
   const dx = x2 - x1;
   const dz = z2 - z1;
 
-  const pArr = [-dx, dx, -dz, dz];
-  const qArr = [x1 - box.minX, box.maxX - x1, z1 - box.minZ, box.maxZ - z1];
-
-  for (let i = 0; i < 4; i++) {
-    const p = pArr[i];
-    const q = qArr[i];
-    if (Math.abs(p) < 1e-9) {
-      if (q < 0) return false;
-    } else {
-      const r = q / p;
-      if (p < 0) {
-        if (r > t1) return false;
-        if (r > t0) t0 = r;
-      } else {
-        if (r < t0) return false;
-        if (r < t1) t1 = r;
-      }
+  // Unrolled Liang-Barsky slab clip: 0 heap allocations per call!
+  if (Math.abs(dx) < 1e-9) {
+    if (x1 < box.minX || x1 > box.maxX) return false;
+  } else {
+    const invDx = 1.0 / dx;
+    let ta = (box.minX - x1) * invDx;
+    let tb = (box.maxX - x1) * invDx;
+    if (ta > tb) {
+      const tmp = ta;
+      ta = tb;
+      tb = tmp;
     }
+    if (ta > t0) t0 = ta;
+    if (tb < t1) t1 = tb;
+    if (t0 > t1) return false;
   }
+
+  if (Math.abs(dz) < 1e-9) {
+    if (z1 < box.minZ || z1 > box.maxZ) return false;
+  } else {
+    const invDz = 1.0 / dz;
+    let ta = (box.minZ - z1) * invDz;
+    let tb = (box.maxZ - z1) * invDz;
+    if (ta > tb) {
+      const tmp = ta;
+      ta = tb;
+      tb = tmp;
+    }
+    if (ta > t0) t0 = ta;
+    if (tb < t1) t1 = tb;
+    if (t0 > t1) return false;
+  }
+
   return t0 <= t1;
 }
 

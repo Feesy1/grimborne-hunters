@@ -1,9 +1,9 @@
 // Abandoned Knight Rift — Hero Combat Audio Module
-// Studio 44.1 kHz / 48 kHz WAV sample playback (?v=20261121z68) with cinematic gain (0.80–1.0),
+// Studio 44.1 kHz / 48 kHz WAV sample playback (?v=20261123z71) with cinematic gain (0.80–1.0),
 // razor-crisp sample-accurate attack, ±4% micro-pitch jitter, stone early-reflection send,
 // ElevenLabs parry steel ring support, armored roll slot, and Web Audio fallbacks.
 
-export const SOULS_HERO_AUDIO_VERSION = '20261121z68';
+export const SOULS_HERO_AUDIO_VERSION = '20261123z71';
 const SAMPLE_VER = SOULS_HERO_AUDIO_VERSION;
 
 export const HERO_SAMPLE_MANIFEST = Object.freeze([
@@ -93,18 +93,17 @@ export function createSoulsHeroAudio({
     return { ctx, dest, reverbDest };
   }
 
+  let preloadPromise = null;
   function preload(audioCtx) {
+    if (preloadPromise) return preloadPromise;
     const ctx = audioCtx || (typeof getCtx === 'function' ? getCtx() : null);
     if (!ctx || typeof fetch === 'undefined') return Promise.resolve([]);
 
-    const tasks = [];
-    for (let i = 0; i < HERO_SAMPLE_MANIFEST.length; i++) {
-      const [key, url] = HERO_SAMPLE_MANIFEST[i];
-      if (sampleBuffers.has(key) || missingKeys.has(key)) continue;
-      if (pendingLoads.has(key)) {
-        tasks.push(pendingLoads.get(key));
-        continue;
-      }
+    // Staggered decode (2 concurrent) so first click / chapter entry never stalls main thread!
+    let nextIdx = 0;
+    const loadOne = (key, url) => {
+      if (sampleBuffers.has(key) || missingKeys.has(key)) return Promise.resolve(null);
+      if (pendingLoads.has(key)) return pendingLoads.get(key);
       const p = fetch(url)
         .then((res) => {
           if (res.status === 404) {
@@ -124,9 +123,16 @@ export function createSoulsHeroAudio({
           return null;
         });
       pendingLoads.set(key, p);
-      tasks.push(p);
-    }
-    return Promise.all(tasks);
+      return p;
+    };
+    const worker = async () => {
+      while (nextIdx < HERO_SAMPLE_MANIFEST.length) {
+        const [key, url] = HERO_SAMPLE_MANIFEST[nextIdx++];
+        await loadOne(key, url);
+      }
+    };
+    preloadPromise = Promise.all([worker(), worker()]).then(() => []);
+    return preloadPromise;
   }
 
   function playSample(key, {

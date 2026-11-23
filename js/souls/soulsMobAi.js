@@ -19,7 +19,7 @@
 //   - Calm Elden Ring pacing, Pack Token Coordination (`<= 2` melee attackers),
 //     smooth C1 step-in (`1.2–2.2 m/s`), live velocity lead & shield-turtle reads.
 
-import * as CASTLE_LAYOUT from './soulsCastleLayout.js?v=20261121z68';
+import * as CASTLE_LAYOUT from './soulsCastleLayout.js?v=20261123z71';
 
 const TWO_PI = Math.PI * 2;
 const _tmpClampOut = { x: 0, z: 0 };
@@ -1292,6 +1292,14 @@ export function clampSoulsCorridorVelocity(e, vx, vz, dt = 0.016, opts = {}) {
     const clampedZ = clamp(projected.z, minZ, maxZ);
     outVx = (projected.x - x) / safeDt;
     outVz = (clampedZ - z) / safeDt;
+    // Guard against hitstop tiny-dt velocity explosion (dt ~ 0.001s dividing tiny wall push -> 20 m/s spike!)
+    const maxSafeSpd = Math.max(Math.hypot(vx || 0, vz || 0) * 1.15, 3.8);
+    const outSpd = Math.hypot(outVx, outVz);
+    if (outSpd > maxSafeSpd && outSpd > 1e-5) {
+      const sc = maxSafeSpd / outSpd;
+      outVx *= sc;
+      outVz *= sc;
+    }
     return {
       vx: outVx,
       vz: outVz,
@@ -1477,33 +1485,66 @@ function pickPatrolWaypoint(e, profile, rng) {
 function projectLocalVelocity(vx, vz, facing) {
   const fwdX = Math.sin(facing);
   const fwdZ = Math.cos(facing);
-  const rightX = Math.cos(facing);
-  const rightZ = -Math.sin(facing);
+  // Up(0,1,0) x Fwd(sin,0,cos) = (+cos, 0, -sin) = LOCAL LEFT (+X in character space)
+  const leftX = Math.cos(facing);
+  const leftZ = -Math.sin(facing);
   return {
     localZ: vx * fwdX + vz * fwdZ,
-    localX: vx * rightX + vz * rightZ
+    localX: vx * leftX + vz * leftZ
   };
 }
 
-function resolveStrafeAnimMode({ isMoving, isPatrol, aiState, localX, localZ, yawDelta, dt }) {
-  if (aiState === 'backstep') return 'backstep';
-  if (!isMoving) {
-    const yawRate = dt > 0.0005 ? yawDelta / dt : 0;
-    if (Math.abs(yawDelta) > 0.035 || Math.abs(yawRate) > 1.35) {
-      return yawDelta > 0 ? 'turn_left' : 'turn_right';
+function resolveStrafeAnimMode({ e = null, isMoving, isPatrol, aiState, localX, localZ, yawDelta, dt }) {
+  const safeDt = Math.max(0.001, Math.min(0.1, Number(dt) || 0.016));
+  const prevMode = e?._soulsPrevAnimMode || 'idle';
+  if (e) {
+    e._soulsAnimModeHoldTimer = Math.max(0, (e._soulsAnimModeHoldTimer || 0) - safeDt);
+  }
+
+  let nextMode;
+  if (aiState === 'backstep') {
+    nextMode = 'backstep';
+  } else if (!isMoving) {
+    // Guard against hitstop dt collapse (~0.001s) producing bogus turn_left/turn_right flashes
+    const yawRate = safeDt >= 0.004 ? yawDelta / safeDt : 0;
+    const turnEnter = prevMode === 'turn_left' || prevMode === 'turn_right' ? 0.022 : 0.048;
+    const turnRateEnter = prevMode === 'turn_left' || prevMode === 'turn_right' ? 0.95 : 1.55;
+    if (Math.abs(yawDelta) > turnEnter || Math.abs(yawRate) > turnRateEnter) {
+      nextMode = yawDelta > 0 ? 'turn_left' : 'turn_right';
+    } else {
+      nextMode = 'idle';
     }
-    return 'idle';
+  } else if (isPatrol) {
+    nextMode = 'patrol';
+  } else {
+    const absX = Math.abs(localX);
+    const absZ = Math.abs(localZ);
+    const wasStrafe = prevMode === 'strafe_left' || prevMode === 'strafe_right';
+    const wasBack = prevMode === 'backstep';
+    const strafeRatio = wasStrafe ? 0.58 : 0.78;
+    const strafeMinX = wasStrafe ? 0.20 : 0.34;
+    const backMinZ = wasBack ? -0.24 : -0.38;
+    if (localZ < backMinZ && absZ >= absX * 0.65) {
+      nextMode = 'backstep';
+    } else if (absX > absZ * strafeRatio && absX > strafeMinX) {
+      // Fixed sign: localX > 0 is LEFT (+X), localX < 0 is RIGHT (-X)!
+      nextMode = localX > 0 ? 'strafe_left' : 'strafe_right';
+    } else {
+      nextMode = 'combat_walk';
+    }
   }
-  if (isPatrol) return 'patrol';
-  const absX = Math.abs(localX);
-  const absZ = Math.abs(localZ);
-  if (absX > absZ * 0.72 && absX > 0.28) {
-    return localX > 0 ? 'strafe_right' : 'strafe_left';
+
+  // Schmitt-trigger minimum hold time (0.22s) between locomotion gaits prevents rapid flip-flop twitching
+  const isGaitPrev = prevMode === 'combat_walk' || prevMode === 'strafe_left' || prevMode === 'strafe_right' || prevMode === 'backstep';
+  const isGaitNext = nextMode === 'combat_walk' || nextMode === 'strafe_left' || nextMode === 'strafe_right' || nextMode === 'backstep';
+  if (e && nextMode !== prevMode) {
+    if (isGaitPrev && isGaitNext && aiState !== 'backstep' && e._soulsAnimModeHoldTimer > 0) {
+      return prevMode;
+    }
+    e._soulsPrevAnimMode = nextMode;
+    e._soulsAnimModeHoldTimer = isGaitNext ? 0.22 : 0.12;
   }
-  if (localZ < -0.55 && absX < 0.45) {
-    return 'backstep';
-  }
-  return 'combat_walk';
+  return nextMode;
 }
 
 // ============================================================================
@@ -1877,11 +1918,19 @@ function updateStrafeTimerAndWallBounce(e, profile, dt, tanX, tanZ, preferredFla
   if (hitWall && e._soulsWallFlipCooldown <= 0) {
     e.strafeDir = -sDir;
     e.strafeTimer = randRange(profile.strafeSwitchMinSec, profile.strafeSwitchMaxSec, rng);
-    e._soulsWallFlipCooldown = 0.45;
+    e._soulsWallFlipCooldown = 0.55;
   } else if (preferredFlankDir !== 0 && e.strafeDir !== preferredFlankDir && e._soulsWallFlipCooldown <= 0) {
-    e.strafeDir = preferredFlankDir;
-    e.strafeTimer = randRange(profile.strafeSwitchMinSec * 0.8, profile.strafeSwitchMaxSec, rng);
-    e._soulsWallFlipCooldown = 0.35;
+    // Only take preferredFlankDir if that side is NOT blocked by a wall (stops corridor wall ping-pong!)
+    const fProbeX = (e.x || 0) + tanX * preferredFlankDir * 1.15;
+    const fProbeZ = (e.z || 0) + tanZ * preferredFlankDir * 1.15;
+    const flankHitsWall = typeof CASTLE_LAYOUT.isInsideCastleWalkable === 'function'
+      ? !CASTLE_LAYOUT.isInsideCastleWalkable(fProbeX, fProbeZ, radius + 0.12, { bossDoorState: 'closed', allowBossHall: false })
+      : Math.abs(fProbeX) >= getCorridorMaxX(e.z || 0, radius) - 0.1;
+    if (!flankHitsWall) {
+      e.strafeDir = preferredFlankDir;
+      e.strafeTimer = randRange(profile.strafeSwitchMinSec * 0.8, profile.strafeSwitchMaxSec, rng);
+      e._soulsWallFlipCooldown = 0.45;
+    }
   } else if (e.strafeTimer <= 0) {
     e.strafeDir = -sDir;
     e.strafeTimer = randRange(profile.strafeSwitchMinSec, profile.strafeSwitchMaxSec, rng);
@@ -2282,8 +2331,10 @@ export function stepSoulsMobAi(e, ctx = {}) {
               e.aiState = 'patrol';
               e.soulsState = 'idle';
               e.facing = out.desiredFacing;
-              e.vx = out.vx;
-              e.vz = out.vz;
+              e.aiVx = out.vx;
+              e.aiVz = out.vz;
+              e.vx = 0;
+              e.vz = 0;
               e.animSpeedMult = groundSyncedRatio;
               e.strafeAnimMode = 'patrol';
               e.attackAnimClip = null;
@@ -2483,9 +2534,9 @@ export function stepSoulsMobAi(e, ctx = {}) {
     }
     out.trackingLocked = Boolean(e._soulsTrackingLocked);
 
-    const lungeSpd = Number(meta?.lungeSpeed) || 0;
-    const stepStart = Number(meta?.stepStart01) || 0.45;
-    const stepPeak = Number(meta?.stepPeak01) || 0.88;
+    const lungeSpd = (Number(meta?.lungeSpeed) || 0) * 0.55;
+    const stepStart = Math.max(0.55, Number(meta?.stepStart01) || 0.55);
+    const stepPeak = Number(meta?.stepPeak01) || 0.90;
     const nearGateBack = lungeSpd < 0 && (e.z || 0) <= zDom.minZ + 1.35 && -e.soulsStrikeDirZ < 0;
     if (Math.abs(lungeSpd) > 0.01 && !nearGateBack && progress01 >= stepStart) {
       let curve;
@@ -2493,7 +2544,7 @@ export function stepSoulsMobAi(e, ctx = {}) {
         curve = smoothstep01((progress01 - stepStart) / Math.max(0.05, stepPeak - stepStart));
       } else {
         const tailU = smoothstep01((progress01 - stepPeak) / Math.max(0.04, 1.0 - stepPeak));
-        curve = 1.0 - 0.45 * tailU;
+        curve = 1.0 - 0.55 * tailU;
       }
       const rawStep = lungeSpd * curve * frostSlow;
       e._soulsStepEndRawSpeed = rawStep;
@@ -2502,10 +2553,11 @@ export function stepSoulsMobAi(e, ctx = {}) {
       rawVx = e.soulsStrikeDirX * effStep;
       rawVz = e.soulsStrikeDirZ * effStep;
     } else {
-      const plantDecay = Math.exp(-16 * dt);
+      // Planted windup feet: kill pre-step coasting promptly so boots never skate before the lunge!
+      const plantDecay = Math.exp(-28 * dt);
       rawVx = (e._velX || 0) * plantDecay;
       rawVz = (e._velZ || 0) * plantDecay;
-      if (Math.hypot(rawVx, rawVz) < 0.04) {
+      if (Math.hypot(rawVx, rawVz) < 0.08) {
         rawVx = 0;
         rawVz = 0;
       }
@@ -2648,15 +2700,8 @@ export function stepSoulsMobAi(e, ctx = {}) {
     out.combatPhase = 'recover';
     out.combatPhase01 = recProg01;
 
-    const settleRaw = (Number(e._soulsStepEndRawSpeed) || 0) * 0.4;
-    const settleWindow = 0.14;
-    if (Math.abs(settleRaw) > 0.01 && e._soulsRecoverElapsed <= settleWindow && (settleRaw < 0 || dist > minMeleeGap)) {
-      const u = smoothstep01(e._soulsRecoverElapsed / settleWindow);
-      const gapScale = settleRaw > 0 ? clamp((dist - minMeleeGap) / 0.85, 0, 1) : 1.0;
-      const slideSpd = settleRaw * (1 - u) * gapScale;
-      rawVx = e.soulsStrikeDirX * slideSpd;
-      rawVz = e.soulsStrikeDirZ * slideSpd;
-    }
+    // Planted recovery stance: zero root skating while recovering from swing!
+    e._soulsStepEndRawSpeed = 0;
 
     e.punishWindowTimer = Math.max(0, e.soulsTimer);
     if (e.soulsPunishWindow) {
@@ -2931,13 +2976,17 @@ export function stepSoulsMobAi(e, ctx = {}) {
     out.patrolMoveSpeedRatio = 0;
     out.strafeAnimMode = 'idle';
   } else {
-    out.isMoving = finalSpeed > 0.08;
+    // Hysteresis on moving threshold (0.14 enter / 0.06 exit) kills 'assess' separation idle<->walk flickering!
+    const wasMoving = Boolean(e._soulsWasMoving);
+    out.isMoving = wasMoving ? finalSpeed > 0.06 : finalSpeed > 0.14;
+    e._soulsWasMoving = out.isMoving;
     const refSpd = Math.max(0.8, profile.refWalkSpeed || baseSpeed);
     out.animSpeedMult = out.isMoving
       ? clamp((finalSpeed / refSpd) * 0.95, 0.34, 1.08)
       : 0;
     out.patrolMoveSpeedRatio = out.animSpeedMult;
     out.strafeAnimMode = resolveStrafeAnimMode({
+      e,
       isMoving: out.isMoving,
       isPatrol: false,
       aiState: e.aiState,
@@ -2952,8 +3001,11 @@ export function stepSoulsMobAi(e, ctx = {}) {
   out.soulsState = e.soulsState;
 
   e.facing = out.desiredFacing;
-  e.vx = out.vx;
-  e.vz = out.vz;
+  // Store AI velocity in aiVx/aiVz (NEVER overload legacy knockback e.vx/e.vz which combat.js:8146 double-integrated!)
+  e.aiVx = out.vx;
+  e.aiVz = out.vz;
+  e.vx = 0;
+  e.vz = 0;
   e.animSpeedMult = out.animSpeedMult;
   e.strafeAnimMode = out.strafeAnimMode;
   e.attackAnimClip = out.attackAnimClip;

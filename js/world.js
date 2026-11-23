@@ -4,20 +4,21 @@
 import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { DRACOLoader } from '../vendor/DRACOLoader.js';
-import { ARENA_HALF_SIZE } from './config.js?v=20261121z68';
-import { createMistyArena } from './mistyArena.js?v=20261121z68';
-import { createSoulsArena } from './soulsArena.js?v=20261121z68';
+import { ARENA_HALF_SIZE } from './config.js?v=20261123z71';
+import { createMistyArena } from './mistyArena.js?v=20261123z71';
+import { createSoulsArena } from './soulsArena.js?v=20261123z71';
 import {
   BOSS_DOOR_CUTSCENE_DURATION,
   evaluateBossDoorCutscene,
   getBossDoorCutsceneSkipState,
   computeBossDoorCutsceneShakeOffset
-} from './souls/soulsCutsceneChoreography.js?v=20261121z68';
+} from './souls/soulsCutsceneChoreography.js?v=20261123z71';
 import {
   clampCastleCameraPosition,
   SOULS_CASTLE_CONSTANTS
-} from './souls/soulsCastleLayout.js?v=20261121z68';
-import { createSoulsEnvironmentMap } from './souls/soulsLightingRig.js?v=20261121z68';
+} from './souls/soulsCastleLayout.js?v=20261123z71';
+import { createSoulsEnvironmentMap } from './souls/soulsLightingRig.js?v=20261123z71';
+import { applyEldenDissolveToModel } from './souls/soulsDissolveVfx.js?v=20261123z71';
 import {
   createCourtyardStoneTexture,
   createHubMistTexture,
@@ -28,7 +29,7 @@ import {
   createHubContactAoTexture,
   createArcaneCircleTexture,
   getSlashCrescentGeo
-} from './world/textures.js?v=20261121z68';
+} from './world/textures.js?v=20261123z71';
 
 const sharedDracoLoader = new DRACOLoader();
 sharedDracoLoader.setDecoderPath('./vendor/draco/');
@@ -52,7 +53,7 @@ export function createArenaWorld(canvas) {
 
   const renderer = new THREE.WebGLRenderer({
     canvas: canvas || undefined,
-    alpha: true,
+    alpha: false,
     antialias: !isMobileDevice && nativeDpr < 1.5,
     powerPreference: 'high-performance'
   });
@@ -1387,11 +1388,16 @@ export function createArenaWorld(canvas) {
   }
 
   // ==========================================================================
-  // Pooled 3D Voxel Particle System (Single InstancedMesh Draw Call)
+  // Pooled 3D Spark / Ember Shard Particle System (Single InstancedMesh Draw Call)
   // ==========================================================================
   const MAX_PARTICLES = 720;
-  const partGeo = new THREE.OctahedronGeometry(0.62, 0);
-  const partMat = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false });
+  const partGeo = (() => {
+    const g = new THREE.OctahedronGeometry(0.46, 0);
+    // Fine tapered ember-spark shard (eliminates blocky square/voxel Minecraft look in gothic combat!)
+    g.scale(0.36, 1.05, 0.36);
+    return g;
+  })();
+  const partMat = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: true });
   const particleMesh = new THREE.InstancedMesh(partGeo, partMat, MAX_PARTICLES);
   particleMesh.frustumCulled = false;
   particleMesh.visible = false;
@@ -1461,7 +1467,8 @@ export function createArenaWorld(canvas) {
       p.rz = Math.random() * Math.PI;
       p.vrx = (Math.random() - 0.5) * 15;
       p.vry = (Math.random() - 0.5) * 15;
-      p.size = size * (0.75 + Math.random() * 0.45);
+      const soulsSparkScale = isSoulsBiome(currentBiome) ? 0.62 : 1.0;
+      p.size = size * soulsSparkScale * (0.68 + Math.random() * 0.52);
       p.age = 0;
       p.life = life * (0.8 + Math.random() * 0.4);
       p.gravity = gravity;
@@ -1718,16 +1725,71 @@ export function createArenaWorld(canvas) {
     activeSlashArcs.push(sa);
   }
 
-  const unitShockRingGeo = (() => {
-    const g = new THREE.RingGeometry(0.82, 1.0, 36);
+  const unitShockPlaneGeo = (() => {
+    const g = new THREE.PlaneGeometry(2.16, 2.16, 1, 1);
     g.rotateX(-Math.PI / 2);
     return g;
   })();
-  const unitShockDiscGeo = (() => {
-    const g = new THREE.CircleGeometry(0.96, 32);
-    g.rotateX(-Math.PI / 2);
-    return g;
-  })();
+
+  function createFeatheredShockwaveMaterial(colorHex) {
+    return new THREE.ShaderMaterial({
+      uniforms: {
+        uColor: { value: new THREE.Color(colorHex) },
+        uOpacity: { value: 0.72 },
+        uProgress: { value: 0.0 }
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 uColor;
+        uniform float uOpacity;
+        uniform float uProgress;
+        varying vec2 vUv;
+        float hash21(vec2 p) {
+          p = fract(p * vec2(127.1, 311.7));
+          p += dot(p, p + 34.5);
+          return fract(p.x * p.y);
+        }
+        float vnoise(vec2 p) {
+          vec2 i = floor(p);
+          vec2 f = fract(p);
+          f = f * f * (3.0 - 2.0 * f);
+          return mix(
+            mix(hash21(i), hash21(i + vec2(1.0, 0.0)), f.x),
+            mix(hash21(i + vec2(0.0, 1.0)), hash21(i + vec2(1.0, 1.0)), f.x),
+            f.y
+          );
+        }
+        void main() {
+          vec2 d = vUv * 2.0 - 1.0;
+          float r = length(d);
+          if (r > 1.0) discard;
+          float ang = atan(d.y, d.x);
+          float n1 = vnoise(vec2(ang * 3.8 + uProgress * 2.2, r * 6.0 - uProgress * 3.5));
+          float n2 = vnoise(vec2(ang * 8.5 - uProgress * 3.0, r * 11.0));
+          float wisp = 0.62 + 0.38 * (n1 * 0.65 + n2 * 0.35);
+          // Soft feathered kinetic wave crest (zero hard flat paper-ring edges!)
+          float crestPos = 0.84;
+          float bandDist = abs(r - crestPos);
+          float crest = exp(-bandDist * bandDist * 95.0) * wisp;
+          float innerGlow = smoothstep(0.95, 0.20, r) * smoothstep(0.18, 0.80, r) * 0.24 * wisp;
+          float outerFade = 1.0 - smoothstep(0.86, 1.0, r);
+          float alpha = (crest * 0.82 + innerGlow) * outerFade * uOpacity;
+          vec3 col = mix(uColor * 0.82, uColor * 1.28 + vec3(0.16, 0.10, 0.04), crest);
+          gl_FragColor = vec4(col, alpha);
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide
+    });
+  }
 
   function spawnShockwaveRing({
     x = 0,
@@ -1740,34 +1802,16 @@ export function createArenaWorld(canvas) {
     let sw = freeShockwaves.pop();
     if (!sw) {
       const group = new THREE.Group();
-      const ringMat = new THREE.MeshBasicMaterial({
-        color,
-        transparent: true,
-        opacity: 0.95,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        side: THREE.DoubleSide
-      });
-      const fillMat = new THREE.MeshBasicMaterial({
-        map: arcaneCircleTex,
-        color,
-        transparent: true,
-        opacity: 0.42,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        side: THREE.DoubleSide
-      });
-      const ringMesh = new THREE.Mesh(unitShockRingGeo, ringMat);
-      const fillMesh = new THREE.Mesh(unitShockDiscGeo, fillMat);
-      fillMesh.position.y = -0.01;
-      group.add(ringMesh, fillMesh);
+      const ringMat = createFeatheredShockwaveMaterial(color);
+      const ringMesh = new THREE.Mesh(unitShockPlaneGeo, ringMat);
+      ringMesh.renderOrder = 4;
+      group.add(ringMesh);
       scene.add(group);
-      sw = { group, ringMat, fillMat, radius: 1, age: 0, duration: 0.34 };
+      sw = { group, ringMat, fillMat: null, radius: 1, age: 0, duration: 0.34 };
     } else {
-      sw.ringMat.color.setHex(color);
-      sw.fillMat.color.setHex(color);
-      sw.ringMat.opacity = 0.95;
-      sw.fillMat.opacity = 0.42;
+      sw.ringMat.uniforms.uColor.value.setHex(color);
+      sw.ringMat.uniforms.uOpacity.value = 0.72;
+      sw.ringMat.uniforms.uProgress.value = 0.0;
       sw.group.visible = true;
     }
     sw.group.position.set(x, 0.07, z);
@@ -1784,9 +1828,9 @@ export function createArenaWorld(canvas) {
         y: 0.72,
         z,
         color,
-        size: Math.max(2.6, Math.min(7.5, radius * 1.45)),
-        duration: Math.min(0.42, Math.max(0.22, duration)),
-        opacity: 0.56
+        size: Math.max(2.2, Math.min(6.2, radius * 1.25)),
+        duration: Math.min(0.38, Math.max(0.20, duration)),
+        opacity: 0.42
       });
     }
   }
@@ -3804,14 +3848,12 @@ export function createArenaWorld(canvas) {
     heroAuraLight.intensity = isSouls ? 0.28 : COMBAT_HERO_AURA_INTENSITY;
     heroAuraLight.distance = isSouls ? 8.5 : 16.5;
 
-    dirLight.castShadow = !lowSpecMode;
+    dirLight.castShadow = true;
     const targetShadowRes = isMobileDevice
       ? 512
       : lowSpecMode
         ? 512
-        : isSouls
-          ? 2048
-          : 1024;
+        : 1024;
     syncDirLightShadowMapSize(targetShadowRes);
 
     const combatShadExt = isSouls ? (isMobileDevice ? 13 : 11.8) : 21;
@@ -4125,18 +4167,37 @@ export function createArenaWorld(canvas) {
     const sa = ensureSoulsArena();
     if (!sa || !sa.group) return false;
 
-    // Pre-seed 1 hidden pooled debris mesh per PBR material so first kill/break never compiles mid-combat
-    if (activeDebris.length === 0) {
-      const seedKinds = ['bone', 'helmet', 'shield'];
-      for (let i = 0; i < seedKinds.length; i++) {
-        const k = seedKinds[i];
-        if (freeDebrisByKind[k] && freeDebrisByKind[k].length === 0) {
-          const piece = acquireDebrisPiece(k);
-          piece.mesh.visible = false;
-          freeDebrisByKind[k].push(piece);
+      // Pre-seed 1 hidden pooled debris mesh per PBR material so first kill/break never compiles mid-combat
+      if (activeDebris.length === 0) {
+        const seedKinds = ['bone', 'helmet', 'shield'];
+        for (let i = 0; i < seedKinds.length; i++) {
+          const k = seedKinds[i];
+          if (freeDebrisByKind[k] && freeDebrisByKind[k].length === 0) {
+            const piece = acquireDebrisPiece(k);
+            piece.mesh.visible = false;
+            freeDebrisByKind[k].push(piece);
+          }
         }
       }
-    }
+
+      // Prewarm elden_dissolve_v2 shader program once during load (eliminates 80-300ms freeze on first mob/boss kill!)
+      let dissolveWarmupGroup = null;
+      let dissolveWarmupGeo = null;
+      let dissolveWarmupMat = null;
+      try {
+        dissolveWarmupGeo = new THREE.BufferGeometry();
+        dissolveWarmupGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([0, 0, 0, 0.01, 0, 0, 0, 0.01, 0]), 3));
+        dissolveWarmupGeo.setAttribute('normal', new THREE.BufferAttribute(new Float32Array([0, 1, 0, 0, 1, 0, 0, 1, 0]), 3));
+        dissolveWarmupGeo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array([0, 0, 1, 0, 0, 1]), 2));
+        dissolveWarmupMat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.7, metalness: 0.2 });
+        const dissolveMesh = new THREE.Mesh(dissolveWarmupGeo, dissolveWarmupMat);
+        dissolveMesh.frustumCulled = false;
+        dissolveWarmupGroup = new THREE.Group();
+        dissolveWarmupGroup.position.set(0, -100, 0);
+        dissolveWarmupGroup.add(dissolveMesh);
+        applyEldenDissolveToModel(dissolveWarmupGroup, 0.25, { dt: 0.016 });
+        scene.add(dissolveWarmupGroup);
+      } catch {}
 
     const savedVis = new Map();
     const setTempVisible = (node, vis) => {
@@ -4229,6 +4290,11 @@ export function createArenaWorld(canvas) {
       console.warn('[world] prewarmSoulsShaders skipped:', err);
       return false;
     } finally {
+      if (dissolveWarmupGroup) {
+        scene.remove(dissolveWarmupGroup);
+        dissolveWarmupGeo?.dispose?.();
+        dissolveWarmupMat?.dispose?.();
+      }
       for (const [node, vis] of savedVis) {
         node.visible = vis;
       }
@@ -4339,7 +4405,7 @@ export function createArenaWorld(canvas) {
     if (devEditors) return Promise.resolve(devEditors);
     if (!isDevModeEnabled()) return Promise.resolve(null);
     if (!devEditorsPromise) {
-      devEditorsPromise = import('./world/devEditors.js?v=20261121z68')
+      devEditorsPromise = import('./world/devEditors.js?v=20261123z71')
         .then((mod) => {
           devEditors = mod.createWorldDevEditors({
             scene,
@@ -5419,8 +5485,13 @@ export function createArenaWorld(canvas) {
       const easeOut = 1 - (1 - p) * (1 - p);
       const curR = sw.radius * (0.18 + 0.82 * easeOut);
       sw.group.scale.set(curR, 1, curR);
-      sw.ringMat.opacity = (1 - p) * 0.95;
-      sw.fillMat.opacity = (1 - p) * 0.42;
+      if (sw.ringMat?.uniforms) {
+        sw.ringMat.uniforms.uOpacity.value = (1 - p) * (1 - p * 0.35) * 0.72;
+        sw.ringMat.uniforms.uProgress.value = p;
+      } else {
+        sw.ringMat.opacity = (1 - p) * 0.95;
+        if (sw.fillMat) sw.fillMat.opacity = (1 - p) * 0.42;
+      }
     }
 
     // Update 3D Chain-Lightning Arcs
@@ -5755,14 +5826,13 @@ export function createArenaWorld(canvas) {
     if (next === lowSpecMode) return;
     lowSpecMode = next;
     renderer.setPixelRatio(getTargetPixelRatio());
-    dirLight.castShadow = !lowSpecMode;
+    // ZERO-HITCH: NEVER toggle dirLight.castShadow mid-combat (changes NUM_DIR_LIGHT_SHADOWS across every lit shader
+    // causing a 200-600ms synchronous HLSL recompile freeze!). Scale DPR, shadow map res, particles & uniforms instead.
     if (cameraMode === 'hub') {
       hubShadowCatcher.visible = hubStageFocus !== 'arsenal' && !lowSpecMode;
       syncDirLightShadowMapSize(isMobileDevice || lowSpecMode ? 512 : 1024);
     } else {
-      syncDirLightShadowMapSize(
-        isMobileDevice || lowSpecMode ? 512 : isSoulsBiome(currentBiome) ? 2048 : 1024
-      );
+      syncDirLightShadowMapSize(isMobileDevice || lowSpecMode ? 512 : 1024);
     }
     refreshAdaptiveBloomMaterials();
     syncBiomeWeatherVisibility();

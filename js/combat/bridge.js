@@ -5,7 +5,7 @@ import {
   ARENA_HALF_SIZE,
   CLASSES,
   ENEMY_TYPES
-} from '../config.js?v=20261121z68';
+} from '../config.js?v=20261123z71';
 
 export const TWO_PI = Math.PI * 2;
 // Keep the player just inside the decorative fence ring (HALF_SIZE - 1.6).

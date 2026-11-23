@@ -22,11 +22,11 @@
 //           - `stopBossIntroVoice(fadeSec)` (also invoked automatically by `stopCinematicSequence()` on skip).
 //      Full Yandex Games `suspend()`/`resume()` (pauses/resumes voice, door clock & staggered preload) & leak-free `.dispose()`.
 
-import * as CASTLE_LAYOUT from './soulsCastleLayout.js?v=20261121z68';
+import * as CASTLE_LAYOUT from './soulsCastleLayout.js?v=20261123z71';
 
 const { SOULS_CASTLE_BONFIRE, SOULS_CASTLE_BRAZIERS, SOULS_CASTLE_CONSTANTS } = CASTLE_LAYOUT;
 
-export const SOULS_SPATIAL_AUDIO_VERSION = '20261121z68';
+export const SOULS_SPATIAL_AUDIO_VERSION = '20261123z71';
 export const BOSS_DOOR_CINEMATIC_DURATION = 43.2;
 export const BOSS_DOOR_AUDIO_SEQUENCE_DURATION = 7.8;
 

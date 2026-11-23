@@ -918,9 +918,9 @@ function createAshlarPbrSet(size, anisotropy, sharedHeightCanvas) {
   const scale = size / 512;
   const rand = makeRng(268811);
 
-  ctx.fillStyle = '#1e212a';
+  ctx.fillStyle = '#252936';
   ctx.fillRect(0, 0, size, size);
-  hctx.fillStyle = '#070707';
+  hctx.fillStyle = '#222222';
   hctx.fillRect(0, 0, size, size);
 
   const courses = 8;
@@ -941,17 +941,17 @@ function createAshlarPbrSet(size, anisotropy, sharedHeightCanvas) {
     let cursorX = off;
     for (let c = 0; c < blocks; c++) {
       const cellW = (weights[c] / wSum) * size;
-      const joint = 3.0 * scale;
+      const joint = 2.6 * scale;
       const x = cursorX + joint;
       const y = r * ch + joint;
       const w = cellW - joint * 2;
       const h = ch - joint * 2;
       cursorX += cellW;
 
-      // Lifted ~+18% midtones (134 -> 158) with warmer charcoal-slate stonework balance
-      const lum = 158 + Math.floor((rand() - 0.5) * 34);
-      const warmCool = Math.floor((rand() - 0.52) * 14);
-      const faceH = Math.round(182 + rand() * 56);
+      // Balanced weathered gothic stonework midtones (eliminates harsh glossy LEGO-brick contrast!)
+      const lum = 136 + Math.floor((rand() - 0.5) * 26);
+      const warmCool = Math.floor((rand() - 0.52) * 12);
+      const faceH = Math.round(176 + rand() * 44);
       const cx = x + w * 0.5;
       const cy = y + h * 0.5;
 
@@ -1032,25 +1032,25 @@ function createAshlarPbrSet(size, anisotropy, sharedHeightCanvas) {
       drawWrappedFast(ctx, size, size, minX, minY, maxX, maxY, () => {
         tracePolyPath(ctx, pts);
         ctx.lineJoin = 'round';
-        ctx.strokeStyle = 'rgba(5, 7, 12, 0.82)';
-        ctx.lineWidth = 6.2 * scale;
+        ctx.strokeStyle = 'rgba(14, 17, 25, 0.62)';
+        ctx.lineWidth = 4.2 * scale;
         ctx.stroke();
 
-        // Angled dressed chamfer rim (warmer charcoal-slate)
-        ctx.fillStyle = `rgb(${Math.max(52, lum - 28)}, ${Math.max(52, lum - 28)}, ${Math.max(56, lum - 25 + warmCool)})`;
+        // Subtle dressed chamfer rim (organic weathered stone transition)
+        ctx.fillStyle = `rgb(${Math.max(54, lum - 16)}, ${Math.max(54, lum - 16)}, ${Math.max(58, lum - 13 + warmCool)})`;
         ctx.fill();
 
-        // Raised pillowed ashlar face (+18% lifted warm charcoal-slate stone)
+        // Weathered medieval ashlar face (soft tonal gradient without bright plastic top highlights)
         tracePolyPath(ctx, innerPts);
         const grad = ctx.createLinearGradient(x, y, x, y + h);
-        grad.addColorStop(0.0, `rgb(${Math.min(244, lum + 16)}, ${Math.min(243, lum + 15)}, ${Math.min(245, lum + 15 + warmCool)})`);
-        grad.addColorStop(0.5, `rgb(${Math.min(240, lum + 2)}, ${Math.min(240, lum + 1)}, ${Math.min(244, lum + 3 + warmCool)})`);
-        grad.addColorStop(1.0, `rgb(${Math.max(66, lum - 20)}, ${Math.max(66, lum - 20)}, ${Math.max(70, lum - 17 + warmCool)})`);
+        grad.addColorStop(0.0, `rgb(${Math.min(220, lum + 8)}, ${Math.min(220, lum + 8)}, ${Math.min(224, lum + 9 + warmCool)})`);
+        grad.addColorStop(0.5, `rgb(${Math.min(216, lum + 1)}, ${Math.min(216, lum + 1)}, ${Math.min(220, lum + 3 + warmCool)})`);
+        grad.addColorStop(1.0, `rgb(${Math.max(60, lum - 11)}, ${Math.max(60, lum - 11)}, ${Math.max(64, lum - 9 + warmCool)})`);
         ctx.fillStyle = grad;
         ctx.fill();
 
-        ctx.strokeStyle = 'rgba(244, 242, 238, 0.16)';
-        ctx.lineWidth = Math.max(1.1, 1.8 * scale);
+        ctx.strokeStyle = 'rgba(218, 222, 232, 0.055)';
+        ctx.lineWidth = Math.max(0.9, 1.2 * scale);
         ctx.stroke();
 
         for (let t = 0; t < chisels.length; t++) {
@@ -1095,31 +1095,31 @@ function createAshlarPbrSet(size, anisotropy, sharedHeightCanvas) {
       drawWrappedFast(hctx, size, size, minX, minY, maxX, maxY, () => {
         tracePolyPath(hctx, pts);
         hctx.lineJoin = 'round';
-        hctx.strokeStyle = 'rgb(44, 44, 44)';
-        hctx.lineWidth = 5.8 * scale;
+        hctx.strokeStyle = 'rgb(68, 68, 68)';
+        hctx.lineWidth = 4.2 * scale;
         hctx.stroke();
 
-        const skirtH = Math.round(faceH * 0.50);
+        const skirtH = Math.round(faceH * 0.66);
         hctx.fillStyle = `rgb(${skirtH},${skirtH},${skirtH})`;
         hctx.fill();
 
         tracePolyPath(hctx, innerPts);
         const hGrad = hctx.createLinearGradient(x, y, x, y + h);
-        hGrad.addColorStop(0.0, `rgb(${Math.min(248, faceH + 12)},${Math.min(248, faceH + 12)},${Math.min(248, faceH + 12)})`);
-        hGrad.addColorStop(1.0, `rgb(${Math.max(128, faceH - 14)},${Math.max(128, faceH - 14)},${Math.max(128, faceH - 14)})`);
+        hGrad.addColorStop(0.0, `rgb(${Math.min(238, faceH + 7)},${Math.min(238, faceH + 7)},${Math.min(238, faceH + 7)})`);
+        hGrad.addColorStop(1.0, `rgb(${Math.max(136, faceH - 8)},${Math.max(136, faceH - 8)},${Math.max(136, faceH - 8)})`);
         hctx.fillStyle = hGrad;
         hctx.fill();
 
-        const shoulderH = Math.round(faceH * 0.76);
+        const shoulderH = Math.round(faceH * 0.84);
         hctx.strokeStyle = `rgb(${shoulderH},${shoulderH},${shoulderH})`;
-        hctx.lineWidth = 3.0 * scale;
+        hctx.lineWidth = 2.4 * scale;
         hctx.stroke();
 
-        // Pillowed architectural cushion relief
+        // Subtle hand-dressed stone face undulation (eliminates puffy plastic LEGO-brick cushions!)
         const domeR = Math.min(w, h) * 0.48;
         if (domeR > 4) {
           const dome = hctx.createRadialGradient(cx, cy, domeR * 0.1, cx, cy, domeR);
-          dome.addColorStop(0.0, 'rgba(255, 255, 255, 0.20)');
+          dome.addColorStop(0.0, 'rgba(255, 255, 255, 0.09)');
           dome.addColorStop(1.0, 'rgba(255, 255, 255, 0.0)');
           hctx.fillStyle = dome;
           hctx.beginPath();
@@ -1291,26 +1291,26 @@ function createAshlarPbrSet(size, anisotropy, sharedHeightCanvas) {
       aPix[p4 + 1] = g < 0 ? 0 : g > 255 ? 255 : (g | 0);
       aPix[p4 + 2] = b < 0 ? 0 : b > 255 ? 255 : (b | 0);
 
-      // Authentic matte weathered medieval gothic stonework roughness [0.74..0.96] — zero fire shimmer!
+      // Authentic matte weathered medieval gothic stonework roughness [0.84..0.98] — zero glossy brick bevel glare!
       let rough;
       if (baseH < 0.28) {
-        rough = 0.93 + (0.14 - baseH) * 0.10 + grain * 0.04;
+        rough = 0.96 + (0.14 - baseH) * 0.06 + grain * 0.03;
       } else {
         const wear = clamp01((baseH - 0.58) * 2.2);
-        const dryR = 0.90 - wear * 0.07 + grain * 0.07;
-        const dampR = 0.80 - wear * 0.05 + grain * 0.05;
+        const dryR = 0.94 - wear * 0.05 + grain * 0.05;
+        const dampR = 0.87 - wear * 0.04 + grain * 0.04;
         rough = dryR + (dampR - dryR) * seepSmooth;
-        if (moss > 0.01) rough = rough + (0.95 - rough) * (moss * 0.85);
+        if (moss > 0.01) rough = rough + (0.97 - rough) * (moss * 0.85);
       }
-      roughData[idx] = rough < 0.74 ? 0.74 : rough > 0.96 ? 0.96 : rough;
+      roughData[idx] = rough < 0.84 ? 0.84 : rough > 0.98 ? 0.98 : rough;
     }
   }
 
   ctx.putImageData(albedoImg, 0, 0);
 
   const albedo = finalizeCanvasTexture(albedoCanvas, { isColor: true, repeat: true, anisotropy });
-  // Softened micro-normal contrast eliminates pixel-crawling shimmer while preserving crisp ashlar masonry!
-  const normal = buildNormalMapFromHeight(heightData, size, size, 0.72, 1.48, 0.82, anisotropy, true);
+  // Natural weathered ashlar relief without exaggerated glossy brick bevels
+  const normal = buildNormalMapFromHeight(heightData, size, size, 0.56, 0.94, 0.68, anisotropy, true);
   const orm = buildOrmMapFromFields(aoData, roughData, size, size, anisotropy, true);
 
   return { albedo, normal, roughness: orm, ao: orm };
@@ -3652,13 +3652,13 @@ function createAbyssMistTexture(anisotropy) {
 // Public 2K PBR Suite Factory (PC: 2048x2048 | Mobile: 512x512)
 // ============================================================================
 export function createSoulsPbrTextures({ isMobile = false } = {}) {
-  const texSize = isMobile ? 512 : 2048;
-  const ironSize = isMobile ? 256 : 1024;
-  const carpetSize = isMobile ? 256 : 1024;
-  const bannerW = isMobile ? 256 : 1024;
-  const bannerH = isMobile ? 512 : 2048;
+  const texSize = isMobile ? 512 : 1024;
+  const ironSize = isMobile ? 256 : 512;
+  const carpetSize = isMobile ? 256 : 512;
+  const bannerW = isMobile ? 256 : 512;
+  const bannerH = isMobile ? 512 : 1024;
   const fogSize = isMobile ? 256 : 512;
-  const anisotropy = isMobile ? 2 : 16;
+  const anisotropy = isMobile ? 2 : 4;
 
   // Reuse a single temporary height canvas across the 3 square 2K stone generators (saves ~32MB RAM!)
   const sharedHeightCanvas = createCanvas2D(texSize, texSize);

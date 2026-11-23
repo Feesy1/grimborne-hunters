@@ -1004,32 +1004,80 @@ export function createAnimController(modelRoot, clipMap, idleClipName = 'Idle', 
       return;
     }
 
-    if (prevBase && prevBase !== next) {
-      stopActionClean(prevBase);
-      stopActionClean(prevLowerBase);
-      prevLowerBase = null;
+    const isGaitClipName = (n) =>
+      /walk|run|strafe|backstep|sprint/i.test(String(n || ''));
+
+    // Smooth reversal if bouncing back to prevBase mid-fade: ZERO weight-inversion snap!
+    if (prevBase === next && currentBase && baseFadeTimer > 0.001 && baseFadeDur > 0.001) {
+      const oldCur = currentBase;
+      const oldCurName = currentBaseName;
+      const oldCurLower = activeLowerBase;
+      currentBase = prevBase;
+      currentBaseName = prevBaseName || nextName;
+      activeLowerBase = prevLowerBase;
+      prevBase = oldCur;
+      prevBaseName = oldCurName;
+      prevLowerBase = oldCurLower;
+      baseFadeTimer = Math.max(0.005, baseFadeDur - baseFadeTimer);
+      next.enabled = true;
+      next.paused = false;
+      if (!next.isRunning()) next.play();
+      return;
     }
 
-    if (currentBase) {
-      prevBase = currentBase;
-      prevBaseName = currentBaseName;
-      prevLowerBase = activeLowerBase;
+    const reqFadeDur =
+      Number.isFinite(Number(fadeDurSec)) && Number(fadeDurSec) >= 0.04
+        ? Math.min(0.45, Number(fadeDurSec))
+        : BASE_FADE_DUR;
+
+    // If a third clip interrupts early in a fade (prevBase still dominant > 55% weight),
+    // keep the visually dominant prevBase as the fade-out source instead of snapping currentBase from 10% -> 100%!
+    const keepDominantPrev =
+      Boolean(prevBase && prevBase !== next && currentBase && baseFadeDur > 0.001 && (baseFadeTimer / baseFadeDur) > 0.55);
+
+    if (keepDominantPrev) {
+      stopActionClean(currentBase);
+      stopActionClean(activeLowerBase);
       activeLowerBase = null;
-      baseFadeDur =
-        Number.isFinite(Number(fadeDurSec)) && Number(fadeDurSec) >= 0.04
-          ? Math.min(0.45, Number(fadeDurSec))
-          : BASE_FADE_DUR;
-      baseFadeTimer = baseFadeDur;
+      baseFadeDur = reqFadeDur;
+      baseFadeTimer = reqFadeDur;
     } else {
-      prevBase = null;
-      prevBaseName = null;
-      baseFadeTimer = 0;
-      baseFadeDur = BASE_FADE_DUR;
+      if (prevBase && prevBase !== next) {
+        stopActionClean(prevBase);
+        stopActionClean(prevLowerBase);
+        prevLowerBase = null;
+      }
+
+      if (currentBase) {
+        prevBase = currentBase;
+        prevBaseName = currentBaseName;
+        prevLowerBase = activeLowerBase;
+        activeLowerBase = null;
+        baseFadeDur = reqFadeDur;
+        baseFadeTimer = baseFadeDur;
+      } else {
+        prevBase = null;
+        prevBaseName = null;
+        baseFadeTimer = 0;
+        baseFadeDur = BASE_FADE_DUR;
+      }
     }
 
     next.setLoop(THREE.LoopRepeat, Infinity);
     next.clampWhenFinished = false;
-    if (!next.isRunning()) next.reset();
+    const wasRunning = next.isRunning();
+    if (!wasRunning) {
+      next.reset();
+      // Preserve normalized stride cycle phase when switching between gait clips so legs don't snap to frame 0!
+      if (prevBase && isGaitClipName(prevBaseName) && isGaitClipName(nextName)) {
+        const pDur = prevBase.getClip?.()?.duration || 0;
+        const nDur = next.getClip?.()?.duration || 0;
+        if (pDur > 0.05 && nDur > 0.05) {
+          const phase01 = (((prevBase.time || 0) % pDur) + pDur) % pDur / pDur;
+          next.time = phase01 * nDur;
+        }
+      }
+    }
     next.stopFading();
     next.enabled = true;
     next.play();
@@ -1303,6 +1351,81 @@ export function createAnimController(modelRoot, clipMap, idleClipName = 'Idle', 
     return true;
   }
 
+  // Smoothly hands off an active one-shot attack (or combo tail) directly into a looping base clip
+  // (e.g., Heavy_Cleave -> Whirl_Spin or Recover_Heft -> Idle/Walking) with strict wSum === 1.000
+  // and ZERO 1-frame pose snap or stuck attack tail blocking base locomotion!
+  function handoffOneShotToBase(targetBaseName = idleClipName, timeScale = 1.0, blendOutSec = 0.20) {
+    if (isDead || activeDeathAction) return false;
+    const outgoing = activeAttackAction;
+    if (!outgoing) {
+      if (targetBaseName) {
+        setBaseState(targetBaseName, timeScale, blendOutSec);
+      }
+      return true;
+    }
+    const nextName = targetBaseName || currentBaseName || idleClipName;
+    const next = getAction(nextName) || getAction(idleClipName);
+    if (!next) return false;
+    const resolvedName = (next.getClip()?.name || nextName || idleClipName).replace(/\.\d+$/, '');
+    const outWeight = Math.max(0, lastAttackWeight || outgoing.getEffectiveWeight?.() || 0);
+    const keepOutgoing =
+      outgoing !== next && outgoing.isScheduled?.() && outWeight > 0.01 ? outgoing : null;
+
+    if (prevAttackAction && prevAttackAction !== keepOutgoing) {
+      stopActionClean(prevAttackAction);
+    }
+    prevAttackAction = null;
+    prevAttackFadeTimer = 0;
+    prevAttackFadeDur = PREV_ATTACK_FADE_DUR;
+    prevAttackStartWeight = 0;
+    if (activeAttackAction && activeAttackAction !== keepOutgoing) {
+      stopActionClean(activeAttackAction);
+    }
+    activeAttackAction = null;
+    clearAttackMaskState();
+    legacyAtkAge = 0;
+    legacyAtkInDur = LEGACY_ATK_IN_DUR;
+    lastAttackWeight = 0;
+
+    if (prevBase && prevBase !== keepOutgoing && prevBase !== next) {
+      stopActionClean(prevBase);
+    }
+    if (currentBase && currentBase !== keepOutgoing && currentBase !== next) {
+      stopActionClean(currentBase);
+    }
+    stopActionClean(activeLowerBase);
+    activeLowerBase = null;
+    stopActionClean(prevLowerBase);
+    prevLowerBase = null;
+
+    next.stopFading();
+    next.setLoop(THREE.LoopRepeat, Infinity);
+    next.clampWhenFinished = false;
+    next.timeScale = Math.max(0.01, Number(timeScale) || 1.0);
+    if (!next.isRunning()) next.reset();
+    next.enabled = true;
+    next.paused = false;
+    next.play();
+
+    currentBase = next;
+    currentBaseName = resolvedName;
+    if (keepOutgoing) {
+      keepOutgoing.stopFading();
+      keepOutgoing.enabled = true;
+      prevBase = keepOutgoing;
+      prevBaseName = (keepOutgoing.getClip()?.name || '').replace(/\.\d+$/, '');
+      baseFadeDur = Math.max(0.06, Math.min(0.45, Number(blendOutSec) || 0.20));
+      baseFadeTimer = baseFadeDur;
+    } else {
+      prevBase = null;
+      prevBaseName = null;
+      baseFadeTimer = 0;
+      baseFadeDur = BASE_FADE_DUR;
+    }
+    syncLayerWeights(0);
+    return true;
+  }
+
   function triggerHit(speed = 1.85, clipName = null, opts = null) {
     if (isDead || activeDeathAction || activeRollAction || doorPushWanted) return false;
     const blockGuard = opts?.blockGuard !== false;
@@ -1510,6 +1633,7 @@ export function createAnimController(modelRoot, clipMap, idleClipName = 'Idle', 
     isHitActive,
     prepareExternalClip,
     handoffExternalClipToBase,
+    handoffOneShotToBase,
     triggerDeath,
     resetAlive
   };
@@ -1554,11 +1678,16 @@ export function solveMixamoArmIK(upperEntry, foreEntry, handEntry, targetWorldPo
     _prevForeQ.copy(fNode.quaternion);
   }
 
-  // Reset to rest before measuring/solving
+  // Reset to rest before measuring/solving (update ONLY the 3-bone arm chain, never recursive fingers/weapons!)
   uNode.quaternion.copy(upperEntry.restQ);
   fNode.quaternion.copy(foreEntry.restQ);
   uNode.parent.updateWorldMatrix(true, false);
-  uNode.updateMatrixWorld(true);
+  uNode.updateMatrix();
+  uNode.matrixWorld.multiplyMatrices(uNode.parent.matrixWorld, uNode.matrix);
+  fNode.updateMatrix();
+  fNode.matrixWorld.multiplyMatrices(uNode.matrixWorld, fNode.matrix);
+  hNode.updateMatrix();
+  hNode.matrixWorld.multiplyMatrices(fNode.matrixWorld, hNode.matrix);
 
   uNode.getWorldPosition(_ikShoulderW);
   fNode.getWorldPosition(_ikElbowW);
@@ -1617,7 +1746,10 @@ export function solveMixamoArmIK(upperEntry, foreEntry, handEntry, targetWorldPo
     _prevUpperQ.slerp(uNode.quaternion, blend);
     uNode.quaternion.copy(_prevUpperQ);
   }
-  uNode.updateMatrixWorld(true);
+  uNode.updateMatrix();
+  uNode.matrixWorld.multiplyMatrices(uNode.parent.matrixWorld, uNode.matrix);
+  fNode.updateMatrix();
+  fNode.matrixWorld.multiplyMatrices(uNode.matrixWorld, fNode.matrix);
 
   // Rotate ForeArm so its +Y axis points at targetWorldPos
   fNode.getWorldPosition(_ikElbowW);
@@ -1631,5 +1763,8 @@ export function solveMixamoArmIK(upperEntry, foreEntry, handEntry, targetWorldPo
     _prevForeQ.slerp(fNode.quaternion, blend);
     fNode.quaternion.copy(_prevForeQ);
   }
-  fNode.updateMatrixWorld(true);
+  fNode.updateMatrix();
+  fNode.matrixWorld.multiplyMatrices(uNode.matrixWorld, fNode.matrix);
+  hNode.updateMatrix();
+  hNode.matrixWorld.multiplyMatrices(fNode.matrixWorld, hNode.matrix);
 }

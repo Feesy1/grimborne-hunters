@@ -26,7 +26,7 @@
 
 import * as THREE from '../../vendor/three.module.js';
 import { mergeGeometries } from '../../vendor/BufferGeometryUtils.js';
-import * as CASTLE_LAYOUT from './soulsCastleLayout.js?v=20261121z68';
+import * as CASTLE_LAYOUT from './soulsCastleLayout.js?v=20261123z71';
 
 const DUST_COUNT_PC = 120;
 const DUST_COUNT_MOBILE = 55;
@@ -1353,13 +1353,11 @@ function buildMistParts(mistZones, isMobile) {
   const parts = [];
   const layerSpecs = isMobile
     ? [
-        { y: 0.12, hFrac: 0.0, weight: 1.00 },
-        { y: 0.38, hFrac: 1.0, weight: 0.72 }
+        { y: 0.14, hFrac: 0.0, weight: 1.00 }
       ]
     : [
-        { y: 0.10, hFrac: 0.0, weight: 1.00 },
-        { y: 0.28, hFrac: 0.5, weight: 0.78 },
-        { y: 0.50, hFrac: 1.0, weight: 0.56 }
+        { y: 0.12, hFrac: 0.0, weight: 1.00 },
+        { y: 0.40, hFrac: 1.0, weight: 0.68 }
       ];
 
   for (let l = 0; l < layerSpecs.length; l++) {
@@ -1418,13 +1416,9 @@ function getMistFbmGlsl(isMobile) {
       return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
     }
     float fbmMist(vec2 p) {
-      float sum = vnoise(p) * 0.58;
+      float sum = vnoise(p) * 0.64;
       p = mat2(0.80, -0.60, 0.60, 0.80) * p * 2.03 + vec2(17.1, 31.7);
-      sum += vnoise(p) * 0.30;
-      ${isMobile ? '' : `
-      p = mat2(0.80, -0.60, 0.60, 0.80) * p * 2.02 + vec2(9.4, 13.8);
-      sum += vnoise(p) * 0.12;
-      `}
+      sum += vnoise(p) * 0.36;
       return sum;
     }
   `;

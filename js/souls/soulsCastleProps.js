@@ -1,4 +1,4 @@
-// Wave 2 (`?v=20261121z68`) Next-Gen Gothic Castle 3D Props — «Abandoned Knight Rift»
+// Wave 2 (`?v=20261123z71`) Next-Gen Gothic Castle 3D Props — «Abandoned Knight Rift»
 // +200% PC Polygon Fidelity, Physical PBR Reflections & Dynamic Fire Shadow-Casting
 // while preserving the strict <= 45k-tri Mobile Yandex Games tessellation budget:
 //   1. createHeroBonfire3D             -> High-poly 16-stone charred hearth + ash mound + 6 bark-grooved charred logs
@@ -25,13 +25,13 @@ import {
   createInstancedWallLanternFlames,
   createCandleFlameShaderMaterial,
   createCandleFlameTeardropGeometry
-} from './soulsFireVfx.js?v=20261121z68';
+} from './soulsFireVfx.js?v=20261123z71';
 import {
   SOULS_CASTLE_ALCOVE_DECOR,
   SOULS_CASTLE_WALL_SEGMENTS,
   SOULS_CASTLE_FLAME_TRAPS,
   SOULS_CASTLE_WALL_LANTERNS
-} from './soulsCastleLayout.js?v=20261121z68';
+} from './soulsCastleLayout.js?v=20261123z71';
 
 // ============================================================================
 // Dual-Profile Tessellation Shim:
@@ -717,10 +717,6 @@ export function createHeroBonfire3D({
     const cast = !isMobile && !isLowSpec;
     hearthMesh.castShadow = cast;
     swordMesh.castShadow = cast;
-    hearthMat.normalMap = isLowSpec ? null : ashNormal;
-    swordMat.normalMap = isLowSpec ? null : ironNormal;
-    hearthMat.needsUpdate = true;
-    swordMat.needsUpdate = true;
     flameAssembly.setLowSpec(isLowSpec);
   }
 
@@ -1591,14 +1587,6 @@ export function createGothicLanternBraziers3D({
     if (pedMesh) pedMesh.castShadow = cast;
     if (ironMesh) ironMesh.castShadow = false;
     if (coalInst) coalInst.castShadow = false;
-    if (pedestalStoneMat) {
-      pedestalStoneMat.normalMap = isLowSpec ? null : stoneNormal;
-      pedestalStoneMat.needsUpdate = true;
-    }
-    if (forgedIronMat) {
-      forgedIronMat.normalMap = isLowSpec ? null : ironNormal;
-      forgedIronMat.needsUpdate = true;
-    }
     if (brazierFlames) brazierFlames.setLowSpec(isLowSpec);
     if (wallLanternFlames) wallLanternFlames.setLowSpec(isLowSpec);
     if (wallGlassInst) wallGlassInst.visible = !isLowSpec;
@@ -1716,7 +1704,7 @@ function createMeltedWaxAndWickGeometry() {
     bp.setXYZ(i, x, y, z);
   }
   body.computeVertexNormals();
-  parts.push(tagGeo(body, { colorHex: 0xf2e6cc, bottomColorHex: 0xb39f7e }));
+  parts.push(tagGeo(body, { colorHex: 0xd8c6a2, bottomColorHex: 0x8e7959 }));
 
   const dripSpecs = [
     { ang: 0.25, len: 0.62, r: 0.21 },
@@ -1737,12 +1725,12 @@ function createMeltedWaxAndWickGeometry() {
     parts.push(tagGeo(makeXform(
       new THREE.CylinderGeometry(d.r * 0.72, d.r * 1.02, topY - botY, SEG_MOBILE ? 5 : 9),
       ca * 0.96, midY, sa * 0.96
-    ), { colorHex: 0xecdec2, bottomColorHex: 0xc5af89 }));
+    ), { colorHex: 0xcfbca0, bottomColorHex: 0x9b8564 }));
     parts.push(tagGeo(makeXform(
       new THREE.SphereGeometry(d.r * 1.28, 6, 4),
       ca * 0.99, botY, sa * 0.99,
       0, 0, 0, 1.0, 1.42, 1.0
-    ), { colorHex: 0xf1e4ca, bottomColorHex: 0xbca680 }));
+    ), { colorHex: 0xd4c19e, bottomColorHex: 0x937d5d }));
   }
 
   parts.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.085, 0.115, 0.28, SEG_MOBILE ? 5 : 8), 0.04, 1.01, 0, 0, 0, -0.22), {
@@ -2007,8 +1995,6 @@ export function createMeltedCandleClusters3D({
     const cast = !isMobile && !isLowSpec;
     saucerInst.castShadow = false;
     waxInst.castShadow = false;
-    saucerMat.normalMap = isLowSpec ? null : ironNormal;
-    saucerMat.needsUpdate = true;
     flameMat.setLowSpec(isLowSpec);
     applyVisibility();
   }
@@ -2880,19 +2866,61 @@ function appendWallShieldParts(parts, spec) {
 }
 
 function createRunicCrystalGeometry() {
+  // Sculpted Gothic Golden Estus Reliquary Chalice / Fluted Amber Flask (replaces arcade crystal + Saturn ring!)
   const parts = [];
-  const crystal = new THREE.OctahedronGeometry(0.22, SEG_MOBILE ? 0 : 1);
-  crystal.scale(0.76, 1.78, 0.76);
-  const nonIdxC = crystal.index ? crystal.toNonIndexed() : crystal;
-  if (nonIdxC !== crystal) crystal.dispose();
-  parts.push(nonIdxC);
+  const seg = SEG_MOBILE ? 10 : 18;
+  const toNonIdx = (g) => {
+    const out = g.index ? g.toNonIndexed() : g;
+    if (out !== g) g.dispose();
+    // Ensure consistent position/normal/uv attributes before merge
+    if (!out.attributes.normal) out.computeVertexNormals();
+    if (!out.attributes.uv) {
+      out.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(out.attributes.position.count * 2), 2));
+    }
+    return out;
+  };
 
-  const ring = new THREE.TorusGeometry(0.33, 0.021, 5, SEG_MOBILE ? 6 : 12);
-  ring.rotateX(Math.PI * 0.38);
-  ring.rotateZ(0.32);
-  const nonIdxR = ring.index ? ring.toNonIndexed() : ring;
-  if (nonIdxR !== ring) ring.dispose();
-  parts.push(nonIdxR);
+  // 1. Turned Gothic Chalice & Bulbous Fluted Estus Vessel profile (LatheGeometry)
+  const profile = [
+    new THREE.Vector2(0.001, -0.34),
+    new THREE.Vector2(0.155, -0.34), // Wide stepped chalice base
+    new THREE.Vector2(0.150, -0.305),
+    new THREE.Vector2(0.110, -0.285),
+    new THREE.Vector2(0.056, -0.245), // Stem collar
+    new THREE.Vector2(0.042, -0.195),
+    new THREE.Vector2(0.072, -0.165), // Gothic stem knop
+    new THREE.Vector2(0.045, -0.130),
+    new THREE.Vector2(0.095, -0.092), // Calyx cup flare
+    new THREE.Vector2(0.168, -0.032), // Lower amber flask belly
+    new THREE.Vector2(0.184,  0.045), // Widest glowing Estus belly
+    new THREE.Vector2(0.164,  0.125), // Upper shoulder
+    new THREE.Vector2(0.096,  0.182), // Flask neck base
+    new THREE.Vector2(0.068,  0.222), // Forged collar throat
+    new THREE.Vector2(0.108,  0.258), // Flared reliquary crown lip
+    new THREE.Vector2(0.088,  0.275),
+    new THREE.Vector2(0.052,  0.292), // Stopper finial neck
+    new THREE.Vector2(0.064,  0.328), // Finial jewel bud
+    new THREE.Vector2(0.022,  0.375),
+    new THREE.Vector2(0.001,  0.395)
+  ];
+  const chalice = new THREE.LatheGeometry(profile, seg);
+  chalice.computeVertexNormals();
+  parts.push(toNonIdx(chalice));
+
+  // 2. Four slender wrought-gold gothic cradle ribs clasping the amber vessel belly
+  const ribCount = SEG_MOBILE ? 4 : 6;
+  for (let i = 0; i < ribCount; i++) {
+    const a = (i / ribCount) * Math.PI * 2;
+    const rib = new THREE.CylinderGeometry(0.012, 0.015, 0.27, SEG_MOBILE ? 4 : 6);
+    rib.translate(Math.cos(a) * 0.186, 0.042, Math.sin(a) * 0.186);
+    parts.push(toNonIdx(rib));
+  }
+
+  // 3. Delicate horizontal filigree waist band around the reliquary shoulder
+  const band = new THREE.TorusGeometry(0.172, 0.013, 5, seg);
+  band.rotateX(Math.PI * 0.5);
+  band.translate(0, 0.126, 0);
+  parts.push(toNonIdx(band));
 
   const merged = mergeGeometries(parts, false);
   for (let i = 0; i < parts.length; i++) parts[i].dispose();
@@ -3022,13 +3050,13 @@ export function createCastleBannersAndShrines3D({
     stoneShrineMat = regMat(new THREE.MeshStandardMaterial({
       map: stoneAlbedo,
       normalMap: lowSpec ? null : stoneNormal,
-      normalScale: new THREE.Vector2(1.20, 1.20),
+      normalScale: new THREE.Vector2(0.76, 0.76),
       roughnessMap: stoneRough,
-      color: stoneAlbedo ? 0xa3aac0 : 0x7f879e,
+      color: stoneAlbedo ? 0x8b93aa : 0x767e94,
       vertexColors: true,
-      roughness: 0.90,
-      metalness: 0.09,
-      envMapIntensity: 0.55
+      roughness: 0.96,
+      metalness: 0.05,
+      envMapIntensity: 0.24
     }));
     const stoneGeo = regGeo(mergeTaggedParts(stoneShrineParts, 2.0));
     stoneMesh = new THREE.Mesh(stoneGeo, stoneShrineMat);
@@ -3209,26 +3237,28 @@ export function createCastleBannersAndShrines3D({
         varying vec3 vNormalView;
         varying vec3 vViewDir;
         varying vec3 vColor;
+        varying vec3 vLocalP;
         varying float vClaimed;
         varying float vPulse;
 
         void main() {
           vColor = aColor;
+          vLocalP = position;
           vClaimed = aClaimed;
           float isLit = 1.0 - clamp(aClaimed, 0.0, 1.0);
-          float ang = (uTime * 1.15 + aPhase) * isLit;
+          float ang = (uTime * 0.48 + aPhase) * isLit;
           float c = cos(ang);
           float s = sin(ang);
 
           vec3 p = position;
           vec3 rp = vec3(p.x * c - p.z * s, p.y, p.x * s + p.z * c);
-          rp *= mix(0.84, 1.0, isLit);
-          rp.y += mix(-0.18, sin(uTime * 2.3 + aPhase) * 0.085, isLit);
+          rp *= mix(0.92, 1.0, isLit);
+          rp.y += mix(-0.14, sin(uTime * 1.75 + aPhase) * 0.042, isLit);
 
           vec3 n = normal;
           vec3 rn = vec3(n.x * c - n.z * s, n.y, n.x * s + n.z * c);
 
-          vPulse = 0.78 + 0.22 * sin(uTime * 3.6 + aPhase * 1.4);
+          vPulse = 0.84 + 0.16 * sin(uTime * 2.6 + aPhase * 1.4);
           vec4 mvPos = modelViewMatrix * instanceMatrix * vec4(rp, 1.0);
           vNormalView = normalize(normalMatrix * mat3(instanceMatrix) * rn);
           vViewDir = normalize(-mvPos.xyz);
@@ -3239,17 +3269,44 @@ export function createCastleBannersAndShrines3D({
         varying vec3 vNormalView;
         varying vec3 vViewDir;
         varying vec3 vColor;
+        varying vec3 vLocalP;
         varying float vClaimed;
         varying float vPulse;
 
         void main() {
-          float ndv = clamp(abs(dot(normalize(vNormalView), normalize(vViewDir))), 0.0, 1.0);
-          float fresnel = pow(1.0 - ndv, 2.2);
-          float facetLight = 0.45 + 0.55 * clamp(dot(normalize(vNormalView), normalize(vec3(0.4, 0.8, 0.45))), 0.0, 1.0);
+          vec3 N = normalize(vNormalView);
+          vec3 V = normalize(vViewDir);
+          vec3 L = normalize(vec3(0.38, 0.82, 0.44));
+          vec3 H = normalize(L + V);
 
-          vec3 activeCol = vColor * (0.72 + 0.55 * facetLight) * vPulse + mix(vColor, vec3(1.0, 0.98, 0.90), 0.65) * (0.28 + fresnel * 0.85);
-          vec3 dormantCol = vec3(0.11, 0.12, 0.16) * (0.60 + 0.65 * facetLight) + vec3(0.05, 0.06, 0.08) * fresnel;
+          float ndv = clamp(abs(dot(N, V)), 0.0, 1.0);
+          float ndl = clamp(dot(N, L), 0.0, 1.0);
+          float fresnel = pow(1.0 - ndv, 2.4);
+          float spec = pow(clamp(dot(N, H), 0.0, 1.0), 28.0);
 
+          // Distinguish forged antique-gold chalice stem/collar/cradle ribs vs glowing molten-amber Estus vessel belly
+          float rad = length(vLocalP.xz);
+          float inVesselY = smoothstep(-0.105, -0.055, vLocalP.y) * smoothstep(0.205, 0.145, vLocalP.y);
+          float isCageRib = smoothstep(0.174, 0.184, rad);
+          float isBand = smoothstep(0.108, 0.120, vLocalP.y) * smoothstep(0.144, 0.132, vLocalP.y) * smoothstep(0.158, 0.168, rad);
+          float glassMask = clamp(inVesselY * (1.0 - max(isCageRib, isBand)), 0.0, 1.0);
+
+          // 1. Tarnished Antique Gothic Gold / Forged Bronze Metalwork
+          vec3 goldBase = vec3(0.36, 0.25, 0.11);
+          vec3 goldHi   = vec3(0.88, 0.68, 0.34);
+          vec3 metalLit = goldBase * (0.38 + 0.72 * ndl) + goldHi * (spec * 0.72 + fresnel * 0.24);
+          vec3 metalDormant = vec3(0.16, 0.14, 0.13) * (0.45 + 0.55 * ndl) + vec3(0.24, 0.21, 0.18) * spec * 0.35;
+
+          // 2. Bottled Bonfire Amber Glass (deep honey-ember core + dark smoked-glass rim, zero flat neon!)
+          vec3 warmVessel = mix(vColor * vec3(0.76, 0.44, 0.16), vec3(0.92, 0.56, 0.14), 0.32);
+          float innerGlow = pow(ndv, 1.35) * vPulse;
+          vec3 glassLit = warmVessel * (0.28 + 0.78 * innerGlow + 0.26 * ndl)
+            + mix(vColor, vec3(1.0, 0.88, 0.56), 0.55) * (spec * 0.48 + pow(ndv, 3.0) * 0.34 * vPulse)
+            + vec3(0.42, 0.20, 0.06) * fresnel * 0.32;
+          vec3 glassDormant = vec3(0.08, 0.085, 0.10) * (0.50 + 0.50 * ndl) + vec3(0.14, 0.15, 0.19) * (fresnel * 0.45 + spec * 0.32);
+
+          vec3 activeCol = mix(metalLit, glassLit, glassMask);
+          vec3 dormantCol = mix(metalDormant, glassDormant, glassMask);
           vec3 finalCol = mix(activeCol, dormantCol, clamp(vClaimed, 0.0, 1.0));
           gl_FragColor = vec4(finalCol, 1.0);
         }
@@ -3314,18 +3371,6 @@ export function createCastleBannersAndShrines3D({
     if (stoneMesh) stoneMesh.castShadow = cast;
     if (ironMesh) ironMesh.castShadow = cast;
     if (bannersClothMesh) bannersClothMesh.castShadow = cast;
-    if (stoneShrineMat) {
-      stoneShrineMat.normalMap = low ? null : stoneNormal;
-      stoneShrineMat.needsUpdate = true;
-    }
-    if (forgedDecorMat) {
-      forgedDecorMat.normalMap = low ? null : ironNormal;
-      forgedDecorMat.needsUpdate = true;
-    }
-    if (bannerMat && bannerNormalTex) {
-      bannerMat.normalMap = low ? null : bannerNormalTex;
-      bannerMat.needsUpdate = true;
-    }
   }
 
   function update(_dt = 0.016, elapsed = 0) {

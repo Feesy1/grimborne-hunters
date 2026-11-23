@@ -528,11 +528,11 @@ export function createSoulsFireShadowRig(scene, options = {}) {
   };
   setSources(opts.sources);
 
-  // Configure 2 physical inverse-square (decay = 2) PointLights:
-  // Primary slot casts crisp 512x512 PCFSoft cube shadows (6 faces, fixed far=16m -> 0 mid-walk matrix/shader hitches!),
-  // Secondary slot provides warm physical cross-fill without 6 extra redundant cube-map shadow passes (80% less shadow fillrate!).
+  // Configure 2 physical inverse-square (decay = 2) PointLights without 6-face cubemap shadows:
+  // Eliminates 6 full-scene shadow passes/frame (~1.6M skinned tris/frame!) while preserving warm flickering fire fill
+  // alongside the primary DirectionalLight shadow map and contact AO pads.
   const slotSpecs = [
-    { mapSize: 512, far: 16.0, gain: 1.0, castsShadow: true },
+    { mapSize: 256, far: 16.0, gain: 1.0, castsShadow: false },
     { mapSize: 256, far: 18.0, gain: 0.78, castsShadow: false }
   ];
 

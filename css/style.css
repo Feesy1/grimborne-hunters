@@ -8821,7 +8821,7 @@ html.is-mobile-landscape .hub-rotate-hint {
   letter-spacing: 0.025em;
 }
 
-/* Dark Souls Green Stamina Bar directly under HP bar */
+/* Castle of Ash Gothic Stamina Bar directly under HP bar (muted noble moss-emerald + antique gold trim) */
 .souls-stamina-wrap {
   margin-top: 4px;
   width: min(260px, 46vw);
@@ -8829,21 +8829,96 @@ html.is-mobile-landscape .hub-rotate-hint {
 
 .souls-stamina-frame {
   position: relative;
-  height: 16px;
-  border-radius: 6px;
-  background: rgba(8, 12, 16, 0.88);
-  border: 1px solid rgba(110, 231, 183, 0.48);
+  height: 15px;
+  border-radius: 3px;
+  background: rgba(10, 9, 12, 0.92);
+  border: 1px solid rgba(196, 162, 98, 0.52);
   overflow: hidden;
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.65), inset 0 1px 3px rgba(0, 0, 0, 0.8);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.72), inset 0 1px 3px rgba(0, 0, 0, 0.85);
 }
 
 .souls-stamina-fill {
   position: absolute;
   inset: 0;
   transform-origin: left center;
-  background: linear-gradient(90deg, #15803d 0%, #22c55e 58%, #86efac 100%);
-  box-shadow: 0 0 10px rgba(34, 197, 94, 0.45);
+  background: linear-gradient(180deg, #568564 0%, #2f5c41 55%, #1d3c2b 100%);
+  box-shadow: inset 0 1px 0 rgba(212, 232, 206, 0.22);
   transition: transform 0.05s linear;
+}
+
+.hud-screen.is-souls-mode .hp-bar-frame {
+  border-radius: 3px;
+  border-color: rgba(196, 162, 98, 0.58);
+  background: rgba(10, 9, 12, 0.92);
+}
+
+.hud-screen.is-souls-mode .hp-bar-fill {
+  background: linear-gradient(180deg, #b53036 0%, #801820 58%, #540f15 100%);
+  box-shadow: inset 0 1px 0 rgba(252, 198, 198, 0.22);
+}
+
+.hud-screen.is-souls-mode .wave-box {
+  padding: 5px 16px 6px;
+  border-radius: 4px;
+  background: linear-gradient(180deg, rgba(16, 13, 18, 0.86) 0%, rgba(10, 8, 12, 0.92) 100%);
+  border: 1px solid rgba(196, 162, 98, 0.45);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.65);
+}
+
+.hud-screen.is-souls-mode .hud-level-title {
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #e8cfa0;
+}
+
+.hud-screen.is-souls-mode .hud-wave-timer {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: rgba(214, 198, 170, 0.82);
+  margin-top: 1px;
+}
+
+.hud-screen.is-souls-mode .hud-dash-btn,
+.hud-screen.is-souls-mode .hud-souls-heavy-btn,
+.hud-screen.is-souls-mode .hud-souls-block-btn,
+.hud-screen.is-souls-mode .hud-souls-flask-btn,
+.hud-screen.is-souls-mode .hud-lock-btn {
+  border-radius: 5px;
+  background: linear-gradient(180deg, rgba(22, 19, 24, 0.94) 0%, rgba(11, 9, 13, 0.97) 100%);
+  border: 1.5px solid rgba(196, 162, 98, 0.54);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.72), inset 0 1px 0 rgba(235, 206, 146, 0.16);
+}
+
+.hud-souls-heavy-btn {
+  position: relative;
+  height: 46px;
+  padding: 0 12px 0 10px;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #f3e4c4;
+  cursor: pointer;
+  user-select: none;
+}
+
+.hud-screen.is-souls-touch-active .wave-box {
+  padding: 3px 12px 4px;
+}
+
+.hud-screen.is-souls-touch-active .hud-level-title {
+  font-size: 11.5px;
+}
+
+.hud-screen.is-souls-touch-active .hud-wave-timer {
+  font-size: 9.5px;
+}
+
+.hud-screen.is-souls-touch-active .weapon-hud-badge,
+.hud-screen.is-souls-touch-active .hud-souls-heavy-btn {
+  display: none !important;
 }
 
 .souls-stamina-wrap.is-guard-broken .souls-stamina-frame {
@@ -9112,22 +9187,21 @@ html.is-mobile-landscape .hub-rotate-hint {
 
 .souls-pointer-hint {
   position: fixed;
-  bottom: calc(92px + var(--safe-bottom));
+  bottom: calc(90px + var(--safe-bottom));
   left: 50%;
   transform: translateX(-50%);
   z-index: 46;
   pointer-events: none;
-  padding: 5px 13px;
-  border-radius: 999px;
-  border: 1px solid rgba(229, 184, 92, 0.42);
-  background: rgba(12, 9, 14, 0.78);
-  color: rgba(254, 243, 199, 0.9);
-  font-size: 11.5px;
+  padding: 5px 14px;
+  border-radius: 4px;
+  border: 1px solid rgba(196, 162, 98, 0.44);
+  background: linear-gradient(180deg, rgba(16, 13, 18, 0.86) 0%, rgba(10, 8, 12, 0.92) 100%);
+  color: rgba(235, 217, 180, 0.86);
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.04em;
   white-space: nowrap;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.58);
-  backdrop-filter: blur(3px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.68);
 }
 
 .souls-defeat-overlay {
@@ -9394,61 +9468,63 @@ html.is-mobile-landscape .hub-rotate-hint {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1px;
-  color: #fef3c7;
-  background: radial-gradient(circle at 36% 30%, rgba(36, 28, 44, 0.88) 0%, rgba(12, 10, 18, 0.94) 100%);
-  border: 1.5px solid rgba(229, 184, 92, 0.66);
+  gap: 2px;
+  color: #efe1c0;
+  background: radial-gradient(circle at 36% 28%, rgba(30, 25, 32, 0.92) 0%, rgba(12, 10, 14, 0.96) 100%);
+  border: 1.5px solid rgba(196, 162, 98, 0.62);
   box-shadow:
-    0 6px 18px rgba(0, 0, 0, 0.68),
-    inset 0 1px 0 rgba(254, 240, 138, 0.28);
+    0 6px 18px rgba(0, 0, 0, 0.74),
+    inset 0 1px 0 rgba(235, 206, 146, 0.22);
   transition: transform 0.08s ease, border-color 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
 }
 
 .touch-souls-btn.is-pressed {
   transform: scale(0.9);
-  border-color: #fffbeb;
+  border-color: #f3dca4;
   filter: brightness(1.16);
 }
 
 .touch-souls-ico {
-  font-size: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   line-height: 1;
 }
 
 .touch-souls-lbl {
   font-family: var(--font-display);
-  font-size: 10.5px;
+  font-size: 9.5px;
   font-weight: 800;
   letter-spacing: 0.04em;
-  color: #fde68a;
+  color: #e6cca0;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
 }
 
-/* Primary Right-Thumb Arc Geometry — Enlarged Thumb-Friendly Targets (verified 0 overlap on 844x390 landscape & tablets) */
+/* Unified Obsidian & Antique-Gold Gothic Right-Thumb Arc (0 rainbow clutter, 0 overlap on 844x390!) */
 .touch-souls-r1 {
   width: 80px;
   height: 80px;
   right: calc(16px + var(--safe-right));
   bottom: calc(16px + var(--safe-bottom));
-  background: radial-gradient(circle at 38% 30%, rgba(153, 27, 27, 0.92) 0%, rgba(56, 10, 14, 0.96) 100%);
-  border-color: #fcd34d;
+  background: radial-gradient(circle at 38% 30%, rgba(92, 22, 26, 0.94) 0%, rgba(34, 10, 13, 0.97) 100%);
+  border-color: rgba(218, 178, 102, 0.85);
   box-shadow:
-    0 8px 22px rgba(0, 0, 0, 0.72),
-    0 0 18px rgba(220, 38, 38, 0.36),
-    inset 0 1px 0 rgba(254, 240, 138, 0.45);
+    0 8px 22px rgba(0, 0, 0, 0.78),
+    0 0 14px rgba(153, 27, 27, 0.34),
+    inset 0 1px 0 rgba(242, 214, 152, 0.34);
 }
 
 .touch-souls-r1 .touch-souls-ico {
-  font-size: 26px;
+  font-size: 24px;
 }
 
 .touch-souls-r1.is-counter-ready,
 .hud-souls-block-btn.is-counter-ready {
-  border-color: #fef08a;
+  border-color: #f6dc8e;
   box-shadow:
-    0 0 24px rgba(253, 224, 71, 0.85),
-    0 0 12px rgba(245, 158, 11, 0.75),
-    inset 0 0 14px rgba(254, 249, 195, 0.45);
+    0 0 22px rgba(217, 162, 60, 0.8),
+    0 0 10px rgba(196, 130, 38, 0.65),
+    inset 0 0 12px rgba(246, 226, 166, 0.35);
 }
 
 .touch-layer.is-souls-touch .touch-dash-btn {
@@ -9457,12 +9533,15 @@ html.is-mobile-landscape .hub-rotate-hint {
   right: calc(110px + var(--safe-right));
   bottom: calc(18px + var(--safe-bottom));
   z-index: 4;
+  background: radial-gradient(circle at 36% 28%, rgba(32, 28, 34, 0.92) 0%, rgba(13, 11, 15, 0.96) 100%);
+  border-color: rgba(196, 162, 98, 0.65);
 }
 
 .touch-layer.is-souls-touch .touch-dash-btn .touch-dash-label,
 .touch-layer.is-souls-touch .touch-dash-btn .touch-btn-label {
-  font-size: 9.5px;
-  letter-spacing: 0.01em;
+  font-size: 9px;
+  letter-spacing: 0.02em;
+  color: #e6cca0;
 }
 
 .touch-souls-r2 {
@@ -9470,8 +9549,12 @@ html.is-mobile-landscape .hub-rotate-hint {
   height: 64px;
   right: calc(106px + var(--safe-right));
   bottom: calc(102px + var(--safe-bottom));
-  background: radial-gradient(circle at 38% 30%, rgba(120, 53, 15, 0.92) 0%, rgba(44, 18, 8, 0.96) 100%);
-  border-color: rgba(251, 191, 36, 0.78);
+  background: radial-gradient(circle at 38% 30%, rgba(56, 34, 20, 0.93) 0%, rgba(22, 13, 10, 0.96) 100%);
+  border-color: rgba(206, 164, 94, 0.72);
+}
+
+.touch-souls-r2 .touch-souls-lbl {
+  font-size: 8.5px;
 }
 
 .touch-souls-block {
@@ -9479,24 +9562,24 @@ html.is-mobile-landscape .hub-rotate-hint {
   height: 68px;
   right: calc(186px + var(--safe-right));
   bottom: calc(72px + var(--safe-bottom));
-  background: radial-gradient(circle at 38% 30%, rgba(30, 52, 86, 0.9) 0%, rgba(14, 22, 40, 0.96) 100%);
-  border-color: rgba(147, 197, 253, 0.72);
+  background: radial-gradient(circle at 38% 30%, rgba(26, 30, 42, 0.93) 0%, rgba(12, 13, 20, 0.96) 100%);
+  border-color: rgba(188, 164, 118, 0.68);
 }
 
 .touch-souls-block.is-blocking {
-  border-color: #60a5fa;
-  box-shadow: 0 0 20px rgba(96, 165, 250, 0.68);
+  border-color: #cbd5e1;
+  box-shadow: 0 0 18px rgba(148, 163, 184, 0.55);
 }
 
 .touch-souls-block.is-parry {
-  border-color: #fde047;
-  background: radial-gradient(circle, rgba(146, 84, 14, 0.95) 0%, rgba(56, 30, 8, 0.98) 100%);
-  box-shadow: 0 0 24px rgba(253, 224, 71, 0.85);
+  border-color: #f6dc8e;
+  background: radial-gradient(circle, rgba(112, 68, 18, 0.95) 0%, rgba(42, 22, 8, 0.98) 100%);
+  box-shadow: 0 0 22px rgba(217, 162, 60, 0.8);
 }
 
 .touch-souls-block.is-guard-broken {
-  border-color: #ef4444;
-  box-shadow: 0 0 18px rgba(239, 68, 68, 0.65);
+  border-color: #b91c1c;
+  box-shadow: 0 0 16px rgba(185, 28, 28, 0.65);
 }
 
 .touch-souls-lock {
@@ -9511,9 +9594,9 @@ html.is-mobile-landscape .hub-rotate-hint {
 }
 
 .touch-souls-lock.is-active {
-  border-color: #fde047;
-  background: radial-gradient(circle, rgba(146, 92, 14, 0.95) 0%, rgba(58, 32, 8, 0.98) 100%);
-  box-shadow: 0 0 20px rgba(250, 204, 21, 0.76);
+  border-color: #f3d58c;
+  background: radial-gradient(circle, rgba(96, 60, 16, 0.95) 0%, rgba(36, 20, 8, 0.98) 100%);
+  box-shadow: 0 0 18px rgba(217, 162, 60, 0.72);
 }
 
 .touch-souls-flask {
@@ -9521,8 +9604,8 @@ html.is-mobile-landscape .hub-rotate-hint {
   height: 58px;
   right: calc(84px + var(--safe-right));
   bottom: calc(180px + var(--safe-bottom));
-  background: radial-gradient(circle at 38% 30%, rgba(110, 52, 14, 0.9) 0%, rgba(38, 16, 8, 0.96) 100%);
-  border-color: rgba(245, 158, 11, 0.72);
+  background: radial-gradient(circle at 38% 30%, rgba(62, 36, 16, 0.92) 0%, rgba(24, 13, 8, 0.96) 100%);
+  border-color: rgba(212, 162, 84, 0.72);
 }
 
 .touch-souls-flask .touch-souls-ico {

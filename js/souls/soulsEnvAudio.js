@@ -2,7 +2,7 @@
 // Studio 44.1 kHz 16-bit WAV samples + acoustic procedural fallbacks during decode.
 // Strictly isolated from PvE biomes; zero external dependencies (Vanilla ES Module).
 
-export const SOULS_ENV_AUDIO_VERSION = '20261121z68';
+export const SOULS_ENV_AUDIO_VERSION = '20261123z71';
 
 const BASE_AUDIO_PATH = './assets/audio';
 
@@ -853,21 +853,18 @@ export function createSoulsEnvAudio({
   // Public API
   // =========================================================================
 
+  let envPreloadPromise = null;
   function preload(audioCtx) {
+    if (envPreloadPromise) return envPreloadPromise;
     const ctx = audioCtx || safeGet(getCtx);
     if (!ctx || typeof fetch !== 'function') {
       return Promise.resolve(false);
     }
 
-    const tasks = [];
-    for (let i = 0; i < SOULS_ENV_SAMPLE_MANIFEST.length; i++) {
-      const [key, url] = SOULS_ENV_SAMPLE_MANIFEST[i];
-      if (buffers.has(key)) continue;
-      if (pendingLoads.has(key)) {
-        tasks.push(pendingLoads.get(key));
-        continue;
-      }
-
+    let nextIdx = 0;
+    const loadOne = (key, url) => {
+      if (buffers.has(key)) return Promise.resolve(buffers.get(key));
+      if (pendingLoads.has(key)) return pendingLoads.get(key);
       const p = fetch(url)
         .then((res) => (res && res.ok ? res.arrayBuffer() : Promise.reject(new Error(`HTTP ${res ? res.status : 0}`))))
         .then((ab) => decodeAudioBuffer(ctx, ab))
@@ -884,13 +881,17 @@ export function createSoulsEnvAudio({
         .finally(() => {
           pendingLoads.delete(key);
         });
-
       pendingLoads.set(key, p);
-      tasks.push(p);
-    }
-
-    if (tasks.length === 0) return Promise.resolve(true);
-    return Promise.all(tasks).then(() => buffers.size > 0);
+      return p;
+    };
+    const worker = async () => {
+      while (nextIdx < SOULS_ENV_SAMPLE_MANIFEST.length) {
+        const [key, url] = SOULS_ENV_SAMPLE_MANIFEST[nextIdx++];
+        await loadOne(key, url);
+      }
+    };
+    envPreloadPromise = Promise.all([worker(), worker()]).then(() => buffers.size > 0);
+    return envPreloadPromise;
   }
 
   function playStoneFootstep({

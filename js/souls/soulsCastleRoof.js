@@ -1,6 +1,6 @@
 // Monumental High-Gothic Vaulted Roof, Star-Ribbed Tierceron Ceilings, Deep Traceried Clerestory Windows,
 // Enlarged Boss Cathedral Dome & Swaying Wrought-Iron Candle Chandeliers
-// for Chapter 26 — «Abandoned Knight Rift» (Wave 2 `?v=20261121z68` — Pure Vanilla ES Module, Three.js r160).
+// for Chapter 26 — «Abandoned Knight Rift» (Wave 2 `?v=20261123z71` — Pure Vanilla ES Module, Three.js r160).
 //
 // Wave 2 Architectural & Next-Gen PBR Upgrade (+200% PC Geometry, Depth & Physical Realism):
 //   - 2x Smoother Multi-Segment Pointed Arch Curvature & 10-Face Gothic Roll-and-Fillet Cavetto Rib Mouldings on PC!
@@ -28,7 +28,7 @@ import {
   SOULS_CASTLE_ROOMS,
   SOULS_CASTLE_VAULTS,
   SOULS_CASTLE_CHANDELIERS
-} from './soulsCastleLayout.js?v=20261121z68';
+} from './soulsCastleLayout.js?v=20261123z71';
 
 // ============================================================================
 // Canonical Architectural Roof Spec (derived 100% live from soulsCastleLayout.js!)
@@ -2368,26 +2368,26 @@ export function createSoulsCastleRoof(options = {}) {
   const vaultAlbedoMap = options.vaultStoneAlbedo || pbr?.vaultStoneAlbedo || srcDark?.map || pbr?.ashlarAlbedo || null;
   const vaultNormalMap = options.vaultStoneNormal || pbr?.vaultStoneNormal || srcDark?.normalMap || pbr?.ashlarNormal || null;
   const vaultRoughMap = srcDark?.roughnessMap || pbr?.ashlarRoughness || null;
-  const baseNormalScale = isMobile ? 1.15 : 1.65;
+  const baseNormalScale = isMobile ? 0.85 : 1.12;
 
-  // DC #1 Material: Carved Gothic Vaulted Ceiling Stone (STRICT THREE.FrontSide!)
+  // DC #1 Material: Soot-Darkened Gothic Vaulted Ceiling Stone (harmonized cool indigo-slate w/ castle walls!)
   const vaultShellMat = trackMat(new THREE.MeshStandardMaterial({
     map: vaultAlbedoMap,
     normalMap: lowSpecMode ? null : vaultNormalMap,
     normalScale: new THREE.Vector2(baseNormalScale, baseNormalScale),
     roughnessMap: vaultRoughMap,
-    color: 0x9aa5c2,
-    emissive: new THREE.Color(0x1f2b44),
+    color: 0x626c88,
+    emissive: new THREE.Color(0x131b30),
     emissiveMap: vaultAlbedoMap,
-    emissiveIntensity: 0.48,
-    roughness: 0.78,
-    metalness: 0.07,
-    envMapIntensity: 1.15,
+    emissiveIntensity: 0.24,
+    roughness: 0.92,
+    metalness: 0.04,
+    envMapIntensity: 0.44,
     vertexColors: true,
     side: THREE.FrontSide
   }));
 
-  // DC #2 Material: Dressed Limestone 10-Face Gothic Ribs, Star-Tiercerons & Foliate Keystones (STRICT THREE.FrontSide!)
+  // DC #2 Material: Dressed Slate 10-Face Gothic Ribs, Star-Tiercerons & Foliate Keystones (STRICT THREE.FrontSide!)
   const ribAlbedoMap = srcTrim?.map || pbr?.ashlarAlbedo || vaultAlbedoMap;
   const ribNormalMap = srcTrim?.normalMap || pbr?.ashlarNormal || vaultNormalMap;
   const ribRoughMap = srcTrim?.roughnessMap || pbr?.ashlarRoughness || vaultRoughMap;
@@ -2395,15 +2395,15 @@ export function createSoulsCastleRoof(options = {}) {
   const vaultRibsMat = trackMat(new THREE.MeshStandardMaterial({
     map: ribAlbedoMap,
     normalMap: lowSpecMode ? null : ribNormalMap,
-    normalScale: new THREE.Vector2(baseNormalScale * 0.90, baseNormalScale * 0.90),
+    normalScale: new THREE.Vector2(baseNormalScale * 0.88, baseNormalScale * 0.88),
     roughnessMap: ribRoughMap,
-    color: 0xbcc6df,
-    emissive: new THREE.Color(0x1b253a),
+    color: 0x76819e,
+    emissive: new THREE.Color(0x11192b),
     emissiveMap: ribAlbedoMap,
-    emissiveIntensity: 0.36,
-    roughness: 0.68,
-    metalness: 0.11,
-    envMapIntensity: 1.25,
+    emissiveIntensity: 0.20,
+    roughness: 0.86,
+    metalness: 0.06,
+    envMapIntensity: 0.50,
     vertexColors: true,
     side: THREE.FrontSide
   }));
@@ -3062,12 +3062,7 @@ export function createSoulsCastleRoof(options = {}) {
     if (next === lowSpecMode) return;
     lowSpecMode = next;
 
-    for (let i = 0; i < normalMappedMats.length; i++) {
-      const entry = normalMappedMats[i];
-      entry.mat.normalMap = lowSpecMode ? null : entry.map;
-      entry.mat.needsUpdate = true;
-    }
-
+    // ZERO-HITCH: never strip normalMap or trigger mat.needsUpdate = true mid-combat (avoids 200-600ms shader recompile freeze!)
     glassUniforms.uLowSpec.value = lowSpecMode ? 1.0 : 0.0;
     chandelierSwayUniforms.uSwayAmp.value = lowSpecMode ? 0.45 : 1.0;
     chandelierCandlesMesh.visible = !lowSpecMode;

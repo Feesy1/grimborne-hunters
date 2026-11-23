@@ -19,8 +19,8 @@ import {
   RUN_UPGRADES,
   MAGE_TALENT_TREE,
   CLASS_TALENT_TREES
-} from './config.js?v=20261121z68';
-import { attachSeamlessLoop } from './ambientVideo.js?v=20261121z68';
+} from './config.js?v=20261123z71';
+import { attachSeamlessLoop } from './ambientVideo.js?v=20261123z71';
 import {
   CLASS_ORDER,
   CLASS_META,
@@ -36,18 +36,18 @@ import {
   resolveWeaponUpgradeCost,
   resolveMasteryList,
   normalizeActivePerks
-} from './ui/resolvers.js?v=20261121z68';
+} from './ui/resolvers.js?v=20261123z71';
 import {
   makeSvgNode,
   createWeaponSvg,
   createStatRuneSvg,
   createTalentRuneSvg,
   createBlessingRelicSvg
-} from './ui/svgIcons.js?v=20261121z68';
-import { createModalsController } from './ui/modals.js?v=20261121z68';
+} from './ui/svgIcons.js?v=20261123z71';
+import { createModalsController } from './ui/modals.js?v=20261123z71';
 
 // Backward-compatible facade re-exports (Wave 1/2 modularization)
-export { createWeaponSvg, createBlessingRelicSvg } from './ui/svgIcons.js?v=20261121z68';
+export { createWeaponSvg, createBlessingRelicSvg } from './ui/svgIcons.js?v=20261123z71';
 
 // ============================================================================
 // MAIN UI MANAGER FACTORY
@@ -396,35 +396,75 @@ export function createUIManager(initialCallbacks = {}) {
   const touchUltLabel = el('span', 'touch-ult-label', '0/5');
   touchUltBtn.append(touchUltRingSvg, touchUltIcon, touchUltLabel);
 
-  // Right-Thumb Ergonomic Arc Cluster for Abandoned Knight Rift (Mobile Touch / Yandex Games)
+  // Right-Thumb Ergonomic Arc Cluster for Castle of Ash (Unified Obsidian + Gold Gothic SVG Icons!)
   const touchSoulsCluster = el('div', 'touch-souls-cluster hidden');
+
+  const makeSoulsBtnSvg = (innerPath, size = 24) =>
+    makeSvgNode(
+      `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" xmlns="http://www.w3.org/2000/svg" class="touch-souls-svg" aria-hidden="true">${innerPath}</svg>`
+    );
 
   const touchAttackBtn = el('button', 'touch-souls-btn touch-souls-r1');
   touchAttackBtn.type = 'button';
-  touchAttackBtn.setAttribute('aria-label', 'Атака R1');
-  touchAttackBtn.append(el('span', 'touch-souls-ico', '⚔️'), el('span', 'touch-souls-lbl', 'R1'));
+  touchAttackBtn.setAttribute('aria-label', 'Удар');
+  const touchAttackIco = el('span', 'touch-souls-ico');
+  touchAttackIco.appendChild(
+    makeSoulsBtnSvg(
+      '<path d="M18.8 4.2 L10.2 12.8 L8.4 11 L17 2.4 L19.8 2.2 Z" fill="#f3d69b" stroke="#2c1608" stroke-width="0.9"/><path d="M7.6 10.6 L13.4 16.4 M6.4 17.6 L9.8 14.2 M4.6 19.4 L6.8 17.2" stroke="#e5b85c" stroke-width="2" stroke-linecap="round"/>',
+      26
+    )
+  );
+  touchAttackBtn.append(touchAttackIco, el('span', 'touch-souls-lbl', 'УДАР'));
 
   const touchHeavyBtn = el('button', 'touch-souls-btn touch-souls-r2');
   touchHeavyBtn.type = 'button';
-  touchHeavyBtn.setAttribute('aria-label', 'Тяжёлый удар R2');
-  touchHeavyBtn.append(el('span', 'touch-souls-ico', '💥'), el('span', 'touch-souls-lbl', 'R2'));
+  touchHeavyBtn.setAttribute('aria-label', 'Мощный удар');
+  const touchHeavyIco = el('span', 'touch-souls-ico');
+  touchHeavyIco.appendChild(
+    makeSoulsBtnSvg(
+      '<path d="M5 17.5 C7.5 11.5 12.5 7 19.5 5.5 C16.5 10.5 13 14.5 8 19 Z" fill="#d98b3c" stroke="#f5d89a" stroke-width="1.2" stroke-linejoin="round"/><path d="M4.5 19.5 L8.2 15.8 M13.5 4.2 L15 6.8 M18.8 9.2 L16.2 10.5" stroke="#fde68a" stroke-width="1.5" stroke-linecap="round"/>',
+      22
+    )
+  );
+  touchHeavyBtn.append(touchHeavyIco, el('span', 'touch-souls-lbl', 'МОЩНЫЙ'));
 
   const touchBlockBtn = el('button', 'touch-souls-btn touch-souls-block');
   touchBlockBtn.type = 'button';
   touchBlockBtn.setAttribute('aria-label', 'Блок и Парирование');
+  const touchBlockIco = el('span', 'touch-souls-ico');
+  touchBlockIco.appendChild(
+    makeSoulsBtnSvg(
+      '<path d="M12 2.8 L19.4 5.8 V11.4 C19.4 16.2 16.2 19.8 12 21.4 C7.8 19.8 4.6 16.2 4.6 11.4 V5.8 Z" fill="rgba(229,184,92,0.16)" stroke="#e5c787" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 5.6 V18.2 M8 10.6 H16" stroke="#d4b06a" stroke-width="1.4" stroke-linecap="round"/>',
+      22
+    )
+  );
   const touchBlockLbl = el('span', 'touch-souls-lbl', 'БЛОК');
-  touchBlockBtn.append(el('span', 'touch-souls-ico', '🛡️'), touchBlockLbl);
+  touchBlockBtn.append(touchBlockIco, touchBlockLbl);
 
   const touchFlaskBtn = el('button', 'touch-souls-btn touch-souls-flask');
   touchFlaskBtn.type = 'button';
   touchFlaskBtn.setAttribute('aria-label', 'Фляга');
+  const touchFlaskIco = el('span', 'touch-souls-ico');
+  touchFlaskIco.appendChild(
+    makeSoulsBtnSvg(
+      '<path d="M9.6 3 H14.4 M10.6 3 V7.2 L6.2 14.5 C5.4 16 6.4 19.2 8.8 19.2 H15.2 C17.6 19.2 18.6 16 17.8 14.5 L13.4 7.2 V3" stroke="#e8c376" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M7.8 14.4 H16.2 L16.8 15.8 C17.1 16.6 16.5 17.8 15.2 17.8 H8.8 C7.5 17.8 6.9 16.6 7.2 15.8 Z" fill="#d97706"/>',
+      20
+    )
+  );
   const touchFlaskCountLbl = el('span', 'touch-souls-lbl', '4/4');
-  touchFlaskBtn.append(el('span', 'touch-souls-ico', '🧪'), touchFlaskCountLbl);
+  touchFlaskBtn.append(touchFlaskIco, touchFlaskCountLbl);
 
   const touchLockBtn = el('button', 'touch-souls-btn touch-souls-lock');
   touchLockBtn.type = 'button';
   touchLockBtn.setAttribute('aria-label', 'Захват цели');
-  touchLockBtn.append(el('span', 'touch-souls-ico', '🎯'), el('span', 'touch-souls-lbl', 'ЦЕЛЬ'));
+  const touchLockIco = el('span', 'touch-souls-ico');
+  touchLockIco.appendChild(
+    makeSoulsBtnSvg(
+      '<circle cx="12" cy="12" r="6.4" stroke="#e5c787" stroke-width="1.6"/><circle cx="12" cy="12" r="2.1" fill="#e5b85c"/><path d="M12 2.5 V5.6 M12 18.4 V21.5 M2.5 12 H5.6 M18.4 12 H21.5" stroke="#e5c787" stroke-width="1.6" stroke-linecap="round"/>',
+      20
+    )
+  );
+  touchLockBtn.append(touchLockIco, el('span', 'touch-souls-lbl', 'ЦЕЛЬ'));
 
   touchSoulsCluster.append(touchAttackBtn, touchHeavyBtn, touchBlockBtn, touchFlaskBtn, touchLockBtn);
 
@@ -585,19 +625,19 @@ export function createUIManager(initialCallbacks = {}) {
   hudComboBarTrack.appendChild(hudComboBarFill);
   hudComboBadge.append(hudComboHead, hudComboBarTrack);
 
-  // Abandoned Knight Rift Action Pills: Shield Block/Parry [M4 / RMB] + Estus Flask [R]
+  // Castle of Ash Action Pills: Shield Block/Parry [ПКМ / M4] + Estus Flask [R] + Lock-On [Q]
   const hudBlockBtn = el('button', 'hud-souls-block-btn hidden');
   hudBlockBtn.type = 'button';
-  hudBlockBtn.title = 'Удерживать [Mouse 4 / ПКМ] — Блок щитом • Точное нажатие — Парирование (×2.2 контрудар)';
+  hudBlockBtn.title = 'Удерживать [ПКМ / Mouse 4] — Блок щитом • Точное нажатие — Парирование (×2.2 контрудар)';
   const hudBlockIcon = makeSvgNode(
     `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <path d="M12 2.4 L19.8 5.6 V11.4 C19.8 16.4 16.4 20.1 12 21.8 C7.6 20.1 4.2 16.4 4.2 11.4 V5.6 Z" fill="#1e293b" stroke="#fde093" stroke-width="1.6" stroke-linejoin="round"/>
-      <path d="M12 5.4 V18.6 M7.6 10.6 H16.4" stroke="#93c5fd" stroke-width="1.5" stroke-linecap="round"/>
+      <path d="M12 2.4 L19.8 5.6 V11.4 C19.8 16.4 16.4 20.1 12 21.8 C7.6 20.1 4.2 16.4 4.2 11.4 V5.6 Z" fill="#1b1815" stroke="#d8b56c" stroke-width="1.6" stroke-linejoin="round"/>
+      <path d="M12 5.4 V18.6 M7.6 10.6 H16.4" stroke="#c8a862" stroke-width="1.4" stroke-linecap="round"/>
     </svg>`
   );
   const hudBlockMeta = el('span', 'hud-souls-meta');
   const hudBlockStateText = el('span', 'hud-souls-state', 'БЛОК / ПАРИР.');
-  const hudBlockKeyTag = el('span', 'hud-souls-key', '[M4]');
+  const hudBlockKeyTag = el('span', 'hud-souls-key', '[ПКМ]');
   hudBlockMeta.append(hudBlockStateText, hudBlockKeyTag);
   hudBlockBtn.append(hudBlockIcon, hudBlockMeta);
 
@@ -606,8 +646,8 @@ export function createUIManager(initialCallbacks = {}) {
   hudFlaskBtn.title = 'Фляга Пепла [R] — восстанавливает 55% ОЗ (восполняется у Костра)';
   const hudFlaskIcon = makeSvgNode(
     `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <path d="M9.5 3 H14.5 M10.5 3 V7.2 L5.8 14.8 C4.9 16.3 5.9 19.6 8.4 19.6 H15.6 C18.1 19.6 19.1 16.3 18.2 14.8 L13.5 7.2 V3" stroke="#fde093" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M7.6 14.6 H16.4 L17.1 16 C17.5 16.9 16.9 18.2 15.6 18.2 H8.4 C7.1 18.2 6.5 16.9 6.9 16 Z" fill="#f59e0b"/>
+      <path d="M9.5 3 H14.5 M10.5 3 V7.2 L5.8 14.8 C4.9 16.3 5.9 19.6 8.4 19.6 H15.6 C18.1 19.6 19.1 16.3 18.2 14.8 L13.5 7.2 V3" stroke="#e2be72" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M7.6 14.6 H16.4 L17.1 16 C17.5 16.9 16.9 18.2 15.6 18.2 H8.4 C7.1 18.2 6.5 16.9 6.9 16 Z" fill="#d97706"/>
     </svg>`
   );
   const hudFlaskMeta = el('span', 'hud-souls-meta');
@@ -616,19 +656,41 @@ export function createUIManager(initialCallbacks = {}) {
   hudFlaskMeta.append(hudFlaskStateText, hudFlaskKeyTag);
   hudFlaskBtn.append(hudFlaskIcon, hudFlaskMeta);
 
-  // Target Lock-On Pill [Q / Middle Mouse] — Dark Souls (Chapter XXVI) exclusive
+  // Target Lock-On Pill [Q / Middle Mouse] — monochrome gold gothic reticle SVG (no raw emoji!)
   const hudLockBtn = el('button', 'hud-lock-btn hidden');
   hudLockBtn.type = 'button';
   hudLockBtn.title = 'Захват цели [Q / СКМ] • Сменить цель [Tab]';
   hudLockBtn.setAttribute('aria-pressed', 'false');
-  const hudLockGlyph = el('span', 'hud-lock-glyph', '🎯');
+  const hudLockGlyph = makeSvgNode(
+    `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" xmlns="http://www.w3.org/2000/svg" class="hud-lock-svg" aria-hidden="true">
+      <circle cx="12" cy="12" r="6.2" stroke="#e2be72" stroke-width="1.6"/>
+      <circle cx="12" cy="12" r="2" fill="#e5b85c"/>
+      <path d="M12 2.5 V5.6 M12 18.4 V21.5 M2.5 12 H5.6 M18.4 12 H21.5" stroke="#e2be72" stroke-width="1.6" stroke-linecap="round"/>
+    </svg>`
+  );
   const hudLockMeta = el('span', 'hud-souls-meta');
   const hudLockStateText = el('span', 'hud-souls-state hud-lock-state', 'ЦЕЛЬ');
   const hudLockKeyTag = el('span', 'hud-souls-key', '[Q]');
   hudLockMeta.append(hudLockStateText, hudLockKeyTag);
   hudLockBtn.append(hudLockGlyph, hudLockMeta);
 
-  hudWeaponRow.append(weaponHudBadge, hudReloadBtn, hudDashBtn, hudBlockBtn, hudFlaskBtn, hudLockBtn, hudUltBtn, hudComboBadge);
+  // Heavy Attack Pill [F / Shift+ЛКМ] — desktop Souls reference pill
+  const hudHeavyBtn = el('button', 'hud-souls-heavy-btn hidden');
+  hudHeavyBtn.type = 'button';
+  hudHeavyBtn.title = 'Тяжёлый удар / Заряженный выпад [F или Shift+ЛКМ]';
+  const hudHeavyIcon = makeSvgNode(
+    `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M5 17.5 C7.5 11.5 12.5 7 19.5 5.5 C16.5 10.5 13 14.5 8 19 Z" fill="#c27832" stroke="#e8c884" stroke-width="1.2" stroke-linejoin="round"/>
+      <path d="M4.5 19.5 L8.2 15.8" stroke="#e8c884" stroke-width="1.6" stroke-linecap="round"/>
+    </svg>`
+  );
+  const hudHeavyMeta = el('span', 'hud-souls-meta');
+  const hudHeavyStateText = el('span', 'hud-souls-state', 'МОЩНЫЙ');
+  const hudHeavyKeyTag = el('span', 'hud-souls-key', '[F]');
+  hudHeavyMeta.append(hudHeavyStateText, hudHeavyKeyTag);
+  hudHeavyBtn.append(hudHeavyIcon, hudHeavyMeta);
+
+  hudWeaponRow.append(weaponHudBadge, hudReloadBtn, hudHeavyBtn, hudDashBtn, hudBlockBtn, hudFlaskBtn, hudLockBtn, hudUltBtn, hudComboBadge);
 
   // Hero Level XP Bar (feeds Talent Points — Soul Blessings removed)
   const soulXpWrap = el('div', 'soul-xp-wrap');
@@ -1157,6 +1219,17 @@ export function createUIManager(initialCallbacks = {}) {
   );
 
   bindCapturedHoldBtn(
+    hudHeavyBtn,
+    () => {
+      touchState.heavyTrigger = true;
+      touchState.heavyHeld = true;
+    },
+    () => {
+      touchState.heavyHeld = false;
+    }
+  );
+
+  bindCapturedHoldBtn(
     touchBlockBtn,
     () => {
       touchState.block = true;
@@ -1367,9 +1440,9 @@ export function createUIManager(initialCallbacks = {}) {
       </svg>`
     )
   );
-  const homeSoulsLabel = el('span', 'home-souls-label', 'ABANDONED KNIGHT RIFT');
+  const homeSoulsLabel = el('span', 'home-souls-label', 'ЗАМОК ПЕПЛА');
   homeSoulsTop.appendChild(homeSoulsLabel);
-  const homeSoulsSub = el('span', 'home-souls-sub', 'Отдельный режим • Босс');
+  const homeSoulsSub = el('span', 'home-souls-sub', 'Тёмный данж • Босс');
   homeSoulsBtn.append(homeSoulsTop, homeSoulsSub);
 
   // Permanent Training Ground CTA Button (Peaceful Dummy Arena for testing animations & mechanics anytime)
@@ -2308,8 +2381,8 @@ export function createUIManager(initialCallbacks = {}) {
   let soulsBannerFadeTimer = null;
   let soulsBannerHideTimer = null;
 
-  // Unobtrusive corner hint after boss defeat in Abandoned Knight Rift
-  const soulsClearedHint = el('button', 'souls-cleared-hint hidden', '🔥 Локация зачищена • [Esc] Меню / В Хаб');
+  // Unobtrusive corner hint after boss defeat in Castle of Ash
+  const soulsClearedHint = el('button', 'souls-cleared-hint hidden', 'Локация зачищена • [Esc] Меню / В Хаб');
   soulsClearedHint.type = 'button';
   soulsClearedHint.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -2317,8 +2390,8 @@ export function createUIManager(initialCallbacks = {}) {
   });
   hudScreen.appendChild(soulsClearedHint);
 
-  // Compact Pointer Lock free-look camera hint (shown only in Abandoned Knight Rift while cursor is unlocked)
-  const soulsPointerHint = el('div', 'souls-pointer-hint hidden', '🖱️ Клик по экрану — свободная камера мышкой • [Esc] курсор');
+  // Compact Pointer Lock free-look camera hint (gothic plaque, zero raw OS emoji)
+  const soulsPointerHint = el('div', 'souls-pointer-hint hidden', 'Клик по экрану — обзор мышкой • [Esc] курсор');
   hudScreen.appendChild(soulsPointerHint);
 
   // Crisp non-blocking Elden Ring Combat Cue Pill (КОНТРУДАР! / СЛОМ СТОЙКИ! / ЧАСТИЧНОЕ ПАРИР.)
@@ -2423,8 +2496,10 @@ export function createUIManager(initialCallbacks = {}) {
           ? '🛡️ ЧАСТИЧНОЕ ПАРИР.'
           : '⚡ КОНТРУДАР!');
     soulsCombatCue.textContent = label;
-    soulsCombatCue.className = `souls-combat-cue cue-${kind || 'guard_counter'}`;
-    void soulsCombatCue.offsetWidth;
+    soulsCombatCue.className = 'souls-combat-cue hidden';
+    requestAnimationFrame(() => {
+      soulsCombatCue.className = `souls-combat-cue cue-${kind || 'guard_counter'}`;
+    });
     if (soulsCombatCueTimer) clearTimeout(soulsCombatCueTimer);
     soulsCombatCueTimer = setTimeout(() => {
       soulsCombatCue.classList.add('hidden');
@@ -2438,7 +2513,7 @@ export function createUIManager(initialCallbacks = {}) {
   soulsDefeatBand.append(
     el('div', 'souls-banner-line top'),
     el('div', 'souls-defeat-title', 'ВЫ ПОГИБЛИ'),
-    el('div', 'souls-defeat-sub', 'ABANDONED KNIGHT RIFT'),
+    el('div', 'souls-defeat-sub', 'ЗАМОК ПЕПЛА'),
     el('div', 'souls-banner-line bottom')
   );
   const soulsDefeatActions = el('div', 'souls-defeat-actions');
@@ -2469,7 +2544,6 @@ export function createUIManager(initialCallbacks = {}) {
     soulsBannerSubtitle.textContent = subtitle || '';
     soulsBannerSubtitle.classList.toggle('hidden', !subtitle);
     soulsBanner.classList.remove('is-fading', 'hidden');
-    void soulsBanner.offsetWidth;
     const totalMs = Math.max(1600, Number(durationMs) || 4800);
     soulsBannerFadeTimer = setTimeout(() => {
       soulsBanner.classList.add('is-fading');
@@ -4376,8 +4450,10 @@ export function createUIManager(initialCallbacks = {}) {
     if (isSoulsHud !== hudCache.isSoulslike) {
       hudCache.isSoulslike = isSoulsHud;
       soulsModeActive = isSoulsHud;
+      hudScreen.classList.toggle('is-souls-mode', isSoulsHud);
       soulsAtmosphereVignette.classList.toggle('hidden', !isSoulsHud);
       soulsStaminaWrap.classList.toggle('hidden', !isSoulsHud);
+      hudHeavyBtn.classList.toggle('hidden', !isSoulsHud);
       hudBlockBtn.classList.toggle('hidden', !isSoulsHud);
       hudFlaskBtn.classList.toggle('hidden', !isSoulsHud);
       hudLockBtn.classList.toggle('hidden', !isSoulsHud);
@@ -4385,12 +4461,13 @@ export function createUIManager(initialCallbacks = {}) {
       touchUltBtn.classList.toggle('hidden', isSoulsHud);
       autoAimBtn.classList.toggle('hidden', isSoulsHud);
       attackToggleBtn.classList.toggle('hidden', isSoulsHud);
+      hudTelegraphBtn.classList.toggle('hidden', isSoulsHud);
+      goldPill.classList.toggle('hidden', isSoulsHud);
       killsPill.classList.toggle('hidden', isSoulsHud);
       soulXpWrap.classList.toggle('hidden', isSoulsHud);
-      hudDashKeyTag.textContent = isSoulsHud ? '[Alt]' : '[Space]';
-      hudDashBtn.title = isSoulsHud ? 'Перекат [Alt / Space] • Тяжёлый удар R2: [F] / Shift+ЛКМ' : 'Рывок с неуязвимостью [Space]';
+      hudDashKeyTag.textContent = '[Space]';
+      hudDashBtn.title = isSoulsHud ? 'Перекат с неуязвимостью [Space / Alt]' : 'Рывок с неуязвимостью [Space]';
       touchDashLabel.textContent = isSoulsHud ? (lang === 'en' ? 'ROLL' : 'ПЕРЕКАТ') : (lang === 'en' ? 'DASH' : 'РЫВОК');
-      goldPill.title = isSoulsHud ? 'Золото Abandoned Knight Rift (отдельный кошелёк режима)' : 'Золото';
       syncSoulsTouchLayout();
       if (isSoulsHud) {
         sealSlotsWrap.classList.add('hidden');
@@ -4714,7 +4791,7 @@ export function createUIManager(initialCallbacks = {}) {
       }
       const lvlNum = Number(snapshot.level ?? snapshot.levelNumber ?? 1);
       const lTitle = isSoulsHud
-        ? (snapshot.souls?.zoneTitleRu ? `Abandoned Knight Rift • ${snapshot.souls.zoneTitleRu}` : (SOULS_LEVEL_DEF?.nameRu || 'Abandoned Knight Rift'))
+        ? (snapshot.souls?.zoneTitleRu || 'Замок Пепла')
         : (
           snapshot.levelNameRu ||
           snapshot.levelTitle ||
@@ -4988,8 +5065,7 @@ export function createUIManager(initialCallbacks = {}) {
           ? (lang === 'en' ? 'COMBO ×3' : 'КОМБО ×3')
           : (lang === 'en' ? 'COMBO ×2' : 'КОМБО ×2');
         hudComboBadge.classList.remove('is-pop');
-        void hudComboBadge.offsetWidth;
-        hudComboBadge.classList.add('is-pop');
+        requestAnimationFrame(() => hudComboBadge.classList.add('is-pop'));
       }
       const cRatio = snapshot.comboTimer === undefined ? 1 : Math.max(0, Math.min(1, comboTimer / 1.35));
       const cQuant = Math.round(cRatio * 200);

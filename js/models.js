@@ -8,7 +8,7 @@ import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { DRACOLoader } from '../vendor/DRACOLoader.js';
 import { clone as cloneSkinned } from '../vendor/SkeletonUtils.js';
-import { WEAPONS } from './config.js?v=20261121z68';
+import { WEAPONS } from './config.js?v=20261123z71';
 import {
   getGeo,
   getMat,
@@ -17,29 +17,29 @@ import {
   createAnimController,
   setBoneRelEuler,
   solveMixamoArmIK
-} from './models/shared.js?v=20261121z68';
+} from './models/shared.js?v=20261123z71';
 import {
   getWarriorWeaponMountConfig,
   createWarriorStanceState,
   applyWarriorWeaponStance,
   applyWarriorAttackOverlay
-} from './models/warriorStances.js?v=20261121z68';
+} from './models/warriorStances.js?v=20261123z71';
 import {
   computeFootSyncPlaybackRate,
   computeCombatPostureDynamics,
   applyCombatPostureToObject3D,
   applyCombatRecoilImpulse
-} from './souls/soulsPhysicsFeel.js?v=20261121z68';
-import { createActorContactShadowMesh } from './souls/soulsAtmosphere.js?v=20261121z68';
+} from './souls/soulsPhysicsFeel.js?v=20261123z71';
+import { createActorContactShadowMesh } from './souls/soulsAtmosphere.js?v=20261123z71';
 import {
   applyEldenDissolveToModel,
   resetEldenDissolveFromModel
-} from './souls/soulsDissolveVfx.js?v=20261121z68';
+} from './souls/soulsDissolveVfx.js?v=20261123z71';
 
 const MODEL_PATHS = {
   gunslinger_tripo: './assets/models/Gunslinger_Tripo.glb?v=20261120z34',
   // New clean warrior with Mixamo "Sword And Shield Run" baked in as Running_A + custom diagonal Slash v4 + 60 FPS Turn_180 + 60 FPS Combat_Roll + 60 FPS Heavy_Thrust + 60 FPS Door_Push.
-  warrior_run: './assets/models/Warrior_Run.glb?v=20261121z68',
+  warrior_run: './assets/models/Warrior_Run.glb?v=20261123z71',
 
   sword_tripo: './assets/models/Sword_Tripo.glb?v=20261120z34',
   shield_custom: './assets/models/Shield_Custom.glb?v=20261120z34',
@@ -60,11 +60,11 @@ const MODEL_PATHS = {
   mimic_tripo: './assets/models/Mimic_Tripo.glb?v=20261120z34',
   chest_disguise_tripo: './assets/models/Chest_Disguise_Tripo.glb?v=20261120z34',
   lich_tripo: './assets/models/Lich_Tripo.glb?v=20261120z34',
-  troll_tripo: './assets/models/Troll_Tripo.glb?v=20261121z68',
-  rift_boss: './assets/models/Rift_Boss_Tripo.glb?v=20261121z68',
-  rift_executioner: './assets/models/Rift_Executioner_Tripo.glb?v=20261121z68',
-  rift_vanguard: './assets/models/Rift_Vanguard_Tripo.glb?v=20261121z68',
-  rift_acolyte: './assets/models/Rift_Acolyte_Tripo.glb?v=20261121z68',
+  troll_tripo: './assets/models/Troll_Tripo.glb?v=20261123z71',
+  rift_boss: './assets/models/Rift_Boss_Tripo.glb?v=20261123z71',
+  rift_executioner: './assets/models/Rift_Executioner_Tripo.glb?v=20261123z71',
+  rift_vanguard: './assets/models/Rift_Vanguard_Tripo.glb?v=20261123z71',
+  rift_acolyte: './assets/models/Rift_Acolyte_Tripo.glb?v=20261123z71',
   succubus_tripo: './assets/models/Succubus_Tripo.glb?v=20261120z34',
   spider_tripo: './assets/models/Spider_Tripo.glb?v=20261120z34',
   barbarian: './assets/models/Barbarian.glb?v=20261120z34',
@@ -1182,17 +1182,19 @@ function loadSingleModelKey(key) {
                     }
                   }
                   const staffCutoutAlpha = isStaffMesh && m.map?.image ? buildStaffGlobeCutoutAlphaMap(m.map.image) : null;
+                  const isHeroKnight = key === 'warrior_run';
                   const std = new THREE.MeshStandardMaterial({
                     map: m.map || null,
                     alphaMap: staffCutoutAlpha || null,
                     alphaTest: staffCutoutAlpha ? 0.5 : 0,
                     normalMap: m.normalMap || null,
-                    normalScale: new THREE.Vector2(1.72, 1.72),
+                    normalScale: new THREE.Vector2(isHeroKnight ? 1.45 : 1.72, isHeroKnight ? 1.45 : 1.72),
                     roughnessMap: m.roughnessMap || null,
                     metalnessMap: m.metalnessMap || null,
-                    color: 0xffffff,
-                    roughness: isTripoWeapon || isEmbeddedWeapon || key === 'warrior_tripo' ? 0.48 : 0.60,
-                    metalness: isTripoWeapon || isEmbeddedWeapon || key === 'warrior_tripo' ? 0.46 : 0.20
+                    color: isHeroKnight ? 0xdce0e8 : 0xffffff,
+                    roughness: isHeroKnight ? 0.82 : (isTripoWeapon || isEmbeddedWeapon || key === 'warrior_tripo' ? 0.48 : 0.60),
+                    metalness: isHeroKnight ? 0.34 : (isTripoWeapon || isEmbeddedWeapon || key === 'warrior_tripo' ? 0.46 : 0.20),
+                    envMapIntensity: isHeroKnight ? 0.62 : 1.0
                   });
                   const allowEyeMap = !isEmbeddedWeapon && (key !== 'gunslinger_tripo' || /tripo_part_0/i.test(node.name));
                   if (eyeEmissiveTex && allowEyeMap) {
@@ -3534,7 +3536,8 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
               mountedWeaponObj.rotation.set(-1.04, 0.24, -1.52);
               mountedWeaponObj.traverse((n) => {
                 if (n.isMesh) {
-                  n.castShadow = true;
+                  // Disable 21k-tri weapon shadow casting (hero body casts main silhouette; saves 21k tris/shadow pass!)
+                  n.castShadow = false;
                   n.frustumCulled = false;
                 }
               });
@@ -3581,7 +3584,7 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
               wMesh.position.set(0, cfg.gripY * cfg.scale, cfg.centerZ * cfg.scale);
               wMesh.traverse((n) => {
                 if (n.isMesh) {
-                  n.castShadow = true;
+                  n.castShadow = false;
                   n.frustumCulled = false;
                 }
               });
@@ -3617,6 +3620,12 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
           if (gltfCache.has('shield_custom')) {
             const sh = gltfCache.get('shield_custom').scene.clone(true);
             sh.name = 'HeroWeapon_Shield_Mount';
+            sh.traverse((n) => {
+              if (n.isMesh) {
+                n.castShadow = false;
+                n.frustumCulled = false;
+              }
+            });
             sh.scale.setScalar(0.42);
             sh.position.set(-0.1763, 0.1213, -0.0632);
             sh.rotation.set(-0.4292, -0.24, -2);
@@ -5148,9 +5157,15 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
   }
 
   function getWeaponSegmentWorld() {
-    root.updateMatrixWorld(true);
     const activeSrc = mountedWeaponObj || (embeddedWarriorSwordNode?.visible ? embeddedWarriorSwordNode : null);
+    if (activeSrc) {
+      // Ancestor-only chain update (~7 bones instead of recursive 65-bone full skeleton walk!)
+      activeSrc.updateWorldMatrix(true, false);
+    } else {
+      root.updateWorldMatrix(true, false);
+    }
     if (activeSrc && (!hasCachedWeaponSeg || weaponSegSourceObj !== activeSrc)) {
+      activeSrc.updateMatrixWorld(true);
       refreshWeaponSegmentCache(activeSrc);
     } else if (!activeSrc) {
       hasCachedWeaponSeg = false;
@@ -8401,6 +8416,7 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
 
   let inPool = false;
   let isDying = false;
+  let deathBaseY = 0;
   let proceduralFall = false;
   let hitJoltTimer = 0;
   let hitJoltAmp = 1.0;
@@ -8489,7 +8505,8 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
   const postureApplyOpts = {
     isLocalChild: true,
     baseY: 0,
-    applyForwardLean: true
+    applyForwardLean: false,
+    applyBobY: false
   };
 
   function resolveEnemyLocomotionClip(mode, isMovingFlag, speedMultVal, localX, localZ, yawRateVal) {
@@ -8510,7 +8527,7 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
         }
       } else if (Math.abs(localX) > Math.abs(localZ) * 0.85 && Math.abs(localX) > 0.25) {
         m = localX > 0 ? 'strafe_left' : 'strafe_right';
-      } else if (localZ < -0.45 && has('Backstep_Evade')) {
+      } else if (localZ < -0.45 && (has('Walk_Backward') || has('Backstep_Evade'))) {
         m = 'backstep';
       } else if (speedMultVal < 0.62 && has(cfg.patrolClip || 'Patrol_Walk')) {
         m = 'patrol';
@@ -8538,7 +8555,7 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
         return { mode: 'turn_right', clip: turnClip, isIdle: turnClip === (resolvedIdleClip || 'Idle') };
       }
       case 'backstep':
-        return { mode: 'backstep', clip: pick('Backstep_Evade', 'Combat_Walk', cfg.moveClip), isIdle: false };
+        return { mode: 'backstep', clip: pick('Walk_Backward', 'Backstep_Evade', 'Combat_Walk', cfg.moveClip), isIdle: false };
       default:
         return isMovingFlag
           ? { mode: 'combat_walk', clip: pick(cfg.moveClip, 'Combat_Walk'), isIdle: false }
@@ -8547,8 +8564,13 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
   }
 
   function getWeaponSegmentWorld() {
-    root.updateMatrixWorld(true);
     const activeWeaponBone = weaponHammerBone || handR;
+    if (activeWeaponBone) {
+      // Ancestor-only chain update (~6 bones instead of recursive 67-bone full armature walk!)
+      activeWeaponBone.updateWorldMatrix(true, false);
+    } else {
+      root.updateWorldMatrix(true, false);
+    }
     const activeWeaponSeg = weaponHammerBone
       ? (calibratedWeaponBoneSeg || cfg.weaponBoneSegment)
       : cfg.weaponBoneSegment;
@@ -8826,6 +8848,52 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
         animCtrl.mixer.update(0);
       }
     },
+    // Smoothly transfers any active one-shot attack (or Recover_Heft tail) into a looping base override
+    // (e.g., Heavy_Cleave -> Whirl_Spin) so an outgoing one-shot NEVER blocks base clip overrides!
+    handoffToClipOverride(clipName = null, speed = null, blendSec = 0.20) {
+      baseClipOverride = typeof clipName === 'string' && clipName ? clipName : null;
+      baseClipOverrideSpeed =
+        baseClipOverride && Number.isFinite(Number(speed)) && Number(speed) > 0 ? Number(speed) : null;
+      if (!baseClipOverride || !animCtrl || isDying) return false;
+      const spd = baseClipOverrideSpeed ?? 1.0;
+      const safeBlend = Number.isFinite(Number(blendSec)) ? Math.max(0.06, Math.min(0.45, Number(blendSec))) : 0.20;
+      if (activeCutsceneAction) {
+        handle.clearCutsceneClip(safeBlend);
+      }
+      if (activeClampedAction) {
+        handle.clearClampedClip(false, 0);
+      }
+      if (typeof animCtrl.handoffOneShotToBase === 'function') {
+        animCtrl.handoffOneShotToBase(baseClipOverride, spd, safeBlend);
+      } else {
+        animCtrl.cancelOneShot?.();
+        animCtrl.setBaseState(baseClipOverride, spd, safeBlend);
+      }
+      restoreJawAdditive();
+      animCtrl.mixer.update(0);
+      applyJawAdditive();
+      return true;
+    },
+    // Smoothly releases any lingering one-shot (e.g., short Recover_Heft) directly back into base locomotion/Idle
+    // with strict wSum === 1.000 and ZERO 1-frame snap or ice-skating!
+    handoffToBase(clipName = null, speed = 1.0, blendSec = 0.20) {
+      baseClipOverride = null;
+      baseClipOverrideSpeed = null;
+      if (!animCtrl || isDying) return false;
+      const target = typeof clipName === 'string' && clipName ? clipName : (resolvedIdleClip || cfg.idleClip || 'Idle');
+      const spd = Number.isFinite(Number(speed)) && Number(speed) > 0 ? Number(speed) : 1.0;
+      const safeBlend = Number.isFinite(Number(blendSec)) ? Math.max(0.06, Math.min(0.45, Number(blendSec))) : 0.20;
+      if (typeof animCtrl.handoffOneShotToBase === 'function') {
+        animCtrl.handoffOneShotToBase(target, spd, safeBlend);
+      } else {
+        animCtrl.cancelOneShot?.();
+        animCtrl.setBaseState(target, spd, safeBlend);
+      }
+      restoreJawAdditive();
+      animCtrl.mixer.update(0);
+      applyJawAdditive();
+      return true;
+    },
     // FPS-independent normalized cutscene scrubber for Boss intro acting (Throne_Intro_Dialogue / Throne_Intro_StandUp).
     // Smoothly cross-fades into `clipName` over `blendSec`, freezes `act.paused = true`, and pins
     // `act.time = clamp01(u01) * clip.duration` with strict wSum === 1.000 on every frame!
@@ -9071,6 +9139,7 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
       baseClipOverrideSpeed = null;
       inPool = false;
       isDying = false;
+      deathBaseY = 0;
       proceduralFall = false;
       hitJoltTimer = 0;
       hitJoltAmp = 1.0;
@@ -9140,12 +9209,7 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
           ? Math.max(0, Math.min(1.5, Number(opts.joltScale)))
           : 1.0;
       if (joltScale > 0.01 && !activeClampedAction && !activeCutsceneAction) {
-        // Colossal Boss: zero procedural tilt/squash wobble — only the strictly capped physics recoil spring.
-        if (!isColossalBossPhysics) {
-          hitJoltTimer = 0.17;
-          hitJoltAmp = joltScale;
-          hitTwistDir = -hitTwistDir;
-        }
+        // Unified critically damped physics recoil spring (removed legacy hitJoltTimer which froze & double-snapped recoil!)
         applyCombatRecoilImpulse(physicsActorState, {
           kind: 'hitRecoil',
           dirX: isObj ? opts.dirX : undefined,
@@ -9183,6 +9247,7 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
       baseClipOverride = null;
       baseClipOverrideSpeed = null;
       isDying = true;
+      deathBaseY = Number.isFinite(root.position.y) ? root.position.y : 0;
       physicsActorState.isDying = true;
       hitJoltTimer = 0;
       if (spawnedInst) {
@@ -9192,11 +9257,12 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
       if (halo) halo.visible = false;
       if (innerBossHalo) innerBossHalo.visible = false;
       if (eliteCrest) eliteCrest.visible = false;
-      const hasClip = animCtrl?.triggerDeath?.(1.38);
+      const deathSpeed = cfg.isBossVisual ? 1.0 : 1.38;
+      const hasClip = animCtrl?.triggerDeath?.(deathSpeed);
       proceduralFall = !hasClip;
     },
     // updateDying(dt, sinkRatio, dissolve01):
-    //   - dissolve01 > 0 -> Elden Ring ash/ember dissolution IN PLACE on the stone floor (no sinking!)
+    //   - dissolve01 > 0 -> Elden Ring ash/ember dissolution IN PLACE on the stone floor/stairs (no sinking!)
     //   - otherwise legacy sinkRatio floor-sink fallback (PvE Chapters 1-25 untouched).
     updateDying(dt, sinkRatio = 0, dissolve01 = 0) {
       const safeDt = Math.min(Math.max(dt || 0.016, 0), 0.1);
@@ -9227,11 +9293,11 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
             flashMeshSlots[i].mesh.material = flashMeshSlots[i].origMat;
           }
         }
-        root.position.y = 0;
+        root.position.y = deathBaseY;
         dissolveActive = applyEldenDissolveToModel(spawnedInst || root, d01, { dt: safeDt });
         if (!dissolveActive && d01 > 0.5) {
           // Graceful fallback for non-patchable materials: gentle sink once past the halfway point
-          root.position.y = -(d01 - 0.5) * 0.9;
+          root.position.y = deathBaseY - (d01 - 0.5) * 0.9;
         }
         const t = d01 <= 0.08 ? 0 : d01 >= 0.85 ? 1 : (d01 - 0.08) / 0.77;
         shadowFade = 1 - t * t * (3 - 2 * t);
@@ -9394,7 +9460,7 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
     // is matched by combat/bridge.js (`params.length >= 4 && params[2].includes('speed')`),
     // while also supporting `(dt, { isMoving, speedMult, elapsedTime, strafeAnimMode, vx, vz, ... })` and `(dt, elapsedTime)`.
     update(dt, isMovingArg = true, speedMultArg = 1, elapsedTimeArg = 0, moveLocalXArg = 0, moveLocalZArg = 1, extraStateArg = null) {
-      const safeDt = Math.min(Math.max(dt || 0.016, 0), 0.1);
+      const safeDt = Number.isFinite(dt) ? Math.min(Math.max(dt, 0), 0.1) : 0.016;
       // Undo last frame's additive jaw lip-sync BEFORE the mixer evaluates (0 drift)
       restoreJawAdditive();
       let isMoving = true;
@@ -9445,32 +9511,45 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
         localZ = lastExplicitLocalZ;
       }
 
-      // Measure real post-collision ground displacement & yaw turn rate (kills wall-pushing treadmill!)
-      let realVx = 0;
-      let realVz = 0;
-      let realSpeed = 0;
-      let yawRate = 0;
-      if (hasPrevRootPose && safeDt > 1e-4) {
+      // Measure real post-collision ground displacement & yaw turn rate (guarded against hitstop dt ~ 0.001s explosion!)
+      let realVx = physicsActorState._smoothRealVx || 0;
+      let realVz = physicsActorState._smoothRealVz || 0;
+      let realSpeed = physicsActorState._smoothRealSpeed || 0;
+      let yawRate = physicsActorState._smoothYawRate || 0;
+      if (hasPrevRootPose && safeDt >= 0.004) {
         const dx = root.position.x - prevRootX;
         const dz = root.position.z - prevRootZ;
         const disp = Math.hypot(dx, dz);
-        realVx = dx / safeDt;
-        realVz = dz / safeDt;
-        realSpeed = disp / safeDt;
+        const rawVx = dx / safeDt;
+        const rawVz = dz / safeDt;
+        const rawSpd = disp / safeDt;
         let dyaw = root.rotation.y - prevRootYaw;
         while (dyaw > Math.PI) dyaw -= Math.PI * 2;
         while (dyaw < -Math.PI) dyaw += Math.PI * 2;
-        yawRate = dyaw / safeDt;
+        const rawYawRate = Math.max(-14, Math.min(14, dyaw / safeDt));
+        const velAlpha = 1 - Math.exp(-22 * safeDt);
+        realVx += (rawVx - realVx) * velAlpha;
+        realVz += (rawVz - realVz) * velAlpha;
+        realSpeed += (rawSpd - realSpeed) * velAlpha;
+        yawRate += (rawYawRate - yawRate) * velAlpha;
+        physicsActorState._smoothRealVx = realVx;
+        physicsActorState._smoothRealVz = realVz;
+        physicsActorState._smoothRealSpeed = realSpeed;
+        physicsActorState._smoothYawRate = yawRate;
         if (disp > 0.002) {
           hasEverMovedRoot = true;
           zeroDispSec = 0;
         } else {
           zeroDispSec += safeDt;
         }
+        prevRootX = root.position.x;
+        prevRootZ = root.position.z;
+        prevRootYaw = root.rotation.y;
+      } else if (!hasPrevRootPose) {
+        prevRootX = root.position.x;
+        prevRootZ = root.position.z;
+        prevRootYaw = root.rotation.y;
       }
-      prevRootX = root.position.x;
-      prevRootZ = root.position.z;
-      prevRootYaw = root.rotation.y;
       hasPrevRootPose = true;
 
       const optVx = optsObj && Number.isFinite(Number(optsObj.vx)) ? Number(optsObj.vx) : lastExplicitVx;
@@ -9483,8 +9562,8 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
         optsObj && Number.isFinite(Number(optsObj.turnDelta))
           ? Number(optsObj.turnDelta)
           : lastExplicitTurnDelta;
-      if (Math.abs(yawRate) < 0.05 && optTurnDelta !== null && Math.abs(optTurnDelta) > 0.02 && safeDt > 1e-4) {
-        yawRate = optTurnDelta / safeDt;
+      if (Math.abs(yawRate) < 0.05 && optTurnDelta !== null && Math.abs(optTurnDelta) > 0.02 && safeDt >= 0.004) {
+        yawRate = Math.max(-14, Math.min(14, optTurnDelta / safeDt));
       }
       const hasCallerVel = optVx !== null && optVz !== null;
       const stalledAgainstWall = hasEverMovedRoot && realSpeed < 0.08 && zeroDispSec > 0.14;
@@ -9587,7 +9666,7 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
             animCtrl.setBaseState(loco.clip, turnSpd, 0.14);
             animCtrl.updateOneShotFade?.(safeDt);
             animCtrl.mixer.update(safeDt);
-          } else if (!loco.isIdle && isBackstep) {
+          } else if (!loco.isIdle && isBackstep && loco.clip !== 'Walk_Backward') {
             animCtrl.setBaseState(loco.clip, 1.15, 0.12);
             animCtrl.updateOneShotFade?.(safeDt);
             animCtrl.mixer.update(safeDt);
@@ -9598,7 +9677,8 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
             footSyncOpts.smoothDt = safeDt;
             const syncedRate = computeFootSyncPlaybackRate(physicsActorState, effVx, effVz, footSyncOpts);
             if (syncedRate > 0.02) {
-              const rateScale = cfg.isRiftTripo || cfg.isBossVisual ? syncedRate : Math.max(0.28, (cfg.moveSpeedAnim || 1.1) * clampedSpeedMult);
+              // Apply exact biomechanical 1:1 foot-sync to ALL enemies (Souls Rift, Bosses AND regular PvE mobs!)
+              const rateScale = syncedRate;
               animCtrl.setBaseState(loco.clip, rateScale, 0.18);
             } else if (hasDedicatedIdleClip) {
               animCtrl.setBaseState(resolvedIdleClip, 1.0, 0.18);
@@ -9638,19 +9718,7 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
         procRig.update(safeDt, elapsedTime, isDying);
       }
 
-      if (hitJoltTimer > 0 && !isDying) {
-        hitJoltTimer = Math.max(0, hitJoltTimer - safeDt);
-        const jolt = Math.sin((hitJoltTimer / 0.17) * Math.PI) * hitJoltAmp;
-        if (spawnedInst) {
-          spawnedInst.rotation.x = -jolt * 0.28;
-          spawnedInst.rotation.z = hitTwistDir * jolt * 0.14;
-          spawnedInst.scale.set(
-            baseInstScaleX * (1 + jolt * 0.055),
-            baseInstScaleY * (1 - jolt * 0.075),
-            baseInstScaleZ * (1 + jolt * 0.055)
-          );
-        }
-      } else if (!isDying && spawnedInst && !procRig) {
+      if (!isDying && spawnedInst && !procRig) {
         if (activeCutsceneAction || activeClampedAction) {
           // Pure baked cutscene/stagger pose while normalized cutscene or clamped clip drives the skeleton
           if (spawnedInst.rotation.x !== 0 || spawnedInst.rotation.y !== 0 || spawnedInst.rotation.z !== 0) {
@@ -9670,20 +9738,26 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
 
           if (phase === 'neutral' && animCtrl?.isOneShotActive?.()) {
             const activeClip = animCtrl.getActiveAttackClipName?.() || lastAttackClipPlayed;
-            const prog = animCtrl.getActiveAttackProgress01?.() ?? 0;
-            const impFrac = ENEMY_CLIP_IMPACT_FRAC[activeClip] ?? 0.48;
-            const windEnd = Math.max(0.15, impFrac * 0.82);
-            const activeEnd = Math.min(0.88, impFrac + 0.16);
-            moveType = activeClip || moveType;
-            if (prog < windEnd) {
-              phase = 'windup';
-              phase01 = prog / windEnd;
-            } else if (prog < activeEnd) {
-              phase = 'active';
-              phase01 = (prog - windEnd) / Math.max(0.05, activeEnd - windEnd);
+            // Never misclassify Recover_Heft / breather clips as a 'slash' attack!
+            if (activeClip && activeClip !== 'Recover_Heft') {
+              const prog = animCtrl.getActiveAttackProgress01?.() ?? 0;
+              const impFrac = ENEMY_CLIP_IMPACT_FRAC[activeClip] ?? 0.48;
+              const windEnd = Math.max(0.15, impFrac * 0.82);
+              const activeEnd = Math.min(0.88, impFrac + 0.16);
+              moveType = activeClip || moveType;
+              if (prog < windEnd) {
+                phase = 'windup';
+                phase01 = prog / windEnd;
+              } else if (prog < activeEnd) {
+                phase = 'active';
+                phase01 = (prog - windEnd) / Math.max(0.05, activeEnd - windEnd);
+              } else {
+                phase = 'recover';
+                phase01 = (prog - activeEnd) / Math.max(0.05, 1.0 - activeEnd);
+              }
             } else {
               phase = 'recover';
-              phase01 = (prog - activeEnd) / Math.max(0.05, 1.0 - activeEnd);
+              phase01 = 0.5;
             }
           } else if (lastPostureStaggered && phase === 'neutral') {
             phase = 'stagger';
@@ -9801,6 +9875,8 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
     cancelHitReact: () => handle.cancelHitReact(),
     playHitFlinch: (opts) => handle.playHitFlinch(opts),
     playAttackAnim: (c, d, s, b) => handle.playAttackAnim(c, d, s, b),
+    handoffToClipOverride: (c, s, b) => handle.handoffToClipOverride(c, s, b),
+    handoffToBase: (c, s, b) => handle.handoffToBase(c, s, b),
     playDeathCollapse: () => handle.playDeathCollapse(),
     getWeaponSegmentWorld: () => handle.getWeaponSegmentWorld(),
     setLocomotionState: (opts) => handle.setLocomotionState(opts),

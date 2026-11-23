@@ -2,16 +2,16 @@
 // Arsenal Progression, Procedural Web Audio, Gothic UI, and Yandex Games SDK v2.
 
 import * as THREE from '../vendor/three.module.js';
-import { LEVELS, SOULS_LEVEL_DEF, getLevelDef, MAGE_ELEMENTS, WEAPONS } from './config.js?v=20261121z68';
-import { createArenaWorld } from './world.js?v=20261121z68';
-import * as models from './models.js?v=20261121z68';
-import { createProgressionStore, mergeCloudState } from './progression.js?v=20261121z68';
-import { createCombatController } from './combat.js?v=20261121z68';
-import { createAudioEngine } from './audio.js?v=20261121z68';
-import { initYandexSdk } from './yandexSdk.js?v=20261121z68';
-import { createUIManager } from './ui.js?v=20261121z68';
-import { createInputController } from './input.js?v=20261121z68';
-import { attachSeamlessLoop } from './ambientVideo.js?v=20261121z68';
+import { LEVELS, SOULS_LEVEL_DEF, getLevelDef, MAGE_ELEMENTS, WEAPONS } from './config.js?v=20261123z71';
+import { createArenaWorld } from './world.js?v=20261123z71';
+import * as models from './models.js?v=20261123z71';
+import { createProgressionStore, mergeCloudState } from './progression.js?v=20261123z71';
+import { createCombatController } from './combat.js?v=20261123z71';
+import { createAudioEngine } from './audio.js?v=20261123z71';
+import { initYandexSdk } from './yandexSdk.js?v=20261123z71';
+import { createUIManager } from './ui.js?v=20261123z71';
+import { createInputController } from './input.js?v=20261123z71';
+import { attachSeamlessLoop } from './ambientVideo.js?v=20261123z71';
 
 async function bootstrap() {
   const canvas = document.getElementById('game-canvas');
@@ -1367,10 +1367,13 @@ async function bootstrap() {
   } catch {}
 
   // === Uncapped High-Refresh Render & Simulation Loop ===
+  const showFpsBadge =
+    typeof window !== 'undefined' &&
+    /(?:^|[?&])(fps=1|debug=1)(?:&|$)/i.test(window.location?.search || '');
   const fpsBadgeEl = document.getElementById('fps-badge');
   if (fpsBadgeEl) {
-    fpsBadgeEl.classList.remove('hidden');
-    fpsBadgeEl.classList.add('is-dev-visible');
+    fpsBadgeEl.classList.toggle('hidden', !showFpsBadge);
+    fpsBadgeEl.classList.toggle('is-dev-visible', showFpsBadge);
   }
   const FPS_BADGE_UPDATE_INTERVAL_SEC = 0.4; // 2.5x/sec (prevents DOM thrash while staying crisp)
   resetFrameLoopTiming();
@@ -1424,8 +1427,8 @@ async function bootstrap() {
     }
 
     if (gameMode === 'playing') {
-      // Avoid spurious 2x sub-step spirals from routine 60Hz vsync jitter (16.7..21ms)
-      const subSteps = dt <= 0.022 ? 1 : Math.max(1, Math.min(3, Math.ceil(dt / MAX_SIM_STEP)));
+      // Avoid 3x sub-step CPU death spirals on brief frame dips (cap at 2 substeps max)
+      const subSteps = dt <= 0.025 ? 1 : Math.max(1, Math.min(2, Math.ceil(dt / MAX_SIM_STEP)));
       const stepDt = dt / subSteps;
       const frameInput = gatherInput(dt);
       const urgentHudSync = Boolean(

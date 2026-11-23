@@ -13,8 +13,8 @@ import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { DRACOLoader } from '../vendor/DRACOLoader.js';
 import { mergeGeometries } from '../vendor/BufferGeometryUtils.js';
-import { createSoulsPbrTextures } from './souls/soulsPbrTextures.js?v=20261121z68';
-import * as CastleLayout from './souls/soulsCastleLayout.js?v=20261121z68';
+import { createSoulsPbrTextures } from './souls/soulsPbrTextures.js?v=20261123z71';
+import * as CastleLayout from './souls/soulsCastleLayout.js?v=20261123z71';
 import {
   SOULS_CASTLE_CONSTANTS,
   SOULS_CASTLE_BONFIRE,
@@ -38,26 +38,26 @@ import {
   clampCastlePosition,
   getCastleSurfaceType,
   getCastleStaticColliders
-} from './souls/soulsCastleLayout.js?v=20261121z68';
-import { createWallFlameJetTraps } from './souls/soulsFireVfx.js?v=20261121z68';
-import { createSoulsCastleDoors } from './souls/soulsCastleDoors.js?v=20261121z68';
+} from './souls/soulsCastleLayout.js?v=20261123z71';
+import { createWallFlameJetTraps } from './souls/soulsFireVfx.js?v=20261123z71';
+import { createSoulsCastleDoors } from './souls/soulsCastleDoors.js?v=20261123z71';
 import {
   createHeroBonfire3D,
   createGothicLanternBraziers3D,
   createMeltedCandleClusters3D,
   createCastleBannersAndShrines3D
-} from './souls/soulsCastleProps.js?v=20261121z68';
-import { createSoulsCastleRoof } from './souls/soulsCastleRoof.js?v=20261121z68';
-import { createCastleAtmosphere } from './souls/soulsAtmosphere.js?v=20261121z68';
+} from './souls/soulsCastleProps.js?v=20261123z71';
+import { createSoulsCastleRoof } from './souls/soulsCastleRoof.js?v=20261123z71';
+import { createCastleAtmosphere } from './souls/soulsAtmosphere.js?v=20261123z71';
 import {
   createSoulsFireShadowRig,
   buildFireSourcesFromCastleLayout
-} from './souls/soulsLightingRig.js?v=20261121z68';
+} from './souls/soulsLightingRig.js?v=20261123z71';
 
 const sharedDracoLoader = new DRACOLoader();
 sharedDracoLoader.setDecoderPath('./vendor/draco/');
 
-const THRONE_GLB_URL = './assets/env/souls_throne.glb?v=20261121z68';
+const THRONE_GLB_URL = './assets/env/souls_throne.glb?v=20261123z71';
 
 const BOSS_CENTER_Z = SOULS_CASTLE_CONSTANTS.BOSS_CENTER_Z;
 const BOSS_RADIUS = SOULS_CASTLE_CONSTANTS.BOSS_RADIUS;
@@ -535,7 +535,7 @@ function fallbackCastleFloorHeight(x = 0, z = 0) {
 export function createSoulsArena(options = {}) {
   const isMobile = options.isMobile !== undefined ? Boolean(options.isMobile) : detectMobileDevice();
   let lowSpecMode = Boolean(options.lowSpec);
-  const stoneNormalStrength = isMobile ? 0.78 : 0.88;
+  const stoneNormalStrength = isMobile ? 0.58 : 0.66;
 
   const group = new THREE.Group();
   group.visible = false;
@@ -550,17 +550,17 @@ export function createSoulsArena(options = {}) {
   const pbr = createSoulsPbrTextures({ isMobile });
 
   // ==========================================================================
-  // Shared Matte Anti-Shimmer PBR Materials (normalScale 0.88 PC / 0.78 Mobile!)
+  // Shared Matte Weathered Medieval PBR Materials (zero plastic brick glare!)
   // ==========================================================================
   const stoneFloorMat = trackMat(new THREE.MeshStandardMaterial({
     map: pbr.floorAlbedo,
     normalMap: lowSpecMode ? null : pbr.floorNormal,
-    normalScale: new THREE.Vector2(stoneNormalStrength, stoneNormalStrength),
+    normalScale: new THREE.Vector2(stoneNormalStrength * 1.18, stoneNormalStrength * 1.18),
     roughnessMap: pbr.floorRoughness,
-    color: 0xc4cad9,
+    color: 0xc0c6d6,
     roughness: 1.0,
-    metalness: 0.05,
-    envMapIntensity: 0.42
+    metalness: 0.04,
+    envMapIntensity: 0.34
   }));
 
   const darkStoneMat = trackMat(new THREE.MeshStandardMaterial({
@@ -568,21 +568,21 @@ export function createSoulsArena(options = {}) {
     normalMap: lowSpecMode ? null : pbr.ashlarNormal,
     normalScale: new THREE.Vector2(stoneNormalStrength, stoneNormalStrength),
     roughnessMap: pbr.ashlarRoughness,
-    color: 0x868fa6,
+    color: 0x7d869e,
     roughness: 1.0,
-    metalness: 0.05,
-    envMapIntensity: 0.34
+    metalness: 0.03,
+    envMapIntensity: 0.20
   }));
 
   const trimStoneMat = trackMat(new THREE.MeshStandardMaterial({
     map: pbr.ashlarAlbedo,
     normalMap: lowSpecMode ? null : pbr.ashlarNormal,
-    normalScale: new THREE.Vector2(stoneNormalStrength * 0.92, stoneNormalStrength * 0.92),
+    normalScale: new THREE.Vector2(stoneNormalStrength * 0.90, stoneNormalStrength * 0.90),
     roughnessMap: pbr.ashlarRoughness,
-    color: 0x9099b0,
-    roughness: 0.96,
-    metalness: 0.06,
-    envMapIntensity: 0.34
+    color: 0x8891a8,
+    roughness: 0.98,
+    metalness: 0.04,
+    envMapIntensity: 0.20
   }));
 
   const ironMat = trackMat(new THREE.MeshStandardMaterial({
@@ -878,6 +878,7 @@ export function createSoulsArena(options = {}) {
   const crimsonCarpetBatch = new THREE.Mesh(trackGeo(mergeBucket(carpetParts, 0)), daisRunnerMat);
   crimsonCarpetBatch.castShadow = false;
   crimsonCarpetBatch.receiveShadow = true;
+  crimsonCarpetBatch.renderOrder = 3;
   group.add(crimsonCarpetBatch);
 
   // Camera-safe solid stone upper wall groups (South, West, East) [3 DC]
@@ -889,10 +890,10 @@ export function createSoulsArena(options = {}) {
       normalMap: lowSpecMode ? null : pbr.ashlarNormal,
       normalScale: new THREE.Vector2(stoneNormalStrength * 0.95, stoneNormalStrength * 0.95),
       roughnessMap: pbr.ashlarRoughness,
-      color: 0x8a93aa,
+      color: 0x828ba2,
       roughness: 1.0,
-      metalness: 0.05,
-      envMapIntensity: 0.34,
+      metalness: 0.03,
+      envMapIntensity: 0.20,
       transparent: false,
       opacity: 1.0
     }));
@@ -915,18 +916,18 @@ export function createSoulsArena(options = {}) {
     const archMat = trackMat(new THREE.MeshStandardMaterial({
       map: pbr.ashlarAlbedo,
       normalMap: lowSpecMode ? null : pbr.ashlarNormal,
-      normalScale: new THREE.Vector2(stoneNormalStrength * 0.92, stoneNormalStrength * 0.92),
+      normalScale: new THREE.Vector2(stoneNormalStrength * 0.90, stoneNormalStrength * 0.90),
       roughnessMap: pbr.ashlarRoughness,
-      color: 0x9099b0,
-      roughness: 0.96,
-      metalness: 0.06,
-      envMapIntensity: 0.34,
-      transparent: true,
+      color: 0x868fa6,
+      roughness: 0.98,
+      metalness: 0.04,
+      envMapIntensity: 0.20,
+      transparent: false,
       opacity: 1.0
     }));
     normalMappedMats.push({ mat: archMat, map: pbr.ashlarNormal });
     const archMesh = new THREE.Mesh(trackGeo(buildGothicArchGeometry(arch)), archMat);
-    archMesh.castShadow = true;
+    archMesh.castShadow = false;
     archMesh.receiveShadow = true;
     group.add(archMesh);
     archEntries.push({ arch, mesh: archMesh, mat: archMat, curOpacity: 1.0 });
@@ -1368,6 +1369,7 @@ export function createSoulsArena(options = {}) {
   const flameTraps = createWallFlameJetTraps(SOULS_CASTLE_FLAME_TRAPS, {
     isMobile,
     lowSpec: lowSpecMode,
+    pbr,
     trackGeo,
     trackMat
   });
@@ -1405,11 +1407,11 @@ export function createSoulsArena(options = {}) {
   const alcoveCz = (SOULS_CASTLE_CONSTANTS.EAST_ALCOVE_MIN_Z + SOULS_CASTLE_CONSTANTS.EAST_ALCOVE_MAX_Z) * 0.5;
   const corrMidZ = (SOULS_CASTLE_CONSTANTS.CORRIDOR_MIN_Z + SOULS_CASTLE_CONSTANTS.CORRIDOR_MAX_Z) * 0.5;
   const decalSpecs = [
-    // Shattered battle cracks (zero flat printed blood splats!)
+    // Shattered battle cracks (placed strictly on bare flagstones — NEVER cutting across the velvet royal carpet!)
     { q: 0, x:  0.4, z: SOULS_CASTLE_CONSTANTS.COURTYARD_MIN_Z + 4.0, s: 3.4, rot: 0.3 },
     { q: 0, x: -1.4, z: corrMidZ + 3.0, s: 2.6, rot: 1.1 },
     { q: 0, x: alcoveCx - 1.6, z: alcoveCz, s: 3.0, rot: 0.7 },
-    { q: 0, x:  0.0, z: BOSS_CENTER_Z + 0.4, s: 5.2 * BOSS_HALL_SCALE, rot: 0.5 },
+    { q: 0, x: -4.4 * BOSS_HALL_SCALE, z: BOSS_CENTER_Z - 1.1 * BOSS_HALL_SCALE, s: 4.0, rot: 0.5 },
     { q: 0, x: -5.4 * BOSS_HALL_SCALE, z: BOSS_CENTER_Z + 2.7 * BOSS_HALL_SCALE, s: 3.8, rot: 2.1 },
     { q: 0, x:  4.8 * BOSS_HALL_SCALE, z: BOSS_CENTER_Z - 2.0 * BOSS_HALL_SCALE, s: 4.1, rot: -0.7 },
     // Scorched ash & wax circles (Bonfire Sanctuary, Relic Shrine, Boss Doors & Flame Gauntlet)
@@ -1451,14 +1453,14 @@ export function createSoulsArena(options = {}) {
   const decalMat = trackMat(new THREE.MeshBasicMaterial({
     map: pbr.decalAtlas,
     transparent: true,
-    opacity: 0.88,
+    opacity: 0.58,
     depthWrite: false,
     polygonOffset: true,
-    polygonOffsetFactor: -2,
-    polygonOffsetUnits: -2
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1
   }));
   const groundDecalsMesh = new THREE.Mesh(trackGeo(mergeBucket(decalParts, 0)), decalMat);
-  groundDecalsMesh.renderOrder = 2;
+  groundDecalsMesh.renderOrder = 1;
   group.add(groundDecalsMesh);
 
   // ==========================================================================
@@ -1620,12 +1622,7 @@ export function createSoulsArena(options = {}) {
     if (next === lowSpecMode) return;
     lowSpecMode = next;
 
-    for (let i = 0; i < normalMappedMats.length; i++) {
-      const entry = normalMappedMats[i];
-      entry.mat.normalMap = lowSpecMode ? null : entry.map;
-      entry.mat.needsUpdate = true;
-    }
-
+    // ZERO-HITCH: never strip normalMap or set mat.needsUpdate = true mid-combat (causes 200-600ms HLSL recompile freeze!).
     activePoolCount = lowSpecMode ? 1 : MAX_POOL_LIGHTS;
     // ZERO-HITCH: NEVER toggle PointLight.visible (changes the scene light count => recompiles every lit shader mid-fight!).
     // Inactive slots simply fade to intensity 0 and get released; they stay `visible = true`.
@@ -1747,6 +1744,14 @@ export function createSoulsArena(options = {}) {
   // ==========================================================================
   const _camPosScratch = new THREE.Vector3();
   const _atmoFrameOpts = { doorOpenProgress: 0 };
+  const _fireRigOpts = {
+    heroX: 0,
+    heroZ: 0,
+    camPos: null,
+    bossDoorState: 'closed',
+    cutsceneActive: false,
+    trapSources: null
+  };
 
   function update(dt = 0.016, t = 0, opts = null) {
     if (!group.visible) return;
@@ -1823,15 +1828,13 @@ export function createSoulsArena(options = {}) {
     castleRoof.update(t, safeDt, hasCam ? _camPosScratch : null);
     _atmoFrameOpts.doorOpenProgress = dProg;
     castleAtmo.update(t, safeDt, _atmoFrameOpts);
-    fireShadowRig?.update?.(safeDt, t, {
-      focusX,
-      focusZ,
-      camX,
-      camZ,
-      doorOpenProgress: dProg,
-      cutsceneActive,
-      trapSources: flameTraps.getActiveTrapLightSources?.() || null
-    });
+    _fireRigOpts.heroX = focusX;
+    _fireRigOpts.heroZ = focusZ;
+    _fireRigOpts.camPos = hasCam ? _camPosScratch : null;
+    _fireRigOpts.bossDoorState = dState;
+    _fireRigOpts.cutsceneActive = cutsceneActive;
+    _fireRigOpts.trapSources = flameTraps.getActiveTrapLightSources?.() || null;
+    fireShadowRig?.update?.(t, safeDt, _fireRigOpts);
 
     const minSightZ = Math.min(camZ, focusZ) - 1.2;
     const maxSightZ = Math.max(camZ, focusZ) + 1.8;
@@ -1861,8 +1864,10 @@ export function createSoulsArena(options = {}) {
         ae.mesh.visible = false;
       } else {
         ae.mesh.visible = true;
-        ae.mat.opacity = ae.curOpacity;
-        ae.mat.depthWrite = ae.curOpacity > 0.85;
+        const isFading = ae.curOpacity < 0.992;
+        ae.mat.transparent = isFading;
+        ae.mat.opacity = isFading ? ae.curOpacity : 1.0;
+        ae.mat.depthWrite = !isFading || ae.curOpacity > 0.85;
       }
     }
 

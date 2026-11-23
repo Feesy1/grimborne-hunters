@@ -579,6 +579,19 @@ export const ENEMY_TYPES = {
     scale: 1.32,
     color: 0xd97706
   },
+  bone_archer: {
+    id: 'bone_archer',
+    nameRu: 'Аколит Разлома',
+    roleHintRu: 'Рунный арбалет • Дальняя атака',
+    hp: 86,
+    speed: 2.15,
+    damage: 18,
+    xp: 16,
+    gold: 8,
+    scale: 1.00,
+    ranged: true,
+    color: 0x38bdf8
+  },
   dark_cultist: {
     id: 'dark_cultist',
     nameRu: 'Тёмный культист',
