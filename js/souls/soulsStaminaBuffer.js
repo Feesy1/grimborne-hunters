@@ -23,8 +23,8 @@ export const SOULS_STAMINA_CFG = Object.freeze({
 });
 
 export const SOULS_BUFFER_CFG = Object.freeze({
-  TTL_DESKTOP_SEC: 0.200,
-  TTL_MOBILE_SEC: 0.240,
+  TTL_DESKTOP_SEC: 0.440,
+  TTL_MOBILE_SEC: 0.480,
   PRIORITY: Object.freeze({
     roll: 4,
     parry: 4,

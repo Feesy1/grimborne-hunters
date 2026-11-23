@@ -357,10 +357,10 @@ const LOCOMOTION_STRIDE_MULT = Object.freeze({
   strafe: 0.78,
   strafe_left: 0.78,
   strafe_right: 0.78,
-  circle: 0.80,
-  retreat: 0.62,
-  walk_back: 0.62,
-  backstep: 0.62,
+  circle: 0.86,
+  retreat: 0.94,
+  walk_back: 0.94,
+  backstep: 0.96,
   turn_left: 0.72,
   turn_right: 0.72
 });

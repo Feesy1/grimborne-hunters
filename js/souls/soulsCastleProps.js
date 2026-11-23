@@ -1,4 +1,4 @@
-// Wave 2 (`?v=20261123z71`) Next-Gen Gothic Castle 3D Props — «Abandoned Knight Rift»
+// Wave 2 (`?v=20261124z84`) Next-Gen Gothic Castle 3D Props — «Abandoned Knight Rift»
 // +200% PC Polygon Fidelity, Physical PBR Reflections & Dynamic Fire Shadow-Casting
 // while preserving the strict <= 45k-tri Mobile Yandex Games tessellation budget:
 //   1. createHeroBonfire3D             -> High-poly 16-stone charred hearth + ash mound + 6 bark-grooved charred logs
@@ -25,13 +25,13 @@ import {
   createInstancedWallLanternFlames,
   createCandleFlameShaderMaterial,
   createCandleFlameTeardropGeometry
-} from './soulsFireVfx.js?v=20261123z71';
+} from './soulsFireVfx.js?v=20261124z84';
 import {
   SOULS_CASTLE_ALCOVE_DECOR,
   SOULS_CASTLE_WALL_SEGMENTS,
   SOULS_CASTLE_FLAME_TRAPS,
   SOULS_CASTLE_WALL_LANTERNS
-} from './soulsCastleLayout.js?v=20261123z71';
+} from './soulsCastleLayout.js?v=20261124z84';
 
 // ============================================================================
 // Dual-Profile Tessellation Shim:
@@ -1791,6 +1791,7 @@ export function createMeltedCandleClusters3D({
       y: cy,
       z: cz,
       broken: false,
+      unbreakable: (!Array.isArray(entry) && entry.breakable === false) || cy > 0.65,
       itemIndices: []
     });
 
@@ -1949,7 +1950,7 @@ export function createMeltedCandleClusters3D({
     const broken = [];
     for (let c = 0; c < clusters.length; c++) {
       const cl = clusters[c];
-      if (cl.broken) continue;
+      if (cl.broken || cl.unbreakable) continue;
       const dx = cl.x - px;
       const dz = cl.z - pz;
       const distSq = dx * dx + dz * dz;
@@ -2673,6 +2674,7 @@ function appendWeaponRackParts(parts, spec) {
   const w = Number.isFinite(spec.width) ? spec.width : 1.8;
   const h = Number.isFinite(spec.height) ? spec.height : 1.85;
   const isHeavy = spec.style === 'greatswords_halberds';
+  const hasShield = spec.style === 'halberds_shields';
 
   const local = [];
   const halfW = w * 0.46;
@@ -2683,6 +2685,9 @@ function appendWeaponRackParts(parts, spec) {
     local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.09, h * 0.78, 0.10), sx, h * 0.42, -0.06, 0.12, 0, 0), { colorHex: 0x3b2c22, bottomColorHex: 0x221914 }));
     local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.09, h * 0.76, 0.10), sx, h * 0.41,  0.14, -0.14, 0, 0), { colorHex: 0x3b2c22, bottomColorHex: 0x221914 }));
     local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.12, 0.08, 0.24), sx, h * 0.78, 0.04), { colorHex: 0x454d60 }));
+    if (!SEG_MOBILE) {
+      local.push(tagGeo(makeXform(new THREE.ConeGeometry(0.045, 0.14, 4), sx, h * 0.86, 0.04, 0, Math.PI / 4, 0), { colorHex: 0x5c667e }));
+    }
   }
   local.push(tagGeo(makeXform(new THREE.BoxGeometry(w, 0.08, 0.34), 0, 0.14, 0.02), { colorHex: 0x35271e }));
   local.push(tagGeo(makeXform(new THREE.BoxGeometry(w + 0.08, 0.075, 0.09), 0, h * 0.62, 0.02), { colorHex: 0x403025 }));
@@ -2690,7 +2695,7 @@ function appendWeaponRackParts(parts, spec) {
 
   const addRackSword = (sx, bladeLen, guardW, tiltZ) => {
     const sw = [];
-    sw.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.028, 0.055, bladeLen, 4), 0, bladeLen * 0.5 + 0.18, 0, 0, Math.PI / 4, 0, 1.0, 1.0, 0.35), {
+    sw.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.028, 0.058, bladeLen, 4), 0, bladeLen * 0.5 + 0.18, 0, 0, Math.PI / 4, 0, 1.0, 1.0, 0.35), {
       colorHex: 0x7b849b, bottomColorHex: 0x4d5466
     }));
     sw.push(tagGeo(makeXform(new THREE.BoxGeometry(guardW, 0.045, 0.055), 0, bladeLen + 0.18, 0), { colorHex: 0x525a6f }));
@@ -2723,6 +2728,20 @@ function appendWeaponRackParts(parts, spec) {
     addRackSword(-halfW * 0.22, 1.24, 0.38, -0.03);
     addRackSword( halfW * 0.22, 1.18, 0.36,  0.03);
     addRackPolearm( halfW * 0.68, 1.94, true, -0.05);
+  } else if (hasShield) {
+    addRackPolearm(-halfW * 0.70, 1.92, true,  0.05);
+    addRackSword(-halfW * 0.24, 1.26, 0.40, -0.03);
+    addRackSword( halfW * 0.26, 1.12, 0.34,  0.04);
+    addRackPolearm( halfW * 0.70, 1.84, false, -0.04);
+    // Battered Gothic Kite Shield leaning against front of weapon rack
+    const sh = [];
+    sh.push(tagGeo(makeXform(new THREE.BoxGeometry(0.54, 0.84, 0.045), 0, 0.46, 0), { colorHex: 0x4b1520, bottomColorHex: 0x1d0b10 }));
+    sh.push(tagGeo(makeXform(new THREE.BoxGeometry(0.58, 0.05, 0.058), 0, 0.87, 0), { colorHex: 0x6e7890 }));
+    sh.push(tagGeo(makeXform(new THREE.ConeGeometry(0.28, 0.34, 4), 0, 0.16, 0, Math.PI, Math.PI / 4, 0, 1.0, 1.0, 0.18), { colorHex: 0x5c657c }));
+    sh.push(tagGeo(makeXform(new THREE.SphereGeometry(0.09, 7, 5), 0, 0.52, 0.032, 0, 0, 0, 1.0, 1.0, 0.45), { colorHex: 0xb89344 }));
+    const sm = mergeTaggedParts(sh);
+    makeXform(sm, halfW * 0.32, 0.02, 0.24, -0.24, 0.14, -0.05);
+    local.push(sm);
   } else {
     addRackPolearm(-halfW * 0.66, 1.82, false,  0.05);
     addRackSword(-halfW * 0.20, 0.98, 0.30, -0.04);
@@ -2740,6 +2759,9 @@ function appendArmorStandParts(parts, spec) {
   const oy = spec.y || 0;
   const oz = spec.z || 0;
   const rotY = resolveYaw(spec);
+  const scarred = spec.style === 'battle_scarred';
+  const plateTopHex = scarred ? 0x565e72 : 0x6c748a;
+  const plateHiHex = scarred ? 0x677088 : 0x7b859e;
 
   const local = [];
 
@@ -2750,30 +2772,36 @@ function appendArmorStandParts(parts, spec) {
   local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.76, 0.055, 0.055), 0, 1.44, 0), { colorHex: 0x362b24 }));
 
   local.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.24, 0.19, 0.46, 10), 0, 1.24, 0.02, 0, Math.PI / 8, 0, 1.16, 1.0, 0.78), {
-    colorHex: 0x6c748a, bottomColorHex: 0x3a4050
+    colorHex: plateTopHex, bottomColorHex: 0x2d3240
   }));
-  local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.055, 0.44, 0.10), 0, 1.24, 0.16, -0.08, 0, 0), { colorHex: 0x8089a2 }));
-  local.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.14, 0.21, 0.12, 10), 0, 1.50, 0.01), { colorHex: 0x5c6478 }));
+  local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.055, 0.44, 0.10), 0, 1.24, 0.16, -0.08, 0, 0), { colorHex: plateHiHex }));
+  local.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.14, 0.21, 0.12, 10), 0, 1.50, 0.01), { colorHex: 0x525a6e }));
   local.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.20, 0.26, 0.20, 10), 0, 0.94, 0.01, 0, Math.PI / 8, 0, 1.12, 1.0, 0.78), {
-    colorHex: 0x565e72, bottomColorHex: 0x343a48
+    colorHex: 0x4c5468, bottomColorHex: 0x2a2f3c
   }));
   for (const side of [-1, 1]) {
     local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.16, 0.30, 0.05), side * 0.14, 0.72, 0.13, -0.14, side * 0.22, side * 0.08), {
-      colorHex: 0x626b80, bottomColorHex: 0x383e4d
+      colorHex: plateTopHex, bottomColorHex: 0x303644
     }));
     local.push(tagGeo(makeXform(new THREE.SphereGeometry(0.155, 8, 6, 0, Math.PI * 2, 0, Math.PI * 0.65), side * 0.31, 1.44, 0, 0, 0, -side * 0.42, 1.15, 0.92, 1.05), {
-      colorHex: 0x767f96, bottomColorHex: 0x42495a
+      colorHex: plateHiHex, bottomColorHex: 0x394050
     }));
     local.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.082, 0.068, 0.32, 9), side * 0.36, 1.22, 0.01, 0, 0, -side * 0.12), {
-      colorHex: 0x596175, bottomColorHex: 0x343a48
+      colorHex: 0x525a6e, bottomColorHex: 0x2e3442
     }));
+    if (scarred && !SEG_MOBILE && side === -1) {
+      // Asymmetric gothic pauldron spike ridge on battle-scarred veteran armor
+      local.push(tagGeo(makeXform(new THREE.ConeGeometry(0.036, 0.16, 4), side * 0.35, 1.58, 0.0, 0, 0, side * -0.45), {
+        colorHex: 0x7d87a0
+      }));
+    }
   }
 
-  local.push(tagGeo(makeXform(new THREE.SphereGeometry(0.148, 9, 7), 0, 1.70, 0.01, 0, 0, 0, 0.92, 1.14, 1.08), {
-    colorHex: 0x7b859e, bottomColorHex: 0x42495c
+  local.push(tagGeo(makeXform(new THREE.SphereGeometry(0.148, 9, 7), 0, 1.70, 0.01, 0, 0, scarsTilt(scarred), 0.92, 1.14, 1.08), {
+    colorHex: plateHiHex, bottomColorHex: 0x3b4254
   }));
   local.push(tagGeo(makeXform(new THREE.ConeGeometry(0.11, 0.22, 4), 0, 1.65, 0.14, Math.PI * 0.46, Math.PI / 4, 0), {
-    colorHex: 0x697288, bottomColorHex: 0x3d4354
+    colorHex: plateTopHex, bottomColorHex: 0x353b4a
   }));
   local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.16, 0.026, 0.045), 0, 1.69, 0.175), { colorHex: 0x111318 }));
   local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.028, 0.16, 0.26), 0, 1.84, -0.02, -0.18, 0, 0), { colorHex: 0x8791ab }));
@@ -2781,6 +2809,10 @@ function appendArmorStandParts(parts, spec) {
   const merged = mergeTaggedParts(local);
   makeXform(merged, ox, oy, oz, 0, rotY, 0);
   parts.push(merged);
+}
+
+function scarsTilt(scarred) {
+  return scarred ? 0.11 : 0.0;
 }
 
 function appendWallShieldParts(parts, spec) {
@@ -2863,6 +2895,1280 @@ function appendWallShieldParts(parts, spec) {
   const merged = mergeTaggedParts(local);
   makeXform(merged, ox, oy, oz, 0, rotY, 0, s, s, s);
   parts.push(merged);
+}
+
+// ============================================================================
+// Zones 1–5 Dark-Fantasy Environmental Storytelling 3D Prop Builders
+//   - Zone 1: Stone Sarcophagi / Knight Tomb Effigies, Weathered Vigilant Knight
+//             Statues, Broken Overhead Portcullis & Chains, Fallen Shields/Rubble
+//   - Zone 2: Carved Gothic Skull Reliquary Wall Niches (+ Weapon Racks & Armor)
+//   - Zone 3: GPU-Swaying Hanging Wrought-Iron Prisoner Cages (1 InstancedMesh DC)
+//             + Safe-Pocket Charred Skeletal Remains & Scorched Armor
+//   - Zone 4: Cathedral Stone Pews / Shattered Benches, Tall Gothic Side-Wall
+//             Shrines/Statues, GPU-Swaying Hanging Chain Censers (1 InstancedMesh DC),
+//             and Fallen Carved Masonry Slabs
+//   - Zone 5: Kneeling Armored Watcher Statues facing the Boss Doors, Weathered
+//             Pilgrim Stone Benches, and Leaning Greatswords / Resting Gear
+// ============================================================================
+function buildStorySkullMerged({
+  scale = 1.0,
+  craniumHex = 0xe8dcc2,
+  bottomHex = 0x8e7e68,
+  socketHex = 0x100e12,
+  rng = null
+} = {}) {
+  const local = [];
+  const cran = new THREE.IcosahedronGeometry(0.125, SEG_MOBILE ? 0 : 1);
+  const cp = cran.attributes.position;
+  for (let i = 0; i < cp.count; i++) {
+    let x = cp.getX(i) * 0.86;
+    let y = cp.getY(i);
+    let z = cp.getZ(i) * 1.12;
+    if (y < -0.02) {
+      x *= 0.82;
+      z *= 0.90;
+    }
+    if (z > 0.06 && y > -0.02 && y < 0.055) z += 0.022;
+    cp.setXYZ(i, x, y, z);
+  }
+  cran.computeVertexNormals();
+  local.push(tagGeo(cran, { colorHex: craniumHex, bottomColorHex: bottomHex, jitter: rng ? 0.04 : 0, rng }));
+  local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.145, 0.056, 0.082), 0, -0.062, 0.068), {
+    colorHex: craniumHex, bottomColorHex: bottomHex
+  }));
+  local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.104, 0.046, 0.072), 0, -0.098, 0.088), {
+    colorHex: bottomHex, bottomColorHex: 0x4b4238
+  }));
+  for (const sx of [-0.042, 0.042]) {
+    if (SEG_MOBILE) {
+      local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.046, 0.038, 0.028), sx, -0.018, 0.106), {
+        colorHex: socketHex
+      }));
+    } else {
+      local.push(tagGeo(makeXform(new THREE.SphereGeometry(0.032, 6, 4), sx, -0.018, 0.106, 0, 0, 0, 1.05, 0.86, 0.60), {
+        colorHex: socketHex
+      }));
+    }
+  }
+  if (!SEG_MOBILE) {
+    local.push(tagGeo(makeXform(new THREE.ConeGeometry(0.018, 0.040, 3), 0, -0.064, 0.118, 0.12, Math.PI, 0), {
+      colorHex: socketHex
+    }));
+  }
+  const merged = mergeTaggedParts(local);
+  if (scale !== 1.0) merged.scale(scale, scale, scale);
+  return merged;
+}
+
+function buildStoryLongboneMerged(len = 0.52, rad = 0.022, topHex = 0xe2d5ba, botHex = 0x867762) {
+  const local = [
+    tagGeo(new THREE.CylinderGeometry(rad * 0.82, rad * 0.95, len, SEG_MOBILE ? 5 : 8), {
+      colorHex: topHex, bottomColorHex: botHex
+    })
+  ];
+  if (!SEG_MOBILE) {
+    for (const s of [-1, 1]) {
+      local.push(tagGeo(makeXform(new THREE.SphereGeometry(rad * 1.42, 5, 4), -rad * 0.55, s * len * 0.48, 0), { colorHex: topHex }));
+      local.push(tagGeo(makeXform(new THREE.SphereGeometry(rad * 1.35, 5, 4),  rad * 0.55, s * len * 0.48, 0), { colorHex: topHex }));
+    }
+  }
+  return mergeTaggedParts(local);
+}
+
+// 1. Zone 1: Carved Gothic Stone Sarcophagus / Recumbent Knight Tomb Effigy / Cracked Tomb
+function appendStoneSarcophagusParts(stoneParts, ironParts, spec) {
+  const ox = spec.x || 0;
+  const oy = spec.y || 0;
+  const oz = spec.z || 0;
+  const rotY = resolveYaw(spec);
+  const w = Number.isFinite(spec.width) ? spec.width : 2.28;
+  const d = Number.isFinite(spec.depth) ? spec.depth : 1.06;
+  const isCracked = spec.style === 'cracked_tomb';
+  const isFounder = spec.style === 'founder_effigy';
+  const rng = makeRng(310411 + Math.round((ox + oz) * 37));
+
+  const stoneLocal = [];
+  const ironLocal = [];
+
+  // Stepped chamfered Gothic stone plinth
+  stoneLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(w + 0.16, 0.14, d + 0.16), 0, 0.07, 0), {
+    colorHex: 0x62697d, bottomColorHex: 0x222530
+  }));
+  stoneLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(w + 0.06, 0.10, d + 0.06), 0, 0.19, 0), {
+    colorHex: 0x737b92, bottomColorHex: 0x3b4050
+  }));
+
+  // Tomb chest walls (hollow dark interior when cracked ajar, solid coffer otherwise)
+  if (isCracked) {
+    stoneLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(w - 0.06, 0.56, d - 0.06), 0, 0.52, 0), {
+      colorHex: 0x161821, bottomColorHex: 0x0d0e14
+    }));
+    const wallT = 0.12;
+    stoneLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(w - 0.04, 0.58, wallT), 0, 0.53, (d - wallT) * 0.48), {
+      colorHex: 0x687086, bottomColorHex: 0x343948
+    }));
+    stoneLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(w - 0.04, 0.58, wallT), 0, 0.53, -(d - wallT) * 0.48), {
+      colorHex: 0x687086, bottomColorHex: 0x343948
+    }));
+    stoneLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(wallT, 0.58, d - 0.20), (w - wallT) * 0.48, 0.53, 0), {
+      colorHex: 0x687086, bottomColorHex: 0x343948
+    }));
+    stoneLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(wallT, 0.58, d - 0.20), -(w - wallT) * 0.48, 0.53, 0), {
+      colorHex: 0x687086, bottomColorHex: 0x343948
+    }));
+    // Skeletal occupant skull & reaching forearm inside cracked sarcophagus gap!
+    const sk = buildStorySkullMerged({ scale: 0.92, craniumHex: 0xdccfb4, bottomHex: 0x7a6c58, rng });
+    makeXform(sk, -w * 0.24, 0.74, 0.12, -0.35, 0.48, 0.22);
+    stoneLocal.push(sk);
+    const armBone = buildStoryLongboneMerged(0.46, 0.020, 0xd8cab0, 0x706250);
+    makeXform(armBone, -w * 0.06, 0.80, d * 0.34, 0.32, 0.25, 1.35);
+    stoneLocal.push(armBone);
+  } else {
+    stoneLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(w - 0.04, 0.58, d - 0.04), 0, 0.53, 0), {
+      colorHex: 0x666e84, bottomColorHex: 0x333846
+    }));
+  }
+
+  // Carved Gothic blind-arcade side pilasters & corner colonnettes
+  if (!SEG_MOBILE) {
+    const bays = 5;
+    for (const sz of [-1, 1]) {
+      const fz = sz * (d * 0.5 - 0.005);
+      for (let b = 0; b <= bays; b++) {
+        const bx = -w * 0.44 + (b / bays) * (w * 0.88);
+        stoneLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(0.085, 0.52, 0.055), bx, 0.53, fz), {
+          colorHex: 0x7d869e, bottomColorHex: 0x414758
+        }));
+      }
+    }
+  }
+  for (const sx of [-w * 0.47, w * 0.47]) {
+    for (const sz of [-d * 0.46, d * 0.46]) {
+      if (!SEG_MOBILE) {
+        stoneLocal.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.062, 0.072, 0.60, 8), sx, 0.54, sz), {
+          colorHex: 0x8089a2, bottomColorHex: 0x43495a
+        }));
+      }
+      ironLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(0.14, 0.06, 0.14), sx, 0.81, sz), {
+        colorHex: 0x3b4254
+      }));
+    }
+  }
+
+  // Molded cornice rim & heavy beveled stone tomb lid (+ sculpted recumbent Knight Tomb Effigy!)
+  const lidLocal = [];
+  lidLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(w + 0.08, 0.10, d + 0.08), 0, 0.05, 0), {
+    colorHex: 0x838ca6, bottomColorHex: 0x4c5366
+  }));
+  lidLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(w - 0.08, 0.09, d - 0.10), 0, 0.14, 0), {
+    colorHex: 0x79829a, bottomColorHex: 0x4e5568
+  }));
+
+  // Sculpted Recumbent Knight Effigy lying in eternal vigil atop the sarcophagus lid
+  lidLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(0.36, 0.08, 0.48), -w * 0.31, 0.21, 0, 0, 0, -0.06), {
+    colorHex: 0x747d95, bottomColorHex: 0x494f60
+  }));
+  lidLocal.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.115, 0.13, 0.24, 8), -w * 0.30, 0.28, 0, 0, 0, Math.PI * 0.48), {
+    colorHex: 0x8b95b0, bottomColorHex: 0x52596d
+  }));
+  lidLocal.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.17, 0.21, 0.56, 8), -w * 0.08, 0.25, 0, 0, 0, Math.PI * 0.5, 1.0, 1.0, 1.24), {
+    colorHex: 0x858fa8, bottomColorHex: 0x4d5466
+  }));
+  for (const sz of [-0.21, 0.21]) {
+    lidLocal.push(tagGeo(makeXform(new THREE.SphereGeometry(0.115, 7, 5), -w * 0.16, 0.26, sz, 0, 0, 0, 1.15, 0.78, 0.95), {
+      colorHex: 0x8c96b0, bottomColorHex: 0x50576a
+    }));
+  }
+  lidLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(0.68, 0.14, 0.34), w * 0.20, 0.22, 0), {
+    colorHex: 0x7c859e, bottomColorHex: 0x4a5163
+  }));
+  for (const sz of [-0.09, 0.09]) {
+    lidLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(0.11, 0.18, 0.09), w * 0.39, 0.26, sz, 0, 0, -0.18), {
+      colorHex: 0x8690aa, bottomColorHex: 0x4f5668
+    }));
+  }
+  const swordTarget = isFounder ? ironLocal : lidLocal;
+  const swY = isFounder ? 0.82 + 0.33 : 0.33;
+  swordTarget.push(tagGeo(makeXform(new THREE.BoxGeometry(1.12, 0.032, 0.068), w * 0.08, swY, 0), {
+    colorHex: isFounder ? 0x9aa4be : 0x949eb8
+  }));
+  swordTarget.push(tagGeo(makeXform(new THREE.BoxGeometry(0.052, 0.045, 0.34), -w * 0.14, swY + 0.01, 0), {
+    colorHex: isFounder ? 0xc8a048 : 0x8e98b2
+  }));
+
+  const lidMerged = mergeTaggedParts(lidLocal);
+  if (isCracked) {
+    makeXform(lidMerged, 0.12, 0.81, -0.19, -0.04, 0.13, 0.02);
+  } else {
+    makeXform(lidMerged, 0, 0.82, 0);
+  }
+  stoneLocal.push(lidMerged);
+
+  const stoneMerged = mergeTaggedParts(stoneLocal);
+  makeXform(stoneMerged, ox, oy, oz, 0, rotY, 0);
+  stoneParts.push(stoneMerged);
+
+  if (ironLocal.length > 0) {
+    const ironMerged = mergeTaggedParts(ironLocal);
+    makeXform(ironMerged, ox, oy, oz, 0, rotY, 0);
+    ironParts.push(ironMerged);
+  }
+}
+
+// 2. Zone 1: Weathered Vigilant Knight Stone Statue on Carved Octagonal Pedestal (~3.45m tall)
+function appendKnightStatueParts(stoneParts, ironParts, spec) {
+  const ox = spec.x || 0;
+  const oy = spec.y || 0;
+  const oz = spec.z || 0;
+  const rotY = resolveYaw(spec);
+  const s = Number.isFinite(spec.scale) ? spec.scale : 1.0;
+  const isSentinel = spec.style === 'vigilant_sentinel';
+
+  const stoneLocal = [];
+  const ironLocal = [];
+
+  // A. Carved Octagonal Gothic Pedestal (y = 0 .. 1.18)
+  stoneLocal.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.58, 0.65, 0.18, 8), 0, 0.09, 0, 0, Math.PI / 8, 0), {
+    colorHex: 0x60677b, bottomColorHex: 0x20232d
+  }));
+  stoneLocal.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.48, 0.56, 0.14, 8), 0, 0.25, 0, 0, Math.PI / 8, 0), {
+    colorHex: 0x727a90, bottomColorHex: 0x3b4050
+  }));
+  stoneLocal.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.41, 0.44, 0.64, 8), 0, 0.64, 0, 0, Math.PI / 8, 0), {
+    colorHex: 0x646c82, bottomColorHex: 0x343948
+  }));
+  if (!SEG_MOBILE) {
+    for (let p = 0; p < 4; p++) {
+      const a = (p / 4) * Math.PI * 2;
+      stoneLocal.push(tagGeo(makeRadialBar(new THREE.BoxGeometry(0.10, 0.54, 0.18), 0.41, 0.64, a, 0.02), {
+        colorHex: 0x7b849c, bottomColorHex: 0x3e4454
+      }));
+    }
+  }
+  stoneLocal.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.54, 0.43, 0.12, 8), 0, 1.02, 0, 0, Math.PI / 8, 0), {
+    colorHex: 0x7c859e, bottomColorHex: 0x454b5d
+  }));
+  stoneLocal.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.52, 0.55, 0.10, 8), 0, 1.13, 0, 0, Math.PI / 8, 0), {
+    colorHex: 0x8690aa, bottomColorHex: 0x4f5668
+  }));
+
+  // B. Standing Vigilant Knight Figure (y = 1.18 .. 3.42, facing +Z)
+  const baseY = 1.18;
+  for (const sx of [-0.15, 0.15]) {
+    stoneLocal.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.088, 0.102, 0.78, 8), sx, baseY + 0.39, 0.02, 0, 0, sx * -0.04), {
+      colorHex: 0x747d95, bottomColorHex: 0x3f4556
+    }));
+    stoneLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(0.13, 0.09, 0.25), sx, baseY + 0.045, 0.08), {
+      colorHex: 0x6b748b, bottomColorHex: 0x353a48
+    }));
+  }
+  stoneLocal.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.21, 0.33, 0.92, 9), 0, baseY + 0.62, -0.02, 0, 0, 0, 1.08, 1.0, 0.85), {
+    colorHex: 0x6f7890, bottomColorHex: 0x393f4f
+  }));
+  stoneLocal.push(tagGeo(makeXform(new THREE.ConeGeometry(0.38, 1.56, 8, 1, true), 0, baseY + 0.88, -0.10, 0.08, Math.PI, 0, 1.15, 1.0, 0.68), {
+    colorHex: 0x687088, bottomColorHex: 0x313644
+  }));
+  stoneLocal.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.26, 0.20, 0.56, 9), 0, baseY + 1.24, 0.02, 0, Math.PI / 8, 0, 1.18, 1.0, 0.82), {
+    colorHex: 0x828ca6, bottomColorHex: 0x4b5264
+  }));
+  for (const side of [-1, 1]) {
+    stoneLocal.push(tagGeo(makeXform(new THREE.SphereGeometry(0.18, 8, 6, 0, Math.PI * 2, 0, Math.PI * 0.65), side * 0.32, baseY + 1.46, 0.0, 0, 0, -side * 0.38, 1.18, 0.95, 1.05), {
+      colorHex: 0x8b95b0, bottomColorHex: 0x4d5468
+    }));
+    stoneLocal.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.072, 0.082, 0.54, 8), side * 0.20, baseY + 1.24, 0.14, 0.52, 0, side * 0.38), {
+      colorHex: 0x7b849e, bottomColorHex: 0x474e60
+    }));
+  }
+  stoneLocal.push(tagGeo(makeXform(new THREE.SphereGeometry(0.095, 7, 5), 0, baseY + 1.05, 0.27, 0, 0, 0, 1.25, 0.85, 1.0), {
+    colorHex: 0x8993ae, bottomColorHex: 0x52596c
+  }));
+
+  stoneLocal.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.14, 0.155, 0.32, 8), 0, baseY + 1.72, 0.03, 0.18, Math.PI / 8, 0), {
+    colorHex: 0x8d97b2, bottomColorHex: 0x4f566a
+  }));
+  stoneLocal.push(tagGeo(makeXform(new THREE.SphereGeometry(0.142, 8, 6, 0, Math.PI * 2, 0, Math.PI * 0.55), 0, baseY + 1.85, 0.01, 0.18, 0, 0), {
+    colorHex: 0x959fba, bottomColorHex: 0x5c647a
+  }));
+  stoneLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(0.18, 0.032, 0.06), 0, baseY + 1.74, 0.16, 0.18, 0, 0), {
+    colorHex: 0x1a1d26
+  }));
+  if (isSentinel && !SEG_MOBILE) {
+    for (const side of [-1, 1]) {
+      stoneLocal.push(tagGeo(makeXform(new THREE.ConeGeometry(0.05, 0.28, 4), side * 0.16, baseY + 1.96, -0.02, -0.20, 0, -side * 0.36), {
+        colorHex: 0x96a0bc, bottomColorHex: 0x596176
+      }));
+    }
+  }
+
+  const swList = isSentinel ? ironLocal : stoneLocal;
+  const bladeHex = isSentinel ? 0x6f7992 : 0x8b95b0;
+  const guardHex = isSentinel ? 0x555e74 : 0x848ea8;
+  swList.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.024, 0.056, 0.88, 4), 0, baseY + 0.45, 0.27, 0, Math.PI / 4, 0, 1.0, 1.0, 0.34), {
+    colorHex: bladeHex, bottomColorHex: 0x3b4152
+  }));
+  swList.push(tagGeo(makeXform(new THREE.BoxGeometry(0.38, 0.048, 0.064), 0, baseY + 0.90, 0.27), {
+    colorHex: guardHex
+  }));
+  swList.push(tagGeo(makeXform(new THREE.OctahedronGeometry(0.056, 0), 0, baseY + 1.13, 0.27), {
+    colorHex: bladeHex
+  }));
+
+  const stoneMerged = mergeTaggedParts(stoneLocal);
+  makeXform(stoneMerged, ox, oy, oz, 0, rotY, 0, s, s, s);
+  stoneParts.push(stoneMerged);
+
+  if (ironLocal.length > 0) {
+    const ironMerged = mergeTaggedParts(ironLocal);
+    makeXform(ironMerged, ox, oy, oz, 0, rotY, 0, s, s, s);
+    ironParts.push(ironMerged);
+  }
+}
+
+// 3. Zone 1 & 2: Broken Overhead Wrought-Iron Portcullis & Dangling Hoist Chains
+function appendBrokenPortcullisParts(ironParts, spec) {
+  const ox = spec.x || 0;
+  const oz = spec.z || 0;
+  const spanW = Number.isFinite(spec.spanWidth) ? spec.spanWidth : 10.4;
+  const halfSpan = spanW * 0.5;
+  const springY = Number.isFinite(spec.springY) ? spec.springY : 5.0;
+  const apexY = Number.isFinite(spec.apexY) ? spec.apexY : 7.9;
+  const minCenterY = Number.isFinite(spec.minCenterSpikeY) ? spec.minCenterSpikeY : 4.85;
+  const rng = makeRng(320987 + Math.round(Math.abs(oz) * 19));
+
+  const local = [];
+  const evalArchY = (u) => {
+    const t = Math.max(0, Math.min(1, 1.0 - Math.pow(Math.abs(u) / Math.max(0.5, halfSpan), 1 / 0.82)));
+    return springY + (apexY - springY) * Math.sin(t * Math.PI * 0.5) - 0.18;
+  };
+
+  const spacing = spanW > 14 ? 0.92 : 0.74;
+  const barCount = Math.max(7, Math.floor((spanW - 1.2) / spacing));
+  const usedW = (barCount - 1) * spacing;
+
+  for (let i = 0; i < barCount; i++) {
+    const lx = -usedW * 0.5 + i * spacing;
+    const normX = Math.abs(lx) / Math.max(0.5, halfSpan);
+    const topY = evalArchY(lx);
+    const outerDrop = Math.pow(Math.max(0, (normX - 0.52) / 0.48), 1.45) * 1.25;
+    const jaggedSnap = (rng() - 0.35) * 0.48;
+    const botY = Math.max(3.55, (normX < 0.55 ? minCenterY + 0.15 + Math.abs(jaggedSnap) : minCenterY - outerDrop + jaggedSnap * 0.5));
+    if (topY - botY < 0.45) continue;
+
+    if (normX < 0.45 && (i % 5 === 2)) {
+      const stubLen = Math.min(0.85, topY - botY);
+      local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.068, stubLen, 0.068), lx, topY - stubLen * 0.5, 0, 0, 0, (rng() - 0.5) * 0.08), {
+        colorHex: 0x3b4254, bottomColorHex: 0x222632
+      }));
+      continue;
+    }
+
+    const len = topY - botY;
+    const bendZ = normX > 0.55 ? 0 : (rng() - 0.5) * 0.05;
+    local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.072, len, 0.072), lx, botY + len * 0.5, 0, bendZ, 0, (rng() - 0.5) * 0.04), {
+      colorHex: 0x41495c, bottomColorHex: 0x252a36
+    }));
+    local.push(tagGeo(makeXform(new THREE.ConeGeometry(0.058, 0.22, 4), lx, botY - 0.09, 0, Math.PI, Math.PI / 4, 0), {
+      colorHex: 0x58627a, bottomColorHex: 0x2d3342
+    }));
+  }
+
+  const railYs = [minCenterY + 0.58, minCenterY + 1.28, minCenterY + 2.02];
+  for (let r = 0; r < railYs.length; r++) {
+    const ry = railYs[r];
+    if (ry >= apexY - 0.45) continue;
+    let halfChord = halfSpan * 0.90;
+    for (let s = 0; s < 16; s++) {
+      const testX = halfSpan * (1.0 - s / 16);
+      if (evalArchY(testX) >= ry + 0.08) {
+        halfChord = testX;
+        break;
+      }
+    }
+    const railW = Math.max(1.6, halfChord * 1.94);
+    local.push(tagGeo(makeXform(new THREE.BoxGeometry(railW, 0.095, 0.12), 0, ry, 0, 0, 0, r === 0 ? -0.025 : 0.012), {
+      colorHex: 0x495268, bottomColorHex: 0x282d3a
+    }));
+  }
+
+  for (const side of [-1, 1]) {
+    const cx = side * (halfSpan * 0.78);
+    const drumY = Math.min(apexY - 0.8, springY + 0.55);
+    local.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.18, 0.18, 0.46, 8), cx, drumY, 0.22, 0, 0, Math.PI / 2), {
+      colorHex: 0x384050, bottomColorHex: 0x1e222c
+    }));
+    const links = SEG_MOBILE ? 5 : 9;
+    for (let k = 0; k < links; k++) {
+      const ly = drumY - 0.22 - k * 0.19;
+      if (ly < 3.65) break;
+      const swayX = Math.sin(k * 0.55 + side) * 0.04;
+      local.push(tagGeo(makeXform(
+        new THREE.TorusGeometry(0.068, 0.020, 4, 8),
+        cx + swayX, ly, 0.28,
+        0.08, k % 2 === 0 ? Math.PI / 2 : 0, 0
+      ), { colorHex: 0x525c74 }));
+    }
+  }
+
+  const merged = mergeTaggedParts(local);
+  makeXform(merged, ox, 0, oz);
+  ironParts.push(merged);
+}
+
+// 4. Zone 1: Scattered Ancient Stone Rubble & Fallen Battle Shields
+function appendFallenShieldClusterParts(stoneParts, ironParts, spec) {
+  const ox = spec.x || 0;
+  const oy = spec.y || 0;
+  const oz = spec.z || 0;
+  const rotY = resolveYaw(spec);
+  const rng = makeRng(330157 + Math.round((ox * 13 + oz * 29)));
+
+  const stoneLocal = [];
+  const ironLocal = [];
+
+  for (let c = 0; c < (SEG_MOBILE ? 3 : 5); c++) {
+    const ang = (c / 5) * Math.PI * 2 + 0.3;
+    const dist = 0.18 + rng() * 0.34;
+    const chunk = new THREE.DodecahedronGeometry(0.11 + rng() * 0.07, 0);
+    makeXform(chunk, Math.cos(ang) * dist, 0.065, Math.sin(ang) * dist, rng() * 2, rng() * 3, rng() * 2, 1.35, 0.55, 1.05);
+    stoneLocal.push(tagGeo(chunk, { colorHex: 0x6b738a, bottomColorHex: 0x262a36, jitter: 0.06, rng }));
+  }
+
+  ironLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(0.56, 0.042, 0.82), -0.06, 0.13, 0.04, 0.18, 0.26, -0.22), {
+    colorHex: 0x4c1622, bottomColorHex: 0x221018
+  }));
+  ironLocal.push(tagGeo(makeXform(new THREE.TorusGeometry(0.24, 0.022, 4, 8), -0.06, 0.15, 0.04, Math.PI * 0.5 + 0.18, 0.26, -0.22), {
+    colorHex: 0x6c768e
+  }));
+  ironLocal.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.26, 0.28, 0.036, 10), 0.34, 0.07, -0.18, -0.14, 0.4, 0.19), {
+    colorHex: 0x454e62, bottomColorHex: 0x242834
+  }));
+  ironLocal.push(tagGeo(makeXform(new THREE.SphereGeometry(0.072, 7, 5), 0.34, 0.10, -0.18, 0, 0, 0, 1.0, 0.55, 1.0), {
+    colorHex: 0x8690aa
+  }));
+  ironLocal.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.018, 0.022, 0.96, 7), -0.12, 0.05, -0.24, Math.PI * 0.49, 0.35, 0.92), {
+    colorHex: 0x3b2c22, bottomColorHex: 0x1e1612
+  }));
+
+  const stoneMerged = mergeTaggedParts(stoneLocal);
+  makeXform(stoneMerged, ox, oy, oz, 0, rotY, 0);
+  stoneParts.push(stoneMerged);
+
+  const ironMerged = mergeTaggedParts(ironLocal);
+  makeXform(ironMerged, ox, oy, oz, 0, rotY, 0);
+  ironParts.push(ironMerged);
+}
+
+// 5. Zone 2: Carved Gothic Stone Reliquary Wall Niche w/ Skulls, Bones & Iron Keeper Grille
+function appendReliquaryNicheParts(stoneParts, ironParts, spec) {
+  const ox = spec.x || 0;
+  const oy = spec.y || 0;
+  const oz = spec.z || 0;
+  const rotY = resolveYaw(spec);
+  const s = Number.isFinite(spec.scale) ? spec.scale : 1.0;
+  const rng = makeRng(340821 + Math.round((ox + oz) * 23));
+
+  const stoneLocal = [];
+  const ironLocal = [];
+
+  stoneLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(1.24, 0.14, 0.42), 0, 1.11, 0.20), {
+    colorHex: 0x7e87a0, bottomColorHex: 0x3b4050
+  }));
+  stoneLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(0.88, 0.24, 0.28), 0, 0.94, 0.13, 0.26, 0, 0), {
+    colorHex: 0x677086, bottomColorHex: 0x2d3240
+  }));
+
+  stoneLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(0.86, 1.24, 0.08), 0, 1.80, 0.05), {
+    colorHex: 0x151822, bottomColorHex: 0x0c0e14
+  }));
+  for (const sx of [-0.48, 0.48]) {
+    stoneLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(0.16, 1.24, 0.28), sx, 1.80, 0.14), {
+      colorHex: 0x6d768e, bottomColorHex: 0x3d4354
+    }));
+    stoneLocal.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.058, 0.066, 1.18, 8), sx * 0.86, 1.80, 0.27), {
+      colorHex: 0x858fa8, bottomColorHex: 0x4a5164
+    }));
+  }
+
+  stoneLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(0.74, 0.16, 0.30), -0.26, 2.58, 0.15, 0, 0, 0.62), {
+    colorHex: 0x828ca6, bottomColorHex: 0x484f62
+  }));
+  stoneLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(0.74, 0.16, 0.30),  0.26, 2.58, 0.15, 0, 0, -0.62), {
+    colorHex: 0x828ca6, bottomColorHex: 0x484f62
+  }));
+  stoneLocal.push(tagGeo(makeXform(new THREE.ConeGeometry(0.11, 0.34, 4), 0, 2.92, 0.16, 0, Math.PI / 4, 0), {
+    colorHex: 0x909ab6
+  }));
+
+  const skullCoords = [
+    [-0.20, 1.32, 0.16, -0.08,  0.22,  0.04, 0.96],
+    [ 0.20, 1.32, 0.16, -0.06, -0.24, -0.05, 0.94],
+    [ 0.00, 1.54, 0.14,  0.05,  0.04,  0.02, 1.02]
+  ];
+  for (let i = 0; i < skullCoords.length; i++) {
+    if (SEG_MOBILE && i === 1) continue;
+    const [kx, ky, kz, rx, ry, rz, ks] = skullCoords[i];
+    const sk = buildStorySkullMerged({ scale: ks, craniumHex: 0xebe0c8, bottomHex: 0x8c7d66, rng });
+    makeXform(sk, kx, ky, kz, rx, ry, rz);
+    stoneLocal.push(sk);
+  }
+  const boneA = buildStoryLongboneMerged(0.56, 0.020, 0xe4d7bc, 0x82745e);
+  makeXform(boneA, 0, 1.22, 0.22, 0.12, 0.22, 1.38);
+  stoneLocal.push(boneA);
+
+  ironLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(0.88, 0.032, 0.032), 0, 1.34, 0.34), { colorHex: 0x454e62 }));
+  for (let b = -2; b <= 2; b++) {
+    ironLocal.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.012, 0.014, 0.20, 6), b * 0.17, 1.26, 0.34), { colorHex: 0x3b4356 }));
+  }
+
+  const stoneMerged = mergeTaggedParts(stoneLocal);
+  makeXform(stoneMerged, ox, oy, oz, 0, rotY, 0, s, s, s);
+  stoneParts.push(stoneMerged);
+
+  const ironMerged = mergeTaggedParts(ironLocal);
+  makeXform(ironMerged, ox, oy, oz, 0, rotY, 0, s, s, s);
+  ironParts.push(ironMerged);
+}
+
+// 6. Zone 3: Safe-Recess Charred Skeletal Remains & Scorched Armor Pieces
+function appendCharredRemainsParts(stoneParts, ironParts, spec) {
+  const ox = spec.x || 0;
+  const oy = spec.y || 0;
+  const oz = spec.z || 0;
+  const rotY = resolveYaw(spec);
+  const pose = spec.pose || 'seated_knight';
+  const rng = makeRng(350613 + Math.round((ox * 17 + oz * 31)));
+
+  const stoneLocal = [];
+  const ironLocal = [];
+
+  stoneLocal.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.32, 0.58, 0.08, SEG_MOBILE ? 6 : 10), 0, 0.04, 0.08, 0, 0, 0, 1.15, 1.0, 0.82), {
+    colorHex: 0x1d1a1e, bottomColorHex: 0x0d0b0e, jitter: 0.07, rng
+  }));
+
+  if (pose === 'seated_knight') {
+    for (let r = 0; r < 3; r++) {
+      stoneLocal.push(tagGeo(makeXform(new THREE.TorusGeometry(0.13 - r * 0.012, 0.015, 4, 8, Math.PI * 1.15), 0, 0.26 + r * 0.065, -0.08, 1.25, 0, 0), {
+        colorHex: 0x4f423b, bottomColorHex: 0x201918
+      }));
+    }
+    const sk = buildStorySkullMerged({ scale: 0.96, craniumHex: 0x5c4d44, bottomHex: 0x241d1b, socketHex: 0x090708, rng });
+    makeXform(sk, 0.03, 0.52, -0.05, 0.36, 0.22, -0.18);
+    stoneLocal.push(sk);
+
+    for (const sx of [-0.12, 0.14]) {
+      const fem = buildStoryLongboneMerged(0.48, 0.022, 0x584a40, 0x221b19);
+      makeXform(fem, sx, 0.07, 0.18, Math.PI * 0.48, sx * 0.8, 0.12);
+      stoneLocal.push(fem);
+    }
+    ironLocal.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.16, 0.19, 0.30, 8), 0, 0.28, -0.06, -0.24, 0, 0, 1.15, 1.0, 0.72), {
+      colorHex: 0x2d282e, bottomColorHex: 0x141216
+    }));
+    ironLocal.push(tagGeo(makeXform(new THREE.SphereGeometry(0.13, 7, 5), 0.28, 0.11, 0.12, 0.3, -0.4, 0.5), {
+      colorHex: 0x353038, bottomColorHex: 0x161419
+    }));
+  } else if (pose === 'crawling_husk') {
+    const sk = buildStorySkullMerged({ scale: 0.94, craniumHex: 0x54463d, bottomHex: 0x201917, socketHex: 0x090708, rng });
+    makeXform(sk, 0.16, 0.15, 0.12, -0.25, 0.85, 0.28);
+    stoneLocal.push(sk);
+    for (let b = 0; b < 3; b++) {
+      const bn = buildStoryLongboneMerged(0.44, 0.020, 0x56483e, 0x1e1816);
+      makeXform(bn, -0.10 + b * 0.14, 0.06, -0.06 + (b % 2) * 0.16, Math.PI * 0.49, 0.5 + b * 0.7, 0.2);
+      stoneLocal.push(bn);
+    }
+    ironLocal.push(tagGeo(makeXform(new THREE.SphereGeometry(0.14, 7, 5, 0, Math.PI * 2, 0, Math.PI * 0.6), -0.04, 0.14, 0.02, 0.2, 0.3, -0.3), {
+      colorHex: 0x312c34, bottomColorHex: 0x151318
+    }));
+    ironLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(0.62, 0.026, 0.052), 0.24, 0.045, 0.20, 0.05, 0.42, 0.08), {
+      colorHex: 0x423d48, bottomColorHex: 0x1d1a20
+    }));
+  } else {
+    const sk = buildStorySkullMerged({ scale: 0.92, craniumHex: 0x594a41, bottomHex: 0x221b19, socketHex: 0x090708, rng });
+    makeXform(sk, -0.14, 0.16, 0.08, 0.18, -0.52, 0.35);
+    stoneLocal.push(sk);
+    ironLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(0.48, 0.04, 0.68), 0.08, 0.14, 0.04, 0.26, -0.32, 0.24), {
+      colorHex: 0x2c1b20, bottomColorHex: 0x140e12
+    }));
+    ironLocal.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.020, 0.024, 0.88, 7), -0.05, 0.08, 0.14, Math.PI * 0.47, -0.25, 1.15), {
+      colorHex: 0x2a201b, bottomColorHex: 0x14100e
+    }));
+  }
+
+  const stoneMerged = mergeTaggedParts(stoneLocal);
+  makeXform(stoneMerged, ox, oy, oz, 0, rotY, 0);
+  stoneParts.push(stoneMerged);
+
+  const ironMerged = mergeTaggedParts(ironLocal);
+  makeXform(ironMerged, ox, oy, oz, 0, rotY, 0);
+  ironParts.push(ironMerged);
+}
+
+// 7. Zone 4: Carved Cathedral Stone Pew / Shattered Bench
+function appendCathedralPewParts(stoneParts, spec) {
+  const ox = spec.x || 0;
+  const oy = spec.y || 0;
+  const oz = spec.z || 0;
+  const rotY = resolveYaw(spec);
+  const w = Number.isFinite(spec.width) ? spec.width : 1.95;
+  const d = Number.isFinite(spec.depth) ? spec.depth : 0.64;
+  const shattered = spec.style === 'shattered';
+  const halfW = w * 0.46;
+
+  const local = [];
+
+  if (!shattered) {
+    for (const side of [-1, 1]) {
+      const sx = side * halfW;
+      local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.14, 0.14, d), sx, 0.07, 0), {
+        colorHex: 0x62697d, bottomColorHex: 0x222630
+      }));
+      local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.12, 0.88, d * 0.88), sx, 0.51, -0.02), {
+        colorHex: 0x747d95, bottomColorHex: 0x3b4050
+      }));
+      local.push(tagGeo(makeXform(new THREE.ConeGeometry(0.10, 0.24, 4), sx, 1.06, -d * 0.24, 0, Math.PI / 4, 0), {
+        colorHex: 0x8993ae, bottomColorHex: 0x4d5466
+      }));
+    }
+    local.push(tagGeo(makeXform(new THREE.BoxGeometry(w, 0.09, d * 0.76), 0, 0.46, 0.04), {
+      colorHex: 0x808aa4, bottomColorHex: 0x474e60
+    }));
+    local.push(tagGeo(makeXform(new THREE.BoxGeometry(w - 0.06, 0.48, 0.10), 0, 0.72, -d * 0.30, -0.08, 0, 0), {
+      colorHex: 0x768098, bottomColorHex: 0x414858
+    }));
+    local.push(tagGeo(makeXform(new THREE.BoxGeometry(w + 0.04, 0.07, 0.13), 0, 0.96, -d * 0.32), {
+      colorHex: 0x8c96b0, bottomColorHex: 0x52596c
+    }));
+    local.push(tagGeo(makeXform(new THREE.BoxGeometry(w - 0.16, 0.08, 0.14), 0, 0.08, d * 0.28), {
+      colorHex: 0x5d6478, bottomColorHex: 0x252934
+    }));
+  } else {
+    local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.14, 0.14, d), -halfW, 0.07, 0), {
+      colorHex: 0x62697d, bottomColorHex: 0x222630
+    }));
+    local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.12, 0.86, d * 0.88), -halfW, 0.50, -0.02), {
+      colorHex: 0x747d95, bottomColorHex: 0x3b4050
+    }));
+    local.push(tagGeo(makeXform(new THREE.ConeGeometry(0.10, 0.22, 4), -halfW, 1.04, -d * 0.24, 0, Math.PI / 4, 0), {
+      colorHex: 0x8892ac
+    }));
+    local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.14, 0.38, d * 0.84), halfW, 0.19, -0.02, 0.04, 0.08, -0.09), {
+      colorHex: 0x687086, bottomColorHex: 0x262a36
+    }));
+    local.push(tagGeo(makeXform(new THREE.BoxGeometry(w * 0.54, 0.09, d * 0.74), -w * 0.20, 0.44, 0.04, 0.03, 0, -0.08), {
+      colorHex: 0x7c86a0, bottomColorHex: 0x434a5c
+    }));
+    local.push(tagGeo(makeXform(new THREE.BoxGeometry(w * 0.48, 0.44, 0.10), -w * 0.22, 0.68, -d * 0.29, -0.08, 0.03, -0.10), {
+      colorHex: 0x727b94, bottomColorHex: 0x3d4354
+    }));
+    local.push(tagGeo(makeXform(new THREE.BoxGeometry(w * 0.46, 0.09, d * 0.70), w * 0.22, 0.20, 0.06, 0.12, -0.10, -0.38), {
+      colorHex: 0x6e778e, bottomColorHex: 0x303544
+    }));
+  }
+
+  const merged = mergeTaggedParts(local);
+  makeXform(merged, ox, oy, oz, 0, rotY, 0);
+  stoneParts.push(merged);
+}
+
+// 8. Zone 4: Tall Gothic Side-Wall Tabernacle Shrine / Hooded Saint Statue (~3.65m tall)
+function appendGothicWallShrineParts(stoneParts, ironParts, spec) {
+  const ox = spec.x || 0;
+  const oy = spec.y || 0;
+  const oz = spec.z || 0;
+  const rotY = resolveYaw(spec);
+
+  const stoneLocal = [];
+  const ironLocal = [];
+
+  stoneLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(1.18, 0.16, 0.78), 0, 0.08, 0.06), {
+    colorHex: 0x62697d, bottomColorHex: 0x20232d
+  }));
+  stoneLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(0.98, 0.74, 0.62), 0, 0.53, 0.04), {
+    colorHex: 0x6d768e, bottomColorHex: 0x373c4b
+  }));
+  stoneLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(1.14, 0.14, 0.74), 0, 0.97, 0.06), {
+    colorHex: 0x858fa8, bottomColorHex: 0x4b5264
+  }));
+
+  stoneLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(0.96, 1.88, 0.14), 0, 1.98, -0.22), {
+    colorHex: 0x4c5366, bottomColorHex: 0x282c38
+  }));
+  for (const sx of [-0.46, 0.46]) {
+    stoneLocal.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.068, 0.078, 1.84, 8), sx, 1.96, 0.22), {
+      colorHex: 0x828ca6, bottomColorHex: 0x474e60
+    }));
+    stoneLocal.push(tagGeo(makeXform(new THREE.ConeGeometry(0.085, 0.32, 4), sx, 3.04, 0.22, 0, Math.PI / 4, 0), {
+      colorHex: 0x8f99b4
+    }));
+  }
+  stoneLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(0.72, 0.16, 0.56), -0.25, 3.12, 0.02, 0, 0, 0.68), {
+    colorHex: 0x8892ac, bottomColorHex: 0x4b5264
+  }));
+  stoneLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(0.72, 0.16, 0.56),  0.25, 3.12, 0.02, 0, 0, -0.68), {
+    colorHex: 0x8892ac, bottomColorHex: 0x4b5264
+  }));
+  stoneLocal.push(tagGeo(makeXform(new THREE.ConeGeometry(0.12, 0.42, 4), 0, 3.54, 0.04, 0, Math.PI / 4, 0), {
+    colorHex: 0x96a0bc
+  }));
+
+  stoneLocal.push(tagGeo(makeXform(new THREE.ConeGeometry(0.28, 1.32, 9), 0, 1.70, 0.02, 0, 0, 0, 1.06, 1.0, 0.82), {
+    colorHex: 0x808aa4, bottomColorHex: 0x434a5c
+  }));
+  stoneLocal.push(tagGeo(makeXform(new THREE.SphereGeometry(0.21, 8, 6), 0, 2.24, 0.01, 0, 0, 0, 1.12, 0.85, 0.85), {
+    colorHex: 0x8993ae, bottomColorHex: 0x4e5568
+  }));
+  stoneLocal.push(tagGeo(makeXform(new THREE.ConeGeometry(0.15, 0.34, 8), 0, 2.54, 0.03, 0.24, 0, 0), {
+    colorHex: 0x919bb6, bottomColorHex: 0x4c5366
+  }));
+  stoneLocal.push(tagGeo(makeXform(new THREE.SphereGeometry(0.085, 6, 5), 0, 2.46, 0.11), {
+    colorHex: 0x1c1f29
+  }));
+  ironLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(0.042, 0.88, 0.024), 0, 1.66, 0.20), {
+    colorHex: 0x7b859e, bottomColorHex: 0x454c5e
+  }));
+  ironLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(0.26, 0.038, 0.042), 0, 2.02, 0.20), {
+    colorHex: 0xb89244
+  }));
+
+  const stoneMerged = mergeTaggedParts(stoneLocal);
+  makeXform(stoneMerged, ox, oy, oz, 0, rotY, 0);
+  stoneParts.push(stoneMerged);
+
+  const ironMerged = mergeTaggedParts(ironLocal);
+  makeXform(ironMerged, ox, oy, oz, 0, rotY, 0);
+  ironParts.push(ironMerged);
+}
+
+// 9. Zone 4: Fallen Carved Masonry Slabs & Broken Vault Shards
+function appendFallenMasonrySlabParts(stoneParts, spec) {
+  const ox = spec.x || 0;
+  const oy = spec.y || 0;
+  const oz = spec.z || 0;
+  const rotY = resolveYaw(spec);
+  const rng = makeRng(360941 + Math.round((ox * 23 + oz * 17)));
+
+  const local = [];
+  local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.76, 0.13, 0.54), -0.12, 0.075, 0.14, 0.08, 0.24, -0.07), {
+    colorHex: 0x747d95, bottomColorHex: 0x262a36, jitter: 0.05, rng
+  }));
+  local.push(tagGeo(makeXform(new THREE.BoxGeometry(0.52, 0.11, 0.42), 0.34, 0.06, -0.18, -0.06, -0.45, 0.08), {
+    colorHex: 0x697288, bottomColorHex: 0x242834, jitter: 0.05, rng
+  }));
+  for (let c = 0; c < (SEG_MOBILE ? 2 : 4); c++) {
+    const ch = new THREE.DodecahedronGeometry(0.08 + rng() * 0.05, 0);
+    makeXform(ch, (rng() - 0.5) * 0.9, 0.045, (rng() - 0.5) * 0.8, rng() * 2, rng() * 3, rng() * 2, 1.3, 0.5, 1.0);
+    local.push(tagGeo(ch, { colorHex: 0x626a80, bottomColorHex: 0x20232e }));
+  }
+
+  const merged = mergeTaggedParts(local);
+  makeXform(merged, ox, oy, oz, 0, rotY, 0);
+  stoneParts.push(merged);
+}
+
+// 10. Zone 5: Solemn Kneeling Armored Husk / Watcher Statue facing the Boss Doors
+function appendKneelingKnightParts(stoneParts, ironParts, spec) {
+  const ox = spec.x || 0;
+  const oy = spec.y || 0;
+  const oz = spec.z || 0;
+  const rotY = resolveYaw(spec);
+
+  const stoneLocal = [];
+  const ironLocal = [];
+
+  stoneLocal.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.50, 0.56, 0.12, 8), 0, 0.06, 0, 0, Math.PI / 8, 0), {
+    colorHex: 0x62697d, bottomColorHex: 0x20232d
+  }));
+  stoneLocal.push(tagGeo(makeXform(new THREE.ConeGeometry(0.38, 0.88, 9), 0, 0.52, -0.06, -0.14, 0, 0, 1.08, 1.0, 1.15), {
+    colorHex: 0x5c6378, bottomColorHex: 0x262a36
+  }));
+
+  ironLocal.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.075, 0.085, 0.44, 8), 0.14, 0.22, -0.10, Math.PI * 0.45, 0.12, 0), {
+    colorHex: 0x4b5368, bottomColorHex: 0x252a36
+  }));
+  ironLocal.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.078, 0.088, 0.42, 8), -0.14, 0.33, 0.08, 0.08, 0, 0), {
+    colorHex: 0x525b72, bottomColorHex: 0x2a303e
+  }));
+
+  ironLocal.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.22, 0.18, 0.48, 9), 0, 0.82, 0.0, 0.22, Math.PI / 8, 0, 1.16, 1.0, 0.82), {
+    colorHex: 0x5d6780, bottomColorHex: 0x313746
+  }));
+  for (const side of [-1, 1]) {
+    ironLocal.push(tagGeo(makeXform(new THREE.SphereGeometry(0.15, 8, 6, 0, Math.PI * 2, 0, Math.PI * 0.65), side * 0.28, 0.98, 0.04, 0.2, 0, -side * 0.38, 1.15, 0.92, 1.05), {
+      colorHex: 0x6b7590, bottomColorHex: 0x383f50
+    }));
+    ironLocal.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.064, 0.074, 0.44, 8), side * 0.17, 0.84, 0.18, 0.68, 0, side * 0.36), {
+      colorHex: 0x565f76, bottomColorHex: 0x2e3442
+    }));
+  }
+
+  ironLocal.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.125, 0.142, 0.26, 8), 0, 1.16, 0.09, 0.38, Math.PI / 8, 0), {
+    colorHex: 0x6e7892, bottomColorHex: 0x363d4e
+  }));
+  ironLocal.push(tagGeo(makeXform(new THREE.ConeGeometry(0.115, 0.20, 4), 0, 1.12, 0.21, Math.PI * 0.58, Math.PI / 4, 0), {
+    colorHex: 0x606a82, bottomColorHex: 0x323848
+  }));
+  ironLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(0.15, 0.024, 0.05), 0, 1.16, 0.23, 0.38, 0, 0), {
+    colorHex: 0x101218
+  }));
+
+  ironLocal.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.024, 0.054, 0.86, 4), 0, 0.53, 0.31, 0, Math.PI / 4, 0, 1.0, 1.0, 0.34), {
+    colorHex: 0x7c86a0, bottomColorHex: 0x42495c
+  }));
+  ironLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(0.38, 0.044, 0.058), 0, 0.96, 0.31), {
+    colorHex: 0x9b7d3c
+  }));
+  ironLocal.push(tagGeo(makeXform(new THREE.SphereGeometry(0.082, 7, 5), 0, 1.04, 0.31, 0, 0, 0, 1.25, 0.85, 1.0), {
+    colorHex: 0x646e88
+  }));
+  ironLocal.push(tagGeo(makeXform(new THREE.OctahedronGeometry(0.048, 0), 0, 1.20, 0.31), {
+    colorHex: 0xb29046
+  }));
+
+  const stoneMerged = mergeTaggedParts(stoneLocal);
+  makeXform(stoneMerged, ox, oy, oz, 0, rotY, 0);
+  stoneParts.push(stoneMerged);
+
+  const ironMerged = mergeTaggedParts(ironLocal);
+  makeXform(ironMerged, ox, oy, oz, 0, rotY, 0);
+  ironParts.push(ironMerged);
+}
+
+// 11. Zone 5: Weathered Pilgrim Stone Bench & Resting Sanctuary Gear
+function appendPilgrimBenchParts(stoneParts, ironParts, spec) {
+  const ox = spec.x || 0;
+  const oy = spec.y || 0;
+  const oz = spec.z || 0;
+  const rotY = resolveYaw(spec);
+  const w = Number.isFinite(spec.width) ? spec.width : 1.92;
+  const d = Number.isFinite(spec.depth) ? spec.depth : 0.64;
+
+  const stoneLocal = [];
+  const ironLocal = [];
+
+  for (const sx of [-w * 0.38, w * 0.38]) {
+    stoneLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(0.24, 0.42, d * 0.86), sx, 0.21, 0), {
+      colorHex: 0x687086, bottomColorHex: 0x242834
+    }));
+  }
+  stoneLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(w, 0.12, d), 0, 0.47, 0), {
+    colorHex: 0x828ca6, bottomColorHex: 0x474e60
+  }));
+  stoneLocal.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.08, 0.11, 0.26, 8), -w * 0.34, 0.66, -0.06), {
+    colorHex: 0x767f96, bottomColorHex: 0x3f4556
+  }));
+  ironLocal.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.065, 0.055, 0.18, 6), w * 0.30, 0.62, 0.04), {
+    colorHex: 0x454e62, bottomColorHex: 0x222632
+  }));
+  ironLocal.push(tagGeo(makeXform(new THREE.ConeGeometry(0.078, 0.09, 6), w * 0.30, 0.74, 0.04), {
+    colorHex: 0x566078
+  }));
+  ironLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(0.92, 0.036, 0.072), -0.02, 0.55, 0.06, 0.04, 0.18, 0.02), {
+    colorHex: 0x3b2c24, bottomColorHex: 0x1e1612
+  }));
+  ironLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(0.042, 0.045, 0.26), -0.46, 0.56, -0.02, 0, 0.18, 0), {
+    colorHex: 0x9b7e3c
+  }));
+
+  const stoneMerged = mergeTaggedParts(stoneLocal);
+  makeXform(stoneMerged, ox, oy, oz, 0, rotY, 0);
+  stoneParts.push(stoneMerged);
+
+  const ironMerged = mergeTaggedParts(ironLocal);
+  makeXform(ironMerged, ox, oy, oz, 0, rotY, 0);
+  ironParts.push(ironMerged);
+}
+
+// 12. Zone 5: Leaning Greatswords / Halberds / Heater Shields along Sanctuary Outer Walls
+function appendLeaningGreatswordParts(stoneParts, ironParts, spec) {
+  const ox = spec.x || 0;
+  const oy = spec.y || 0;
+  const oz = spec.z || 0;
+  const rotY = resolveYaw(spec);
+  const style = spec.style || 'greatsword_shield';
+
+  const stoneLocal = [];
+  const ironLocal = [];
+
+  if (style === 'halberd_urn') {
+    stoneLocal.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.14, 0.18, 0.44, 9), -0.26, 0.22, 0.18), {
+      colorHex: 0x747d95, bottomColorHex: 0x343948
+    }));
+    ironLocal.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.022, 0.026, 1.96, 8), 0.14, 0.98, 0.18, -0.18, 0, 0.06), {
+      colorHex: 0x3d2e24, bottomColorHex: 0x201813
+    }));
+    ironLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(0.24, 0.28, 0.024), 0.22, 1.72, 0.03, -0.18, 0, -0.12), {
+      colorHex: 0x828ca6
+    }));
+  } else if (style === 'pilgrim_staff_sword') {
+    ironLocal.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.020, 0.024, 1.78, 8), -0.22, 0.88, 0.16, -0.17, 0, -0.05), {
+      colorHex: 0x423126, bottomColorHex: 0x221913
+    }));
+    ironLocal.push(tagGeo(makeXform(new THREE.TorusGeometry(0.075, 0.016, 5, 9), -0.18, 1.76, 0.02), {
+      colorHex: 0xa68642
+    }));
+    ironLocal.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.13, 0.145, 0.24, 8), 0.26, 0.12, 0.22, 0.12, -0.35, 0.08), {
+      colorHex: 0x69738c, bottomColorHex: 0x323848
+    }));
+  }
+
+  const sw = [];
+  sw.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.032, 0.068, 1.42, 4), 0, 0.72, 0, 0, Math.PI / 4, 0, 1.0, 1.0, 0.34), {
+    colorHex: 0x828ca6, bottomColorHex: 0x495064
+  }));
+  sw.push(tagGeo(makeXform(new THREE.BoxGeometry(0.44, 0.052, 0.062), 0, 1.44, 0), {
+    colorHex: 0x5c657c
+  }));
+  sw.push(tagGeo(makeXform(new THREE.CylinderGeometry(0.026, 0.030, 0.32, 8), 0, 1.62, 0), {
+    colorHex: 0x2d221e
+  }));
+  sw.push(tagGeo(makeXform(new THREE.OctahedronGeometry(0.058, 0), 0, 1.80, 0), {
+    colorHex: 0x7b859e
+  }));
+  const swMerged = mergeTaggedParts(sw);
+  makeXform(swMerged, 0.04, 0.02, 0.28, -0.19, 0.08, -0.04);
+  ironLocal.push(swMerged);
+
+  if (style === 'greatsword_shield') {
+    ironLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(0.56, 0.86, 0.046), -0.26, 0.44, 0.22, -0.24, 0.22, 0.05), {
+      colorHex: 0x4e1522, bottomColorHex: 0x1e0b10
+    }));
+    ironLocal.push(tagGeo(makeXform(new THREE.BoxGeometry(0.60, 0.05, 0.058), -0.24, 0.85, 0.12, -0.24, 0.22, 0.05), {
+      colorHex: 0x727c94
+    }));
+  }
+
+  if (stoneLocal.length > 0) {
+    const stoneMerged = mergeTaggedParts(stoneLocal);
+    makeXform(stoneMerged, ox, oy, oz, 0, rotY, 0);
+    stoneParts.push(stoneMerged);
+  }
+  const ironMerged = mergeTaggedParts(ironLocal);
+  makeXform(ironMerged, ox, oy, oz, 0, rotY, 0);
+  ironParts.push(ironMerged);
+}
+
+// ============================================================================
+// Exact Corridor Groin-Vault Ceiling Height Evaluator & GPU Pendulum Instancers
+//   - Zone 3: 6 Swaying Hanging Wrought-Iron Prisoner Cages (1 InstancedMesh DC!)
+//   - Zone 4: 6 Swaying Hanging Gothic Chain Censers (1 InstancedMesh DC!)
+// ============================================================================
+function gothicVaultOgive(absS, ecc = 0.48) {
+  const s = Math.max(0, Math.min(1, Math.abs(absS)));
+  const R = 1.0 + ecc;
+  const peak = Math.sqrt(R * R - ecc * ecc);
+  const val = Math.sqrt(Math.max(0, R * R - (s + ecc) * (s + ecc)));
+  return val / peak;
+}
+
+function evalCastleCorridorVaultY(x, z) {
+  const hx = (8.0 - (-12.5)) * 0.5 + 0.46;
+  const minZ = -32.0;
+  const maxZ = 26.0;
+  const nBays = 9;
+  const step = (maxZ - minZ) / nBays;
+  const bIdx = Math.max(0, Math.min(nBays - 1, Math.floor((z - minZ) / step)));
+  const z0 = minZ + bIdx * step - (bIdx === 0 ? 0.15 : 0);
+  const z1 = minZ + (bIdx + 1) * step + (bIdx === nBays - 1 ? 0.15 : 0);
+  const cz = (z0 + z1) * 0.5;
+  const hz = Math.max(0.5, (z1 - z0) * 0.5);
+  const ySpring = 8.15;
+  const yApex = 10.6;
+  const rise = yApex - ySpring;
+  const lunetteRise = rise * 0.86;
+  const transRise = rise * 0.93;
+
+  const sx = Math.max(0, Math.min(1, Math.abs(x) / hx));
+  const sz = Math.max(0, Math.min(1, Math.abs(z - cz) / hz));
+  if (sx < 1e-5 && sz < 1e-5) return yApex;
+  if (sx >= sz) {
+    const t = sz / Math.max(1e-5, sx);
+    const yd = ySpring + rise * gothicVaultOgive(sx);
+    const ym = ySpring + lunetteRise + (rise - lunetteRise) * (1.0 - sx * sx);
+    return yd + (ym - yd) * gothicVaultOgive(t);
+  }
+  const t = sx / Math.max(1e-5, sz);
+  const yd = ySpring + rise * gothicVaultOgive(sz);
+  const ym = ySpring + transRise + (rise - transRise) * (1.0 - sz * sz);
+  return yd + (ym - yd) * gothicVaultOgive(t);
+}
+
+function tagPendulumPart(rawGeo, partRole, tagOpts = {}) {
+  const g = tagGeo(rawGeo, { uvTile: 0.85, ...tagOpts });
+  const count = g.attributes.position.count;
+  const roleArr = new Float32Array(count);
+  roleArr.fill(partRole);
+  g.setAttribute('aPartRole', new THREE.BufferAttribute(roleArr, 1));
+  return g;
+}
+
+function buildUnitHangingCageGeometry() {
+  const parts = [];
+  const rng = makeRng(370529);
+
+  parts.push(tagPendulumPart(makeXform(new THREE.CylinderGeometry(0.16, 0.12, 0.08, 8), 0, -0.04, 0), 0.0, {
+    colorHex: 0x3b4254, bottomColorHex: 0x222632
+  }));
+
+  if (SEG_MOBILE) {
+    parts.push(tagPendulumPart(makeXform(new THREE.CylinderGeometry(0.022, 0.022, 3.70, 5), 0, -1.93, 0), 1.0, {
+      colorHex: 0x454e62
+    }));
+  } else {
+    const linkCount = 24;
+    for (let i = 0; i < linkCount; i++) {
+      const f = (i + 0.5) / linkCount;
+      const ly = -0.08 - f * 3.70;
+      parts.push(tagPendulumPart(makeXform(
+        new THREE.TorusGeometry(0.062, 0.019, 4, 8),
+        0, ly, 0,
+        0, i % 2 === 0 ? Math.PI / 2 : 0, 0
+      ), 1.0, { colorHex: i % 2 === 0 ? 0x4c556c : 0x3f475a }));
+    }
+  }
+
+  parts.push(tagPendulumPart(makeXform(new THREE.TorusGeometry(0.085, 0.022, 5, 9), 0, -3.82, 0), 2.0, { colorHex: 0x566078 }));
+  for (let s = 0; s < 4; s++) {
+    const a = (s / 4) * Math.PI * 2 + Math.PI / 4;
+    parts.push(tagPendulumPart(makeRadialBar(new THREE.BoxGeometry(0.036, 0.34, 0.036), 0.21, -3.96, a, 0.72), 2.0, {
+      colorHex: 0x485166
+    }));
+  }
+  for (const hy of [-4.08, -4.56, -5.02]) {
+    parts.push(tagPendulumPart(makeXform(new THREE.TorusGeometry(0.42, 0.026, 5, SEG_MOBILE ? 8 : 14), 0, hy, 0, Math.PI / 2, 0, 0), 2.0, {
+      colorHex: 0x4b546a
+    }));
+  }
+  const cageBars = SEG_MOBILE ? 6 : 8;
+  for (let b = 0; b < cageBars; b++) {
+    const a = (b / cageBars) * Math.PI * 2;
+    parts.push(tagPendulumPart(makeRadialBar(new THREE.BoxGeometry(0.032, 0.98, 0.032), 0.42, -4.55, a, 0), 2.0, {
+      colorHex: 0x3e4658, bottomColorHex: 0x242936
+    }));
+  }
+  parts.push(tagPendulumPart(makeXform(new THREE.CylinderGeometry(0.41, 0.38, 0.05, 8), 0, -5.04, 0), 2.0, {
+    colorHex: 0x343b4b, bottomColorHex: 0x1d212b
+  }));
+  parts.push(tagPendulumPart(makeXform(new THREE.ConeGeometry(0.06, 0.18, 4), 0, -5.14, 0, Math.PI, Math.PI / 4, 0), 2.0, {
+    colorHex: 0x525c74
+  }));
+
+  const cran = new THREE.IcosahedronGeometry(0.118, SEG_MOBILE ? 0 : 1);
+  makeXform(cran, 0.06, -4.48, 0.10, 0.28, 0.35, -0.14, 0.88, 1.04, 1.08);
+  parts.push(tagPendulumPart(cran, 3.0, { colorHex: 0xcbbfa6, bottomColorHex: 0x6c5e4c, jitter: 0.04, rng }));
+  for (let r = 0; r < 3; r++) {
+    parts.push(tagPendulumPart(makeXform(new THREE.TorusGeometry(0.13 - r * 0.012, 0.016, 4, 8, Math.PI * 1.2), 0.02, -4.68 - r * 0.075, 0.02, 1.35, 0.2, 0), 3.0, {
+      colorHex: 0xc2b59c, bottomColorHex: 0x5c4f3f
+    }));
+  }
+  for (const sx of [-0.11, 0.13]) {
+    parts.push(tagPendulumPart(makeXform(new THREE.CylinderGeometry(0.020, 0.022, 0.42, 6), sx, -4.92, 0.08, 1.18, sx * 1.2, 0.2), 3.0, {
+      colorHex: 0xbfb298, bottomColorHex: 0x584c3d
+    }));
+  }
+
+  const merged = mergeGeometries(parts, false);
+  for (let i = 0; i < parts.length; i++) parts[i].dispose();
+  return merged;
+}
+
+function buildUnitHangingCenserGeometry() {
+  const parts = [];
+
+  parts.push(tagPendulumPart(makeXform(new THREE.CylinderGeometry(0.14, 0.09, 0.08, 8), 0, -0.04, 0), 0.0, {
+    colorHex: 0x4b5368, bottomColorHex: 0x262b38
+  }));
+
+  if (SEG_MOBILE) {
+    parts.push(tagPendulumPart(makeXform(new THREE.CylinderGeometry(0.016, 0.016, 3.42, 5), 0, -1.79, 0), 1.0, {
+      colorHex: 0x58627a
+    }));
+  } else {
+    const upperLinks = 20;
+    for (let i = 0; i < upperLinks; i++) {
+      const f = (i + 0.5) / upperLinks;
+      const ly = -0.08 - f * 3.42;
+      parts.push(tagPendulumPart(makeXform(
+        new THREE.TorusGeometry(0.046, 0.014, 4, 7),
+        0, ly, 0,
+        0, i % 2 === 0 ? Math.PI / 2 : 0, 0
+      ), 1.0, { colorHex: 0x58627a }));
+    }
+  }
+  parts.push(tagPendulumPart(makeXform(new THREE.TorusGeometry(0.095, 0.018, 4, 9), 0, -3.52, 0, Math.PI / 2, 0, 0), 1.0, {
+    colorHex: 0x8e7238
+  }));
+  for (let c = 0; c < 3; c++) {
+    const a = (c / 3) * Math.PI * 2;
+    parts.push(tagPendulumPart(makeRadialBar(new THREE.CylinderGeometry(0.012, 0.012, 0.72, 5), 0.14, -3.86, a, -0.26), 1.0, {
+      colorHex: 0x7c6434
+    }));
+  }
+
+  parts.push(tagPendulumPart(makeXform(new THREE.ConeGeometry(0.28, 0.36, 8), 0, -4.06, 0), 2.0, {
+    colorHex: 0x9b7c3c, bottomColorHex: 0x4f3f22
+  }));
+  parts.push(tagPendulumPart(makeXform(new THREE.TorusGeometry(0.29, 0.026, 5, 8), 0, -4.24, 0, Math.PI / 2, 0, 0), 2.0, {
+    colorHex: 0xb59146
+  }));
+  for (let k = 0; k < 8; k++) {
+    const a = (k / 8) * Math.PI * 2;
+    parts.push(tagPendulumPart(makeRadialBar(new THREE.BoxGeometry(0.032, 0.22, 0.036), 0.26, -4.35, a, 0), 2.0, {
+      colorHex: 0x8c6f35
+    }));
+  }
+  parts.push(tagPendulumPart(makeXform(new THREE.TorusGeometry(0.28, 0.024, 5, 8), 0, -4.46, 0, Math.PI / 2, 0, 0), 2.0, {
+    colorHex: 0xa88640
+  }));
+  parts.push(tagPendulumPart(makeXform(new THREE.CylinderGeometry(0.27, 0.12, 0.26, 8), 0, -4.60, 0), 2.0, {
+    colorHex: 0x7d6330, bottomColorHex: 0x3b2f19
+  }));
+  parts.push(tagPendulumPart(makeXform(new THREE.ConeGeometry(0.065, 0.24, 6), 0, -4.84, 0, Math.PI, 0, 0), 2.0, {
+    colorHex: 0x9e7e3e
+  }));
+
+  parts.push(tagPendulumPart(makeXform(new THREE.SphereGeometry(0.19, 8, 6), 0, -4.36, 0, 0, 0, 0, 1.0, 0.72, 1.0), 4.0, {
+    colorHex: 0xff7b1c, bottomColorHex: 0x6e1a04
+  }));
+
+  const merged = mergeGeometries(parts, false);
+  for (let i = 0; i < parts.length; i++) parts[i].dispose();
+  return merged;
+}
+
+function attachPendulumShader(mat, uniforms, { baseChainSpan = 3.70, hasEmberGlow = false } = {}) {
+  mat.customProgramCacheKey = () => `souls_pendulum_${baseChainSpan.toFixed(2)}_${hasEmberGlow ? 1 : 0}`;
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = uniforms.uTime;
+    shader.uniforms.uSwayAmp = uniforms.uSwayAmp;
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+         attribute float aPartRole;
+         attribute float aPhase;
+         attribute float aExtraDrop;
+         attribute float aHasSkeleton;
+         uniform float uTime;
+         uniform float uSwayAmp;
+         varying float vEmberRole;
+         varying float vEmberPhase;`
+      )
+      .replace(
+        '#include <beginnormal_vertex>',
+        `#include <beginnormal_vertex>
+         float pendNx = sin(uTime * 1.12 + aPhase) * uSwayAmp;
+         float pendNz = cos(uTime * 0.86 + aPhase * 1.37) * (uSwayAmp * 0.68);
+         objectNormal = normalize(vec3(
+           objectNormal.x - objectNormal.y * pendNz,
+           objectNormal.y + objectNormal.x * pendNz + objectNormal.z * pendNx,
+           objectNormal.z - objectNormal.y * pendNx
+         ));`
+      )
+      .replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+         vEmberRole = step(3.5, aPartRole);
+         vEmberPhase = aPhase;
+         if (aPartRole > 0.5 && aPartRole < 1.5) {
+           float span = ${baseChainSpan.toFixed(2)};
+           transformed.y = -0.08 + (transformed.y + 0.08) * max(0.32, (span + aExtraDrop) / span);
+         } else if (aPartRole >= 1.5) {
+           transformed.y -= aExtraDrop;
+           if (aPartRole > 2.5 && aPartRole < 3.5 && aHasSkeleton < 0.5) {
+             transformed = vec3(0.0, -4.0 - aExtraDrop, 0.0);
+           }
+         }
+         float pendAx = sin(uTime * 1.12 + aPhase) * uSwayAmp;
+         float pendAz = cos(uTime * 0.86 + aPhase * 1.37) * (uSwayAmp * 0.68);
+         float pendY = transformed.y;
+         transformed.x += (-pendY) * pendAz;
+         transformed.z += (-pendY) * pendAx;
+         transformed.y += (pendAx * pendAx + pendAz * pendAz) * pendY * 0.5;`
+      );
+    if (hasEmberGlow) {
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          '#include <common>',
+          `#include <common>
+           uniform float uTime;
+           varying float vEmberRole;
+           varying float vEmberPhase;`
+        )
+        .replace(
+          '#include <emissivemap_fragment>',
+          `#include <emissivemap_fragment>
+           if (vEmberRole > 0.5) {
+             float cPulse = 0.76 + 0.24 * sin(uTime * 4.6 + vEmberPhase);
+             totalEmissiveRadiance += vec3(1.18, 0.40, 0.06) * cPulse;
+           }`
+        );
+    }
+  };
+}
+
+function createHangingPendulumInstancedMesh(specs, {
+  isCenser = false,
+  ironNormal = null,
+  ironRough = null,
+  lowSpec = false,
+  regGeo,
+  regMat,
+  uniforms
+}) {
+  if (!specs.length) return null;
+  const geo = regGeo(isCenser ? buildUnitHangingCenserGeometry() : buildUnitHangingCageGeometry());
+  const count = specs.length;
+  const phases = new Float32Array(count);
+  const extraDrops = new Float32Array(count);
+  const hasSkeletons = new Float32Array(count);
+  const unitHeight = isCenser ? 4.96 : 5.15;
+
+  for (let i = 0; i < count; i++) {
+    const sp = specs[i];
+    const vaultY = evalCastleCorridorVaultY(sp.x || 0, sp.z || 0);
+    const pivotY = vaultY + 0.03;
+    const rawDrop = Number.isFinite(sp.dropLen) ? sp.dropLen : 5.05;
+    const safeDrop = Math.max(3.35, Math.min(rawDrop, pivotY - 4.70));
+    phases[i] = Number.isFinite(sp.phase) ? sp.phase : i * 1.43 + 0.3;
+    extraDrops[i] = safeDrop - unitHeight;
+    hasSkeletons[i] = sp.hasSkeleton === false ? 0.0 : 1.0;
+  }
+
+  geo.setAttribute('aPhase', new THREE.InstancedBufferAttribute(phases, 1));
+  geo.setAttribute('aExtraDrop', new THREE.InstancedBufferAttribute(extraDrops, 1));
+  geo.setAttribute('aHasSkeleton', new THREE.InstancedBufferAttribute(hasSkeletons, 1));
+
+  const mat = regMat(new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    vertexColors: true,
+    normalMap: lowSpec ? null : ironNormal,
+    normalScale: new THREE.Vector2(0.85, 0.85),
+    roughnessMap: ironRough,
+    roughness: isCenser ? 0.50 : 0.58,
+    metalness: isCenser ? 0.82 : 0.76,
+    envMapIntensity: 1.15
+  }));
+  attachPendulumShader(mat, uniforms, {
+    baseChainSpan: isCenser ? 4.10 : 3.70,
+    hasEmberGlow: isCenser
+  });
+
+  const inst = new THREE.InstancedMesh(geo, mat, count);
+  inst.name = isCenser ? 'castle_hanging_chain_censers' : 'castle_hanging_prisoner_cages';
+  inst.castShadow = false;
+  inst.receiveShadow = true;
+  inst.frustumCulled = false;
+
+  for (let i = 0; i < count; i++) {
+    const sp = specs[i];
+    const pivotY = evalCastleCorridorVaultY(sp.x || 0, sp.z || 0) + 0.03;
+    _dummy.position.set(sp.x || 0, pivotY, sp.z || 0);
+    _dummy.rotation.set(0, i * 0.85 + 0.3, 0);
+    _dummy.scale.set(1, 1, 1);
+    _dummy.updateMatrix();
+    inst.setMatrixAt(i, _dummy.matrix);
+  }
+  inst.instanceMatrix.needsUpdate = true;
+  return inst;
 }
 
 function createRunicCrystalGeometry() {
@@ -3004,26 +4310,107 @@ export function createCastleBannersAndShrines3D({
     }
   }
 
+  const hangingCageSpecs = [];
+  const hangingCenserSpecs = [];
+
   for (let d = 0; d < alcoveDecor.length; d++) {
     const item = alcoveDecor[d];
     if (!item) continue;
-    if (item.kind === 'weapon_rack') {
-      appendWeaponRackParts(forgedHardwareAndAlcoveParts, item);
-    } else if (item.kind === 'armor_stand') {
-      appendArmorStandParts(forgedHardwareAndAlcoveParts, item);
-    } else if (item.kind === 'wall_shield') {
-      appendWallShieldParts(forgedHardwareAndAlcoveParts, item);
+    switch (item.kind) {
+      case 'weapon_rack':
+        appendWeaponRackParts(forgedHardwareAndAlcoveParts, item);
+        break;
+      case 'armor_stand':
+        appendArmorStandParts(forgedHardwareAndAlcoveParts, item);
+        break;
+      case 'wall_shield':
+        appendWallShieldParts(forgedHardwareAndAlcoveParts, item);
+        break;
+      case 'stone_sarcophagus':
+        appendStoneSarcophagusParts(stoneShrineParts, forgedHardwareAndAlcoveParts, item);
+        break;
+      case 'knight_statue':
+        appendKnightStatueParts(stoneShrineParts, forgedHardwareAndAlcoveParts, item);
+        break;
+      case 'broken_portcullis':
+        appendBrokenPortcullisParts(forgedHardwareAndAlcoveParts, item);
+        break;
+      case 'fallen_shield_cluster':
+        appendFallenShieldClusterParts(stoneShrineParts, forgedHardwareAndAlcoveParts, item);
+        break;
+      case 'reliquary_niche':
+        appendReliquaryNicheParts(stoneShrineParts, forgedHardwareAndAlcoveParts, item);
+        break;
+      case 'charred_remains':
+        appendCharredRemainsParts(stoneShrineParts, forgedHardwareAndAlcoveParts, item);
+        break;
+      case 'cathedral_pew':
+        appendCathedralPewParts(stoneShrineParts, item);
+        break;
+      case 'gothic_wall_shrine':
+        appendGothicWallShrineParts(stoneShrineParts, forgedHardwareAndAlcoveParts, item);
+        break;
+      case 'fallen_masonry_slab':
+        appendFallenMasonrySlabParts(stoneShrineParts, item);
+        break;
+      case 'kneeling_knight':
+        appendKneelingKnightParts(stoneShrineParts, forgedHardwareAndAlcoveParts, item);
+        break;
+      case 'pilgrim_bench':
+        appendPilgrimBenchParts(stoneShrineParts, forgedHardwareAndAlcoveParts, item);
+        break;
+      case 'leaning_greatsword':
+        appendLeaningGreatswordParts(stoneShrineParts, forgedHardwareAndAlcoveParts, item);
+        break;
+      case 'hanging_cage':
+        hangingCageSpecs.push(item);
+        break;
+      case 'hanging_censer':
+        hangingCenserSpecs.push(item);
+        break;
+      default:
+        break;
     }
     if (item.collider) {
-      const r = Number.isFinite(item.radius) ? item.radius : 0.55;
-      alcoveColliders.push({
-        id: item.id ?? `alcove_decor_${d}`,
-        kind: item.kind,
-        x: item.x || 0,
-        z: item.z || 0,
-        r,
-        radius: r
-      });
+      const isRect =
+        item.shape === 'aabb' ||
+        ((item.kind === 'weapon_rack' ||
+          item.kind === 'stone_sarcophagus' ||
+          item.kind === 'cathedral_pew' ||
+          item.kind === 'pilgrim_bench') &&
+          Number.isFinite(item.width) &&
+          Number.isFinite(item.depth));
+      if (isRect) {
+        const yaw = resolveYaw(item);
+        const swapped = Math.abs(Math.sin(yaw)) > 0.7071;
+        const localHX = item.width * 0.5;
+        const localHZ = (item.kind === 'weapon_rack' ? Math.max(item.depth, 0.72) : item.depth) * 0.5;
+        const halfW = Number((Number.isFinite(item.halfW) ? item.halfW : (swapped ? localHZ : localHX)).toFixed(3));
+        const halfD = Number((Number.isFinite(item.halfD) ? item.halfD : (swapped ? localHX : localHZ)).toFixed(3));
+        const rIn = Math.min(halfW, halfD);
+        alcoveColliders.push({
+          id: item.id ?? `alcove_decor_${d}`,
+          kind: item.kind,
+          shape: 'aabb',
+          x: item.x || 0,
+          z: item.z || 0,
+          halfW,
+          halfD,
+          r: rIn,
+          radius: rIn
+        });
+      } else {
+        const r = Number.isFinite(item.radius) ? item.radius : 0.55;
+        alcoveColliders.push({
+          id: item.id ?? `alcove_decor_${d}`,
+          kind: item.kind,
+          shape: 'circle',
+          x: item.x || 0,
+          z: item.z || 0,
+          r,
+          radius: r
+        });
+      }
     }
   }
 
@@ -3032,7 +4419,16 @@ export function createCastleBannersAndShrines3D({
     const wallObstacles = [
       ...banners,
       ...wallLanterns,
-      ...alcoveDecor.filter((a) => a && a.kind === 'wall_shield'),
+      ...alcoveDecor.filter(
+        (a) =>
+          a &&
+          (a.kind === 'wall_shield' ||
+            a.kind === 'reliquary_niche' ||
+            a.kind === 'gothic_wall_shrine' ||
+            a.kind === 'stone_sarcophagus' ||
+            a.kind === 'knight_statue' ||
+            a.kind === 'weapon_rack')
+      ),
       ...flameTraps
     ];
     pilasterCount = appendCastleWallArchitecturalTrim(stoneShrineParts, walls, wallObstacles);
@@ -3332,6 +4728,39 @@ export function createCastleBannersAndShrines3D({
     drawCalls++;
   }
 
+  // DC #6 & #7: GPU Pendulum-Swaying Overhead Prisoner Cages (Zone 3) & Chain Censers (Zone 4)
+  const pendulumSwayUniforms = {
+    uTime: { value: 0 },
+    uSwayAmp: { value: lowSpec ? 0.008 : 0.018 }
+  };
+  const hangingCageInst = createHangingPendulumInstancedMesh(hangingCageSpecs, {
+    isCenser: false,
+    ironNormal,
+    ironRough,
+    lowSpec,
+    regGeo,
+    regMat,
+    uniforms: pendulumSwayUniforms
+  });
+  if (hangingCageInst) {
+    group.add(hangingCageInst);
+    drawCalls++;
+  }
+
+  const hangingCenserInst = createHangingPendulumInstancedMesh(hangingCenserSpecs, {
+    isCenser: true,
+    ironNormal,
+    ironRough,
+    lowSpec,
+    regGeo,
+    regMat,
+    uniforms: pendulumSwayUniforms
+  });
+  if (hangingCenserInst) {
+    group.add(hangingCenserInst);
+    drawCalls++;
+  }
+
   function setShrineClaimed(id, claimed = true) {
     if (!shrineClaimedAttr) return false;
     let idx = shrineIdToIdx.get(id);
@@ -3368,14 +4797,16 @@ export function createCastleBannersAndShrines3D({
     const low = Boolean(enabled);
     const cast = !isMobile && !low;
     bannerSwayUniforms.uSwayAmp.value = low ? 0.040 : 0.088;
+    pendulumSwayUniforms.uSwayAmp.value = low ? 0.008 : 0.018;
     if (stoneMesh) stoneMesh.castShadow = cast;
-    if (ironMesh) ironMesh.castShadow = cast;
-    if (bannersClothMesh) bannersClothMesh.castShadow = cast;
+    if (ironMesh) ironMesh.castShadow = false;
+    if (bannersClothMesh) bannersClothMesh.castShadow = false;
   }
 
   function update(_dt = 0.016, elapsed = 0) {
     const t = Number.isFinite(elapsed) ? elapsed : 0;
     bannerSwayUniforms.uTime.value = t;
+    pendulumSwayUniforms.uTime.value = t;
     if (shrineRelicUniforms) {
       shrineRelicUniforms.uTime.value = t;
     }
@@ -3403,9 +4834,13 @@ export function createCastleBannersAndShrines3D({
     colliders: [...shrineColliders, ...alcoveColliders],
     shrineLights,
     alcoveDecorCount: alcoveDecor.length,
+    hangingCageCount: hangingCageSpecs.length,
+    hangingCenserCount: hangingCenserSpecs.length,
     pilasterCount,
     scorchedTrapCount,
     scorchMesh,
+    hangingCageInst,
+    hangingCenserInst,
     drawCalls,
     setShrineClaimed,
     isShrineClaimed,

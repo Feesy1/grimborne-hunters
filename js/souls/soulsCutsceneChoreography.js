@@ -18,11 +18,11 @@
 import {
   SOULS_CASTLE_CONSTANTS,
   SOULS_CASTLE_THRONE_CONFIG
-} from './soulsCastleLayout.js?v=20261123z71';
+} from './soulsCastleLayout.js?v=20261124z84';
 import {
   BOSS_VO_DURATIONS_SEC,
   sampleBossMouthOpen
-} from './soulsBossLipSyncData.js?v=20261123z71';
+} from './soulsBossLipSyncData.js?v=20261124z84';
 
 const DEG_TO_RAD = Math.PI / 180;
 const BOSS_SPEAKER_RU = 'РЫЦАРЬ ПЕПЛА';
@@ -127,8 +127,8 @@ const TURNING_POINT_END = 30.50;
 const BOSS_STANDUP_START = 37.85;
 const BOSS_STANDUP_DURATION = 3.40;
 const BOSS_STANDUP_END = round3(BOSS_STANDUP_START + BOSS_STANDUP_DURATION); // 41.25 s
-const BOSS_STEP1_TIME = round3(BOSS_STANDUP_START + 2.24); // 40.09 s
-const BOSS_STEP2_TIME = round3(BOSS_STANDUP_START + 2.72); // 40.57 s
+const BOSS_STEP1_TIME = round3(BOSS_STANDUP_START + 2.34); // 40.19 s — exact Right boot stone plant in Throne_Intro_StandUp!
+const BOSS_STEP2_TIME = round3(BOSS_STANDUP_START + 2.88); // 40.73 s — exact Left boot stone plant in Throne_Intro_StandUp!
 const ACT4_END = 41.60;
 const TITLE_CARD_START = 39.20;
 const TITLE_CARD_END = 42.40;

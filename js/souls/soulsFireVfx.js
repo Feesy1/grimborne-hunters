@@ -2136,20 +2136,27 @@ export function createHammerFireTrailMaterial(opts = {}) {
       uniform float uVertexDistort;
 
       varying vec2 vUv;
+      varying vec3 vBasePos;
       varying vec3 vLocalPos;
       varying vec3 vNormalV;
       varying vec3 vViewDir;
 
       void main() {
         vUv = uv;
+        vBasePos = position;
         float along = (uFlowAxis > 0.5) ? uv.y : uv.x;
         float across = (uFlowAxis > 0.5) ? uv.x : uv.y;
+        float ac = (across - 0.5) * 2.0;
 
         vec3 p = position;
-        // Turbulent high-velocity flame whip along trailing wake
-        float whipAmp = uVertexDistort * pow(clamp(along, 0.0, 1.0), 1.35) * (0.65 + 0.55 * uPhase2 + 0.45 * uWindup);
+        // Symmetric counter-propagating flame flutter (zero one-sided diagonal shear!)
+        float whipAmp = uVertexDistort * pow(max(clamp(along, 0.0, 1.0), 0.0001), 1.35) * (0.65 + 0.55 * uPhase2 + 0.45 * uWindup);
+        float petalPhase = dot(position, vec3(2.11, 0.87, 2.63));
         float t = uTime * (uSpeed * 1.85);
-        float wave = sin(t - along * 9.5 + across * 4.2) * 0.65 + cos(t * 1.63 - along * 14.2) * 0.35;
+        float wave = (
+          sin(t - along * 8.8 + ac * 2.35 + petalPhase) +
+          sin(t * 1.13 - along * 9.4 - ac * 2.35 - petalPhase * 0.73)
+        ) * 0.34 + cos(t * 1.58 - along * 13.4 + petalPhase * 1.29) * 0.32;
         p += normal * (wave * whipAmp);
 
         vLocalPos = p;
@@ -2176,6 +2183,7 @@ export function createHammerFireTrailMaterial(opts = {}) {
       uniform vec3 uColCore;
 
       varying vec2 vUv;
+      varying vec3 vBasePos;
       varying vec3 vLocalPos;
       varying vec3 vNormalV;
       varying vec3 vViewDir;
@@ -2183,48 +2191,60 @@ export function createHammerFireTrailMaterial(opts = {}) {
       ${GLSL_SIMPLEX_NOISE}
 
       void main() {
-        // Normalize coordinates so along = 0 at hot hammer leading edge -> 1 at torn fire tail
+        // Normalize coordinates so along = 0 at hot hammer base/leading edge -> 1 at torn fire spire/tail
         float along  = clamp((uFlowAxis > 0.5) ? vUv.y : vUv.x, 0.0, 1.0);
         float across = clamp((uFlowAxis > 0.5) ? vUv.x : vUv.y, 0.0, 1.0);
+        float ac = (across - 0.5) * 2.0;
 
         float speedMult = 0.85 + 0.45 * uPhase2 + 0.40 * uWindup;
         float t = uTime * uSpeed * speedMult;
+        float petalOff = (vBasePos.x - vBasePos.z) * 0.95;
 
-        // Anisotropic velocity-stretched turbulence streaming violently backward from the hammer head
-        vec2 warpUv = vec2(across * 2.8, along * 2.2 - t * 0.78);
+        // Align flow along the bilateral-symmetric (1, 1) axis of the 2D Simplex lattice
+        // so vertical 'v' crowns rise straight up with zero 45-degree diagonal slant!
+        float warpFlow  = along * 2.25 - t * 0.80 + petalOff * 0.45;
+        float warpCross = ac * 1.40;
+        vec2 warpUv = vec2(warpFlow + warpCross, warpFlow - warpCross) * 0.70710678;
         vec2 warpV = fireDomainWarp(warpUv, uDetail);
-        float wx = warpV.x;
-        float wy = warpV.y;
-        float warpAmt = (0.16 + 0.52 * along) * (0.78 + 0.32 * uPhase2);
+        float wx = (warpV.x - warpV.y) * 0.70710678;
+        float wy = (warpV.x + warpV.y) * 0.70710678;
+        float warpAmt = (0.15 + 0.50 * along) * (0.78 + 0.32 * uPhase2);
 
-        vec3 p3 = vec3(
-          vLocalPos.x * 2.2 + wx * warpAmt,
-          vLocalPos.z * 2.2 + wy * warpAmt,
-          along * 3.1 - t * 1.05
-        );
-        // Stretched along-flow streaks so flames whip like a roaring volcanic trail
-        vec2 p2 = vec2(
-          across * 5.8 + wx * warpAmt * 1.4,
-          along * 3.4 - t * 1.75 + wy * warpAmt * 0.55
-        );
+        vec3 p3 = (uFlowAxis > 0.5)
+          ? vec3(
+              vLocalPos.x * 2.25 + wx * warpAmt * 0.75,
+              along * 3.15 - t * 1.08,
+              vLocalPos.z * 2.25 + wy * warpAmt * 0.75
+            )
+          : vec3(
+              vLocalPos.x * 2.20 + wx * warpAmt,
+              vLocalPos.y * 2.20 + wy * warpAmt,
+              along * 3.10 - t * 1.05
+            );
+
+        // Symmetric Simplex FBM coordinates: flow scrolls straight along (1,1), cross spans (1,-1)
+        float uCross = ac * 2.85 + wx * warpAmt * 1.05 + petalOff * 0.65;
+        float uFlow  = along * 3.45 - t * 1.75 + wy * warpAmt * 0.50;
+        vec2 p2 = vec2(uFlow + uCross, uFlow - uCross) * 0.70710678;
         vec2 turb = fireTurbulenceFbm(p3, p2, uDetail);
         float fbm = turb.x;
         float streaks = turb.y;
 
-        // Cross-width envelope (softly narrower at tail, ragged burning borders on both edges)
-        float halfW = mix(0.49, 0.24, pow(max(along, 0.0), 0.95));
-        float distAcross = abs((across - 0.5) - wx * 0.14 * along);
-        float edgeMask = clamp(1.0 - pow(max(distAcross / max(halfW, 0.08), 0.0), 1.85), 0.0, 1.0);
+        // Symmetric cross-width envelope (tapers cleanly toward spire/tail, zero one-sided drift)
+        float halfW = mix(0.49, 0.24, pow(max(along, 0.0001), 0.95));
+        float swayAcross = mix(0.12, 0.075, uFlowAxis);
+        float distAcross = abs((across - 0.5) - wx * swayAcross * along);
+        float edgeMask = clamp(1.0 - pow(max(distAcross / max(halfW, 0.08), 0.0001), 1.85), 0.0, 1.0);
 
-        // Organic turbulent leading-edge ignition + jagged flame erosion along tail + detached flying fire shreds
+        // Organic turbulent base/leading-edge ignition + jagged flame erosion along spire/tail
         float leadIn = smoothstep(0.0, 0.07 + (1.0 - fbm) * 0.09, along);
         float tailFade = smoothstep(1.0, 0.10, along);
         float shredBurst = smoothstep(0.56, 0.88, fbm) * smoothstep(0.32, 0.70, along) * smoothstep(0.99, 0.74, along) * 0.44;
 
         float field = edgeMask * (0.66 + 0.46 * tailFade)
-          + (fbm - 0.45) * mix(0.34, 1.08, pow(max(along, 0.0), 0.65))
+          + (fbm - 0.45) * mix(0.34, 1.08, pow(max(along, 0.0001), 0.65))
           + shredBurst
-          - pow(max(along, 0.0), 1.15) * 0.58;
+          - pow(max(along, 0.0001), 1.15) * 0.58;
         field *= leadIn;
 
         float effIntensity = clamp(uIntensity * uStaggerDim * (0.68 + 0.48 * uPhase2 + 0.55 * uWindup), 0.0, 1.75);
@@ -2233,9 +2253,9 @@ export function createHammerFireTrailMaterial(opts = {}) {
         float alpha = clamp(fireEdge * 0.96 + tailSmoke * 0.34, 0.0, 1.0) * clamp(effIntensity, 0.0, 1.0);
         if (alpha < 0.02) discard;
 
-        // Volcanic combustion temperature: hot white-gold right along hammer impact rim -> roaring magma-orange -> crimson shreds
-        float outerBladeHot = smoothstep(0.20, 0.95, across);
-        float leadHeat = smoothstep(0.26, 0.01, along) * (0.34 + 0.24 * outerBladeHot + 0.28 * uWindup + 0.16 * uPhase2);
+        // Bilateral-symmetric volcanic combustion temperature: hottest along central core spine & base
+        float centerSpineHot = 1.0 - smoothstep(0.0, 0.95, abs(ac));
+        float leadHeat = smoothstep(0.26, 0.01, along) * (0.34 + 0.24 * centerSpineHot + 0.28 * uWindup + 0.16 * uPhase2);
         float temp = clamp(
           smoothstep(0.08, 0.88, field) * 0.52
           + leadHeat

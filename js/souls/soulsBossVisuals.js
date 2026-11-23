@@ -8,7 +8,7 @@
 
 import * as THREE from '../../vendor/three.module.js';
 import { mergeGeometries } from '../../vendor/BufferGeometryUtils.js';
-import { createHammerFireTrailMaterial } from './soulsFireVfx.js?v=20261123z71';
+import { createHammerFireTrailMaterial } from './soulsFireVfx.js?v=20261124z84';
 
 // ============================================================================
 // Module-level State, Mobile Detection & Ref-Counted Shared GPU Resources
@@ -57,8 +57,17 @@ const _calVecB = new THREE.Vector3();
 const _calVecC = new THREE.Vector3();
 const _calMin = new THREE.Vector3();
 const _calMax = new THREE.Vector3();
-// Reusable scratch quaternion for per-frame buoyant flame crown alignment (0 allocations!)
+// Reusable scratch objects for per-frame buoyant flame crown & velocity-aligned fire trail (0 allocations!)
 const _updCrownQuat = new THREE.Quaternion();
+const _updTrailWorldQuat = new THREE.Quaternion();
+const _updCurrHammerPos = new THREE.Vector3();
+const _updDeltaHammerPos = new THREE.Vector3();
+const _updInstHammerVel = new THREE.Vector3();
+const _updWakeDir = new THREE.Vector3();
+const _AXIS_PLUS_Z = new THREE.Vector3(0, 0, 1);
+
+const PHASE2_IGNITION_DURATION = 2.6;
+const PHASE2_EXTINGUISH_DURATION = 1.15;
 
 // ============================================================================
 // Deterministic Seeded PRNG & Tileable Value Noise (No DOM Canvas Required!)
@@ -73,6 +82,20 @@ function makeRng(seedInit) {
 
 function clamp01(v) {
   return v < 0 ? 0 : v > 1 ? 1 : v;
+}
+
+function smoothstepRange(edge0, edge1, x) {
+  const span = edge1 - edge0;
+  if (span <= 1e-6) return x >= edge1 ? 1.0 : 0.0;
+  const t = x <= edge0 ? 0.0 : x >= edge1 ? 1.0 : (x - edge0) / span;
+  return t * t * (3.0 - 2.0 * t);
+}
+
+function smootherstepRange(edge0, edge1, x) {
+  const span = edge1 - edge0;
+  if (span <= 1e-6) return x >= edge1 ? 1.0 : 0.0;
+  const t = x <= edge0 ? 0.0 : x >= edge1 ? 1.0 : (x - edge0) / span;
+  return t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
 }
 
 function createTileNoise(gridSize, seed) {
@@ -372,13 +395,15 @@ function normalizeGeomForMerge(rawGeo) {
 function buildUnitHammerFireCrownGeometry() {
   const parts = [];
 
-  const ringCount = 6;
+  // Tier A: 8 radially symmetric cupped flame petals hugging the iron warhammer head
+  // (0 crooked X/Z tilt bias, equal & opposite gentle helical twist <= 0.20, rising straight along +Y!)
+  const ringCount = 8;
   for (let i = 0; i < ringCount; i++) {
-    const yaw = (i / ringCount) * Math.PI * 2.0 + 0.22;
+    const yaw = (i / ringCount) * Math.PI * 2.0;
     const tall = i % 2 === 0;
-    const w = tall ? 1.55 : 1.32;
-    const h = tall ? 2.55 : 2.05;
-    const plane = new THREE.PlaneGeometry(w, h, 3, 7);
+    const w = tall ? 1.48 : 1.30;
+    const h = tall ? 2.52 : 2.08;
+    const plane = new THREE.PlaneGeometry(w, h, 4, 8);
     const pos = plane.attributes.position;
     const uv = plane.attributes.uv;
 
@@ -386,29 +411,32 @@ function buildUnitHammerFireCrownGeometry() {
       const u = uv.getX(k);
       const v = uv.getY(k);
       const uc = (u - 0.5) * 2.0;
-      const widthScale = 0.92 + Math.sin(v * Math.PI) * 0.18 - v * v * 0.28;
+      const widthScale = 0.94 + Math.sin(v * Math.PI) * 0.18 - v * v * 0.28;
       const lx = pos.getX(k) * widthScale;
-      const ly = (v - 0.14) * h;
-      const cup = -0.26 * (1.0 - uc * uc) * (0.35 + 0.65 * Math.sin(v * Math.PI));
-      const flare = 0.42 + Math.sin(v * Math.PI * 0.95) * 0.30 - Math.pow(v, 1.7) * 0.34;
+      const ly = (v - 0.15) * h;
+      const cup = -0.22 * (1.0 - uc * uc) * (0.35 + 0.65 * Math.sin(v * Math.PI));
+      const flare = 0.46 + Math.sin(v * Math.PI * 0.92) * 0.24 - Math.pow(v, 1.55) * 0.36;
       const lz = cup + flare;
-      const tw = (tall ? 0.52 : -0.46) * Math.pow(v, 1.3);
+      const tw = (tall ? 0.20 : -0.20) * Math.pow(v, 1.30);
       const ct = Math.cos(tw);
       const st = Math.sin(tw);
       pos.setXYZ(k, lx * ct - lz * st, ly, lx * st + lz * ct);
     }
 
     plane.rotateY(yaw);
-    plane.rotateZ(tall ? 0.22 : -0.28);
     plane.computeVertexNormals();
     parts.push(normalizeGeomForMerge(plane));
   }
 
-  for (let i = 0; i < 3; i++) {
-    const yaw = (i / 3) * Math.PI + 0.52;
-    const w = 1.85;
-    const h = 2.75 + (i === 1 ? 0.35 : 0.0);
-    const plane = new THREE.PlaneGeometry(w, h, 3, 8);
+  // Tier B: 4 full-360° C4-symmetric central vertical flame spires rising straight along world +Y
+  // (exact (x,z) <-> (-x,-z) antipodal symmetry -> 0.000000 X/Z centroid bias, gentle +-0.18 twist!)
+  const spireCount = 4;
+  for (let i = 0; i < spireCount; i++) {
+    const yaw = (i / spireCount) * Math.PI * 2.0 + Math.PI * 0.25;
+    const tall = i % 2 === 0;
+    const w = tall ? 1.66 : 1.52;
+    const h = tall ? 2.78 : 2.54;
+    const plane = new THREE.PlaneGeometry(w, h, 4, 9);
     const pos = plane.attributes.position;
     const uv = plane.attributes.uv;
 
@@ -416,17 +444,16 @@ function buildUnitHammerFireCrownGeometry() {
       const u = uv.getX(k);
       const v = uv.getY(k);
       const uc = (u - 0.5) * 2.0;
-      const lx = pos.getX(k) * (1.0 + Math.sin(v * Math.PI) * 0.14 - v * v * 0.30);
-      const ly = (v - 0.18) * h;
-      const lz = 0.24 * (1.0 - uc * uc) * Math.sin(v * Math.PI);
-      const tw = (i % 2 === 0 ? 0.62 : -0.56) * Math.pow(v, 1.25);
+      const lx = pos.getX(k) * (0.98 + Math.sin(v * Math.PI) * 0.15 - v * v * 0.32);
+      const ly = (v - 0.17) * h;
+      const lz = 0.16 * (1.0 - uc * uc) * Math.sin(v * Math.PI);
+      const tw = (tall ? 0.18 : -0.18) * Math.pow(v, 1.25);
       const ct = Math.cos(tw);
       const st = Math.sin(tw);
       pos.setXYZ(k, lx * ct - lz * st, ly, lx * st + lz * ct);
     }
 
     plane.rotateY(yaw);
-    plane.rotateX(i === 1 ? 0.36 : -0.22);
     plane.computeVertexNormals();
     parts.push(normalizeGeomForMerge(plane));
   }
@@ -438,15 +465,17 @@ function buildUnitHammerFireCrownGeometry() {
 
 function buildUnitHammerFireTrailGeometry() {
   const parts = [];
+  // 3 balanced volumetric ribbons rolled 60 deg apart, streaming cleanly along local +Z
+  // so trailMesh.quaternion aligns the fire wake directly opposite real world-space velocity!
   const ribbonSpecs = [
-    { roll: 0.0,  pitch:  0.18, len: 3.9, width: 1.55, arcCurve: 0.82, twist:  0.65 },
-    { roll: 1.05, pitch: -0.22, len: 3.5, width: 1.38, arcCurve: 0.72, twist: -0.58 },
-    { roll: 2.10, pitch:  0.12, len: 3.2, width: 1.25, arcCurve: 0.68, twist:  0.52 }
+    { roll: 0.0,                   len: 3.65, width: 1.50, cup:  0.14, twist:  0.24 },
+    { roll: Math.PI / 3.0,         len: 3.35, width: 1.38, cup: -0.14, twist: -0.24 },
+    { roll: (Math.PI * 2.0) / 3.0, len: 3.15, width: 1.28, cup:  0.10, twist:  0.18 }
   ];
 
   for (let r = 0; r < ribbonSpecs.length; r++) {
     const sp = ribbonSpecs[r];
-    const plane = new THREE.PlaneGeometry(sp.len, sp.width, 10, 3);
+    const plane = new THREE.PlaneGeometry(sp.len, sp.width, 10, 4);
     const pos = plane.attributes.position;
     const uv = plane.attributes.uv;
 
@@ -456,21 +485,21 @@ function buildUnitHammerFireTrailGeometry() {
       const vc = (v - 0.5) * 2.0;
 
       const sweepDist = u * sp.len;
-      const wScale = 0.72 + Math.sin(u * Math.PI * 0.85) * 0.45 - u * u * 0.35;
+      const wScale = 0.78 + Math.sin(u * Math.PI * 0.82) * 0.36 - u * u * 0.42;
       const halfSpan = vc * (sp.width * 0.5) * wScale;
+      const arch = sp.cup * (1.0 - vc * vc) * Math.sin(u * Math.PI);
 
       const tw = sp.twist * u;
       const ct = Math.cos(tw);
       const st = Math.sin(tw);
 
-      const lx = halfSpan * ct + Math.sin(u * Math.PI) * sp.arcCurve * 0.35;
-      const ly = halfSpan * st + Math.pow(u, 1.35) * sp.arcCurve;
-      const lz = -sweepDist * 0.92 + 0.35;
+      const lx = halfSpan * ct - arch * st;
+      const ly = halfSpan * st + arch * ct;
+      const lz = sweepDist * 0.92 - 0.26;
 
       pos.setXYZ(k, lx, ly, lz);
     }
 
-    plane.rotateX(sp.pitch);
     plane.rotateZ(sp.roll);
     plane.computeVertexNormals();
     parts.push(normalizeGeomForMerge(plane));
@@ -521,7 +550,8 @@ function releaseSharedResources() {
 function createBossHeatUniforms(microRoughMap) {
   return {
     uBossTime: { value: 0.0 },
-    uBossHeat: { value: 0.16 },
+    uBossHeat: { value: 0.0 },
+    uBossIgnition: { value: 0.0 },
     uBossWindup: { value: 0.0 },
     uBossPhase2: { value: 0.0 },
     uBossStaggerDim: { value: 1.0 },
@@ -580,12 +610,14 @@ function patchBossMaterial(mat, shared, heatUniforms, isWeaponMesh, touchedSet) 
     matUniforms = {
       uBossTime: { value: 0.0 },
       uBossHeat: { value: heatUniforms.uBossHeat.value },
+      uBossIgnition: { value: heatUniforms.uBossIgnition.value },
       uBossWindup: { value: heatUniforms.uBossWindup.value },
       uBossPhase2: { value: heatUniforms.uBossPhase2.value },
       uBossStaggerDim: { value: heatUniforms.uBossStaggerDim.value },
       uBossMouthOpen: { value: 0.0 },
       uBossPulse: { value: 0.0 },
       uBossLanternFlicker: { value: 1.0 },
+      uBossHitFlash: { value: 0.0 },
       uBossIsWeapon: { value: isWeaponMesh ? 1.0 : 0.0 },
       uBossMicroRoughMap: SHARED_MICRO_ROUGH_UNIFORM,
       uBossMicroBumpMap: SHARED_MICRO_BUMP_UNIFORM
@@ -594,12 +626,16 @@ function patchBossMaterial(mat, shared, heatUniforms, isWeaponMesh, touchedSet) 
   } else {
     matUniforms.uBossTime.value = 0.0;
     matUniforms.uBossHeat.value = heatUniforms.uBossHeat.value;
+    matUniforms.uBossIgnition = matUniforms.uBossIgnition || { value: 0.0 };
+    matUniforms.uBossIgnition.value = heatUniforms.uBossIgnition.value;
     matUniforms.uBossWindup.value = heatUniforms.uBossWindup.value;
     matUniforms.uBossPhase2.value = heatUniforms.uBossPhase2.value;
     matUniforms.uBossStaggerDim.value = heatUniforms.uBossStaggerDim.value;
     matUniforms.uBossMouthOpen.value = 0.0;
     matUniforms.uBossPulse.value = 0.0;
     matUniforms.uBossLanternFlicker.value = 1.0;
+    matUniforms.uBossHitFlash = matUniforms.uBossHitFlash || { value: 0.0 };
+    matUniforms.uBossHitFlash.value = 0.0;
     matUniforms.uBossIsWeapon.value = isWeaponMesh ? 1.0 : 0.0;
     matUniforms.uBossMicroRoughMap = SHARED_MICRO_ROUGH_UNIFORM;
     matUniforms.uBossMicroBumpMap = SHARED_MICRO_BUMP_UNIFORM;
@@ -639,7 +675,7 @@ function patchBossMaterial(mat, shared, heatUniforms, isWeaponMesh, touchedSet) 
     mat.roughnessMap = shared.microRoughnessMap;
   }
 
-  const cacheSuffix = `souls_boss_pbr_v4_${hadRoughnessMap ? 'mr' : 'nmr'}_${hasEmissiveMap ? 'em' : 'noem'}`;
+  const cacheSuffix = `souls_boss_pbr_v6_${hadRoughnessMap ? 'mr' : 'nmr'}_${hasEmissiveMap ? 'em' : 'noem'}`;
   mat.customProgramCacheKey = () => {
     const base = prevCacheKey ? prevCacheKey.call(mat) : '';
     return base ? `${base}|${cacheSuffix}` : cacheSuffix;
@@ -649,12 +685,14 @@ function patchBossMaterial(mat, shared, heatUniforms, isWeaponMesh, touchedSet) 
     if (prevOnBeforeCompile) prevOnBeforeCompile.call(mat, shader, renderer);
     shader.uniforms.uBossTime = rec.uniforms.uBossTime;
     shader.uniforms.uBossHeat = rec.uniforms.uBossHeat;
+    shader.uniforms.uBossIgnition = rec.uniforms.uBossIgnition;
     shader.uniforms.uBossWindup = rec.uniforms.uBossWindup;
     shader.uniforms.uBossPhase2 = rec.uniforms.uBossPhase2;
     shader.uniforms.uBossStaggerDim = rec.uniforms.uBossStaggerDim;
     shader.uniforms.uBossMouthOpen = rec.uniforms.uBossMouthOpen;
     shader.uniforms.uBossPulse = rec.uniforms.uBossPulse;
     shader.uniforms.uBossLanternFlicker = rec.uniforms.uBossLanternFlicker;
+    shader.uniforms.uBossHitFlash = rec.uniforms.uBossHitFlash;
     shader.uniforms.uBossIsWeapon = rec.uniforms.uBossIsWeapon;
     shader.uniforms.uBossMicroRoughMap = rec.uniforms.uBossMicroRoughMap;
     shader.uniforms.uBossMicroBumpMap = rec.uniforms.uBossMicroBumpMap;
@@ -665,12 +703,14 @@ function patchBossMaterial(mat, shared, heatUniforms, isWeaponMesh, touchedSet) 
         `#include <common>
 uniform float uBossTime;
 uniform float uBossHeat;
+uniform float uBossIgnition;
 uniform float uBossWindup;
 uniform float uBossPhase2;
 uniform float uBossStaggerDim;
 uniform float uBossMouthOpen;
 uniform float uBossPulse;
 uniform float uBossLanternFlicker;
+uniform float uBossHitFlash;
 uniform float uBossIsWeapon;
 uniform sampler2D uBossMicroRoughMap;
 uniform sampler2D uBossMicroBumpMap;`
@@ -737,31 +777,44 @@ uniform sampler2D uBossMicroBumpMap;`
 #endif`
       );
 
-      // Phase-2 smoldering volcanic coal cracks & heated weapon edges (noble dark-fantasy range, 0 white blowout!)
+      // Phase-2 smoldering volcanic coal cracks & creeping Stage-1 weapon ignition veins (noble dark-fantasy range, 0 white blowout!)
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <opaque_fragment>',
-        `if ( uBossHeat > 0.005 ) {
+        `if ( uBossHeat > 0.004 ) {
   float bossNdotV = clamp( dot( geometryNormal, geometryViewDir ), 0.0, 1.0 );
   float bossEdge = pow( max( 1.0 - bossNdotV, 0.0001 ), 2.55 );
   #ifdef USE_BUMPMAP
     vec3 bossMicroTex = texture2D( bumpMap, vBumpMapUv ).rgb;
     float bossCrevice = clamp( 1.0 - bossMicroTex.r * 1.18, 0.0, 1.0 );
-    float bossCrack = smoothstep( 0.20, 0.80, bossMicroTex.g );
-    float bossCrackCore = smoothstep( 0.58, 0.95, bossMicroTex.g );
+    float bossVeinSpread = mix( 1.0, smoothstep( 0.02, 0.62, uBossIgnition ), uBossIsWeapon );
+    float bossCrackLo = mix( 0.62, 0.18, bossVeinSpread );
+    float bossCrackHi = mix( 0.94, 0.78, bossVeinSpread );
+    float bossCrack = smoothstep( bossCrackLo, bossCrackHi, bossMicroTex.g );
+    float bossCrackCore = smoothstep( mix( 0.80, 0.56, bossVeinSpread ), 0.95, bossMicroTex.g );
   #else
     float bossCrevice = 0.30;
     float bossCrack = 0.22;
     float bossCrackCore = 0.10;
   #endif
   float bossCoalPulse = 0.78 + 0.22 * sin( uBossTime * 4.9 + bossCrack * 5.2 );
-  float bossCrackGate = clamp( uBossPhase2 * 0.92 + uBossWindup * 0.38 + uBossIsWeapon * 0.34, 0.0, 1.0 );
-  vec3 bossCrackCol = mix( vec3( 0.92, 0.18, 0.02 ), vec3( 1.0, 0.66, 0.18 ), bossCrackCore * ( 0.65 + 0.35 * uBossWindup ) );
-  float bossCrackAmp = ( bossCrack * 0.56 + bossCrackCore * 0.78 ) * bossCrackGate * bossCoalPulse * mix( 0.45, 1.20, uBossIsWeapon );
+  float bossWeaponIgniteGate = uBossIsWeapon * smoothstep( 0.01, 0.36, uBossIgnition );
+  float bossCrackGate = clamp( max( uBossPhase2 * 0.92, bossWeaponIgniteGate * 0.96 ) + uBossWindup * 0.38, 0.0, 1.0 );
+  float bossWarmProg = clamp( mix( 1.0, smoothstep( 0.08, 0.75, uBossIgnition ), uBossIsWeapon ), 0.0, 1.0 );
+  vec3 bossDeepVeinCol = mix( vec3( 0.76, 0.10, 0.01 ), vec3( 0.94, 0.20, 0.02 ), bossWarmProg );
+  vec3 bossHotVeinCol = mix( vec3( 0.98, 0.38, 0.05 ), vec3( 1.0, 0.68, 0.18 ), bossWarmProg * ( 0.65 + 0.35 * uBossWindup ) );
+  vec3 bossCrackCol = mix( bossDeepVeinCol, bossHotVeinCol, bossCrackCore );
+  float bossCrackAmp = ( bossCrack * 0.58 + bossCrackCore * 0.82 ) * bossCrackGate * bossCoalPulse * mix( 0.45, 1.28, uBossIsWeapon );
 
-  vec3 bossEmberCol = mix( vec3( 1.0, 0.32, 0.04 ), vec3( 1.0, 0.74, 0.28 ), clamp( uBossWindup * 0.85, 0.0, 1.0 ) );
-  float bossEdgeAmp = ( bossCrevice * ( 0.26 + 0.44 * uBossPhase2 ) + bossEdge * ( 0.20 + 0.58 * uBossWindup ) ) * mix( 0.18, 0.82, uBossIsWeapon );
+  vec3 bossEmberCol = mix( vec3( 1.0, 0.30, 0.04 ), vec3( 1.0, 0.74, 0.28 ), clamp( uBossWindup * 0.85, 0.0, 1.0 ) );
+  float bossEdgeGate = mix( 0.26 + 0.44 * uBossPhase2, 0.18 + 0.54 * smoothstep( 0.18, 0.85, uBossIgnition ), uBossIsWeapon );
+  float bossEdgeAmp = ( bossCrevice * bossEdgeGate + bossEdge * ( 0.20 + 0.58 * uBossWindup ) * smoothstep( 0.22, 0.80, mix( uBossPhase2, uBossIgnition, uBossIsWeapon ) ) ) * mix( 0.18, 0.84, uBossIsWeapon );
 
-  outgoingLight += ( bossCrackCol * bossCrackAmp + bossEmberCol * bossEdgeAmp ) * ( uBossHeat * uBossStaggerDim * 0.46 );
+  outgoingLight += ( bossCrackCol * bossCrackAmp + bossEmberCol * bossEdgeAmp ) * ( uBossHeat * uBossStaggerDim * 0.48 );
+}
+if ( uBossHitFlash > 0.004 ) {
+  float bossHitNdotV = clamp( dot( geometryNormal, geometryViewDir ), 0.0, 1.0 );
+  float bossHitRim = pow( max( 1.0 - bossHitNdotV, 0.0001 ), 1.85 );
+  outgoingLight += vec3( 0.94, 0.84, 0.70 ) * ( uBossHitFlash * ( 0.09 + 0.22 * bossHitRim ) * ( 1.0 - 0.55 * uBossIsWeapon ) );
 }
 #include <opaque_fragment>`
       );
@@ -782,6 +835,7 @@ function releasePatchedMaterial(rec, heatUniforms) {
   const { mat, orig, uniforms } = rec;
   uniforms.uBossTime.value = 0.0;
   uniforms.uBossHeat.value = 0.0;
+  if (uniforms.uBossIgnition) uniforms.uBossIgnition.value = 0.0;
   uniforms.uBossWindup.value = 0.0;
   uniforms.uBossPhase2.value = 0.0;
   uniforms.uBossStaggerDim.value = 1.0;
@@ -1545,22 +1599,27 @@ function createHammerEmberPoints(radius) {
 }
 
 /**
- * Single-draw-call merged Face Fire Glow (2 blazing eyes + curved jagged fiery grin furnace aura
- * for the Hooded Executioner Boss that expands & pulses in real-time sync with `mouthOpen01` & Phase 2!).
+ * Single-draw-call merged Face Fire Glow (2 expressive scowling/blazing eyes + 8-segment articulated
+ * jaw-synced fiery grin furnace slit for the Hooded Executioner Boss that widens/contracts in real-time
+ * sync with `mouthOpen01` / `jawBone`, roars, heavy windups & Phase 2!).
  */
 function createBossFaceFireGlowMesh(cal, includeGrin = false, hasBakedEmissiveMap = false) {
   const rightAxis = new THREE.Vector3().crossVectors(cal.up, cal.forward).normalize();
   if (rightAxis.lengthSq() < 0.01) rightAxis.set(1, 0, 0);
   const upAxis = new THREE.Vector3().crossVectors(cal.forward, rightAxis).normalize();
 
-  const eyeW = cal.eyeSize * 1.15;
-  const eyeH = cal.eyeSize * 0.72;
-  const partCount = includeGrin ? 3 : 2;
-  const positions = new Float32Array(partCount * 6 * 3);
-  const uvs = new Float32Array(partCount * 6 * 2);
-  const roles = new Float32Array(partCount * 6); // 0 = eye ember, 1 = fiery grin furnace glow
+  const eyeW = cal.eyeSize * 1.18;
+  const eyeH = cal.eyeSize * 0.78;
+  const grinSegments = includeGrin ? 8 : 0;
+  const totalQuads = 2 + grinSegments;
+  const positions = new Float32Array(totalQuads * 6 * 3);
+  const uvs = new Float32Array(totalQuads * 6 * 2);
+  const roles = new Float32Array(totalQuads * 6); // 0 = eye ember, 1 = fiery grin furnace slit
+  const eyeSides = new Float32Array(totalQuads * 6); // +-1 = lateral temple sign for symmetric V-brow scowl
 
   const corner = new THREE.Vector3();
+  const midEye = new THREE.Vector3().addVectors(cal.left, cal.right).multiplyScalar(0.5);
+  const sideVec = new THREE.Vector3();
   const quadCorners = [
     [-1, -1, 0, 0],
     [ 1, -1, 1, 0],
@@ -1573,9 +1632,14 @@ function createBossFaceFireGlowMesh(cal, includeGrin = false, hasBakedEmissiveMa
   let pi = 0;
   let ui = 0;
   let ri = 0;
+  let si = 0;
   const eyeCenters = [cal.left, cal.right];
   for (let c = 0; c < 2; c++) {
     const center = eyeCenters[c];
+    sideVec.subVectors(center, midEye);
+    const sideSign = sideVec.lengthSq() > 1e-8
+      ? (rightAxis.dot(sideVec) >= 0 ? 1.0 : -1.0)
+      : (c === 0 ? -1.0 : 1.0);
     for (let k = 0; k < 6; k++) {
       const q = quadCorners[k];
       corner
@@ -1588,24 +1652,40 @@ function createBossFaceFireGlowMesh(cal, includeGrin = false, hasBakedEmissiveMa
       uvs[ui++] = q[2];
       uvs[ui++] = q[3];
       roles[ri++] = 0.0;
+      eyeSides[si++] = sideSign;
     }
   }
 
   if (includeGrin) {
-    const gw = cal.grinWidth * 0.5;
-    const gh = cal.grinHeight * 0.5;
-    for (let k = 0; k < 6; k++) {
-      const q = quadCorners[k];
-      corner
-        .copy(cal.grinCenter)
-        .addScaledVector(rightAxis, q[0] * gw)
-        .addScaledVector(upAxis, q[1] * gh);
-      positions[pi++] = corner.x;
-      positions[pi++] = corner.y;
-      positions[pi++] = corner.z;
-      uvs[ui++] = q[2];
-      uvs[ui++] = q[3];
-      roles[ri++] = 1.0;
+    const gw = cal.grinWidth * 0.54;
+    const gh = cal.grinHeight * 0.56;
+    for (let seg = 0; seg < grinSegments; seg++) {
+      const u0 = seg / grinSegments;
+      const u1 = (seg + 1) / grinSegments;
+      const x0 = u0 * 2.0 - 1.0;
+      const x1 = u1 * 2.0 - 1.0;
+      const segCorners = [
+        [x0, -1, u0, 0],
+        [x1, -1, u1, 0],
+        [x1,  1, u1, 1],
+        [x0, -1, u0, 0],
+        [x1,  1, u1, 1],
+        [x0,  1, u0, 1]
+      ];
+      for (let k = 0; k < 6; k++) {
+        const q = segCorners[k];
+        corner
+          .copy(cal.grinCenter)
+          .addScaledVector(rightAxis, q[0] * gw)
+          .addScaledVector(upAxis, q[1] * gh);
+        positions[pi++] = corner.x;
+        positions[pi++] = corner.y;
+        positions[pi++] = corner.z;
+        uvs[ui++] = q[2];
+        uvs[ui++] = q[3];
+        roles[ri++] = 1.0;
+        eyeSides[si++] = 0.0;
+      }
     }
   }
 
@@ -1613,10 +1693,11 @@ function createBossFaceFireGlowMesh(cal, includeGrin = false, hasBakedEmissiveMa
   geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
   geo.setAttribute('aRole', new THREE.BufferAttribute(roles, 1));
+  geo.setAttribute('aEyeSide', new THREE.BufferAttribute(eyeSides, 1));
 
   // When Rift_Boss_Tripo already has a crisp baked emissiveMap for eyes & jagged teeth,
-  // keep the 3D overlay subtle & atmospheric (warm dark-cavity furnace haze, 0 white clipping!)
-  const overlayWeight = hasBakedEmissiveMap ? 0.22 : 1.0;
+  // keep the 3D overlay balanced & atmospheric (expressive brow scowl & jaw-slit haze, 0 white clipping!)
+  const overlayWeight = hasBakedEmissiveMap ? 0.30 : 1.0;
 
   const mat = new THREE.ShaderMaterial({
     uniforms: {
@@ -1624,11 +1705,15 @@ function createBossFaceFireGlowMesh(cal, includeGrin = false, hasBakedEmissiveMa
       uIntensity: { value: 0.72 },
       uPhase2: { value: 0.0 },
       uWindup: { value: 0.0 },
+      uRoar: { value: 0.0 },
       uMouthOpen: { value: 0.0 },
       uStaggerDim: { value: 1.0 },
       uOverlayWeight: { value: overlayWeight },
       uUpAxis: { value: upAxis.clone() },
-      uJawDropScale: { value: cal.eyeSize * (hasBakedEmissiveMap ? 0.30 : 0.55) }
+      uRightAxis: { value: rightAxis.clone() },
+      uJawDropScale: { value: cal.eyeSize * (hasBakedEmissiveMap ? 0.44 : 0.70) },
+      uMouthWidthScale: { value: cal.grinWidth * 0.085 },
+      uBrowDropScale: { value: cal.eyeSize * 0.24 }
     },
     transparent: true,
     depthWrite: false,
@@ -1637,19 +1722,42 @@ function createBossFaceFireGlowMesh(cal, includeGrin = false, hasBakedEmissiveMa
     toneMapped: false,
     vertexShader: `
       attribute float aRole;
+      attribute float aEyeSide;
+      uniform float uPhase2;
+      uniform float uWindup;
+      uniform float uRoar;
       uniform float uMouthOpen;
       uniform vec3 uUpAxis;
+      uniform vec3 uRightAxis;
       uniform float uJawDropScale;
+      uniform float uMouthWidthScale;
+      uniform float uBrowDropScale;
       varying vec2 vUv;
       varying float vRole;
+      varying float vEyeSide;
       void main() {
         vUv = uv;
         vRole = aRole;
+        vEyeSide = aEyeSide;
         vec3 p = position;
-        // Lower half of fiery grin tracks jaw opening subtly in GPU vertex shader (0 CPU uploads!)
         if (aRole > 0.5) {
-          float lowerLip = 1.0 - clamp(uv.y, 0.0, 1.0);
-          p -= uUpAxis * (uMouthOpen * uJawDropScale * (0.20 + 0.80 * lowerLip));
+          // Articulate parabolic jaw drop + commissure widening/contracting in sync with jaw & speech (0 CPU uploads!)
+          float xNorm = (uv.x - 0.5) * 2.0;
+          float jawArch = max(0.0, 1.0 - xNorm * xNorm * 0.80);
+          float jawOpen = clamp(uMouthOpen + uRoar * 0.55, 0.0, 1.15);
+          float lowerW = clamp((0.55 - uv.y) * 1.82, 0.0, 1.0);
+          float upperW = clamp((uv.y - 0.45) * 1.82, 0.0, 1.0);
+          p -= uUpAxis * (jawOpen * uJawDropScale * (0.18 + 0.82 * jawArch) * lowerW);
+          p += uUpAxis * ((0.14 * jawOpen + 0.26 * uRoar + 0.16 * uWindup) * uJawDropScale * jawArch * upperW);
+          float widthFlex = 0.85 * jawOpen + 0.55 * uRoar - 0.26 * (1.0 - clamp(jawOpen, 0.0, 1.0)) * (0.35 + 0.65 * uWindup);
+          p += uRightAxis * (xNorm * uMouthWidthScale * widthFlex);
+        } else {
+          // Subtle upper-lid / supraorbital brow furrow pressing down toward inner nasal bridge on scowl!
+          float ex = (uv.x - 0.5) * 2.0 * aEyeSide;
+          float scowl = clamp(uWindup * 0.85 + uRoar * 0.92 + uPhase2 * 0.24 + uMouthOpen * 0.38, 0.0, 1.0);
+          float upperLid = clamp((uv.y - 0.40) * 1.66, 0.0, 1.0);
+          float medialBias = clamp(0.64 - 0.36 * ex, 0.16, 1.0);
+          p -= uUpAxis * (scowl * uBrowDropScale * upperLid * medialBias);
         }
         gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
       }
@@ -1659,51 +1767,72 @@ function createBossFaceFireGlowMesh(cal, includeGrin = false, hasBakedEmissiveMa
       uniform float uIntensity;
       uniform float uPhase2;
       uniform float uWindup;
+      uniform float uRoar;
       uniform float uMouthOpen;
       uniform float uStaggerDim;
       uniform float uOverlayWeight;
       varying vec2 vUv;
       varying float vRole;
+      varying float vEyeSide;
       void main() {
         float smoothMouth = smoothstep(0.0, 1.0, clamp(uMouthOpen, 0.0, 1.0));
+        float jawOpen = clamp(smoothMouth + uRoar * 0.55, 0.0, 1.0);
         if (vRole > 0.5) {
-          // Organic warm furnace-cavity glow pulsing smoothly in sync with speech (uMouthOpen) & Phase 2 (0 white blowout!)
+          // Articulate fiery mouth slit: narrows to a taut smoldering seam when silent,
+          // widens horizontally & vertically in parabolic sync with speech syllables, roars & jaw movement!
           float x = (vUv.x - 0.5) * 2.0;
-          float smileCurve = 0.20 * (x * x - 0.35);
+          float slitSpan = mix(0.76, 1.00, clamp(jawOpen * 1.15 + uWindup * 0.28, 0.0, 1.0));
+          float xScaled = x / max(0.35, slitSpan);
+          float smileCurve = (0.16 + 0.08 * (uWindup + uRoar)) * (xScaled * xScaled - 0.35);
           float y = (vUv.y - 0.5 - smileCurve) * 2.4;
-          // Synthetic teeth modulation only when no baked emissiveMap exists; otherwise keep soft cavity haze
-          float teethMask = smoothstep(0.40, 0.85, uOverlayWeight);
-          float teeth = sin(vUv.x * 37.699) * (0.24 - 0.08 * smoothMouth) * teethMask;
-          float openHalfH = 0.38 + 0.36 * smoothMouth + 0.12 * uPhase2;
-          float distY = abs(y - teeth * 0.40) / max(0.20, openHalfH);
-          float rad = sqrt(x * x * 0.94 + distY * distY);
+
+          float teethMask = smoothstep(0.38, 0.85, uOverlayWeight);
+          float teeth = sin(vUv.x * 37.699) * (0.22 - 0.07 * jawOpen) * teethMask;
+          float jawArch = max(0.22, 1.0 - xScaled * xScaled * 0.72);
+          float openHalfH = (0.19 + 0.58 * jawOpen + 0.11 * uPhase2 + 0.07 * uWindup) * mix(0.72, 1.0, jawArch);
+          float distY = abs(y - teeth * 0.38) / max(0.14, openHalfH);
+          float rad = sqrt(xScaled * xScaled * 0.96 + distY * distY);
           float grinHalo = smoothstep(1.02, 0.14, rad);
           float grinCore = smoothstep(0.56, 0.06, rad);
           if (grinHalo < 0.02) discard;
 
           float vocalFlicker = 0.90 + 0.06 * sin(uTime * 10.5 + x * 3.0) + 0.04 * sin(uTime * 16.2 - x * 2.0);
           vec3 outerFire = mix(vec3(0.92, 0.24, 0.02), vec3(0.96, 0.14, 0.01), uPhase2);
-          vec3 innerFire = mix(vec3(1.0, 0.58, 0.12), vec3(1.0, 0.74, 0.22), clamp(smoothMouth * 0.75 + uWindup * 0.35, 0.0, 1.0));
+          vec3 innerFire = mix(vec3(1.0, 0.58, 0.12), vec3(1.0, 0.76, 0.24), clamp(jawOpen * 0.78 + uWindup * 0.35, 0.0, 1.0));
           vec3 col = mix(outerFire, innerFire, grinCore) * vocalFlicker;
-          float speechAmp = (0.24 + 0.68 * smoothMouth + 0.36 * uPhase2 + 0.24 * uWindup) * uOverlayWeight;
-          float alpha = (grinHalo * 0.52 + grinCore * 0.34) * speechAmp * uStaggerDim;
+          float speechAmp = (0.20 + 0.74 * jawOpen + 0.36 * uPhase2 + 0.26 * uWindup) * uOverlayWeight;
+          float alpha = (grinHalo * 0.52 + grinCore * 0.36) * speechAmp * uStaggerDim;
           if (alpha < 0.01) discard;
-          gl_FragColor = vec4(col * (0.78 + 0.28 * smoothMouth + 0.22 * uPhase2), clamp(alpha, 0.0, 0.42));
+          gl_FragColor = vec4(col * (0.78 + 0.30 * jawOpen + 0.22 * uPhase2), clamp(alpha, 0.0, 0.46));
           return;
         }
 
-        // Smoldering / blazing Boss eyes (warm amber-gold core, zero harsh white clipping!)
-        vec2 p = (vUv - vec2(0.5)) * vec2(2.0, 2.6);
+        // Expressive blazing Boss eyes with slanted supraorbital V-brow scowl & squinting ember slit!
+        // ex = -1 at inner nasal bridge, +1 at outer temple
+        float ex = (vUv.x - 0.5) * 2.0 * vEyeSide;
+        float ey = (vUv.y - 0.5) * 2.0;
+        float speechEmote = smoothMouth * (0.38 + 0.10 * sin(uTime * 9.2));
+        float scowl = clamp(uWindup * 0.86 + uRoar * 0.92 + uPhase2 * 0.26 + speechEmote, 0.0, 1.0);
+
+        float browLine = mix(0.94, 0.16, scowl) + ex * (0.08 + 0.36 * scowl);
+        float browMask = smoothstep(browLine + 0.16, browLine - 0.18, ey);
+        float lowerLine = mix(-0.95, -0.58, scowl * 0.60);
+        float lowerMask = smoothstep(lowerLine - 0.16, lowerLine + 0.18, ey);
+        float lidAperture = browMask * lowerMask;
+        if (lidAperture < 0.02) discard;
+
+        vec2 p = vec2((vUv.x - 0.5) * 2.0, (ey + 0.08 * scowl) * mix(1.30, 1.82, scowl * 0.58));
         float d = length(p);
-        float halo = smoothstep(1.0, 0.08, d);
-        float pupil = smoothstep(0.44, 0.04, d);
+        float halo = smoothstep(1.0, 0.08, d) * lidAperture;
+        float pupil = smoothstep(0.44, 0.04, d) * smoothstep(0.15, 0.75, lidAperture);
         if (halo < 0.02) discard;
+
         vec3 emberCol = mix(vec3(1.0, 0.38, 0.05), vec3(1.0, 0.18, 0.02), uPhase2);
-        vec3 coreCol = mix(vec3(1.0, 0.72, 0.22), vec3(1.0, 0.84, 0.36), clamp(uWindup * 0.85 + smoothMouth * 0.40, 0.0, 1.0));
+        vec3 coreCol = mix(vec3(1.0, 0.72, 0.22), vec3(1.0, 0.86, 0.38), clamp(uWindup * 0.80 + uRoar * 0.75 + smoothMouth * 0.42, 0.0, 1.0));
         vec3 col = mix(emberCol, coreCol, pupil);
-        float eyeWeight = mix(0.28, 0.92, uOverlayWeight);
-        float alpha = (halo * 0.64 + pupil * 0.48) * uIntensity * (1.0 + smoothMouth * 0.22) * eyeWeight * uStaggerDim;
-        gl_FragColor = vec4(col * (0.90 + uPhase2 * 0.28 + uWindup * 0.32 + smoothMouth * 0.16), clamp(alpha, 0.0, 0.78));
+        float eyeWeight = mix(0.32, 0.94, uOverlayWeight);
+        float alpha = (halo * 0.66 + pupil * 0.52) * uIntensity * (1.0 + jawOpen * 0.24 + scowl * 0.16) * eyeWeight * uStaggerDim;
+        gl_FragColor = vec4(col * (0.90 + uPhase2 * 0.28 + uWindup * 0.34 + uRoar * 0.30 + jawOpen * 0.18), clamp(alpha, 0.0, 0.80));
       }
     `
   });
@@ -1787,6 +1916,7 @@ export function enhanceSoulsBossModel(bossRoot, options = {}) {
   let rightHandBone = null;
   let rightShoulderBone = null;
   let headBone = null;
+  let jawBone = null;
   let chestBone = null;
 
   root.traverse((n) => {
@@ -1806,6 +1936,9 @@ export function enhanceSoulsBossModel(bossRoot, options = {}) {
     }
     if (!headBone && /^(mixamorig:?)?Head$/i.test(nm)) {
       headBone = n;
+    }
+    if (!jawBone && n.isBone && /^(mixamorig:?)?Jaw$/i.test(nm)) {
+      jawBone = n;
     }
     if (!chestBone && /^(mixamorig:?)?(Spine2|Chest|UpperChest)$/i.test(nm)) {
       chestBone = n;
@@ -1918,6 +2051,7 @@ export function enhanceSoulsBossModel(bossRoot, options = {}) {
   const hammerFireCrownMesh = new THREE.Mesh(shared.hammerFireCrownGeo, hammerFireCrownMat);
   hammerFireCrownMesh.name = 'hammerFireCrown';
   hammerFireCrownMesh.scale.setScalar(hammerCal.radius);
+  hammerFireCrownMesh.visible = false; // Strictly cold forged iron in Phase 1 — ignites ONLY in Phase 2!
   hammerFireCrownMesh.frustumCulled = false;
   hammerFireCrownMesh.renderOrder = 5;
   hammerFireCrownMesh.userData.isSoulsBossVfx = true;
@@ -1947,7 +2081,7 @@ export function enhanceSoulsBossModel(bossRoot, options = {}) {
     map: shared.emberHaloTex,
     color: new THREE.Color(0xff6b1a),
     transparent: true,
-    opacity: 0.24,
+    opacity: 0.0,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
     toneMapped: false
@@ -1956,6 +2090,7 @@ export function enhanceSoulsBossModel(bossRoot, options = {}) {
   hammerHaloSprite.name = 'hammerEmberHalo';
   const baseHaloScale = hammerCal.radius * 3.05;
   hammerHaloSprite.scale.set(baseHaloScale, baseHaloScale, 1);
+  hammerHaloSprite.visible = false;
   hammerHaloSprite.frustumCulled = false;
   hammerHaloSprite.renderOrder = 4;
   hammerHaloSprite.userData.isSoulsBossVfx = true;
@@ -1988,11 +2123,19 @@ export function enhanceSoulsBossModel(bossRoot, options = {}) {
     disposed: false,
     isLanternBoss: Boolean(lanternCal.enabled),
     localTime: 0,
+    ignitionProgress: 0,
     phase2Blend: 0,
     windupBlend: 0,
     staggerBlend: 0,
     roarBlend: 0,
     mouthBlend: 0,
+    hitFlashBlend: 0,
+    prevHammerWorldPos: new THREE.Vector3(),
+    hasPrevHammerWorldPos: false,
+    smoothHammerVel: new THREE.Vector3(),
+    lastTrailDirWorld: new THREE.Vector3(0, 0.25, -1).normalize(),
+    hammerLinearSpeed: 0,
+    smoothHammerSpeed: 0,
     baseHammerRadius: hammerCal.radius,
     baseHaloScale,
     baseLanternHaloScale: lanternCal.haloScale || 0.34,
@@ -2023,6 +2166,8 @@ export function enhanceSoulsBossModel(bossRoot, options = {}) {
     rightHandBone,
     rightShoulderBone,
     headBone,
+    jawBone,
+    jawRestQuat: jawBone ? jawBone.quaternion.clone() : null,
     setLowSpec(enabled) {
       setLowSpec(enabled);
     },
@@ -2044,10 +2189,11 @@ export function enhanceSoulsBossModel(bossRoot, options = {}) {
 
 /**
  * Updates Boss visual intensity smoothly with ZERO per-frame JS allocations:
+ * - Smooth ~2.6s 3-stage cinematic Phase-2 weapon ignition (Stage 1: creeping heat veins & rising sparks ->
+ *   Stage 2: swelling amber halo & 0.25x..0.80x low licking base flames -> Stage 3: full 1.00x roaring crown)
+ * - Strictly velocity-gated & opposite-velocity-aligned swept fire trail (`smoothstep(2.4, 9.5, smoothHammerSpeed)`)
  * - Physical warm flickering `shoulderLanternLight` (`0xff8c2b`, `decay=2`, `distance=6.8`, base=`1.25` on PC)
- * - Speech-reactive organic furnace grin & eye pulsation (`mouthOpen01`, read from params OR automatically from `bossRoot.userData.getBossMouthOpen()`)
- * - Real buoyant volumetric fire crown & swept trail on the warhammer via `.setCombatState(...)`
- * - Heavy Windup (`isWindup`), Act 3 Cutscene Roar, Phase 2 (`phase2Enraged`), and Stagger (`isStaggered`)
+ * - Expressive brow-scowl eyes & jaw-synced fiery grin slit reacting to `mouthOpen01`, `jawBone`, roars & windups
  */
 export function updateSoulsBossVisuals(bossRoot, dt, params = {}) {
   const root = resolveBossObject(bossRoot);
@@ -2071,7 +2217,7 @@ export function updateSoulsBossVisuals(bossRoot, dt, params = {}) {
   state.localTime += safeDt;
   const t = Number.isFinite(elapsed) && elapsed > 0 ? elapsed : state.localTime;
 
-  // Resolve real-time lip-sync mouth openness (explicit param OR auto-read from models.js animCtrl!)
+  // Resolve real-time lip-sync mouth openness (explicit param, animCtrl callback, OR live jawBone rotation!)
   let rawMouth = 0;
   if (Number.isFinite(mouthOpen01)) {
     rawMouth = mouthOpen01;
@@ -2084,35 +2230,67 @@ export function updateSoulsBossVisuals(bossRoot, dt, params = {}) {
       if (Number.isFinite(mv)) rawMouth = mv;
     }
   }
-  const targetMouth = isStaggered ? 0.0 : (rawMouth < 0 ? 0 : rawMouth > 1 ? 1 : rawMouth);
+  if (state.jawBone && state.jawRestQuat) {
+    const dotQ = Math.min(1.0, Math.abs(state.jawBone.quaternion.dot(state.jawRestQuat)));
+    const jawAngle = 2.0 * Math.acos(dotQ);
+    const boneJaw01 = clamp01((jawAngle - 0.006) / 0.12);
+    if (boneJaw01 > rawMouth) rawMouth = boneJaw01;
+  }
+  const targetMouth = isStaggered ? 0.0 : clamp01(rawMouth);
 
   const roarActive = Boolean(isCutsceneRoar || cutsceneRoar || bossRoarPeak || cutsceneAct === 3);
-  const targetP2 = phase2Enraged ? 1.0 : 0.0;
   const targetWindup = isWindup && !isStaggered ? 1.0 : 0.0;
   const targetStagger = isStaggered ? 1.0 : 0.0;
   const targetRoar = roarActive && !isStaggered ? 1.0 : 0.0;
 
-  const kP2 = 1.0 - Math.exp(-(phase2Enraged ? 3.2 : 2.6) * safeDt);
+  // Smooth ~2.6s progressive Phase-2 ignition (0 -> 1) instead of abrupt 0.5s exponential snap!
+  if (phase2Enraged) {
+    state.ignitionProgress = Math.min(1.0, state.ignitionProgress + safeDt / PHASE2_IGNITION_DURATION);
+  } else {
+    state.ignitionProgress = Math.max(0.0, state.ignitionProgress - safeDt / PHASE2_EXTINGUISH_DURATION);
+  }
+  const ign = state.ignitionProgress;
+
   const kWindup = 1.0 - Math.exp(-(targetWindup > state.windupBlend ? 14.0 : 5.8) * safeDt);
   const kStagger = 1.0 - Math.exp(-(isStaggered ? 10.5 : 3.6) * safeDt);
   const kRoar = 1.0 - Math.exp(-(targetRoar > state.roarBlend ? 7.5 : 3.0) * safeDt);
   const kMouth = 1.0 - Math.exp(-(targetMouth > state.mouthBlend ? 18.0 : 9.5) * safeDt);
 
-  state.phase2Blend += (targetP2 - state.phase2Blend) * kP2;
+  state.phase2Blend = smootherstepRange(0.0, 1.0, ign);
   state.windupBlend += (targetWindup - state.windupBlend) * kWindup;
   state.staggerBlend += (targetStagger - state.staggerBlend) * kStagger;
   state.roarBlend += (targetRoar - state.roarBlend) * kRoar;
   state.mouthBlend += (targetMouth - state.mouthBlend) * kMouth;
+  state.hitFlashBlend = Math.max(0, (state.hitFlashBlend || 0) * Math.exp(-15.5 * safeDt) - safeDt * 0.18);
 
   const p2 = state.phase2Blend;
   const wu = state.windupBlend;
   const stg = state.staggerBlend;
   const roar = state.roarBlend;
   const mouth = state.mouthBlend;
+  const hitFlash = state.hitFlashBlend;
   const staggerDim = 1.0 - stg * 0.84;
 
-  const flare = wu > roar * 0.92 ? wu : roar * 0.92;
-  const effPhase2 = p2 > roar * 0.78 ? p2 : roar * 0.78;
+  // 3-Stage Progressive Weapon Ignition Envelopes (ign: 0.00 -> 1.00 over ~2.6s):
+  //   Stage 1 (0.00 .. 0.38): Deep internal red-orange heat cracks & veins creep across warhammer + subtle rising sparks
+  //   Stage 2 (0.38 .. 0.72): Warm amber halo swells softly + low licking base flames hug iron head (0.25x -> 0.80x)
+  //   Stage 3 (0.72 .. 1.00): Full roaring volumetric Phase-2 flame crown reaches full 1.00x height & intensity seamlessly!
+  const weaponHeatEnv = 0.64 * smootherstepRange(0.00, 0.38, ign) + 0.36 * smootherstepRange(0.32, 1.00, ign);
+  const bodyHeatEnv = smootherstepRange(0.14, 0.94, ign);
+  const sparkIgniteEnv = 0.30 * smoothstepRange(0.04, 0.38, ign) + 0.70 * smoothstepRange(0.34, 0.96, ign);
+  const haloIgniteEnv = 0.62 * smootherstepRange(0.35, 0.72, ign) + 0.38 * smootherstepRange(0.66, 1.00, ign);
+  const haloScaleIgnite = 0.48 + 0.52 * smoothstepRange(0.35, 1.00, ign);
+
+  const crownFadeIn = smoothstepRange(0.35, 0.41, ign);
+  const crownStageCurve = 0.25 + 0.55 * smoothstepRange(0.38, 0.73, ign) + 0.20 * smoothstepRange(0.69, 1.00, ign);
+  const crownIntEnv = crownFadeIn * crownStageCurve;
+  const crownHeightMult = crownStageCurve;
+  const crownWidthMult = 0.70 + 0.20 * smoothstepRange(0.38, 0.73, ign) + 0.10 * smoothstepRange(0.69, 1.00, ign);
+
+  const rawFlare = wu > roar * 0.92 ? wu : roar * 0.92;
+  const weaponFlare = rawFlare * crownIntEnv;
+  const bodyFlare = rawFlare * p2;
+  const effPhase2 = p2;
 
   // Dual-harmonic combustion pulse + warm organic speech coal shimmer when speaking
   const slowPulse = Math.sin(t * 2.45) * 0.5 + 0.5;
@@ -2127,21 +2305,24 @@ export function updateSoulsBossVisuals(bossRoot, dt, params = {}) {
     0.035 * Math.sin(t * 15.9 + 2.87) +
     0.020 * Math.cos(t * 26.3 + 0.41);
 
-  const baseHeat = 0.22 + effPhase2 * 0.72 + flare * 0.68 + pulse;
-  const effectiveHeat = baseHeat * staggerDim;
+  const weaponEffectiveHeat = weaponHeatEnv * (0.84 + weaponFlare * 0.52 + pulse * 0.42) * staggerDim;
+  const bodyEffectiveHeat = bodyHeatEnv * (0.82 + bodyFlare * 0.54 + pulse * 0.45) * staggerDim;
 
   // 1. Sync PBR armor/skin/hammer & baked emissiveMap shader uniforms (0 allocations!)
   const recs = state.patchedRecs;
   for (let i = 0; i < recs.length; i++) {
-    const u = recs[i].uniforms;
+    const rec = recs[i];
+    const u = rec.uniforms;
     u.uBossTime.value = t;
-    u.uBossHeat.value = effectiveHeat;
-    u.uBossWindup.value = flare;
+    u.uBossHeat.value = rec.isWeapon ? weaponEffectiveHeat : bodyEffectiveHeat;
+    if (u.uBossIgnition) u.uBossIgnition.value = ign;
+    u.uBossWindup.value = rec.isWeapon ? weaponFlare : rawFlare * staggerDim;
     u.uBossPhase2.value = effPhase2;
     u.uBossStaggerDim.value = staggerDim;
     u.uBossMouthOpen.value = mouth;
     u.uBossPulse.value = pulse;
     u.uBossLanternFlicker.value = lanternFlicker;
+    if (u.uBossHitFlash) u.uBossHitFlash.value = hitFlash;
   }
 
   // 2. Right-Shoulder Forged Iron Lantern PointLight & Subtle Amber Halo
@@ -2149,7 +2330,7 @@ export function updateSoulsBossVisuals(bossRoot, dt, params = {}) {
     if (globalLowSpec || root.visible === false) {
       state.shoulderLanternLight.intensity = 0;
     } else {
-      const lanternBoost = 1.0 + effPhase2 * 0.28 + flare * 0.22 + mouth * 0.10;
+      const lanternBoost = 1.0 + effPhase2 * 0.28 + bodyFlare * 0.22 + mouth * 0.10;
       const stgLantern = 0.38 + 0.62 * staggerDim;
       state.shoulderLanternLight.intensity =
         LANTERN_LIGHT_BASE_INTENSITY * lanternFlicker * lanternBoost * stgLantern;
@@ -2158,121 +2339,171 @@ export function updateSoulsBossVisuals(bossRoot, dt, params = {}) {
   if (state.shoulderLanternHalo && state.shoulderLanternHaloMat) {
     const lhScale = state.baseLanternHaloScale * (0.92 + (lanternFlicker - 0.91) * 0.85 + effPhase2 * 0.18 + mouth * 0.08);
     state.shoulderLanternHalo.scale.set(lhScale, lhScale, 1);
-    const lhOp = (0.15 + effPhase2 * 0.06 + flare * 0.05) * lanternFlicker * (0.45 + 0.55 * staggerDim);
+    const lhOp = (0.15 + effPhase2 * 0.06 + bodyFlare * 0.05) * lanternFlicker * (0.45 + 0.55 * staggerDim);
     state.shoulderLanternHaloMat.opacity = lhOp > 0.24 ? 0.24 : lhOp < 0 ? 0 : lhOp;
   }
 
-  // 3. Real Volumetric Simplex FBM Fire Crown on Hammer Head (buoyant world-up alignment so flames
-  //    always lick cleanly upward off the hammer head while leaning beside the Throne AND in combat!)
+  // Track real world-space Warhammer core position & velocity (0 per-frame Vector3 allocations!)
+  let hasBuoyantQuat = false;
+  let rawHammerSpeed = 0.0;
+  if (state.hammerEmberCore) {
+    state.hammerEmberCore.updateWorldMatrix(true, false);
+    _updCurrHammerPos.setFromMatrixPosition(state.hammerEmberCore.matrixWorld);
+    state.hammerEmberCore.getWorldQuaternion(_updCrownQuat);
+    const qLenSq = _updCrownQuat.lengthSq();
+    if (Number.isFinite(qLenSq) && qLenSq > 0.0001) {
+      _updCrownQuat.invert();
+      hasBuoyantQuat = true;
+    }
+
+    if (!state.hasPrevHammerWorldPos) {
+      state.prevHammerWorldPos.copy(_updCurrHammerPos);
+      state.hasPrevHammerWorldPos = true;
+    } else if (safeDt > 0.0005) {
+      _updDeltaHammerPos.subVectors(_updCurrHammerPos, state.prevHammerWorldPos);
+      state.prevHammerWorldPos.copy(_updCurrHammerPos);
+      const stepDist = _updDeltaHammerPos.length();
+      // Guard against single-frame teleports / arena resets (> 4.0m)
+      if (Number.isFinite(stepDist) && stepDist <= 4.0) {
+        const invDt = 1.0 / safeDt;
+        rawHammerSpeed = stepDist * invDt;
+        _updInstHammerVel.copy(_updDeltaHammerPos).multiplyScalar(invDt);
+        const kVel = 1.0 - Math.exp(-20.0 * safeDt);
+        state.smoothHammerVel.lerp(_updInstHammerVel, kVel);
+        const velSq = state.smoothHammerVel.lengthSq();
+        if (velSq > 0.04) {
+          _updWakeDir.copy(state.smoothHammerVel).multiplyScalar(-1.0 / Math.sqrt(velSq));
+          _updWakeDir.y += 0.12;
+          _updWakeDir.normalize();
+          state.lastTrailDirWorld.copy(_updWakeDir);
+        }
+      } else {
+        state.smoothHammerVel.set(0, 0, 0);
+      }
+    }
+  }
+  state.hammerLinearSpeed = rawHammerSpeed;
+  const kHammerSpeed = 1.0 - Math.exp(-(rawHammerSpeed > state.smoothHammerSpeed ? 18.0 : 12.5) * safeDt);
+  state.smoothHammerSpeed += (rawHammerSpeed - state.smoothHammerSpeed) * kHammerSpeed;
+  const allowAttackTrail = params?.isAttacking === undefined ? true : Boolean(params.isAttacking);
+  const targetTrailGate = allowAttackTrail ? 1.0 : 0.0;
+  const kTrailGate = 1.0 - Math.exp(-(targetTrailGate > (state.attackTrailGate || 0) ? 16.0 : 14.0) * safeDt);
+  state.attackTrailGate = (state.attackTrailGate || 0) + (targetTrailGate - (state.attackTrailGate || 0)) * kTrailGate;
+  const speedFactor = smoothstepRange(5.4, 12.0, state.smoothHammerSpeed) * state.attackTrailGate;
+
+  // 3. Real Volumetric Simplex FBM Fire Crown on Hammer Head (ramping smoothly 0.25x -> 0.80x -> 1.00x in Stage 2..3!)
   const crownMat = state.hammerFireCrownMat;
   const crownMesh = state.hammerFireCrownMesh;
-  let hasBuoyantQuat = false;
   if (crownMat && crownMesh) {
-    const crownInt = (0.44 + effPhase2 * 0.66 + flare * 0.62 + pulse * 0.24) * staggerDim;
-    const cs = state.crownCombatState;
-    cs.heat = crownInt;
-    cs.intensity = crownInt;
-    cs.phase2 = effPhase2;
-    cs.windup = flare;
-    cs.staggerDim = staggerDim;
-    crownMat.setCombatState(cs);
-    crownMat.update(t, safeDt);
-
-    const crownVis = crownInt > 0.04;
+    const crownInt = crownIntEnv * (0.94 + weaponFlare * 0.50 + pulse * 0.22) * staggerDim;
+    const crownVis = crownInt > 0.008;
     crownMesh.visible = crownVis;
     if (crownVis) {
-      if (crownMesh.parent) {
-        crownMesh.parent.updateWorldMatrix(true, false);
-        crownMesh.parent.getWorldQuaternion(_updCrownQuat);
-        const qLenSq = _updCrownQuat.lengthSq();
-        if (Number.isFinite(qLenSq) && qLenSq > 0.0001) {
-          _updCrownQuat.invert();
-          crownMesh.quaternion.copy(_updCrownQuat);
-          hasBuoyantQuat = true;
-        }
+      const cs = state.crownCombatState;
+      cs.heat = crownInt;
+      cs.intensity = crownInt;
+      cs.phase2 = crownStageCurve;
+      cs.windup = weaponFlare;
+      cs.staggerDim = staggerDim;
+      crownMat.setCombatState(cs);
+      crownMat.update(t, safeDt);
+
+      if (hasBuoyantQuat) {
+        crownMesh.quaternion.copy(_updCrownQuat);
       }
       const rBase = state.baseHammerRadius;
-      const sx = rBase * (0.86 + effPhase2 * 0.30 + flare * 0.34 + pulse * 0.12) * (0.68 + 0.32 * staggerDim);
-      const sy = rBase * (0.84 + effPhase2 * 0.44 + flare * 0.52 + pulse * 0.18) * (0.62 + 0.38 * staggerDim);
+      const sx = rBase * crownWidthMult * (0.96 + effPhase2 * 0.24 + weaponFlare * 0.28 + pulse * 0.10) * (0.68 + 0.32 * staggerDim);
+      const sy = rBase * crownHeightMult * (0.98 + effPhase2 * 0.34 + weaponFlare * 0.42 + pulse * 0.14) * (0.62 + 0.38 * staggerDim);
       crownMesh.scale.set(sx, sy, sx);
     }
   }
 
-  // 4. Swept Volcanic Fire Trail Ribbons (off in LowSpec)
+  // 4. Velocity-Driven Volcanic Fire Trail Ribbons (strictly gated by swing motion > 2.4 m/s & aligned opposite velocity!)
   const trailMat = state.hammerFireTrailMat;
   const trailMesh = state.hammerFireTrailMesh;
   if (trailMat && trailMesh) {
-    const trailInt = globalLowSpec ? 0.0 : (effPhase2 * 0.88 + flare * 1.10) * staggerDim;
-    const trailVis = trailInt > 0.05;
+    const trailInt = globalLowSpec
+      ? 0.0
+      : crownIntEnv * speedFactor * (0.88 + weaponFlare * 0.62) * staggerDim;
+    const trailVis = trailInt > 0.015;
     trailMesh.visible = trailVis;
     if (trailVis) {
       const ts = state.trailCombatState;
       ts.heat = trailInt;
       ts.intensity = trailInt;
       ts.phase2 = effPhase2;
-      ts.windup = flare;
+      ts.windup = weaponFlare;
       ts.staggerDim = staggerDim;
       trailMat.setCombatState(ts);
       trailMat.update(t, safeDt);
 
+      _updTrailWorldQuat.setFromUnitVectors(_AXIS_PLUS_Z, state.lastTrailDirWorld);
+      if (hasBuoyantQuat) {
+        trailMesh.quaternion.copy(_updCrownQuat).multiply(_updTrailWorldQuat);
+      } else {
+        trailMesh.quaternion.copy(_updTrailWorldQuat);
+      }
+
       const rBase = state.baseHammerRadius;
-      const trailScale = rBase * (0.88 + effPhase2 * 0.28 + flare * 0.42);
-      trailMesh.scale.set(trailScale, trailScale, trailScale * (0.95 + flare * 0.35));
+      const trailScaleXY = rBase * (0.86 + effPhase2 * 0.22 + weaponFlare * 0.28);
+      const trailScaleZ = trailScaleXY * (0.42 + 0.72 * speedFactor + weaponFlare * 0.22);
+      trailMesh.scale.set(trailScaleXY, trailScaleXY, trailScaleZ);
     }
   }
 
-  // 5. Tight Volumetric Hammer Halo Sprite
+  // 5. Tight Volumetric Hammer Halo Sprite (swelling softly across Stage 2..3!)
   const halo = state.hammerHaloSprite;
   if (halo) {
-    const haloScale = state.baseHaloScale * (0.72 + effPhase2 * 0.42 + flare * 0.52 + pulse * 0.16) * (0.52 + 0.48 * staggerDim);
-    halo.scale.set(haloScale, haloScale, 1);
+    const haloOp = haloIgniteEnv * (0.38 + weaponFlare * 0.28 + pulse * 0.10) * staggerDim;
+    halo.visible = haloOp > 0.006;
+    if (halo.visible) {
+      const haloScale =
+        state.baseHaloScale *
+        haloScaleIgnite *
+        (0.86 + effPhase2 * 0.32 + weaponFlare * 0.42 + pulse * 0.14) *
+        (0.52 + 0.48 * staggerDim);
+      halo.scale.set(haloScale, haloScale, 1);
+      state.haloMat.opacity = haloOp > 0.82 ? 0.82 : haloOp;
 
-    const haloOp = (0.18 + effPhase2 * 0.30 + flare * 0.36 + pulse * 0.10) * staggerDim;
-    state.haloMat.opacity = haloOp > 0.82 ? 0.82 : haloOp < 0 ? 0 : haloOp;
-
-    const r = 1.0;
-    const g = 0.44 - effPhase2 * 0.14 + flare * 0.34 - stg * 0.16;
-    const b = 0.10 - effPhase2 * 0.05 + flare * 0.24 - stg * 0.04;
-    state.haloMat.color.setRGB(
-      r,
-      g < 0.08 ? 0.08 : g > 1.0 ? 1.0 : g,
-      b < 0.02 ? 0.02 : b > 0.72 ? 0.72 : b
-    );
+      const r = 1.0;
+      const g = 0.34 + 0.08 * haloIgniteEnv + weaponFlare * 0.28 - stg * 0.14;
+      const b = 0.06 + 0.03 * haloIgniteEnv + weaponFlare * 0.20 - stg * 0.04;
+      state.haloMat.color.setRGB(
+        r,
+        g < 0.08 ? 0.08 : g > 1.0 ? 1.0 : g,
+        b < 0.02 ? 0.02 : b > 0.72 ? 0.72 : b
+      );
+    } else {
+      state.haloMat.opacity = 0;
+    }
   }
 
-  // 6. GPU Hammer Ember Spark Trail
+  // 6. GPU Hammer Ember Sparks (begin gently rising off hot iron in Stage 1, roaring in Stage 3!)
   const sparks = state.hammerEmberPoints;
   if (sparks) {
-    const rawSparkInt = (effPhase2 * 0.92 + flare * 1.12 + (globalLowSpec ? 0.0 : 0.12)) * staggerDim;
-    const sparkVisible = rawSparkInt > 0.035;
+    const rawSparkInt = sparkIgniteEnv * (0.88 + weaponFlare * 0.65) * staggerDim;
+    const sparkVisible = rawSparkInt > 0.012;
     sparks.visible = sparkVisible;
     if (sparkVisible) {
       if (hasBuoyantQuat) {
         sparks.quaternion.copy(_updCrownQuat);
-      } else if (sparks.parent) {
-        sparks.parent.updateWorldMatrix(true, false);
-        sparks.parent.getWorldQuaternion(_updCrownQuat);
-        const qLenSq = _updCrownQuat.lengthSq();
-        if (Number.isFinite(qLenSq) && qLenSq > 0.0001) {
-          _updCrownQuat.invert();
-          sparks.quaternion.copy(_updCrownQuat);
-        }
       }
       const eu = state.emberMat.uniforms;
       eu.uTime.value = t;
       eu.uIntensity.value = rawSparkInt > 1.3 ? 1.3 : rawSparkInt;
-      eu.uWindup.value = flare;
+      eu.uWindup.value = weaponFlare;
       eu.uPhase2.value = effPhase2;
     }
   }
 
-  // 7. Boss Face Fire Glow (Eyes + Organic Speech-Reactive Furnace Cavity!)
+  // 7. Expressive Boss Face Fire Glow (Scowling V-Brow Eyes + Articulate Jaw-Synced Fiery Mouth Slit!)
   if (state.eyeGlowMat) {
     const eyU = state.eyeGlowMat.uniforms;
     eyU.uTime.value = t;
-    eyU.uIntensity.value = 0.62 + effPhase2 * 0.36 + flare * 0.32 + pulse * 0.18;
+    eyU.uIntensity.value = 0.62 + effPhase2 * 0.36 + wu * 0.28 + roar * 0.26 + pulse * 0.18;
     eyU.uPhase2.value = effPhase2;
-    eyU.uWindup.value = flare;
+    eyU.uWindup.value = wu * staggerDim;
+    if (eyU.uRoar) eyU.uRoar.value = roar * staggerDim;
     eyU.uMouthOpen.value = mouth;
     eyU.uStaggerDim.value = staggerDim;
   }
@@ -2345,6 +2576,15 @@ export function disposeSoulsBossVisuals(bossRoot) {
   if (root.userData && root.userData.soulsBossVisuals === state) {
     delete root.userData.soulsBossVisuals;
   }
+}
+
+export function triggerSoulsBossHitFlash(bossRoot, strength = 1.0) {
+  const root = resolveBossObject(bossRoot);
+  const state = root?.userData?.soulsBossVisuals;
+  if (!state || state.disposed) return false;
+  const s = Number.isFinite(strength) ? (strength < 0.2 ? 0.2 : strength > 1.35 ? 1.35 : strength) : 1.0;
+  state.hitFlashBlend = Math.max(state.hitFlashBlend || 0, s);
+  return true;
 }
 
 export function getSoulsBossVisualStats() {

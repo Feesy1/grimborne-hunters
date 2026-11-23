@@ -22,11 +22,17 @@
 //           - `stopBossIntroVoice(fadeSec)` (also invoked automatically by `stopCinematicSequence()` on skip).
 //      Full Yandex Games `suspend()`/`resume()` (pauses/resumes voice, door clock & staggered preload) & leak-free `.dispose()`.
 
-import * as CASTLE_LAYOUT from './soulsCastleLayout.js?v=20261123z71';
+import * as CASTLE_LAYOUT from './soulsCastleLayout.js?v=20261124z84';
 
-const { SOULS_CASTLE_BONFIRE, SOULS_CASTLE_BRAZIERS, SOULS_CASTLE_CONSTANTS } = CASTLE_LAYOUT;
+const {
+  SOULS_CASTLE_BONFIRE,
+  SOULS_CASTLE_BRAZIERS,
+  SOULS_CASTLE_CONSTANTS,
+  SOULS_CASTLE_FLAME_TRAPS,
+  evaluateFlameTrapState
+} = CASTLE_LAYOUT;
 
-export const SOULS_SPATIAL_AUDIO_VERSION = '20261123z71';
+export const SOULS_SPATIAL_AUDIO_VERSION = '20261124z84';
 export const BOSS_DOOR_CINEMATIC_DURATION = 43.2;
 export const BOSS_DOOR_AUDIO_SEQUENCE_DURATION = 7.8;
 
@@ -412,12 +418,20 @@ function buildSeamlessWarmNoiseLoop(ctx, durationSec = 4.5) {
 function buildTransientNoiseBuffer(ctx, durationSec = 1.2) {
   const sr = Math.max(22050, Math.min(96000, ctx.sampleRate || 44100));
   const length = Math.max(4096, Math.floor(sr * durationSec));
+  const xfade = Math.min(256, Math.floor(length * 0.1));
   const buf = ctx.createBuffer(1, length, sr);
   const data = buf.getChannelData(0);
   let seed = 0x570AE991 >>> 0;
   for (let i = 0; i < length; i++) {
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
     data[i] = seed * INV_2_POW_31 - 1.0;
+  }
+  // Equal-power loop seam wrap so looping broadband flame crackle is 100% click-free
+  for (let k = 0; k < xfade; k++) {
+    const a = (k / xfade) * (Math.PI * 0.5);
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    const tail = seed * INV_2_POW_31 - 1.0;
+    data[k] = data[k] * Math.sin(a) + tail * Math.cos(a);
   }
   return buf;
 }
@@ -512,13 +526,13 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
     const z = Array.isArray(src) ? Number(src[1]) : Number(src.z);
     if (!Number.isFinite(x) || !Number.isFinite(z)) return null;
     const scale = finiteOr(Number(src.scale), 1.0);
-    const refDist = finiteOr(Number(src.refDist), isBonfire ? 1.8 : 1.35);
-    const maxDist = finiteOr(Number(src.maxDist), isBonfire ? 14.5 : 9.8);
+    const refDist = finiteOr(Number(src.refDist), isBonfire ? 1.8 : 1.5);
+    const maxDist = finiteOr(Number(src.maxDist), isBonfire ? 14.5 : 11.2);
     return {
       id: typeof src.id === 'string' ? src.id : (isBonfire ? 'bonfire_main' : `brazier_${idx}`),
       x,
       z,
-      weight: finiteOr(Number(src.weight), isBonfire ? 1.28 : 0.88 * clamp(scale, 0.85, 1.25)),
+      weight: finiteOr(Number(src.weight), isBonfire ? 1.28 : 0.98 * clamp(scale, 0.85, 1.25)),
       refDist,
       maxDist,
       maxDistSq: maxDist * maxDist,
@@ -630,6 +644,23 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
   let windGain = null;
   let windReverbSend = null;
 
+  // Gargoyle Pressurized Flame-Jet Gauntlet Chain (Zone 3 — 5 synchronized flame traps)
+  let jetSource = null;
+  let jetCrackleSource = null;
+  let jetRoarBpf = null;           // 135-220 Hz punchy pressurized furnace combustion rumble
+  let jetRoarGain = null;
+  let jetBlastBpf = null;          // 520-1100 Hz roaring flamethrower column
+  let jetBlastGain = null;
+  let jetHissBpf = null;           // 1850-3200 Hz pressurized nozzle roar & crisp fire crackle
+  let jetHissGain = null;
+  let jetLpf = null;
+  let jetPanner = null;
+  let jetGain = null;
+  let jetReverbSend = null;
+  const trapWasFiring = new Uint8Array(12);
+  let lastJetBurstAt = -10;
+  let nextJetCrackleAt = 0;
+
   // Live Ambient Telemetry & Smoothing Scalars + Epsilon Param Caches (0 GC / 0 timeline flood!)
   let lastIsInSouls = false;
   let lastBossAwakened = false;
@@ -643,6 +674,8 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
   let curFireTargetGain = 0;
   let curFireTargetPan = 0;
   let curWindTargetGain = 0;
+  let curFlameJetTargetGain = 0;
+  let curFlameJetTargetPan = 0;
 
   let lastSentFireGain = NaN;
   let lastSentFirePan = NaN;
@@ -654,6 +687,11 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
   let lastSentWindDraftGain = NaN;
   let lastSentWindRev = NaN;
   let lastSentWindPan = NaN;
+  let lastSentJetGain = NaN;
+  let lastSentJetPan = NaN;
+  let lastSentJetCutoff = NaN;
+  let lastSentJetBlastGain = NaN;
+  let lastSentJetHissGain = NaN;
 
   function resetAmbientParamCache() {
     ambientSilenced = false;
@@ -667,6 +705,11 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
     lastSentWindDraftGain = NaN;
     lastSentWindRev = NaN;
     lastSentWindPan = NaN;
+    lastSentJetGain = NaN;
+    lastSentJetPan = NaN;
+    lastSentJetCutoff = NaN;
+    lastSentJetBlastGain = NaN;
+    lastSentJetHissGain = NaN;
   }
 
   // Active Transient Node, Timer & Idle-Callback Tracking (0 leaks on dispose!)
@@ -807,6 +850,8 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
     safeStop(fireSource);
     stopProceduralFireFallback();
     safeStop(windSource);
+    safeStop(jetSource);
+    safeStop(jetCrackleSource);
 
     safeDisconnect(fireSource);
     safeDisconnect(fireWavGain);
@@ -824,6 +869,19 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
     safeDisconnect(windPanner);
     safeDisconnect(windGain);
     safeDisconnect(windReverbSend);
+
+    safeDisconnect(jetSource);
+    safeDisconnect(jetCrackleSource);
+    safeDisconnect(jetRoarBpf);
+    safeDisconnect(jetRoarGain);
+    safeDisconnect(jetBlastBpf);
+    safeDisconnect(jetBlastGain);
+    safeDisconnect(jetHissBpf);
+    safeDisconnect(jetHissGain);
+    safeDisconnect(jetLpf);
+    safeDisconnect(jetPanner);
+    safeDisconnect(jetGain);
+    safeDisconnect(jetReverbSend);
 
     safeDisconnect(ambReverbIn);
     safeDisconnect(ambReverbHpf);
@@ -864,6 +922,20 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
     windPanner = null;
     windGain = null;
     windReverbSend = null;
+
+    jetSource = null;
+    jetCrackleSource = null;
+    jetRoarBpf = null;
+    jetRoarGain = null;
+    jetBlastBpf = null;
+    jetBlastGain = null;
+    jetHissBpf = null;
+    jetHissGain = null;
+    jetLpf = null;
+    jetPanner = null;
+    jetGain = null;
+    jetReverbSend = null;
+    trapWasFiring.fill(0);
 
     ambReverbIn = null;
     ambReverbHpf = null;
@@ -1216,6 +1288,69 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
 
       windSource.start(t);
 
+      // 5. Gargoyle Pressurized Flame-Jet Gauntlet Chain (Zone 3 — 5 wall traps, ~2.4x visceral roar!)
+      jetSource = audioCtx.createBufferSource();
+      jetSource.buffer = warmNoiseBuffer;
+      jetSource.loop = true;
+
+      jetCrackleSource = audioCtx.createBufferSource();
+      jetCrackleSource.buffer = transientNoiseBuffer;
+      jetCrackleSource.loop = true;
+
+      jetRoarBpf = audioCtx.createBiquadFilter();
+      jetRoarBpf.type = 'bandpass';
+      jetRoarBpf.frequency.setValueAtTime(138, t);
+      jetRoarBpf.Q.setValueAtTime(1.05, t);
+      jetRoarGain = audioCtx.createGain();
+      jetRoarGain.gain.setValueAtTime(1.75, t);
+
+      jetBlastBpf = audioCtx.createBiquadFilter();
+      jetBlastBpf.type = 'bandpass';
+      jetBlastBpf.frequency.setValueAtTime(540, t);
+      jetBlastBpf.Q.setValueAtTime(0.85, t);
+      jetBlastGain = audioCtx.createGain();
+      jetBlastGain.gain.setValueAtTime(0.95, t);
+
+      jetHissBpf = audioCtx.createBiquadFilter();
+      jetHissBpf.type = 'bandpass';
+      jetHissBpf.frequency.setValueAtTime(1980, t);
+      jetHissBpf.Q.setValueAtTime(1.08, t);
+      jetHissGain = audioCtx.createGain();
+      jetHissGain.gain.setValueAtTime(0.44, t);
+
+      jetLpf = audioCtx.createBiquadFilter();
+      jetLpf.type = 'lowpass';
+      jetLpf.frequency.setValueAtTime(3400, t);
+      jetLpf.Q.setValueAtTime(0.80, t);
+
+      jetPanner = createStereoPannerSafe(audioCtx);
+      jetGain = audioCtx.createGain();
+      jetGain.gain.setValueAtTime(0.0001, t);
+      jetReverbSend = audioCtx.createGain();
+      jetReverbSend.gain.setValueAtTime(0.52, t);
+
+      jetSource.connect(jetRoarBpf);
+      jetRoarBpf.connect(jetRoarGain);
+      jetRoarGain.connect(jetLpf);
+
+      jetSource.connect(jetBlastBpf);
+      jetBlastBpf.connect(jetBlastGain);
+      jetBlastGain.connect(jetLpf);
+
+      jetSource.connect(jetHissBpf);
+      jetCrackleSource.connect(jetHissBpf);
+      jetHissBpf.connect(jetHissGain);
+      jetHissGain.connect(jetLpf);
+
+      jetLpf.connect(jetPanner);
+      jetPanner.connect(jetGain);
+      jetGain.connect(dryAmbientBus);
+      jetGain.connect(jetReverbSend);
+      jetReverbSend.connect(ambReverbIn);
+
+      jetSource.start(t, 0.9);
+      jetCrackleSource.start(t, 0.2);
+
       graphInitialized = true;
       graphCtxRef = audioCtx;
       graphDestRef = targetDest;
@@ -1483,11 +1618,170 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
     } catch {}
   }
 
+  function spawnFlameJetIgnitionBurst(pan, atten) {
+    if (disposed || suspended || muted || !graphInitialized || !graphCtxRef || !warmNoiseBuffer || !dryAmbientBus) {
+      return;
+    }
+    const audioCtx = graphCtxRef;
+    const t0 = audioCtx.currentTime;
+    const level = clamp(atten, 0.08, 1.0);
+    const localNodes = [];
+    try {
+      const panner = createStereoPannerSafe(audioCtx);
+      if (panner.pan) panner.pan.setValueAtTime(clamp(pan, -0.92, 0.92), t0);
+      const dryG = audioCtx.createGain();
+      dryG.gain.setValueAtTime(1.32 * level, t0);
+      panner.connect(dryG);
+      dryG.connect(dryAmbientBus);
+      localNodes.push(panner, dryG);
+
+      if (ambReverbIn) {
+        const wetG = audioCtx.createGain();
+        wetG.gain.setValueAtTime(0.72 * level, t0);
+        panner.connect(wetG);
+        wetG.connect(ambReverbIn);
+        localNodes.push(wetG);
+      }
+
+      // Layer A: Deep pressurized furnace detonation WHOOMPH (114 -> 34 Hz + 172 -> 48 Hz punch)
+      const sub = audioCtx.createOscillator();
+      const subG = audioCtx.createGain();
+      sub.type = 'sine';
+      sub.frequency.setValueAtTime(114, t0);
+      sub.frequency.exponentialRampToValueAtTime(34, t0 + 0.30);
+      subG.gain.setValueAtTime(0.0001, t0);
+      subG.gain.linearRampToValueAtTime(0.68, t0 + 0.012);
+      subG.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.34);
+      sub.connect(subG);
+      subG.connect(panner);
+      localNodes.push(sub, subG);
+      sub.start(t0);
+      sub.stop(t0 + 0.36);
+
+      const punch = audioCtx.createOscillator();
+      const punchG = audioCtx.createGain();
+      punch.type = 'triangle';
+      punch.frequency.setValueAtTime(172, t0);
+      punch.frequency.exponentialRampToValueAtTime(48, t0 + 0.16);
+      punchG.gain.setValueAtTime(0.0001, t0);
+      punchG.gain.linearRampToValueAtTime(0.38, t0 + 0.008);
+      punchG.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.18);
+      punch.connect(punchG);
+      punchG.connect(panner);
+      localNodes.push(punch, punchG);
+      punch.start(t0);
+      punch.stop(t0 + 0.20);
+
+      // Layer B: Roaring pressurized flame column surge (230 -> 1480 -> 380 Hz)
+      const nSrc = audioCtx.createBufferSource();
+      nSrc.buffer = warmNoiseBuffer;
+      nSrc.loop = true;
+      const bp = audioCtx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.setValueAtTime(230, t0);
+      bp.frequency.exponentialRampToValueAtTime(1480, t0 + 0.095);
+      bp.frequency.exponentialRampToValueAtTime(380, t0 + 0.54);
+      bp.Q.setValueAtTime(0.95, t0);
+      const ng = audioCtx.createGain();
+      ng.gain.setValueAtTime(0.0001, t0);
+      ng.gain.linearRampToValueAtTime(0.86, t0 + 0.036);
+      ng.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.58);
+      nSrc.connect(bp);
+      bp.connect(ng);
+      ng.connect(panner);
+      localNodes.push(nSrc, bp, ng);
+
+      // Layer C: Crisp searing ignition flash & crackle (1100 -> 3100 -> 1350 Hz)
+      if (transientNoiseBuffer) {
+        const cSrc = audioCtx.createBufferSource();
+        cSrc.buffer = transientNoiseBuffer;
+        cSrc.loop = true;
+        const cBp = audioCtx.createBiquadFilter();
+        cBp.type = 'bandpass';
+        cBp.frequency.setValueAtTime(1100, t0);
+        cBp.frequency.exponentialRampToValueAtTime(3100, t0 + 0.06);
+        cBp.frequency.exponentialRampToValueAtTime(1350, t0 + 0.28);
+        cBp.Q.setValueAtTime(1.15, t0);
+        const cLp = audioCtx.createBiquadFilter();
+        cLp.type = 'lowpass';
+        cLp.frequency.setValueAtTime(3300, t0);
+        const cg = audioCtx.createGain();
+        cg.gain.setValueAtTime(0.0001, t0);
+        cg.gain.linearRampToValueAtTime(0.48, t0 + 0.018);
+        cg.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.30);
+        cSrc.connect(cBp);
+        cBp.connect(cLp);
+        cLp.connect(cg);
+        cg.connect(panner);
+        localNodes.push(cSrc, cBp, cLp, cg);
+        cSrc.start(t0, Math.random() * 0.8, 0.32);
+        cSrc.stop(t0 + 0.33);
+      }
+
+      for (let i = 0; i < localNodes.length; i++) activeTransientNodes.add(localNodes[i]);
+      nSrc.onended = () => {
+        for (let i = 0; i < localNodes.length; i++) {
+          safeDisconnect(localNodes[i]);
+          activeTransientNodes.delete(localNodes[i]);
+        }
+      };
+      nSrc.start(t0, Math.random() * 1.6, 0.60);
+      nSrc.stop(t0 + 0.61);
+    } catch {
+      for (let i = 0; i < localNodes.length; i++) {
+        safeDisconnect(localNodes[i]);
+        activeTransientNodes.delete(localNodes[i]);
+      }
+    }
+  }
+
+  function spawnFlameJetCracklePop(pan, atten) {
+    if (disposed || suspended || muted || !graphInitialized || !graphCtxRef || !transientNoiseBuffer || !jetPanner) {
+      return;
+    }
+    const audioCtx = graphCtxRef;
+    const t0 = audioCtx.currentTime;
+    const dur = 0.012 + Math.random() * 0.026;
+    const freq = 1450 + Math.random() * 1950;
+    const peak = clamp(atten * (0.20 + Math.random() * 0.28), 0.03, 0.48);
+    try {
+      const src = audioCtx.createBufferSource();
+      src.buffer = transientNoiseBuffer;
+      const bp = audioCtx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.setValueAtTime(freq, t0);
+      bp.Q.setValueAtTime(1.8 + Math.random() * 1.6, t0);
+      const g = audioCtx.createGain();
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.linearRampToValueAtTime(peak, t0 + 0.002);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+
+      src.connect(bp);
+      bp.connect(g);
+      g.connect(jetLpf || jetPanner);
+
+      activeTransientNodes.add(src);
+      activeTransientNodes.add(bp);
+      activeTransientNodes.add(g);
+
+      src.onended = () => {
+        safeDisconnect(src);
+        safeDisconnect(bp);
+        safeDisconnect(g);
+        activeTransientNodes.delete(src);
+        activeTransientNodes.delete(bp);
+        activeTransientNodes.delete(g);
+      };
+      const maxOffset = Math.max(0, transientNoiseBuffer.duration - dur - 0.02);
+      src.start(t0, Math.random() * maxOffset, dur + 0.008);
+    } catch {}
+  }
+
   // ==========================================================================
   // Per-Frame Spatial Audio Update (ZERO allocations!)
   // ==========================================================================
 
-  function update(listenerX = 0, listenerZ = 21.8, listenerYaw = 0, isInSouls = false, bossAwakened = false, dt = 0.016) {
+  function update(listenerX = 0, listenerZ = 21.8, listenerYaw = 0, isInSouls = false, bossAwakened = false, dt = 0.016, liveTrapStates = null) {
     if (disposed) return;
 
     const safeDt = clamp(finiteOr(Number(dt), 0.016), 0, 0.12);
@@ -1509,13 +1803,16 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
     if (!activeSouls) {
       curFireTargetGain = 0;
       curWindTargetGain = 0;
+      curFlameJetTargetGain = 0;
       if (!ambientSilenced && graphInitialized && graphCtxRef && fireGain && windGain) {
         const t = graphCtxRef.currentTime;
         safeTargetParam(fireGain.gain, 0.0001, t, 0.14);
         safeTargetParam(windGain.gain, 0.0001, t, 0.18);
+        if (jetGain) safeTargetParam(jetGain.gain, 0.0001, t, 0.10);
         ambientSilenced = true;
         lastSentFireGain = 0.0001;
         lastSentWindGain = 0.0001;
+        lastSentJetGain = 0.0001;
       }
       return;
     }
@@ -1530,9 +1827,11 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
       if (!ambientSilenced && fireGain && windGain) {
         safeTargetParam(fireGain.gain, 0.0001, t, 0.04);
         safeTargetParam(windGain.gain, 0.0001, t, 0.04);
+        if (jetGain) safeTargetParam(jetGain.gain, 0.0001, t, 0.04);
         ambientSilenced = true;
         lastSentFireGain = 0.0001;
         lastSentWindGain = 0.0001;
+        lastSentJetGain = 0.0001;
       }
       return;
     }
@@ -1609,9 +1908,9 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
     const cinemaDuck = (cinematicSession && !cinematicSession.stopped) ? 0.36 : (voiceActive ? 0.42 : 1.0);
     const combatDuck = awakened ? 0.62 : 1.0;
 
-    // Target fire gain: warm & vivid beside Bonfire (~0.34), cozy beside Braziers (~0.24), silent far away
+    // Target fire gain: warm & vivid beside Bonfire (~0.38), clear beside Braziers (~0.29), silent far away
     const targetFireGain = totalFirePresence > 0.004
-      ? clamp(totalFirePresence * 0.275 * flameBreath * cinemaDuck * combatDuck, 0.0001, 0.42)
+      ? clamp(totalFirePresence * 0.315 * flameBreath * cinemaDuck * combatDuck, 0.0001, 0.48)
       : 0.0001;
 
     // Distance air-absorption filter: crisp 9.5 kHz close -> warm 1.7 kHz distant
@@ -1739,12 +2038,160 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
       lastSentWindPan = draftPan;
     }
 
+    // ------------------------------------------------------------------------
+    // 3. Gargoyle Pressurized Flame-Jet Gauntlet (Zone 3 — 5 wall traps)
+    //    Synchronized 1:1 with visual flame jets + ~2.4x visceral roar, crackle & ignition blast!
+    // ------------------------------------------------------------------------
+    let bestJetAtten = 0;
+    let secondaryJetEnergy = 0;
+    let bestJetDist = Infinity;
+    let sumJetEnergy = 0;
+    let weightedJetPan = 0;
+    let maxJetPower = 0;
+    let maxTeleHiss = 0;
+
+    const hasLiveTraps = Array.isArray(liveTrapStates) && liveTrapStates.length > 0;
+    const trapCount = hasLiveTraps
+      ? liveTrapStates.length
+      : (Array.isArray(SOULS_CASTLE_FLAME_TRAPS) ? SOULS_CASTLE_FLAME_TRAPS.length : 0);
+
+    // Evaluate full jet geometry when listener is within hearing range of Zone 3 (z in [-14, +48])
+    if (trapCount > 0 && lz >= -14.0 && lz <= 48.0 && !awakened) {
+      for (let i = 0; i < trapCount; i++) {
+        let ox = 0;
+        let oz = 0;
+        let dirX = 1;
+        let reach = 0;
+        let jetPow = 0;
+        let tele01 = 0;
+        let isFiring = false;
+        let justIgnited = false;
+
+        if (hasLiveTraps) {
+          const st = liveTrapStates[i];
+          if (!st) continue;
+          ox = finiteOr(st.originX, 0);
+          oz = finiteOr(st.originZ, 18);
+          dirX = finiteOr(st.dirX, 1);
+          reach = finiteOr(st.jetReach, 0);
+          jetPow = finiteOr(st.jetPower, 0);
+          tele01 = st.state === 'telegraph' ? finiteOr(st.telegraph01, 0) : 0;
+          isFiring = st.state === 'firing' && jetPow > 0.05;
+          justIgnited = Boolean(st.justStartedFiring) || (isFiring && i < trapWasFiring.length && trapWasFiring[i] === 0);
+        } else {
+          const tr = SOULS_CASTLE_FLAME_TRAPS[i];
+          if (!tr) continue;
+          const ev = evaluateFlameTrapState(tr, clockSec);
+          ox = tr.x;
+          oz = tr.z;
+          dirX = tr.dirX || 1;
+          isFiring = ev.phase === 'jet' && ev.intensity > 0.05;
+          jetPow = isFiring ? ev.intensity : 0;
+          tele01 = ev.phase === 'telegraph' ? ev.phase01 : 0;
+          reach = isFiring ? (tr.jetLength || 9.8) * Math.min(1, 0.35 + 0.65 * (ev.phase01 / 0.14)) : 0;
+          justIgnited = isFiring && i < trapWasFiring.length && trapWasFiring[i] === 0;
+        }
+        if (i < trapWasFiring.length) {
+          trapWasFiring[i] = isFiring ? 1 : 0;
+        }
+
+        // Closest point along active horizontal flame stream [ox .. ox + dirX * reach] at oz
+        const endX = ox + dirX * reach;
+        const segMinX = ox < endX ? ox : endX;
+        const segMaxX = ox > endX ? ox : endX;
+        const cx = isFiring ? clamp(lx, segMinX, segMaxX) : ox;
+        const dx = cx - lx;
+        const dz = oz - lz;
+        const dSq = dx * dx + dz * dz;
+        if (dSq >= 625.0) continue; // 25m corridor hearing range
+
+        const d = Math.sqrt(dSq);
+        const distNorm = clamp((d - 2.4) / 21.6, 0, 1);
+        const distAtten = Math.pow(1.0 - distNorm, 1.55);
+        if (distAtten <= 0.002) continue;
+
+        let pan = 0;
+        if (d > 0.08) {
+          const invD = 1.0 / d;
+          const projR = (dx * rightX + dz * rightZ) * invD;
+          const nearNarrow = d < 1.6 ? clamp(d / 1.6, 0.15, 1.0) : 1.0;
+          pan = clamp(projR * 0.90 * nearNarrow, -0.92, 0.92);
+        }
+
+        if (justIgnited && distAtten > 0.06 && clockSec - lastJetBurstAt > 0.09) {
+          lastJetBurstAt = clockSec;
+          spawnFlameJetIgnitionBurst(pan, distAtten * cinemaDuck);
+        }
+
+        const trapActivity = isFiring ? jetPow : (tele01 > 0.02 ? tele01 * 0.28 : 0);
+        if (trapActivity <= 0.004) continue;
+
+        const contrib = distAtten * trapActivity;
+        if (contrib > bestJetAtten) {
+          secondaryJetEnergy += bestJetAtten * 0.28;
+          bestJetAtten = contrib;
+          bestJetDist = d;
+        } else {
+          secondaryJetEnergy += contrib * 0.28;
+        }
+        if (jetPow * distAtten > maxJetPower) maxJetPower = jetPow * distAtten;
+        if (tele01 * distAtten > maxTeleHiss) maxTeleHiss = tele01 * distAtten;
+
+        const wSq = contrib * contrib;
+        weightedJetPan += pan * wSq;
+        sumJetEnergy += wSq;
+      }
+    } else {
+      trapWasFiring.fill(0);
+    }
+
+    const totalJetPresence = clamp(bestJetAtten + Math.min(0.35, secondaryJetEnergy), 0, 1.38);
+    const jetTurbulence = 1.0 + 0.12 * Math.sin(clockSec * 18.2) + 0.08 * Math.sin(clockSec * 31.4 + 0.7);
+    const targetJetGain = totalJetPresence > 0.004
+      ? clamp(totalJetPresence * 1.32 * jetTurbulence * cinemaDuck, 0.0001, 1.48)
+      : 0.0001;
+    const targetJetPan = sumJetEnergy > 1e-6 ? clamp(weightedJetPan / sumJetEnergy, -0.92, 0.92) : 0;
+    const jetProxNorm = bestJetDist < Infinity ? clamp((bestJetDist - 2.0) / 18.0, 0, 1) : 1;
+    // Wide 3400 Hz close-up (~2600-3400 Hz across corridor lane) -> 1550 Hz far away
+    const targetJetCutoff = 3400 - jetProxNorm * 1850;
+    const targetBlastGain = 0.55 + clamp(maxJetPower, 0, 1) * 1.10;
+    const targetHissGain = 0.24 + clamp(maxTeleHiss * 0.56 + maxJetPower * 0.54, 0, 0.88);
+
+    // Live searing flame crackle snaps while active corridor jets roar nearby
+    if (maxJetPower > 0.14 && clockSec >= nextJetCrackleAt) {
+      spawnFlameJetCracklePop(targetJetPan, clamp(maxJetPower * cinemaDuck, 0.15, 1.0));
+      nextJetCrackleAt = clockSec + 0.038 + Math.random() * 0.062;
+    }
+
+    if (jetGain && !(Math.abs(targetJetGain - lastSentJetGain) < 0.0015)) {
+      safeTargetParam(jetGain.gain, targetJetGain, t, targetJetGain > (lastSentJetGain || 0) ? 0.038 : 0.075);
+      lastSentJetGain = targetJetGain;
+    }
+    if (jetPanner && !(Math.abs(targetJetPan - lastSentJetPan) < 0.006)) {
+      setPannerValue(jetPanner, targetJetPan, t, 0.05);
+      lastSentJetPan = targetJetPan;
+    }
+    if (jetLpf && !(Math.abs(targetJetCutoff - lastSentJetCutoff) < 28)) {
+      safeTargetParam(jetLpf.frequency, targetJetCutoff, t, 0.065);
+      lastSentJetCutoff = targetJetCutoff;
+    }
+    if (jetBlastGain && !(Math.abs(targetBlastGain - lastSentJetBlastGain) < 0.008)) {
+      safeTargetParam(jetBlastGain.gain, targetBlastGain, t, 0.05);
+      lastSentJetBlastGain = targetBlastGain;
+    }
+    if (jetHissGain && !(Math.abs(targetHissGain - lastSentJetHissGain) < 0.008)) {
+      safeTargetParam(jetHissGain.gain, targetHissGain, t, 0.05);
+      lastSentJetHissGain = targetHissGain;
+    }
+
     // Record telemetry
     curNearestFireId = bestId;
     curNearestFireDist = bestDist;
     curFireTargetGain = targetFireGain;
     curFireTargetPan = stereoPan;
     curWindTargetGain = targetWindGain;
+    curFlameJetTargetGain = targetJetGain;
+    curFlameJetTargetPan = targetJetPan;
   }
 
   // ==========================================================================
@@ -3093,9 +3540,11 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
       const t = graphCtxRef.currentTime;
       safeTargetParam(fireGain.gain, 0.0001, t, 0.02);
       safeTargetParam(windGain.gain, 0.0001, t, 0.02);
+      if (jetGain) safeTargetParam(jetGain.gain, 0.0001, t, 0.02);
       ambientSilenced = true;
       lastSentFireGain = 0.0001;
       lastSentWindGain = 0.0001;
+      lastSentJetGain = 0.0001;
     }
   }
 
@@ -3260,6 +3709,8 @@ export function createSoulsSpatialAudio(audioCtxOrOpts = null, masterGainArg = n
       fireGain: Number(curFireTargetGain.toFixed(4)),
       firePan: Number(curFireTargetPan.toFixed(3)),
       windGain: Number(curWindTargetGain.toFixed(4)),
+      flameJetGain: Number(curFlameJetTargetGain.toFixed(4)),
+      flameJetPan: Number(curFlameJetTargetPan.toFixed(3)),
       cinematicActive: isCinematicPlaying(),
       cinematicElapsed: Number(getCinematicElapsed().toFixed(3))
     };

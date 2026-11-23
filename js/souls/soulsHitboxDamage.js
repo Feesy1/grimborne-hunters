@@ -116,122 +116,164 @@ export function computeSoulsDamage({
 }
 
 /**
- * 1H Straight Sword (Warrior) Motion Values & TAE event timings (seconds).
+ * 1H Straight Sword (Warrior baseline) Motion Values & TAE event timings (seconds).
+ * Calibrated to Elden Ring frame data: tangible windup coil, crisp active whip,
+ * weighted follow-through overshoot, and real animation commitment before roll/chain cancel!
  */
 export const SOULS_ATTACK_SPECS = Object.freeze({
   r1_1: Object.freeze({
-    startup: 0.22,
-    active: 0.060,
-    recovery: 0.24,
-    cancelChainAt: 0.29,
-    cancelRollAt: 0.30,
-    cancelBlockAt: 0.31,
-    trackingCutoff01: 0.68,
+    startup: 0.26,
+    active: 0.165,
+    recovery: 0.42,
+    cancelChainAt: 0.52,
+    cancelRollAt: 0.50,
+    cancelBlockAt: 0.52,
+    trackingCutoff01: 0.70,
     mv: 1.00,
-    stanceDmg: 7,
+    stanceDmg: 8,
     stamina: 12,
-    hitstop: 0.042,
-    lungeDist: 0.45
+    hitstop: 0.058,
+    lungeDist: 0.68
   }),
   r1_2: Object.freeze({
-    startup: 0.245,
-    active: 0.060,
-    recovery: 0.26,
-    cancelChainAt: 0.32,
-    cancelRollAt: 0.33,
-    cancelBlockAt: 0.34,
-    trackingCutoff01: 0.68,
-    mv: 1.04,
-    stanceDmg: 7,
+    startup: 0.26,
+    active: 0.165,
+    recovery: 0.44,
+    cancelChainAt: 0.54,
+    cancelRollAt: 0.52,
+    cancelBlockAt: 0.54,
+    trackingCutoff01: 0.70,
+    mv: 1.06,
+    stanceDmg: 9,
     stamina: 12,
-    hitstop: 0.045,
-    lungeDist: 0.78
+    hitstop: 0.062,
+    lungeDist: 0.80
   }),
   r1_3: Object.freeze({
-    startup: 0.34,
-    active: 0.065,
-    recovery: 0.34,
-    cancelChainAt: 0.48,
-    cancelRollAt: 0.44,
-    cancelBlockAt: 0.45,
-    trackingCutoff01: 0.65,
-    mv: 1.22,
-    stanceDmg: 18,
-    stamina: 16,
-    hitstop: 0.062,
-    lungeDist: 0.55,
+    startup: 0.36,
+    active: 0.185,
+    recovery: 0.54,
+    cancelChainAt: 0.92,
+    cancelRollAt: 0.70,
+    cancelBlockAt: 0.72,
+    trackingCutoff01: 0.66,
+    mv: 1.32,
+    stanceDmg: 20,
+    stamina: 17,
+    hitstop: 0.086,
+    lungeDist: 0.92,
     hyperarmor: true
   }),
   r2: Object.freeze({
-    startup: 0.37,
-    active: 0.065,
-    recovery: 0.34,
-    cancelChainAt: 0.50,
-    cancelRollAt: 0.46,
-    cancelBlockAt: 0.48,
-    trackingCutoff01: 0.66,
-    mv: 1.38,
-    stanceDmg: 18,
+    startup: 0.38,
+    active: 0.180,
+    recovery: 0.50,
+    cancelChainAt: 0.82,
+    cancelRollAt: 0.68,
+    cancelBlockAt: 0.70,
+    trackingCutoff01: 0.68,
+    mv: 1.44,
+    stanceDmg: 20,
     stamina: 20,
-    hitstop: 0.068,
-    lungeDist: 0.85,
+    hitstop: 0.088,
+    lungeDist: 1.10,
     hyperarmor: true
   }),
   charged_r2: Object.freeze({
-    startup: 0.62,
-    active: 0.070,
-    recovery: 0.38,
-    cancelChainAt: 0.76,
-    cancelRollAt: 0.72,
-    cancelBlockAt: 0.74,
-    trackingCutoff01: 0.64,
-    mv: 1.70,
-    stanceDmg: 30,
+    startup: 0.66,
+    active: 0.195,
+    recovery: 0.56,
+    cancelChainAt: 1.04,
+    cancelRollAt: 0.92,
+    cancelBlockAt: 0.94,
+    trackingCutoff01: 0.66,
+    mv: 1.82,
+    stanceDmg: 34,
     stamina: 28,
-    hitstop: 0.085,
-    lungeDist: 1.05,
+    hitstop: 0.110,
+    lungeDist: 1.36,
     hyperarmor: true
   }),
   rolling_r1: Object.freeze({
-    startup: 0.20,
-    active: 0.055,
-    recovery: 0.24,
-    cancelChainAt: 0.28,
-    cancelRollAt: 0.29,
-    cancelBlockAt: 0.30,
-    trackingCutoff01: 0.70,
-    mv: 0.92,
-    stanceDmg: 6,
+    startup: 0.22,
+    active: 0.150,
+    recovery: 0.38,
+    cancelChainAt: 0.48,
+    cancelRollAt: 0.46,
+    cancelBlockAt: 0.48,
+    trackingCutoff01: 0.72,
+    mv: 0.98,
+    stanceDmg: 8,
     stamina: 14,
-    hitstop: 0.038,
-    lungeDist: 0.60,
+    hitstop: 0.054,
+    lungeDist: 0.74,
     isPierce: true
   }),
   guard_counter: Object.freeze({
-    startup: 0.26,
-    active: 0.065,
-    recovery: 0.30,
-    cancelChainAt: 0.38,
-    cancelRollAt: 0.36,
-    cancelBlockAt: 0.38,
-    trackingCutoff01: 0.72,
-    mv: 1.32,
-    stanceDmg: 30,
+    startup: 0.28,
+    active: 0.170,
+    recovery: 0.45,
+    cancelChainAt: 0.62,
+    cancelRollAt: 0.56,
+    cancelBlockAt: 0.58,
+    trackingCutoff01: 0.74,
+    mv: 1.40,
+    stanceDmg: 32,
     stamina: 18,
-    hitstop: 0.078,
-    lungeDist: 0.90,
+    hitstop: 0.096,
+    lungeDist: 1.00,
     hyperarmor: true
   })
 });
 
+export const SOULS_WEAPON_WEIGHT_PROFILES = Object.freeze({
+  club: Object.freeze({ timeMult: 1.00, lungeMult: 1.00, staminaMult: 1.00, stanceMult: 1.00, hitstopMult: 1.00 }),
+  spear: Object.freeze({ timeMult: 1.09, lungeMult: 1.22, staminaMult: 1.12, stanceMult: 1.15, hitstopMult: 1.10, forcePierce: true }),
+  cleaver: Object.freeze({ timeMult: 1.12, lungeMult: 1.10, staminaMult: 1.15, stanceMult: 1.22, hitstopMult: 1.15 }),
+  axe: Object.freeze({ timeMult: 1.16, lungeMult: 1.06, staminaMult: 1.20, stanceMult: 1.35, hitstopMult: 1.20 }),
+  flail: Object.freeze({ timeMult: 1.18, lungeMult: 1.08, staminaMult: 1.22, stanceMult: 1.38, hitstopMult: 1.22 }),
+  zweihander: Object.freeze({ timeMult: 1.28, lungeMult: 1.16, staminaMult: 1.35, stanceMult: 1.65, hitstopMult: 1.35, hyperarmorHeavy: true }),
+  boss_hammer: Object.freeze({ timeMult: 1.36, lungeMult: 1.12, staminaMult: 1.45, stanceMult: 1.85, hitstopMult: 1.45, hyperarmorHeavy: true })
+});
+
+const _scaledSpecCache = new Map();
+
 /**
- * Safe lookup helper for SOULS_ATTACK_SPECS.
+ * Safe lookup helper for SOULS_ATTACK_SPECS with zero-alloc weapon-class weight scaling.
  *
  * @param {string} attackKey
+ * @param {string|null} [weaponId=null]
  * @returns {object}
  */
-export function getSoulsAttackSpec(attackKey) {
-  return (attackKey && SOULS_ATTACK_SPECS[attackKey]) || SOULS_ATTACK_SPECS.r1_1;
+export function getSoulsAttackSpec(attackKey, weaponId = null) {
+  const safeKey = attackKey && SOULS_ATTACK_SPECS[attackKey] ? attackKey : 'r1_1';
+  const base = SOULS_ATTACK_SPECS[safeKey];
+  if (!weaponId || weaponId === 'club' || !SOULS_WEAPON_WEIGHT_PROFILES[weaponId]) {
+    return base;
+  }
+  const cacheKey = `${weaponId}:${safeKey}`;
+  const cached = _scaledSpecCache.get(cacheKey);
+  if (cached) return cached;
+
+  const wp = SOULS_WEAPON_WEIGHT_PROFILES[weaponId];
+  const tm = wp.timeMult || 1.0;
+  const scaled = Object.freeze({
+    ...base,
+    startup: +(base.startup * tm).toFixed(3),
+    active: +(base.active * (1 + (tm - 1) * 0.55)).toFixed(3),
+    recovery: +(base.recovery * tm).toFixed(3),
+    cancelChainAt: +(base.cancelChainAt * tm).toFixed(3),
+    cancelRollAt: +(base.cancelRollAt * tm).toFixed(3),
+    cancelBlockAt: +(base.cancelBlockAt * tm).toFixed(3),
+    stanceDmg: Math.round(base.stanceDmg * (wp.stanceMult || 1.0)),
+    stamina: Math.round(base.stamina * (wp.staminaMult || 1.0)),
+    hitstop: +(base.hitstop * (wp.hitstopMult || 1.0)).toFixed(3),
+    lungeDist: +(base.lungeDist * (wp.lungeMult || 1.0)).toFixed(3),
+    isPierce: Boolean(base.isPierce || wp.forcePierce),
+    hyperarmor: Boolean(base.hyperarmor || (wp.hyperarmorHeavy && safeKey !== 'rolling_r1'))
+  });
+  _scaledSpecCache.set(cacheKey, scaled);
+  return scaled;
 }
 
 /**

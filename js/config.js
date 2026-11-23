@@ -1,7 +1,8 @@
-// Shared configuration, class definitions, weapon progression, 9-archetype enemy roster, and 25-level campaign
-// All modules import from './config.js' and adhere strictly to these IDs and data shapes.
+// Pure Soulslike Configuration («Охотники Мрака — Замок Пепла»):
+// - Warrior Hero Class + 5 Melee Weapons (Oath Broadsword+Shield, Spear, Zweihander, War Cleaver Axe, Bonecrusher Hammer)
+// - Castle of Ash Enemy Roster (Vanguard, Executioner, Acolyte, Judge of Ruins Boss)
 
-export const ARENA_HALF_SIZE = 23; // 3D arena [-23, +23] — 30% smaller than the previous 66 m layout
+export const ARENA_HALF_SIZE = 23;
 export const WEAPON_MAX_LEVEL = 12;
 
 export const CLASSES = {
@@ -9,11 +10,10 @@ export const CLASSES = {
     id: 'warrior',
     nameRu: 'Воин Клятвы',
     nameEn: 'Oath Warrior',
-    roleRu: 'Ближний бой • Стальной щит и рассекающий клинок',
-    roleEn: 'Melee • High HP & Shield Block',
-    descRu: 'Неудержимый скелет-латник с мечом и щитом. Держит удар в самой гуще орды, отражает выпады и рубит нежить широкими дугами.',
-    descEn: 'Armored skeleton bruiser with high health, shield block, and sweeping blade strikes.',
-    portrait: './assets/ui/portrait_warrior.png',
+    roleRu: 'Ближний бой • Стальной щит и клинок',
+    roleEn: 'Melee • Iron Shield & Broadsword',
+    descRu: 'Неудержимый латник с мечом и щитом. Парирует удары, держит стойку и сокрушает врагов в ближнем бою.',
+    descEn: 'Armored knight with broadsword and shield.',
     maxHp: 145,
     moveSpeed: 4.4,
     damageBlock: 0.26,
@@ -22,121 +22,19 @@ export const CLASSES = {
     colorSecondary: 0xc8ccd4,
     colorAccent: 0xf4b942,
     starterWeapon: 'club',
-    weapons: ['club', 'spear', 'zweihander', 'axe', 'boss_hammer'],
-    beastNameRu: 'Железный Жнец',
-    beastColor: 0xd9480f
-  },
-  gunslinger: {
-    id: 'gunslinger',
-    nameRu: 'Охотник-Стрелок',
-    nameEn: 'Grim Gunslinger',
-    roleRu: 'Стрелок • USP, Кольт, ПП, Дробовик, АК-47',
-    roleEn: 'Gunslinger • USP, Colt, SMG, Shotgun & AK-47',
-    descRu: 'Ловкий стрелок в капюшоне с тактическим пистолетом USP. Маневрирует на максимальной скорости, меняет стволы от Кольта до АК-47 и перезаряжает на бегу.',
-    descEn: 'Swift hooded hunter starting with a Tactical USP pistol and unlocking Colt, SMG, Shotgun, and AK-47.',
-    portrait: './assets/ui/portrait_gunslinger.png',
-    maxHp: 110,
-    moveSpeed: 6.16,
-    damageBlock: 0.14,
-    blockChance: 0.08,
-    colorPrimary: 0x2b3a4a,
-    colorSecondary: 0x6b4423,
-    colorAccent: 0xe09f3e,
-    starterWeapon: 'usp_pistol',
-    weapons: ['usp_pistol', 'colt', 'smg', 'pistol', 'ak47'],
-    beastNameRu: 'Гончая Пороха',
-    beastColor: 0x3b82f6
-  },
-  mage: {
-    id: 'mage',
-    nameRu: 'Маг Воды',
-    nameEn: 'Water Mage',
-    roleRu: 'Владыка прилива • Живая водная сфера',
-    roleEn: 'Tidecaller • Living Water Sphere',
-    descRu: 'Заклинатель глубин с живым водяным скипетром. Непрерывно восстанавливает ману, замедляет врагов приливом и выпускает стремительные водные сферы со шлейфом брызг.',
-    descEn: 'Spellcaster of the deep channeling regenerating mana into swirling water spheres.',
-    portrait: './assets/ui/portrait_mage.png',
-    maxHp: 92,
-    moveSpeed: 5.32,
-    maxMana: 120,
-    manaRegen: 9.5,
-    damageBlock: 0.05,
-    blockChance: 0.0,
-    colorPrimary: 0x0369a1,
-    colorSecondary: 0x0c4a6e,
-    colorAccent: 0x38bdf8,
-    starterWeapon: 'spark_staff',
-    weapons: ['spark_staff'],
-    beastNameRu: 'Владыка Океана',
-    beastColor: 0x0ea5e9
+    weapons: ['club', 'spear', 'zweihander', 'axe', 'boss_hammer']
   }
 };
 
-// 4 Elemental Schools for Mage (1st Element chosen FREE on first play; remaining 3 unlock progressively!)
-export const MAGE_ELEMENTS = {
-  fire: {
-    id: 'fire',
-    nameRu: 'Огонь',
-    nameEn: 'Fire',
-    shortRu: 'Огонь',
-    icon: '🔥',
-    color: 0xff5722,
-    coreColor: 0xfef08a,
-    staffColor: 0xff6b35,
-    staffEmissive: 0xea580c,
-    descRu: 'Жар Пепла: накладывает мощное стакающееся горение (до 8 зарядов) и увеличивает урон мага по горящей цели на +12% за заряд.'
-  },
-  water: {
-    id: 'water',
-    nameRu: 'Вода',
-    nameEn: 'Water',
-    shortRu: 'Вода',
-    icon: '💧',
-    color: 0x0ea5e9,
-    coreColor: 0xe0f2fe,
-    staffColor: 0x38bdf8,
-    staffEmissive: 0x0284c7,
-    descRu: 'Контроль Воды: замедляет врагов на 42%, а с шансом 7% поднимает группу врагов в водяном шаре в воздух и с грохотом роняет на ×3 урона!'
-  },
-  lightning: {
-    id: 'lightning',
-    nameRu: 'Электричество',
-    nameEn: 'Lightning',
-    shortRu: 'Молния',
-    icon: '⚡',
-    color: 0x38bdf8,
-    coreColor: 0xfef08a,
-    staffColor: 0xfde047,
-    staffEmissive: 0x06b6d4,
-    descRu: 'Цепная Молния: стремительный разряд (+32% скорость), перескакивающий цепной молнией по соседним врагам с широким охватом.'
-  },
-  air: {
-    id: 'air',
-    nameRu: 'Сила Воздуха',
-    nameEn: 'Air Force',
-    shortRu: 'Воздух',
-    icon: '🌪️',
-    color: 0x5eead4,
-    coreColor: 0xf8fafc,
-    staffColor: 0x99f6e4,
-    staffEmissive: 0x14b8a6,
-    descRu: 'Порыв Ветра: лёгкий контроль отталкиванием, компактный вихревой сплэш вокруг цели и +8% к скорости шага мага.'
-  }
-};
-export const MAGE_ELEMENT_ORDER = ['water'];
-export const MAGE_ELEMENT_UNLOCK_COSTS = [0];
-
+// All 5 Warrior Melee Weapons preserved for in-world discovery & equipment
 export const WEAPONS = {
-  // === WARRIOR ===
   club: {
     id: 'club',
     classId: 'warrior',
     tier: 1,
-    unlockLevel: 1,
-    shopCost: 0,
     nameRu: 'Меч Клятвы',
     nameEn: 'Oath Broadsword',
-    descRu: 'Базовый меч Воина: бег 5.5 м/с, атака 0.67 с (1.5 уд/с), дальность 1.25 м, пробитие брони 15%. Бьёт строго 1 цель без сплэша.',
+    descRu: 'Клинок и щит рыцаря: сбалансированная скорость, блок и парирование.',
     type: 'melee',
     baseDamage: 15,
     cooldown: 0.67,
@@ -147,20 +45,16 @@ export const WEAPONS = {
     splashRadius: 0,
     moveSpeedMult: 1.0,
     maxTargets: 1,
-    color: 0xd97706,
-    upgradeBaseCost: 45
+    color: 0xd97706
   },
   spear: {
     id: 'spear',
     classId: 'warrior',
     tier: 2,
     twoHanded: true,
-    unlockLevel: 3,
-    blueprintChestChance: 0.20,
-    shopCost: 220,
     nameRu: 'Боевое Копьё',
     nameEn: 'Executioner Spear',
-    descRu: 'Двуручное копьё на 2.0 м, задержка 0.75 с, бег 4.0 м/с. Пробивает до 2 врагов в линию: 1-я цель 100% / 30% проб., 2-я позади — 50% / 15% проб. Чертёж из сундуков III+ (20%).',
+    descRu: 'Двуручное копьё с длинным выпадом и высоким пробитием брони.',
     type: 'melee',
     baseDamage: 15,
     cooldown: 0.75,
@@ -171,19 +65,16 @@ export const WEAPONS = {
     splashRadius: 0,
     moveSpeedMult: 0.727273,
     maxTargets: 2,
-    color: 0x38bdf8,
-    upgradeBaseCost: 85
+    color: 0x38bdf8
   },
   zweihander: {
     id: 'zweihander',
     classId: 'warrior',
     tier: 3,
     twoHanded: true,
-    unlockLevel: 8,
-    shopCost: 340,
     nameRu: 'Цвайхандер',
     nameEn: 'Iron Zweihander',
-    descRu: 'Двуручный гигантский меч: бег 3.5 м/с, атака 1.0 с, дальность 1.8 м, урон 20, 50% пробития брони, удар до 2 целей спереди и 20% шанс обезоружить врага на 2 с. Открывается после 7-го этапа.',
+    descRu: 'Гигантский двуручный меч с широкой дугой и тяжёлым ударом.',
     type: 'melee',
     baseDamage: 20,
     cooldown: 1.0,
@@ -196,20 +87,16 @@ export const WEAPONS = {
     maxTargets: 2,
     disarmChance: 0.20,
     disarmDuration: 2.0,
-    color: 0xcbd5e1,
-    upgradeBaseCost: 110
+    color: 0xcbd5e1
   },
   axe: {
     id: 'axe',
     classId: 'warrior',
     tier: 3,
     twoHanded: true,
-    unlockLevel: 5,
-    unlockRequiresBossStage: 5,
-    shopCost: 420,
     nameRu: 'Боевая Секира',
     nameEn: 'War Cleaver Axe',
-    descRu: 'Тяжёлый топор: скорость бега 3.3 м/с, задержка 1.0 с, дальность 1.5 м, 50% пробития брони и сплэш строго спереди до 3 целей по 100% урона! Открывается после босса 5-го этапа.',
+    descRu: 'Тяжёлая двуручная секира с сокрушительным рассечением.',
     type: 'melee',
     baseDamage: 20,
     cooldown: 1.0,
@@ -220,21 +107,16 @@ export const WEAPONS = {
     splashRadius: 1.5,
     moveSpeedMult: 0.60,
     maxTargets: 3,
-    color: 0xef4444,
-    upgradeBaseCost: 135
+    color: 0xef4444
   },
   boss_hammer: {
     id: 'boss_hammer',
     classId: 'warrior',
     tier: 4,
     twoHanded: true,
-    bossExclusive: true,
-    bossDropChance: 0.10,
-    bossDropMilestones: [5, 10, 15, 20, 25],
-    shopCost: 0,
     nameRu: 'Молот Костолома',
     nameEn: 'Bonecrusher Hammer',
-    descRu: 'Трофей босса (10% шанс за первое прохождение этапов 5, 10, 15, 20, 25): бег 3.3 м/с, атака 1.1 с, дальность 1.6 м, урон 35, 60% пробития. Бьёт до 3 целей спереди + 1 за спиной 1-й (все 100%), шанс 25% оглушить на 0.5 с.',
+    descRu: 'Массивный боевой молот, ломающий стойку и доспехи.',
     type: 'melee',
     baseDamage: 35,
     cooldown: 1.1,
@@ -247,709 +129,58 @@ export const WEAPONS = {
     maxTargets: 3,
     stunChance: 0.25,
     stunDuration: 0.5,
-    color: 0xf59e0b,
-    upgradeBaseCost: 185
-  },
-
-  // === GUNSLINGER (USP Starter -> Colt -> SMG -> Hunter Shotgun -> AK-47) ===
-  usp_pistol: {
-    id: 'usp_pistol',
-    classId: 'gunslinger',
-    tier: 1,
-    unlockLevel: 1,
-    shopCost: 0,
-    nameRu: 'Тактический USP',
-    nameEn: 'Tactical USP',
-    descRu: 'Стартовый пистолет Стрелка на 15 патронов (перезарядка 2.0 с). Максимальная скорость бега, не пробивает цели насквозь, 15% пробития брони.',
-    type: 'ranged',
-    isShotgun: false,
-    moveSpeedMult: 1.0,
-    baseDamage: 20,
-    cooldown: 0.42,
-    range: 15.0,
-    projectileSpeed: 24,
-    pellets: 1,
-    spread: 0.03,
-    moveSpread: 0.04,
-    focusSpread: 0.02,
-    focusTime: 1.0,
-    pierce: 1,
-    armorPierce: 0.15,
-    splashRadius: 0,
-    knockback: 3.0,
-    magSize: 15,
-    reloadTime: 2.0,
-    recoilKick: 0.9,
-    color: 0xe2e8f0,
-    upgradeBaseCost: 55
-  },
-  colt: {
-    id: 'colt',
-    classId: 'gunslinger',
-    tier: 2,
-    unlockLevel: 3,
-    shopCost: 220,
-    nameRu: 'Револьвер Кольт',
-    nameEn: 'Colt Revolver',
-    descRu: 'Тяжёлый Кольт на 7 патронов (перезарядка 3.5 с): высокая мощность, скорострельность вдвое ниже USP, пробивает до 3 врагов (100% / 50% / 25%).',
-    type: 'ranged',
-    isShotgun: false,
-    moveSpeedMult: 1.0,
-    baseDamage: 40,
-    cooldown: 0.84,
-    range: 15.0,
-    projectileSpeed: 25,
-    pellets: 1,
-    spread: 0.03,
-    moveSpread: 0.04,
-    focusSpread: 0.02,
-    focusTime: 1.0,
-    pierce: 3,
-    pierceDecay: [1.0, 0.5, 0.25],
-    armorPierce: 0.28,
-    splashRadius: 0,
-    knockback: 4.8,
-    magSize: 7,
-    reloadTime: 3.5,
-    recoilKick: 1.6,
-    color: 0xfbbf24,
-    upgradeBaseCost: 80
-  },
-  smg: {
-    id: 'smg',
-    classId: 'gunslinger',
-    tier: 3,
-    unlockLevel: 5,
-    shopCost: 300,
-    nameRu: 'Пистолет-пулемёт',
-    nameEn: 'Darksteel SMG',
-    descRu: 'ПП на 25 патронов (перезарядка 3.0 с): вдвое выше темп стрельбы, ниже урон, -20% бега, дальность -13%, разброс 40% в движении и ~10% через 2 с на месте.',
-    type: 'ranged',
-    isShotgun: false,
-    moveSpeedMult: 0.80,
-    baseDamage: 12,
-    cooldown: 0.21,
-    range: 13.0,
-    projectileSpeed: 23,
-    pellets: 1,
-    spread: 0.10,
-    moveSpread: 0.40,
-    focusSpread: 0.10,
-    focusTime: 2.0,
-    pierce: 1,
-    armorPierce: 0.20,
-    splashRadius: 0,
-    knockback: 1.8,
-    magSize: 25,
-    reloadTime: 3.0,
-    recoilKick: 0.7,
-    color: 0xf59e0b,
-    upgradeBaseCost: 100
-  },
-  pistol: {
-    id: 'pistol',
-    classId: 'gunslinger',
-    tier: 4,
-    unlockLevel: 7,
-    shopCost: 380,
-    nameRu: 'Охотничье ружьё',
-    nameEn: 'Hunter Pump Shotgun',
-    descRu: 'Помповый дробовик на 8 патронов (4.0 с / дозарядка 0.5 с за патрон): 6 дробинок (на 10% меньше урона Кольта в упор), -40% бега, -50% дальности, разброс 80% → 10% за 2.5 с.',
-    type: 'ranged',
-    isShotgun: true,
-    moveSpeedMult: 0.60,
-    baseDamage: 6,
-    cooldown: 0.78,
-    range: 7.5,
-    projectileSpeed: 19,
-    pellets: 6,
-    spread: 0.10,
-    moveSpread: 0.80,
-    focusSpread: 0.10,
-    focusTime: 2.5,
-    pierce: 1,
-    armorPierce: 0.25,
-    splashRadius: 0,
-    knockback: 6.5,
-    magSize: 8,
-    reloadTime: 4.0,
-    reloadPerShellTime: 0.5,
-    recoilKick: 2.4,
-    color: 0xfbbf24,
-    upgradeBaseCost: 120
-  },
-  ak47: {
-    id: 'ak47',
-    classId: 'gunslinger',
-    tier: 5,
-    unlockLevel: 11,
-    shopCost: 480,
-    nameRu: 'АК-47',
-    nameEn: 'Assault Rifle AK-47',
-    descRu: 'Автомат на 35 патронов (перезарядка 2.0 с): урон выше ПП, темп на 20% ниже ПП, -30% бега, пробивает 2 цели и стреляет на всю карту в пределах арены.',
-    type: 'ranged',
-    isShotgun: false,
-    moveSpeedMult: 0.70,
-    baseDamage: 18,
-    cooldown: 0.2625,
-    range: 54.0,
-    clampToArenaBounds: true,
-    projectileSpeed: 27,
-    pellets: 1,
-    spread: 0.08,
-    moveSpread: 0.14,
-    focusSpread: 0.05,
-    focusTime: 1.5,
-    pierce: 2,
-    armorPierce: 0.36,
-    splashRadius: 0,
-    knockback: 2.8,
-    magSize: 35,
-    reloadTime: 2.0,
-    recoilKick: 1.3,
-    color: 0xef4444,
-    upgradeBaseCost: 150
-  },
-  blunderbuss: {
-    id: 'blunderbuss',
-    classId: 'gunslinger',
-    tier: 4,
-    unlockLevel: 6,
-    shopCost: 380,
-    nameRu: 'Двуствольный мушкетон «Гром»',
-    nameEn: 'Thunder Double-Barrel',
-    descRu: 'Убойная двустволка на 2 гильзы: выплёвывает шквал из 11 картечин (28% пробития брони), сносящий отряд в упор.',
-    type: 'ranged',
-    isShotgun: true,
-    baseDamage: 12,
-    cooldown: 0.54,
-    range: 12.0,
-    projectileSpeed: 18.5,
-    pellets: 11,
-    spread: 0.50,
-    pierce: 1,
-    armorPierce: 0.28,
-    splashRadius: 0,
-    knockback: 10.8,
-    magSize: 2,
-    reloadTime: 2.25,
-    recoilKick: 4.5,
-    color: 0xf97316,
-    upgradeBaseCost: 95
-  },
-  gatling: {
-    id: 'gatling',
-    classId: 'gunslinger',
-    tier: 5,
-    unlockLevel: 8,
-    shopCost: 560,
-    nameRu: 'Барабанный дробовик «Шквал»',
-    nameEn: 'Tempest Drum Shotgun',
-    descRu: 'Автоматическое ружьё с барабаном на 8 патронов и бронебойной картечью на вылет (36% пробития брони).',
-    type: 'ranged',
-    isShotgun: true,
-    baseDamage: 14,
-    cooldown: 0.36,
-    range: 15.5,
-    projectileSpeed: 21,
-    pellets: 5,
-    spread: 0.25,
-    pierce: 2,
-    armorPierce: 0.36,
-    splashRadius: 0,
-    knockback: 5.6,
-    magSize: 8,
-    reloadTime: 2.50,
-    recoilKick: 1.9,
-    color: 0x38bdf8,
-    upgradeBaseCost: 145
-  },
-
-  // === MAGE (Single Pure Water Scepter — Upgradable up to Level 30, Continuous Mana Pool!) ===
-  spark_staff: {
-    id: 'spark_staff',
-    classId: 'mage',
-    tier: 1,
-    maxLevel: 30,
-    unlockLevel: 1,
-    shopCost: 0,
-    nameRu: 'Водяной скипетр',
-    nameEn: 'Water Scepter',
-    descRu: 'Выпускает живую водную сферу с вихревым шлейфом и 25% магического пробития брони. Расходует ману без перезарядки.',
-    type: 'magic',
-    baseDamage: 28,
-    cooldown: 0.50,
-    range: 16.5,
-    projectileSpeed: 9.8,
-    pellets: 1,
-    spread: 0.02,
-    pierce: 1,
-    armorPierce: 0.25,
-    splashRadius: 2.4,
-    knockback: 3.0,
-    magSize: 0,
-    reloadTime: 0,
-    manaCost: 7.5,
-    recoilKick: 0.5,
-    color: 0x38bdf8,
-    upgradeBaseCost: 45
+    color: 0xf59e0b
   }
 };
 
-// 16-Archetype Dark-Fantasy Villain Roster + 5 Milestone Act Bosses (matching ad09b7c9.jpg 1-to-1!)
+// Castle of Ash Enemy Archetypes
 export const ENEMY_TYPES = {
-  // === 16 Regular & Specialist Dark-Fantasy Monsters ===
-  ember_skeleton: {
-    id: 'ember_skeleton',
-    nameRu: 'Пылающий скелет',
-    roleHintRu: 'Пылающее ядро в груди • Пехота мрака',
-    hp: 76,
-    speed: 2.94,
-    damage: 13,
-    xp: 10,
-    gold: 3,
-    scale: 0.94,
-    color: 0xf97316
-  },
-  plague_zombie: {
-    id: 'plague_zombie',
-    nameRu: 'Чумной зомби',
-    roleHintRu: 'Оживший мертвец • Натиск орды',
-    hp: 50,
-    speed: 2.35,
-    damage: 8,
-    xp: 12,
-    gold: 4,
-    scale: 1.0,
-    color: 0x65a30d
-  },
-  goblin: {
-    id: 'goblin',
-    nameRu: 'Гоблин-налётчик',
-    roleHintRu: 'Каменный топор • Стремительный рывок',
-    hp: 62,
-    speed: 4.55,
-    damage: 12,
-    xp: 12,
-    gold: 4,
-    scale: 0.84,
-    canDash: true,
-    color: 0x65a30d
-  },
-  werewolf: {
-    id: 'werewolf',
-    nameRu: 'Оборотень мрака',
-    roleHintRu: 'Хищный прыжок и острые когти',
-    hp: 94,
-    speed: 4.78,
-    damage: 16,
-    xp: 16,
-    gold: 6,
-    scale: 0.98,
-    canDash: true,
-    dashMult: 1.85,
-    color: 0xea580c
-  },
   cursed_footman: {
     id: 'cursed_footman',
-    nameRu: 'Проклятый латник',
-    roleHintRu: 'Ржавый доспех и щит спереди',
-    hp: 112,
-    speed: 2.22,
-    damage: 16,
+    nameRu: 'Щитоносец Нефа',
+    roleHintRu: 'Тяжёлый щит и клинок',
+    hp: 230,
+    speed: 2.4,
+    damage: 24,
     armor: 0.34,
     frontArmor: 0.45,
-    xp: 18,
-    gold: 7,
-    scale: 1.04,
+    xp: 45,
+    gold: 0,
+    scale: 1.12,
     color: 0x84cc16
   },
   iron_knight: {
     id: 'iron_knight',
     nameRu: 'Железный страж',
-    roleHintRu: 'Тёмная латная броня • Таранный разбег',
-    hp: 198,
-    speed: 2.05,
+    roleHintRu: 'Тёмная латная броня • Дуэлянт',
+    hp: 260,
+    speed: 2.45,
     damage: 26,
     armor: 0.44,
     frontArmor: 0.30,
     canCharge: true,
-    xp: 30,
-    gold: 14,
-    scale: 1.32,
+    xp: 55,
+    gold: 0,
+    scale: 1.18,
     color: 0xd97706
   },
   bone_archer: {
     id: 'bone_archer',
     nameRu: 'Аколит Разлома',
     roleHintRu: 'Рунный арбалет • Дальняя атака',
-    hp: 86,
+    hp: 150,
     speed: 2.15,
-    damage: 18,
-    xp: 16,
-    gold: 8,
-    scale: 1.00,
+    damage: 20,
+    xp: 40,
+    gold: 0,
+    scale: 1.0,
     ranged: true,
     color: 0x38bdf8
   },
-  dark_cultist: {
-    id: 'dark_cultist',
-    nameRu: 'Тёмный культист',
-    roleHintRu: 'Посох черепа • Сфера тёмного пламени',
-    hp: 72,
-    speed: 2.38,
-    damage: 16,
-    ranged: true,
-    projColor: 0xa855f7,
-    keepDistance: 10.4,
-    xp: 20,
-    gold: 8,
-    scale: 0.96,
-    color: 0xa855f7
-  },
-  mummy: {
-    id: 'mummy',
-    nameRu: 'Древняя мумия',
-    roleHintRu: 'Золотой серп • Призывает скелетов',
-    hp: 82,
-    speed: 2.24,
-    damage: 15,
-    summoner: true,
-    keepDistance: 10.8,
-    xp: 22,
-    gold: 9,
-    scale: 0.98,
-    color: 0x22d3ee
-  },
-  dark_spider: {
-    id: 'dark_spider',
-    nameRu: 'Паук мрака',
-    roleHintRu: 'Быстрый бросок восьмилапого ловца',
-    hp: 58,
-    speed: 4.42,
-    damage: 13,
-    canDash: true,
-    dashMult: 1.55,
-    xp: 14,
-    gold: 5,
-    scale: 0.92,
-    color: 0xef4444
-  },
-  succubus: {
-    id: 'succubus',
-    nameRu: 'Суккуб мрака',
-    roleHintRu: 'Крылатая демонесса • Залп тёмного очарования',
-    hp: 76,
-    speed: 3.12,
-    damage: 16,
-    ranged: true,
-    projColor: 0xec4899,
-    keepDistance: 9.8,
-    xp: 20,
-    gold: 9,
-    scale: 1.0,
-    color: 0xd946ef
-  },
-  toxic_slime: {
-    id: 'toxic_slime',
-    nameRu: 'Кислотная слизь',
-    roleHintRu: 'Взрыв ядовитой лужи после гибели',
-    hp: 52,
-    speed: 3.72,
-    damage: 22,
-    explodesOnDeath: true,
-    hazardColor: 0x22c55e,
-    xp: 16,
-    gold: 6,
-    scale: 0.92,
-    color: 0x22c55e
-  },
-  gargoyle: {
-    id: 'gargoyle',
-    nameRu: 'Каменная гаргулья',
-    roleHintRu: 'Крылатый камень • Стремительный налёт',
-    hp: 104,
-    speed: 3.65,
-    damage: 17,
-    frontArmor: 0.25,
-    canDash: true,
-    xp: 18,
-    gold: 7,
-    scale: 0.96,
-    color: 0x94a3b8
-  },
-  hell_imp: {
-    id: 'hell_imp',
-    nameRu: 'Бес преисподней',
-    roleHintRu: 'Крылатый бес • Огненный выпад',
-    hp: 64,
-    speed: 4.48,
-    damage: 15,
-    canDash: true,
-    xp: 15,
-    gold: 6,
-    scale: 0.84,
-    color: 0xdc2626
-  },
-  phantom_ghost: {
-    id: 'phantom_ghost',
-    nameRu: 'Блуждающий призрак',
-    roleHintRu: 'Неупокоенный дух • Скользит над землёй',
-    hp: 68,
-    speed: 3.45,
-    damage: 15,
-    xp: 15,
-    gold: 6,
-    scale: 0.94,
-    color: 0xe2e8f0
-  },
-  vampire_lord: {
-    id: 'vampire_lord',
-    nameRu: 'Граф Дракула',
-    roleHintRu: 'Повелитель ночи • Удар плащом и стая мышей',
-    hp: 90,
-    speed: 2.85,
-    damage: 18,
-    armor: 0.18,
-    ranged: false,
-    canSummonBats: true,
-    cloakMelee: true,
-    xp: 22,
-    gold: 10,
-    scale: 1.0,
-    color: 0xe11d48
-  },
-  vampire_bat: {
-    id: 'vampire_bat',
-    nameRu: 'Летучая мышь',
-    roleHintRu: 'Крылатый приспешник • Быстрый укус',
-    hp: 18,
-    speed: 5.2,
-    damage: 8,
-    isBat: true,
-    xp: 5,
-    gold: 2,
-    scale: 0.9,
-    color: 0xe11d48
-  },
-  mimic_chest: {
-    id: 'mimic_chest',
-    nameRu: 'Зубастый мимик',
-    roleHintRu: 'Коварный сундук • Прыгает и клацает клыками',
-    hp: 145,
-    speed: 3.15,
-    damage: 22,
-    armor: 0.25,
-    canHop: true,
-    xp: 28,
-    gold: 22,
-    scale: 1.0,
-    color: 0xc084fc
-  },
-  corrupted_treant: {
-    id: 'corrupted_treant',
-    nameRu: 'Гнилой древень',
-    roleHintRu: 'Прыгающее древо • Наскок из чащи',
-    hp: 195,
-    speed: 2.45,
-    damage: 25,
-    armor: 0.24,
-    canCharge: false,
-    xp: 32,
-    gold: 15,
-    scale: 1.34,
-    color: 0xf97316
-  },
-  shadow_wisp: {
-    id: 'shadow_wisp',
-    nameRu: 'Теневой дух',
-    roleHintRu: 'Чёрное пламя • Стремительный рывок тени',
-    hp: 62,
-    speed: 4.18,
-    damage: 16,
-    canDash: true,
-    xp: 16,
-    gold: 6,
-    scale: 0.92,
-    color: 0xf59e0b
-  },
-
-  // === Legacy Archetype Aliases (100% Backwards-Compatible!) ===
-  skeleton: {
-    id: 'skeleton',
-    nameRu: 'Пылающий скелет',
-    roleHintRu: 'Пылающее ядро в груди • Пехота мрака',
-    hp: 76,
-    speed: 2.94,
-    damage: 13,
-    xp: 10,
-    gold: 3,
-    scale: 0.94,
-    color: 0xf97316
-  },
-  hound: {
-    id: 'hound',
-    nameRu: 'Гоблин-налётчик',
-    roleHintRu: 'Каменный топор • Стремительный рывок',
-    hp: 62,
-    speed: 4.55,
-    damage: 12,
-    xp: 12,
-    gold: 4,
-    scale: 0.84,
-    canDash: true,
-    color: 0x65a30d
-  },
-  archer: {
-    id: 'archer',
-    nameRu: 'Граф-вампир',
-    roleHintRu: 'Аристократ ночи • Кровавые сгустки',
-    hp: 78,
-    speed: 2.72,
-    damage: 16,
-    ranged: true,
-    projColor: 0xe11d48,
-    keepDistance: 9.8,
-    xp: 18,
-    gold: 7,
-    scale: 0.95,
-    color: 0xe11d48
-  },
-  shieldbearer: {
-    id: 'shieldbearer',
-    nameRu: 'Проклятый латник',
-    roleHintRu: 'Ржавый доспех и щит спереди',
-    hp: 112,
-    speed: 2.22,
-    damage: 16,
-    frontArmor: 0.45,
-    xp: 18,
-    gold: 7,
-    scale: 1.04,
-    color: 0x84cc16
-  },
-  bomber: {
-    id: 'bomber',
-    nameRu: 'Кислотная слизь',
-    roleHintRu: 'Взрыв ядовитой лужи после гибели',
-    hp: 52,
-    speed: 3.72,
-    damage: 22,
-    explodesOnDeath: true,
-    hazardColor: 0x22c55e,
-    xp: 16,
-    gold: 6,
-    scale: 0.92,
-    color: 0x22c55e
-  },
-  necromancer: {
-    id: 'necromancer',
-    nameRu: 'Древняя мумия',
-    roleHintRu: 'Золотой серп • Призывает скелетов',
-    hp: 82,
-    speed: 2.24,
-    damage: 15,
-    summoner: true,
-    keepDistance: 10.8,
-    xp: 22,
-    gold: 9,
-    scale: 0.98,
-    color: 0x22d3ee
-  },
-  cultist: {
-    id: 'cultist',
-    nameRu: 'Тёмный культист',
-    roleHintRu: 'Посох черепа • Сфера тёмного пламени',
-    hp: 72,
-    speed: 2.38,
-    damage: 16,
-    ranged: true,
-    projColor: 0xa855f7,
-    keepDistance: 10.4,
-    xp: 20,
-    gold: 8,
-    scale: 0.96,
-    color: 0xa855f7
-  },
-  brute: {
-    id: 'brute',
-    nameRu: 'Железный страж',
-    roleHintRu: 'Тёмная латная броня • Таранный разбег',
-    hp: 198,
-    speed: 2.05,
-    damage: 26,
-    frontArmor: 0.30,
-    canCharge: true,
-    xp: 30,
-    gold: 14,
-    scale: 1.32,
-    color: 0xd97706
-  },
-
-  // === 5 DISTINCT ACT BOSSES (Appear on 5, 10, 15, 20, 25 -> then return as Mini-Bosses in later Acts!) ===
-  boss_butcher: {
-    id: 'boss_butcher',
-    nameRu: 'Демон Преисподней',
-    roleHintRu: 'Босс I Акта • Прыжок и клинок магмы',
-    isBoss: true,
-    bossAct: 1,
-    hp: 920,
-    speed: 3.43,
-    damage: 26,
-    xp: 120,
-    gold: 95,
-    scale: 1.85,
-    color: 0xea580c
-  },
-  boss_archlich: {
-    id: 'boss_archlich',
-    nameRu: 'Король-Лич Тёмного Пламени',
-    roleHintRu: 'Босс II Акта • Спираль пламени и призыв',
-    isBoss: true,
-    bossAct: 2,
-    hp: 1380,
-    speed: 3.05,
-    damage: 30,
-    armor: 0.22,
-    xp: 150,
-    gold: 125,
-    scale: 1.96,
-    color: 0xa855f7
-  },
-  boss_cthulhu: {
-    id: 'boss_cthulhu',
-    nameRu: 'Вестник Бездны',
-    roleHintRu: 'Босс III Акта • Натиск щупалец и сфера Бездны',
-    isBoss: true,
-    bossAct: 3,
-    hp: 1750,
-    speed: 3.12,
-    damage: 32,
-    armor: 0.34,
-    xp: 180,
-    gold: 155,
-    scale: 2.05,
-    color: 0x06b6d4
-  },
-  boss_troll: {
-    id: 'boss_troll',
-    nameRu: 'Тролль-Костолом',
-    roleHintRu: 'Босс с боевым молотом • Вихрь джаггернаута',
-    isBoss: true,
-    bossAct: 1,
-    hp: 1120,
-    speed: 3.12,
-    damage: 26,
-    armor: 0.36,
-    xp: 160,
-    gold: 135,
-    scale: 2.15,
-    color: 0xd97706
-  },
   boss_warden: {
     id: 'boss_warden',
-    nameRu: 'Огр-Костолом',
-    roleHintRu: 'Босс IV Акта • Молот и вихрь джаггернаута',
+    nameRu: 'Судия Руин',
+    roleHintRu: 'Рыцарь Пепла • Босс Тронного Зала',
     isBoss: true,
     bossAct: 4,
     hp: 2150,
@@ -957,189 +188,26 @@ export const ENEMY_TYPES = {
     damage: 34,
     armor: 0.40,
     xp: 220,
-    gold: 190,
+    gold: 0,
     scale: 2.18,
     color: 0xd97706
-  },
-  boss_ashlord: {
-    id: 'boss_ashlord',
-    nameRu: 'Пепельный Дракон',
-    roleHintRu: 'Финальный Ультра-Босс • Крылатый Дракон Пепла',
-    isBoss: true,
-    bossAct: 5,
-    hp: 3100,
-    speed: 3.64,
-    damage: 40,
-    armor: 0.44,
-    xp: 350,
-    gold: 320,
-    scale: 2.42,
-    color: 0xef4444
-  },
-  reaper: {
-    id: 'reaper',
-    nameRu: 'Вестник Бездны',
-    roleHintRu: 'Босс III Акта • Натиск щупалец и сфера Бездны',
-    isBoss: true,
-    bossAct: 3,
-    hp: 1750,
-    speed: 3.12,
-    damage: 32,
-    xp: 180,
-    gold: 155,
-    scale: 2.05,
-    color: 0x06b6d4
   }
 };
 
-// 25-Chapter Dark-Fantasy Campaign (5 Acts × 5 Chapters, Bosses on 5, 10, 15, 20, 25!)
-// Chapters 1–10: Classic Gothic Courtyard | Chapters 11–25: Enchanted Misty Ruined Forest («Туманный Лес»)
-const CHAPTER_METADATA = [
-  // ACT I: Погост Проклятых (Levels 1-5 — Двор Цитадели)
-  ['Окраина Погоста', 'Первая вылазка у железных врат: одолей отряд из 10 чумных зомби и их вожака.', 'stage_1.jpg', ['plague_zombie']],
-  ['Ядовитый Прорыв', 'К 10 чумным зомби присоединяются 5 ядовитых слизняков — берегись кислотных всплесков.', 'stage_2.jpg', ['plague_zombie', 'toxic_slime']],
-  ['Роща Проклятых Древней', 'На 3-м этапе наступают 10 зомби, 10 слизняков и 10 гнилых древней; в сундуках открывается шанс найти чертёж Копья (20%).', 'stage_2.jpg', ['plague_zombie', 'toxic_slime', 'corrupted_treant']],
-  ['Караул Гаргулий', 'С башен срываются каменные гаргульи, а впереди строятся проклятые латники.', 'stage_3.jpg', ['ember_skeleton', 'cursed_footman', 'phantom_ghost', 'gargoyle']],
-  ['Врата Погоста', 'Конец I Акта: сразись с Троллем-Костоломом! Победа откроет Боевую Секиру в Магазине и даст 10% шанс выбить его Молот!', 'stage_5.jpg', ['plague_zombie', 'corrupted_treant', 'vampire_lord', 'dark_spider', 'succubus']],
-
-  // ACT II: Осквернённый Лагерь (Levels 6-10 — Двор Цитадели)
-  ['Пески Проклятых', 'Древние мумии поднимают пылающих скелетов из-под камней — устраняй жрецов первыми.', 'stage_4.jpg', ['ember_skeleton', 'cursed_footman', 'mummy', 'phantom_ghost']],
-  ['Склеп Культистов', 'Найди легендарный Рунный Сундук с оружием III ранга под обстрелом тёмных культистов!', 'stage_4.jpg', ['goblin', 'cursed_footman', 'dark_cultist', 'mimic_chest', 'gargoyle']],
-  ['Волчья Охота', 'Стремительные оборотни мрака и крылатые бесы атакуют со всех флангов двора.', 'stage_2.jpg', ['werewolf', 'hell_imp', 'toxic_slime', 'vampire_lord']],
-  ['Железный Заслон', 'Тяжёлые железные стражи идут на таран сквозь ряды проклятых латников.', 'stage_1.jpg', ['cursed_footman', 'dark_cultist', 'gargoyle', 'iron_knight']],
-  ['Трон Тёмного Пламени', 'Конец II Акта: одолей Короля-Лича и свирепого Тролля-Костолома с боевым молотом!', 'stage_5.jpg', ['plague_zombie', 'corrupted_treant', 'dark_spider', 'succubus', 'vampire_lord']],
-
-  // ACT III: Туманный Лес (Levels 11-15 — Новая Карта «Туманный Лес»!)
-  ['Тропа Туманного Леса', 'Добро пожаловать в Туманный Лес: среди мшистых руин рыщут пауки мрака, оборотни и гнилые древни!', 'stage_3.jpg', ['dark_spider', 'werewolf', 'phantom_ghost', 'corrupted_treant']],
-  ['Мшистые Арки', 'Из лилового тумана скользят теневые духи и ядовитая слизь под залпами культистов.', 'stage_3.jpg', ['dark_spider', 'shadow_wisp', 'dark_cultist', 'toxic_slime']],
-  ['Чаща Древней', 'Вековые гнилые древни идут напролом среди паучьих гнёзд и зубастых мимиков.', 'stage_2.jpg', ['werewolf', 'dark_spider', 'mimic_chest', 'corrupted_treant', 'vampire_lord']],
-  ['Забытое Святилище', 'У ступеней лесного алтаря мумии и культисты плетут чары под охраной древней.', 'stage_4.jpg', ['shadow_wisp', 'phantom_ghost', 'mummy', 'dark_cultist', 'corrupted_treant']],
-  ['Алтарь Вестника Бездны', 'Конец III Акта: сразись с древним титаном — Вестником Бездны в сердце Туманного Леса!', 'stage_5.jpg', ['dark_spider', 'shadow_wisp', 'werewolf', 'dark_cultist', 'corrupted_treant']],
-
-  // ACT IV: Курганы Костоломов (Levels 16-20 — Карта «Туманный Лес»)
-  ['Застава Налётчиков', 'Орочьи отряды гоблинов, оборотней и железных стражей окружают лесные руины.', 'stage_1.jpg', ['goblin', 'werewolf', 'cursed_footman', 'gargoyle', 'iron_knight']],
-  ['Трясина Мимиков', 'Кислотная слизь, пауки мрака и тяжёлые древни проверяют закалку твоего оружия.', 'stage_1.jpg', ['dark_spider', 'toxic_slime', 'mimic_chest', 'iron_knight', 'corrupted_treant']],
-  ['Ковен Полуночи', 'Графы-вампиры, теневые духи и культисты заливают мшистые плиты тёмной магией.', 'stage_4.jpg', ['shadow_wisp', 'vampire_lord', 'mummy', 'dark_cultist', 'gargoyle']],
-  ['Гнев Древнего Леса', 'Безостановочный штурм оборотней, крылатых бесов и бронированных стражей.', 'stage_3.jpg', ['werewolf', 'hell_imp', 'cursed_footman', 'iron_knight', 'corrupted_treant']],
-  ['Курган Огра-Костолома', 'Конец IV Акта: выдержи сокрушительные удары молота Огра-Костолома и магмовый натиск Демона Преисподней!', 'stage_5.jpg', ['goblin', 'werewolf', 'iron_knight', 'dark_cultist', 'gargoyle']],
-
-  // ACT V: Гнездо Пепельного Дракона (Levels 21-25 — Карта «Туманный Лес»)
-  ['Дыхание Вулкана', 'Лесной туман багровеет от пепла: бесы преисподней и теневые духи идут в атаку.', 'stage_5.jpg', ['ember_skeleton', 'hell_imp', 'shadow_wisp', 'vampire_lord', 'dark_cultist']],
-  ['Каменный Бастион', 'Железные стражи, гаргульи и гнилые древни смыкают кольцо вокруг охотника.', 'stage_1.jpg', ['gargoyle', 'hell_imp', 'toxic_slime', 'iron_knight', 'corrupted_treant']],
-  ['Ночь Кровавой Охоты', 'Элитные стаи оборотней, вампиров, пауков и мимиков рвутся со всех сторон.', 'stage_2.jpg', ['werewolf', 'dark_spider', 'mummy', 'mimic_chest', 'vampire_lord', 'iron_knight']],
-  ['Преддверие Дракона', 'Предпоследний рубеж: испытание предельной мощи твоего героя перед финальной битвой.', 'stage_4.jpg', ['ember_skeleton', 'hell_imp', 'shadow_wisp', 'dark_cultist', 'iron_knight', 'corrupted_treant']],
-  ['Престол Пепельного Дракона', 'Финал кампании (Глава 25): сокруши крылатого Пепельного Дракона и очисти земли навсегда!', 'stage_5.jpg', ['ember_skeleton', 'hell_imp', 'gargoyle', 'dark_cultist', 'vampire_lord', 'iron_knight']]
-];
-
-const ROMAN = [
-  'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X',
-  'XI', 'XII', 'XIII', 'XIV', 'XV', 'XVI', 'XVII', 'XVIII', 'XIX', 'XX',
-  'XXI', 'XXII', 'XXIII', 'XXIV', 'XXV'
-];
-
-const ACT_BOSS_ORDER = ['boss_troll', 'boss_archlich', 'boss_cthulhu', 'boss_warden', 'boss_ashlord'];
-
-// Progressive 1-new-unit-per-stage ladder: previewed as Mini-Boss on Stage N, graduates into Horde on Stage N+1
-const CUMULATIVE_ENEMY_LADDER = [
-  'plague_zombie',
-  'toxic_slime',
-  'corrupted_treant',
-  'mimic_chest',
-  'vampire_lord',
-  'dark_spider',
-  'cursed_footman',
-  'dark_cultist',
-  'ember_skeleton',
-  'iron_knight',
-  'succubus',
-  'shadow_wisp',
-  'werewolf',
-  'goblin',
-  'gargoyle',
-  'mummy',
-  'phantom_ghost',
-  'hell_imp'
-];
-
-export const LEVELS = CHAPTER_METADATA.map(([titleRu, subRu, bannerFile, _pool], idx) => {
-  const lvl = idx + 1;
-  const act = Math.ceil(lvl / 5);
-  const isBossLevel = lvl % 5 === 0;
-  const finaleBosses =
-    lvl === 5
-      ? ['boss_troll']
-      : lvl === 10
-        ? ['boss_archlich', 'boss_troll']
-        : lvl === 15
-          ? ['boss_cthulhu']
-          : lvl === 20
-            ? ['boss_warden', 'boss_butcher']
-            : lvl === 25
-              ? ['boss_ashlord']
-              : [];
-  const bossId = finaleBosses[0] || null;
-  const coBossId = finaleBosses.length > 1 ? finaleBosses[1] : null;
-  const pool = CUMULATIVE_ENEMY_LADDER.slice(0, Math.min(CUMULATIVE_ENEMY_LADDER.length, lvl));
-  const finaleMiniBossType = CUMULATIVE_ENEMY_LADDER[Math.min(CUMULATIVE_ENEMY_LADDER.length - 1, lvl)];
-  const enemyQuotas =
-    lvl === 1
-      ? { plague_zombie: 10 }
-      : lvl === 2
-        ? { plague_zombie: 10, toxic_slime: 5 }
-        : lvl === 3
-          ? { plague_zombie: 10, toxic_slime: 10, corrupted_treant: 10 }
-          : null;
-  // Capped smooth progression (10 -> 15 -> 30 -> 32..42 max, never exploding to 60–500 enemies!)
-  const targetKills =
-    lvl === 1 ? 10 : lvl === 2 ? 15 : lvl === 3 ? 30 : Math.min(42, 30 + (lvl - 3) * 2);
-  const miniBossPool = finaleMiniBossType ? [finaleMiniBossType] : [];
-  const bossSpawnTimerSec = isBossLevel ? Math.min(65, 40 + act * 5) : 0;
-  const recWeaponLevel = Math.min(WEAPON_MAX_LEVEL, Math.max(1, Math.ceil(lvl * 0.48)));
-  return {
-    level: lvl,
-    act,
-    roman: ROMAN[idx],
-    shortTitleRu: titleRu,
-    nameRu: `Глава ${ROMAN[idx]}: ${titleRu}`,
-    nameEn: `Chapter ${ROMAN[idx]}`,
-    subtitleRu: subRu,
-    bannerImg: `./assets/ui/${bannerFile}`,
-    recWeaponLevel,
-    targetKills,
-    enemyQuotas,
-    finaleMiniBossType,
-    bossSpawnTimerSec,
-    finaleBosses,
-    durationSec: Math.min(115, 62 + lvl * 2),
-    spawnInterval: +(Math.max(0.46, 1.08 - lvl * 0.024)).toFixed(3),
-    hpScale: +(1 + (lvl - 1) * 0.14 + Math.pow(Math.max(0, lvl - 1), 1.15) * 0.028).toFixed(2),
-    dmgScale: +(1 + (lvl - 1) * 0.055).toFixed(2),
-    enemyPool: pool,
-    miniBossPool,
-    bossId,
-    coBossId,
-    unlockWeaponTier: lvl === 3 ? 2 : lvl === 7 ? 3 : null,
-    hasBoss: isBossLevel,
-    hasEliteFinale: !isBossLevel
-  };
-});
-
-// Standalone Boss Arena Mode («Abandoned Knight Rift») — separate from the 25-chapter PvE campaign!
 export const SOULS_LEVEL_DEF = Object.freeze({
   level: 26,
-  id: 'abandoned_knight_rift',
-  act: 0,
-  roman: '',
-  shortTitleRu: 'Abandoned Knight Rift',
-  nameRu: 'Abandoned Knight Rift',
-  nameEn: 'Abandoned Knight Rift',
-  subtitleRu: 'Отдельный режим • Босс • Выносливость • Блок/Парирование [Alt] • Фляга [R]',
-  bannerImg: './assets/ui/act5_banner.jpg',
+  id: 'castle_of_ash',
+  act: 1,
+  roman: 'I',
+  shortTitleRu: 'Замок Пепла',
+  nameRu: 'Замок Пепла',
+  nameEn: 'Castle of Ash',
+  subtitleRu: 'Тёмная цитадель • Выносливость • Блок и парирование • Фляга Эстуса',
   biome: 'souls_citadel',
   isSoulslike: true,
   isStandaloneMode: true,
   recWeaponLevel: 1,
-  targetKills: 4,
+  targetKills: 5,
   enemyQuotas: null,
   finaleMiniBossType: null,
   bossSpawnTimerSec: 0,
@@ -1158,580 +226,10 @@ export const SOULS_LEVEL_DEF = Object.freeze({
   hasEliteFinale: false
 });
 
-export function getLevelDef(levelNum) {
-  if (Number(levelNum) === SOULS_LEVEL_DEF.level || levelNum === SOULS_LEVEL_DEF.id) {
-    return SOULS_LEVEL_DEF;
-  }
-  const num = Math.floor(Number(levelNum));
-  if (Number.isFinite(num)) {
-    const found = LEVELS.find((l) => l.level === num);
-    if (found) return found;
-  }
-  return LEVELS[0];
+export const LEVELS = Object.freeze([SOULS_LEVEL_DEF]);
+
+export function getLevelDef() {
+  return SOULS_LEVEL_DEF;
 }
 
-// Synergistic Roguelike In-Run Blessings (3-card level-up choices during battle!)
-export const RUN_UPGRADES = [
-  {
-    id: 'dash_fire_trail',
-    nameRu: 'Огненный След',
-    categoryRu: 'СИНЕРГИЯ РЫВКА',
-    statBadgeRu: 'РЫВОК ПОДЖИГАЕТ ПОЛ • ОГНЕННЫЙ AoE-УРОН',
-    descRu: 'Во время рывка [Space] оставляет за спиной полосу тлеющего пламени, поджигающую преследующую нежить.',
-    theme: 'flame',
-    maxStacks: 3,
-    iconKind: 'flame',
-    icon: '🔥'
-  },
-  {
-    id: 'shield_thorns_wave',
-    nameRu: 'Шипованная Волна',
-    categoryRu: 'КОНТРУДАР',
-    statBadgeRu: '+5% БЛОК • ВОЛНА ШИПОВ ПРИ УДАРЕ И БЛОКЕ',
-    descRu: 'Усиливает блок на +5%. При блокировании или получении урона выпускает стальную волну шипов с отбрасыванием.',
-    theme: 'steel',
-    maxStacks: 3,
-    iconKind: 'shield',
-    icon: '🛡️'
-  },
-  {
-    id: 'crit_chain_lightning',
-    nameRu: 'Цепь Молний',
-    categoryRu: 'КРИТ-СИНЕРГИЯ',
-    statBadgeRu: '+8% КРИТ • ЦЕПНАЯ МОЛНИЯ В 2 СОСЕДЕЙ',
-    descRu: 'Повышает шанс крита на +8%. Каждый критический удар бьёт цепной молнией в 2 ближайших врагов (+1 цель за ранг).',
-    theme: 'cyan',
-    maxStacks: 3,
-    iconKind: 'lightning',
-    icon: '⚡'
-  },
-  {
-    id: 'vampiric_harvest',
-    nameRu: 'Кровавая Жатва',
-    categoryRu: 'ЖИВУЧЕСТЬ',
-    statBadgeRu: '+15 МАКС. HP • ДОБИВАНИЯ ЛЕЧАТ ГЕРОЯ',
-    descRu: 'Увеличивает макс. здоровье на +15. Каждые 3 убийства (и каждая казнь элитки или босса) восстанавливают HP в бою.',
-    theme: 'crimson',
-    maxStacks: 3,
-    iconKind: 'vampire',
-    icon: '🩸'
-  },
-  {
-    id: 'rapid_cadence',
-    nameRu: 'Вихревой Темп',
-    categoryRu: 'ТЕМП БОЯ',
-    statBadgeRu: '+18% СКОРОСТЬ АТАКИ • -20% ОТКАТ РЫВКА',
-    descRu: 'Ускоряет удары, стрельбу и перезарядку на +18%, а также сокращает откат рывка [Space] на 20% за ранг.',
-    theme: 'emerald',
-    maxStacks: 3,
-    iconKind: 'cadence',
-    icon: '💨'
-  },
-  {
-    id: 'frost_shatter',
-    nameRu: 'Ледяной Раскол',
-    categoryRu: 'МОРОЗНАЯ ЦЕПЬ',
-    statBadgeRu: 'ЗАМЕДЛЕНИЕ ВРАГОВ • ЛЕДЯНОЙ ВЗРЫВ ПРИ СМЕРТИ',
-    descRu: 'Удары и снаряды сковывают врагов морозом; гибель замедленной цели взрывает её ледяными осколками по соседям.',
-    theme: 'ice',
-    maxStacks: 3,
-    iconKind: 'frost',
-    icon: '❄️'
-  },
-  {
-    id: 'executioner_cleave',
-    nameRu: 'Удар Палача',
-    categoryRu: 'КАЗНЬ',
-    statBadgeRu: '+25% ПО ЦЕЛЯМ <40% HP • ШИРЕ ДУГА / +1 ПРОБИТИЕ',
-    descRu: 'Наносит +25% урона раненым целям (ниже 40% HP), расширяет дугу удара на +18% и даёт +1 пробитие снарядам.',
-    theme: 'amber',
-    maxStacks: 3,
-    iconKind: 'cleave',
-    icon: '⚔️'
-  },
-  {
-    id: 'greed_contract',
-    nameRu: 'Печать Алчности',
-    categoryRu: 'ТРОФЕИ ОХОТЫ',
-    statBadgeRu: '+35% ЗОЛОТА • +7% СКОРОСТЬ БЕГА',
-    descRu: 'Увеличивает добычу золота за убитых монстров на +35% и ускоряет передвижение героя по арене.',
-    theme: 'gold',
-    maxStacks: 3,
-    iconKind: 'gold',
-    icon: '🪙'
-  }
-];
-
-// =========================================================================
-// MENU-ONLY CLASS TALENT TREES (1 Skill Point gained per Hero Level!)
-// Initially launching full branching tree for Water Mage ("Маг Воды");
-// Warrior & Gunslinger trees marked coming soon.
-// =========================================================================
-export const MAGE_TALENT_TREE = [
-  {
-    id: 'water_pressure',
-    tier: 1,
-    col: 2,
-    row: 1,
-    xPct: 50,
-    yPct: 14,
-    branchLabelRu: 'Основа Стихии Воды',
-    maxRank: 3,
-    requires: [],
-    iconKind: 'droplet',
-    nameRu: 'Сила Потока',
-    statBadgeRu: '+18% урон сфер • +12 макс. HP / ранг',
-    descRu: 'Уплотняет водную материю скипетра: каждая сфера наносит больше урона и укрепляет здоровье Мага.'
-  },
-  {
-    id: 'mana_spring',
-    tier: 2,
-    col: 1,
-    row: 2,
-    xPct: 24,
-    yPct: 38,
-    branchLabelRu: 'Ветка: Поток Маны и Защита',
-    maxRank: 3,
-    requires: [{ id: 'water_pressure', rank: 1 }],
-    iconKind: 'chalice',
-    nameRu: 'Источник Маны',
-    statBadgeRu: '+22 макс. маны • +1.4 реген/сек / ранг',
-    descRu: 'Расширяет глубинный резерв маны и ускоряет восстановление во время боя.'
-  },
-  {
-    id: 'frost_velocity',
-    tier: 2,
-    col: 3,
-    row: 2,
-    xPct: 76,
-    yPct: 38,
-    branchLabelRu: 'Ветка: Шторм и Криты',
-    maxRank: 3,
-    requires: [{ id: 'water_pressure', rank: 1 }],
-    iconKind: 'boots',
-    nameRu: 'Течение Прилива',
-    statBadgeRu: '+7% скорость атак • +6% бег / ранг',
-    descRu: 'Наполняет походку лёгкостью волны: заклинания вылетают чаще, а уклоняться от врагов проще.'
-  },
-  {
-    id: 'hydro_barrier',
-    tier: 3,
-    col: 1,
-    row: 3,
-    xPct: 20,
-    yPct: 65,
-    branchLabelRu: 'Ветка: Поток Маны и Защита',
-    maxRank: 2,
-    requires: [{ id: 'mana_spring', rank: 1 }],
-    iconKind: 'shield',
-    nameRu: 'Водяной Щит',
-    statBadgeRu: 'Поглощение удара • +4% брони / ранг',
-    descRu: 'Создаёт вокруг Мага защитную пелену воды, периодически поглощающую вражеский удар.'
-  },
-  {
-    id: 'twin_sphere',
-    tier: 3,
-    col: 2,
-    row: 3,
-    xPct: 50,
-    yPct: 56,
-    branchLabelRu: 'Ветка: Центр Водоворота',
-    maxRank: 3,
-    requires: [{ id: 'water_pressure', rank: 2 }],
-    iconKind: 'twin',
-    nameRu: 'Раздвоение Сферы',
-    statBadgeRu: '40% / 75% / 100% доп. сфера бесплатно',
-    descRu: 'Каждый бросок водной сферы имеет высокий шанс бесплатно породить вторую волновую сферу.'
-  },
-  {
-    id: 'crimson_tide',
-    tier: 3,
-    col: 3,
-    row: 3,
-    xPct: 80,
-    yPct: 65,
-    branchLabelRu: 'Ветка: Шторм и Криты',
-    maxRank: 3,
-    requires: [{ id: 'frost_velocity', rank: 1 }],
-    iconKind: 'crit',
-    nameRu: 'Кровавый Шторм',
-    statBadgeRu: '+10% шанс крита • +15% сила крита / ранг',
-    descRu: 'Заточенные гребни воды пробивают уязвимые места чудовищ с сокрушительным критическим уроном.'
-  },
-  {
-    id: 'maelstrom_fury',
-    tier: 4,
-    col: 2,
-    row: 4,
-    xPct: 50,
-    yPct: 84,
-    branchLabelRu: 'Мастерство Водоворота',
-    maxRank: 2,
-    requires: [{ id: 'twin_sphere', rank: 1 }],
-    iconKind: 'crown',
-    nameRu: 'Гнев Водоворота',
-    statBadgeRu: '+22% урон • Вихрь с небес / ранг',
-    descRu: 'Высшее таинство воды: периодически обрушивает небесный вихрь на скопления нечисти и усиливает магию.'
-  }
-];
-
-export const WARRIOR_TALENT_TREE = [
-  {
-    id: 'war_steel_grip',
-    tier: 1,
-    col: 2,
-    row: 1,
-    xPct: 50,
-    yPct: 14,
-    branchLabelRu: 'Основа Воина Клятвы',
-    maxRank: 3,
-    requires: [],
-    iconKind: 'crit',
-    nameRu: 'Стальной Хват',
-    statBadgeRu: '+16% урон в цель • +18 макс. HP / ранг',
-    descRu: 'Закаляет хват меча и щита: точечные удары бьют глубже, а живучесть Воина возрастает.'
-  },
-  {
-    id: 'war_shield_wall',
-    tier: 2,
-    col: 1,
-    row: 2,
-    xPct: 24,
-    yPct: 38,
-    branchLabelRu: 'Ветка: Бастион и Щит',
-    maxRank: 3,
-    requires: [{ id: 'war_steel_grip', rank: 1 }],
-    iconKind: 'shield',
-    nameRu: 'Стальной Бастион',
-    statBadgeRu: '+7% броня • +8% блок щитом / ранг',
-    descRu: 'Укрепляет стальной щит, снижая входящий урон и чаще отражая выпады монстров.'
-  },
-  {
-    id: 'war_swift_stride',
-    tier: 2,
-    col: 3,
-    row: 2,
-    xPct: 76,
-    yPct: 38,
-    branchLabelRu: 'Ветка: Натиск и Жатва',
-    maxRank: 3,
-    requires: [{ id: 'war_steel_grip', rank: 1 }],
-    iconKind: 'boots',
-    nameRu: 'Боевой Натиск',
-    statBadgeRu: '+8% скорость ударов • +6% бег / ранг',
-    descRu: 'Воин стремительнее сближается с целью и наносит быстрые прицельные удары мечом.'
-  },
-  {
-    id: 'war_iron_banner',
-    tier: 3,
-    col: 1,
-    row: 3,
-    xPct: 20,
-    yPct: 65,
-    branchLabelRu: 'Ветка: Бастион и Щит',
-    maxRank: 2,
-    requires: [{ id: 'war_shield_wall', rank: 1 }],
-    iconKind: 'chalice',
-    nameRu: 'Железное Знамя',
-    statBadgeRu: '+24 макс. HP • +14% стойкость дуэли / ранг',
-    descRu: 'Несгибаемая воля к победе: поднимает запас здоровья Воина в ближнем бою.'
-  },
-  {
-    id: 'war_whirlwind_edge',
-    tier: 3,
-    col: 2,
-    row: 3,
-    xPct: 50,
-    yPct: 56,
-    branchLabelRu: 'Ветка: Дуэльный Клинок',
-    maxRank: 3,
-    requires: [{ id: 'war_steel_grip', rank: 2 }],
-    iconKind: 'twin',
-    nameRu: 'Точный Выпад',
-    statBadgeRu: '+12% дальность укола • +14% урон в цель',
-    descRu: 'Фокусирует атаку меча на одном противнике, увеличивая дистанцию выпада без сплэша.'
-  },
-  {
-    id: 'war_blood_cleave',
-    tier: 3,
-    col: 3,
-    row: 3,
-    xPct: 80,
-    yPct: 65,
-    branchLabelRu: 'Ветка: Натиск и Жатва',
-    maxRank: 3,
-    requires: [{ id: 'war_swift_stride', rank: 1 }],
-    iconKind: 'droplet',
-    nameRu: 'Кровавая Жатва',
-    statBadgeRu: '+10% крит • +15% крит урон • вампиризм',
-    descRu: 'Прицельные удары меча пробивают броню одиночной цели и лечат при добивании.'
-  },
-  {
-    id: 'war_orbital_blades',
-    tier: 4,
-    col: 2,
-    row: 4,
-    xPct: 50,
-    yPct: 84,
-    branchLabelRu: 'Мастерство Дуэли',
-    maxRank: 2,
-    requires: [{ id: 'war_whirlwind_edge', rank: 1 }],
-    iconKind: 'crown',
-    nameRu: 'Мастер Дуэли',
-    statBadgeRu: '+24% точечный урон • +10% шанс крита',
-    descRu: 'Превращает каждый взмах меча в смертельную точечную казнь выбранного врага.'
-  }
-];
-
-export const GUNSLINGER_TALENT_TREE = [
-  {
-    id: 'gun_quicksilver',
-    tier: 1,
-    col: 2,
-    row: 1,
-    xPct: 50,
-    yPct: 12,
-    branchLabelRu: 'Основа Стрелка',
-    maxRank: 3,
-    requires: [],
-    iconKind: 'boots',
-    nameRu: 'Ртутный Шаг',
-    statBadgeRu: '+7% скорострельность • +7% бег / ранг',
-    descRu: 'Базовая школа Охотника: ускоряет реакцию, скорость шага и темп стрельбы из любого ствола. Отсюда расходятся ветки Лёгкого оружия, Автоматов и Дробовиков.'
-  },
-  // --- ВЕТКА 1: ЛЁГКОЕ ОРУЖИЕ (Пистолеты + Пистолет-пулемёты) ---
-  {
-    id: 'gun_light_arms',
-    tier: 2,
-    col: 1,
-    row: 2,
-    xPct: 22,
-    yPct: 33,
-    branchLabelRu: 'Подкласс: Лёгкое оружие (Пистолеты и ПП)',
-    maxRank: 3,
-    requires: [{ id: 'gun_quicksilver', rank: 1 }],
-    iconKind: 'pistol',
-    nameRu: 'Лёгкое Оружие',
-    statBadgeRu: '+12% урон Пистолетов/ПП • +18% перезарядка / ранг',
-    descRu: 'Искусство маневренного боя с лёгкими стволами — тактическим USP, револьвером Кольт и Пистолетом-пулемётом. Открывает специализации на Пистолеты и ПП.'
-  },
-  {
-    id: 'gun_pistol_mastery',
-    tier: 3,
-    col: 1,
-    row: 3,
-    xPct: 11,
-    yPct: 59,
-    branchLabelRu: 'Подветка: Пистолеты (USP и Кольт)',
-    maxRank: 3,
-    requires: [{ id: 'gun_light_arms', rank: 1 }],
-    iconKind: 'pistol',
-    nameRu: 'Школа Пистолетов',
-    statBadgeRu: '+18% урон USP/Кольта • +8% пробитие брони / ранг',
-    descRu: 'Усиливает точечные выстрелы из Тактического USP и револьвера Кольт, превращая одиночный выстрел в бронебойный.'
-  },
-  {
-    id: 'gun_deadeye',
-    tier: 4,
-    col: 1,
-    row: 4,
-    xPct: 11,
-    yPct: 83,
-    branchLabelRu: 'Подветка: Пистолеты (USP и Кольт)',
-    maxRank: 3,
-    requires: [{ id: 'gun_pistol_mastery', rank: 1 }],
-    iconKind: 'crit',
-    nameRu: 'Меткий Взор',
-    statBadgeRu: '+11% крит • +16% крит урон • +1 пробитие (Пистолеты)',
-    descRu: 'Прицельная стрельба по уязвимым точкам сокрушает стражей и даёт пистолетам сквозное пробитие цели.'
-  },
-  {
-    id: 'gun_smg_fury',
-    tier: 3,
-    col: 2,
-    row: 3,
-    xPct: 32,
-    yPct: 59,
-    branchLabelRu: 'Подветка: Пистолеты-пулемёты (ПП)',
-    maxRank: 3,
-    requires: [{ id: 'gun_light_arms', rank: 1 }],
-    iconKind: 'smg',
-    nameRu: 'Шквал ПП',
-    statBadgeRu: '+12% темп стрельбы ПП • -20% разброс на бегу / ранг',
-    descRu: 'Обуздание очереди Пистолета-пулемёта: плотный поток свинца сохраняет кучность даже при резком стрейфе.'
-  },
-  {
-    id: 'gun_ammo_belt',
-    tier: 4,
-    col: 2,
-    row: 4,
-    xPct: 32,
-    yPct: 83,
-    branchLabelRu: 'Подветка: Пистолеты-пулемёты (ПП)',
-    maxRank: 3,
-    requires: [{ id: 'gun_smg_fury', rank: 1 }],
-    iconKind: 'chalice',
-    nameRu: 'Быстрый Барабан',
-    statBadgeRu: '+3 патрона в обойму • +28% перезарядка / ранг',
-    descRu: 'Расширяет магазины всех стволов и ускоряет тактическую перезарядку прямо на бегу.'
-  },
-  // --- ВЕТКА 2: АВТОМАТЫ (АК-47) ---
-  {
-    id: 'gun_rifle_core',
-    tier: 2,
-    col: 2,
-    row: 2,
-    xPct: 50,
-    yPct: 37,
-    branchLabelRu: 'Подкласс: Автоматы (АК-47)',
-    maxRank: 3,
-    requires: [{ id: 'gun_quicksilver', rank: 1 }],
-    iconKind: 'rifle',
-    nameRu: 'Штурмовой Калибр',
-    statBadgeRu: '+16% урон Автоматов • +7% пробитие брони / ранг',
-    descRu: 'Специализация на тяжёлых автоматических винтовках класса АК-47: повышает пробивную силу очередей через всю арену.'
-  },
-  {
-    id: 'gun_rifle_stabilizer',
-    tier: 3,
-    col: 2,
-    row: 3,
-    xPct: 50,
-    yPct: 61,
-    branchLabelRu: 'Подкласс: Автоматы (АК-47)',
-    maxRank: 3,
-    requires: [{ id: 'gun_rifle_core', rank: 1 }],
-    iconKind: 'rifle',
-    nameRu: 'Стабильный Упор',
-    statBadgeRu: '+11% скорость с АК-47 • -22% разброс • +1 пробитие (2 ур.)',
-    descRu: 'Компенсирует вес автомата в движении, сужает разброс длинных очередей и со 2-го ранга прошивает на одну цель больше.'
-  },
-  {
-    id: 'gun_explosive_powder',
-    tier: 4,
-    col: 2,
-    row: 4,
-    xPct: 50,
-    yPct: 84,
-    branchLabelRu: 'Подкласс: Автоматы (АК-47)',
-    maxRank: 3,
-    requires: [{ id: 'gun_rifle_stabilizer', rank: 1 }],
-    iconKind: 'crit',
-    nameRu: 'Огненный Порох',
-    statBadgeRu: 'Разрывные заряды • +16% урон • +10% пробитие / ранг',
-    descRu: 'Снаряжает патроны зажигательным порохом: повышенный урон и вспышка при попадании по рядам нечисти.'
-  },
-  // --- ВЕТКА 3: ДРОБОВИКИ ---
-  {
-    id: 'gun_heavy_slug',
-    tier: 2,
-    col: 3,
-    row: 2,
-    xPct: 78,
-    yPct: 33,
-    branchLabelRu: 'Подкласс: Дробовики',
-    maxRank: 3,
-    requires: [{ id: 'gun_quicksilver', rank: 1 }],
-    iconKind: 'shotgun',
-    nameRu: 'Крупная Картечь',
-    statBadgeRu: '+14% урон • +2 дробины в веере / ранг',
-    descRu: 'Главная ветка Охотника с ружьём: утяжеляет заряд дробовика и резко увеличивает плотность смертоносной картечи.'
-  },
-  {
-    id: 'gun_ricochet_shot',
-    tier: 3,
-    col: 3,
-    row: 3,
-    xPct: 69,
-    yPct: 60,
-    branchLabelRu: 'Подкласс: Дробовики',
-    maxRank: 2,
-    requires: [{ id: 'gun_heavy_slug', rank: 1 }],
-    iconKind: 'shield',
-    nameRu: 'Хитрый Рикошет',
-    statBadgeRu: 'Рикошет дроби по орде • +6% броня / ранг',
-    descRu: 'Дробинки отскакивают от целей в соседних монстров, накрывая плотные группы и укрепляя защиту в ближнем бою.'
-  },
-  {
-    id: 'gun_shrapnel_trap',
-    tier: 3,
-    col: 3,
-    row: 3,
-    xPct: 89,
-    yPct: 60,
-    branchLabelRu: 'Подкласс: Дробовики',
-    maxRank: 2,
-    requires: [{ id: 'gun_heavy_slug', rank: 1 }],
-    iconKind: 'crown',
-    nameRu: 'Шрапнельные Мины',
-    statBadgeRu: 'Осколочные ловушки • +18% урон / ранг',
-    descRu: 'Устанавливает шрапнельные мины на пути орды, взрывая прорвавшихся тварей перед залпом в упор.'
-  },
-  {
-    id: 'gun_shotgun_blitz',
-    tier: 4,
-    col: 3,
-    row: 4,
-    xPct: 79,
-    yPct: 83,
-    branchLabelRu: 'Подкласс: Дробовики',
-    maxRank: 2,
-    requires: [{ id: 'gun_heavy_slug', rank: 2 }],
-    iconKind: 'shotgun',
-    nameRu: 'Помповый Блиц',
-    statBadgeRu: '+20% дозарядка гильз • +12% темп дробовика / ранг',
-    descRu: 'Отточенная работа цевьём: ускоряет поштучную дозарядку патронов ружья и темп залпов на короткой дистанции.'
-  }
-];
-
-export const CLASS_TALENT_TREES = {
-  mage: MAGE_TALENT_TREE,
-  warrior: WARRIOR_TALENT_TREE,
-  gunslinger: GUNSLINGER_TALENT_TREE
-};
-
-// Daily Quests Pool (3 deterministic quests per YYYY-MM-DD: 1 kills, 1 barrels/chests, 1 bosses/waves)
-export const DAILY_QUEST_TEMPLATES = [
-  {
-    id: 'dq_slay_35',
-    kind: 'kills',
-    titleRu: 'Истребить 35 тварей в бою',
-    target: 35,
-    rewardGold: 85
-  },
-  {
-    id: 'dq_slay_75',
-    kind: 'kills',
-    titleRu: 'Сразить 75 врагов за день',
-    target: 75,
-    rewardGold: 150
-  },
-  {
-    id: 'dq_barrels_5',
-    kind: 'barrels_chests',
-    titleRu: 'Взорвать 5 бочек или открыть сундуков',
-    target: 5,
-    rewardGold: 95
-  },
-  {
-    id: 'dq_chests_8',
-    kind: 'barrels_chests',
-    titleRu: 'Активировать 8 бочек и сундуков',
-    target: 8,
-    rewardGold: 145
-  },
-  {
-    id: 'dq_boss_2',
-    kind: 'bosses_waves',
-    titleRu: 'Победить боссов или пройти волны (2)',
-    target: 2,
-    rewardGold: 130
-  },
-  {
-    id: 'dq_boss_4',
-    kind: 'bosses_waves',
-    titleRu: 'Одолеть боссов или пройти волны (4)',
-    target: 4,
-    rewardGold: 190
-  }
-];
+export const RUN_UPGRADES = Object.freeze([]);

@@ -6735,7 +6735,7 @@ html.is-mobile-landscape .hub-rotate-hint {
   z-index: 0;
   pointer-events: none;
   overflow: hidden;
-  background: #140f21 url('../assets/ui/hub_stage_bg.jpg?v=20261117z25') center 58% / cover no-repeat;
+  background: radial-gradient(ellipse at 50% 45%, #12101a 0%, #07060b 100%);
   transform: translate3d(0, 0, 0) scale(1.03);
   will-change: transform;
 }
@@ -8880,15 +8880,64 @@ html.is-mobile-landscape .hub-rotate-hint {
   margin-top: 1px;
 }
 
-.hud-screen.is-souls-mode .hud-dash-btn,
-.hud-screen.is-souls-mode .hud-souls-heavy-btn,
-.hud-screen.is-souls-mode .hud-souls-block-btn,
-.hud-screen.is-souls-mode .hud-souls-flask-btn,
-.hud-screen.is-souls-mode .hud-lock-btn {
-  border-radius: 5px;
-  background: linear-gradient(180deg, rgba(22, 19, 24, 0.94) 0%, rgba(11, 9, 13, 0.97) 100%);
-  border: 1.5px solid rgba(196, 162, 98, 0.54);
-  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.72), inset 0 1px 0 rgba(235, 206, 146, 0.16);
+/* Elden Ring Minimalist Bottom-Left Equipment Crest on Desktop PC (hides cluttered MMO skill bar!) */
+.hud-screen.is-souls-mode:not(.is-souls-touch-active) .hud-bottom-dock {
+  max-width: none;
+  margin: 0;
+  align-items: flex-start;
+  padding-left: 2px;
+  padding-bottom: 2px;
+}
+
+.hud-screen.is-souls-mode:not(.is-souls-touch-active) .hud-weapon-row {
+  gap: 7px;
+  align-items: center;
+}
+
+.hud-screen.is-souls-mode:not(.is-souls-touch-active) .hud-dash-btn,
+.hud-screen.is-souls-mode:not(.is-souls-touch-active) .hud-souls-heavy-btn,
+.hud-screen.is-souls-mode:not(.is-souls-touch-active) .hud-souls-block-btn,
+.hud-screen.is-souls-mode:not(.is-souls-touch-active) .hud-lock-btn {
+  display: none !important;
+}
+
+.hud-screen.is-souls-mode:not(.is-souls-touch-active) .weapon-hud-badge {
+  padding: 5px 11px 5px 7px;
+  border-radius: 4px;
+  background: linear-gradient(180deg, rgba(16, 13, 18, 0.88) 0%, rgba(9, 8, 12, 0.94) 100%);
+  border: 1px solid rgba(196, 162, 98, 0.46);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.72);
+  gap: 8px;
+}
+
+.hud-screen.is-souls-mode:not(.is-souls-touch-active) .weapon-hud-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+}
+
+.hud-screen.is-souls-mode:not(.is-souls-touch-active) .hud-wpn-svg {
+  width: 24px;
+  height: 24px;
+}
+
+.hud-screen.is-souls-mode:not(.is-souls-touch-active) .weapon-hud-col {
+  min-width: 0;
+}
+
+.hud-screen.is-souls-mode:not(.is-souls-touch-active) .weapon-hud-name {
+  font-size: 12.5px;
+  letter-spacing: 0.04em;
+  color: #e8cfa0;
+}
+
+.hud-screen.is-souls-mode .hud-souls-flask-btn {
+  height: 42px;
+  padding: 0 11px 0 9px;
+  border-radius: 4px;
+  background: linear-gradient(180deg, rgba(32, 18, 12, 0.90) 0%, rgba(15, 9, 8, 0.95) 100%);
+  border: 1px solid rgba(217, 148, 72, 0.56);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.72), inset 0 1px 0 rgba(252, 211, 141, 0.16);
 }
 
 .hud-souls-heavy-btn {
@@ -9500,10 +9549,10 @@ html.is-mobile-landscape .hub-rotate-hint {
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
 }
 
-/* Unified Obsidian & Antique-Gold Gothic Right-Thumb Arc (0 rainbow clutter, 0 overlap on 844x390!) */
+/* Ergonomic Right-Thumb Arc for Smartphones (УДАР + ПЕРЕКАТ + ЩИТ in 1cm pivot, 0 center clutter!) */
 .touch-souls-r1 {
-  width: 80px;
-  height: 80px;
+  width: 84px;
+  height: 84px;
   right: calc(16px + var(--safe-right));
   bottom: calc(16px + var(--safe-bottom));
   background: radial-gradient(circle at 38% 30%, rgba(92, 22, 26, 0.94) 0%, rgba(34, 10, 13, 0.97) 100%);
@@ -9515,7 +9564,16 @@ html.is-mobile-landscape .hub-rotate-hint {
 }
 
 .touch-souls-r1 .touch-souls-ico {
-  font-size: 24px;
+  font-size: 25px;
+}
+
+.touch-souls-r1.is-riposte-ready {
+  border-color: #fde047;
+  background: radial-gradient(circle at 38% 30%, rgba(146, 64, 14, 0.96) 0%, rgba(56, 20, 8, 0.98) 100%);
+  box-shadow:
+    0 0 26px rgba(250, 204, 21, 0.88),
+    0 0 12px rgba(245, 158, 11, 0.72),
+    inset 0 0 14px rgba(254, 240, 138, 0.42);
 }
 
 .touch-souls-r1.is-counter-ready,
@@ -9528,13 +9586,13 @@ html.is-mobile-landscape .hub-rotate-hint {
 }
 
 .touch-layer.is-souls-touch .touch-dash-btn {
-  width: 70px;
-  height: 70px;
-  right: calc(110px + var(--safe-right));
-  bottom: calc(18px + var(--safe-bottom));
+  width: 74px;
+  height: 74px;
+  right: calc(112px + var(--safe-right));
+  bottom: calc(14px + var(--safe-bottom));
   z-index: 4;
   background: radial-gradient(circle at 36% 28%, rgba(32, 28, 34, 0.92) 0%, rgba(13, 11, 15, 0.96) 100%);
-  border-color: rgba(196, 162, 98, 0.65);
+  border-color: rgba(196, 162, 98, 0.68);
 }
 
 .touch-layer.is-souls-touch .touch-dash-btn .touch-dash-label,
@@ -9544,11 +9602,36 @@ html.is-mobile-landscape .hub-rotate-hint {
   color: #e6cca0;
 }
 
+.touch-souls-block {
+  width: 74px;
+  height: 74px;
+  right: calc(104px + var(--safe-right));
+  bottom: calc(98px + var(--safe-bottom));
+  background: radial-gradient(circle at 38% 30%, rgba(28, 34, 48, 0.94) 0%, rgba(12, 14, 22, 0.97) 100%);
+  border-color: rgba(212, 182, 122, 0.78);
+}
+
+.touch-souls-block.is-blocking {
+  border-color: #cbd5e1;
+  box-shadow: 0 0 18px rgba(148, 163, 184, 0.58);
+}
+
+.touch-souls-block.is-parry {
+  border-color: #fde047;
+  background: radial-gradient(circle, rgba(124, 74, 18, 0.96) 0%, rgba(44, 23, 8, 0.98) 100%);
+  box-shadow: 0 0 24px rgba(250, 204, 21, 0.85);
+}
+
+.touch-souls-block.is-guard-broken {
+  border-color: #b91c1c;
+  box-shadow: 0 0 16px rgba(185, 28, 28, 0.65);
+}
+
 .touch-souls-r2 {
-  width: 64px;
-  height: 64px;
-  right: calc(106px + var(--safe-right));
-  bottom: calc(102px + var(--safe-bottom));
+  width: 62px;
+  height: 62px;
+  right: calc(16px + var(--safe-right));
+  bottom: calc(112px + var(--safe-bottom));
   background: radial-gradient(circle at 38% 30%, rgba(56, 34, 20, 0.93) 0%, rgba(22, 13, 10, 0.96) 100%);
   border-color: rgba(206, 164, 94, 0.72);
 }
@@ -9557,59 +9640,17 @@ html.is-mobile-landscape .hub-rotate-hint {
   font-size: 8.5px;
 }
 
-.touch-souls-block {
-  width: 68px;
-  height: 68px;
-  right: calc(186px + var(--safe-right));
-  bottom: calc(72px + var(--safe-bottom));
-  background: radial-gradient(circle at 38% 30%, rgba(26, 30, 42, 0.93) 0%, rgba(12, 13, 20, 0.96) 100%);
-  border-color: rgba(188, 164, 118, 0.68);
-}
-
-.touch-souls-block.is-blocking {
-  border-color: #cbd5e1;
-  box-shadow: 0 0 18px rgba(148, 163, 184, 0.55);
-}
-
-.touch-souls-block.is-parry {
-  border-color: #f6dc8e;
-  background: radial-gradient(circle, rgba(112, 68, 18, 0.95) 0%, rgba(42, 22, 8, 0.98) 100%);
-  box-shadow: 0 0 22px rgba(217, 162, 60, 0.8);
-}
-
-.touch-souls-block.is-guard-broken {
-  border-color: #b91c1c;
-  box-shadow: 0 0 16px rgba(185, 28, 28, 0.65);
-}
-
-.touch-souls-lock {
-  width: 58px;
-  height: 58px;
-  right: calc(18px + var(--safe-right));
-  bottom: calc(112px + var(--safe-bottom));
-}
-
-.touch-souls-lock .touch-souls-ico {
-  font-size: 20px;
-}
-
-.touch-souls-lock.is-active {
-  border-color: #f3d58c;
-  background: radial-gradient(circle, rgba(96, 60, 16, 0.95) 0%, rgba(36, 20, 8, 0.98) 100%);
-  box-shadow: 0 0 18px rgba(217, 162, 60, 0.72);
-}
-
 .touch-souls-flask {
-  width: 58px;
-  height: 58px;
-  right: calc(84px + var(--safe-right));
-  bottom: calc(180px + var(--safe-bottom));
+  width: 54px;
+  height: 54px;
+  right: calc(198px + var(--safe-right));
+  bottom: calc(16px + var(--safe-bottom));
   background: radial-gradient(circle at 38% 30%, rgba(62, 36, 16, 0.92) 0%, rgba(24, 13, 8, 0.96) 100%);
   border-color: rgba(212, 162, 84, 0.72);
 }
 
 .touch-souls-flask .touch-souls-ico {
-  font-size: 20px;
+  font-size: 19px;
 }
 
 .touch-souls-flask.is-drinking {
@@ -9622,12 +9663,124 @@ html.is-mobile-landscape .hub-rotate-hint {
   filter: grayscale(0.8);
 }
 
-/* Hide redundant desktop-only bottom action pills when mobile Souls touch cluster is active */
+.touch-auto-flask-pill {
+  position: absolute;
+  right: calc(188px + var(--safe-right));
+  bottom: calc(76px + var(--safe-bottom));
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  pointer-events: auto;
+  touch-action: none;
+  -webkit-touch-callout: none;
+  user-select: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background: rgba(16, 14, 18, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.42);
+  color: #94a3b8;
+  font-family: var(--font-display);
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.65);
+  transition: transform 0.08s ease, border-color 0.14s ease, color 0.14s ease, background 0.14s ease;
+}
+
+.touch-auto-flask-pill.is-pressed {
+  transform: scale(0.92);
+}
+
+.touch-auto-flask-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #64748b;
+  flex-shrink: 0;
+}
+
+.touch-auto-flask-pill.is-enabled {
+  background: rgba(26, 38, 28, 0.92);
+  border-color: rgba(234, 179, 8, 0.72);
+  color: #fef08a;
+}
+
+.touch-auto-flask-pill.is-enabled .touch-auto-flask-dot {
+  background: #4ade80;
+  box-shadow: 0 0 6px rgba(74, 222, 128, 0.85);
+}
+
+.touch-souls-lock {
+  width: 48px;
+  height: 48px;
+  right: calc(14px + var(--safe-right));
+  top: calc(56px + var(--safe-top));
+  bottom: auto;
+}
+
+.touch-souls-lock .touch-souls-ico {
+  font-size: 18px;
+}
+
+.touch-souls-lock .touch-souls-lbl {
+  font-size: 8px;
+}
+
+.touch-souls-lock.is-smart-auto {
+  border-color: rgba(218, 178, 102, 0.78);
+}
+
+.touch-souls-lock.is-active {
+  border-color: #f3d58c;
+  background: radial-gradient(circle, rgba(96, 60, 16, 0.95) 0%, rgba(36, 20, 8, 0.98) 100%);
+  box-shadow: 0 0 18px rgba(217, 162, 60, 0.72);
+}
+
+@media (max-height: 410px) {
+  .touch-souls-r1 {
+    width: 78px;
+    height: 78px;
+    bottom: calc(12px + var(--safe-bottom));
+  }
+  .touch-layer.is-souls-touch .touch-dash-btn {
+    width: 68px;
+    height: 68px;
+    right: calc(104px + var(--safe-right));
+    bottom: calc(12px + var(--safe-bottom));
+  }
+  .touch-souls-block {
+    width: 68px;
+    height: 68px;
+    right: calc(96px + var(--safe-right));
+    bottom: calc(88px + var(--safe-bottom));
+  }
+  .touch-souls-r2 {
+    width: 58px;
+    height: 58px;
+    bottom: calc(100px + var(--safe-bottom));
+  }
+  .touch-souls-flask {
+    width: 50px;
+    height: 50px;
+    right: calc(182px + var(--safe-right));
+    bottom: calc(12px + var(--safe-bottom));
+  }
+  .touch-auto-flask-pill {
+    right: calc(174px + var(--safe-right));
+    bottom: calc(68px + var(--safe-bottom));
+  }
+}
+
+/* Hide redundant desktop-only bottom action pills & PC key tags when mobile Souls touch cluster is active */
 .hud-screen.is-souls-touch-active .hud-dash-btn,
 .hud-screen.is-souls-touch-active .hud-souls-block-btn,
 .hud-screen.is-souls-touch-active .hud-souls-flask-btn,
 .hud-screen.is-souls-touch-active .hud-lock-btn,
-.hud-screen.is-souls-touch-active .souls-pointer-hint {
+.hud-screen.is-souls-touch-active .souls-pointer-hint,
+.hud-screen.is-souls-touch-active .souls-interact-key,
+.hud-screen.is-souls-touch-active .souls-riposte-key {
   display: none !important;
 }
 
@@ -9802,7 +9955,7 @@ html.is-mobile-landscape .hub-rotate-hint {
     radial-gradient(circle at 88% 94%, rgba(153, 27, 27, 0.07) 0%, transparent 40%);
 }
 
-body.is-souls-cutscene #fps-badge {
+body.is-souls-cutscene #fps-badge:not(.is-dev-visible) {
   opacity: 0 !important;
   pointer-events: none !important;
 }
@@ -10209,5 +10362,432 @@ body.is-souls-cutscene #fps-badge {
   .souls-riposte-key {
     font-size: 13px;
     padding: 3px 8px;
+  }
+}
+
+
+/* =========================================================================
+   PURE GOTHIC DARK-FANTASY SOULSLIKE TITLE SCREEN & SETTINGS MODAL (z72)
+   ========================================================================= */
+#splash-screen {
+  background: radial-gradient(circle at 50% 42%, #191522 0%, #09080e 65%, #050408 100%) !important;
+}
+
+.souls-title-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.souls-title-screen.hidden {
+  display: none !important;
+}
+
+.souls-title-vignette {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(6, 5, 10, 0.94) 0%, rgba(7, 6, 12, 0.78) 34%, rgba(7, 6, 12, 0.22) 60%, rgba(5, 4, 9, 0.14) 100%),
+    radial-gradient(ellipse at 72% 52%, rgba(214, 114, 38, 0.08) 0%, rgba(5, 4, 8, 0.56) 72%);
+  pointer-events: none;
+}
+
+.souls-title-col {
+  position: relative;
+  z-index: 2;
+  width: min(440px, 46vw);
+  margin-left: clamp(32px, 6.5vw, 96px);
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  pointer-events: auto;
+}
+
+.souls-title-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.souls-title-eyebrow {
+  font-family: 'Cinzel', Georgia, 'Times New Roman', serif;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.34em;
+  color: rgba(212, 173, 102, 0.86);
+  text-transform: uppercase;
+}
+
+.souls-title-logo {
+  margin: 0;
+  font-family: 'Cinzel', Georgia, 'Times New Roman', serif;
+  font-size: clamp(28px, 3.6vw, 46px);
+  font-weight: 800;
+  line-height: 1.08;
+  letter-spacing: 0.09em;
+  color: #efe3c8;
+  text-shadow:
+    0 2px 18px rgba(0, 0, 0, 0.92),
+    0 0 32px rgba(196, 134, 48, 0.22);
+}
+
+.souls-title-rule {
+  width: 220px;
+  height: 1px;
+  margin-top: 6px;
+  background: linear-gradient(90deg, rgba(212, 173, 102, 0.85) 0%, rgba(212, 173, 102, 0.25) 68%, transparent 100%);
+}
+
+.souls-title-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 340px;
+}
+
+.souls-menu-item {
+  position: relative;
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 18px 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgba(190, 154, 92, 0.22);
+  border-left: 2px solid rgba(190, 154, 92, 0.42);
+  border-radius: 3px;
+  background: linear-gradient(90deg, rgba(20, 17, 23, 0.86) 0%, rgba(12, 10, 15, 0.48) 100%);
+  color: #dfd3ba;
+  font-family: 'Cinzel', Georgia, serif;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.15s ease, box-shadow 0.18s ease;
+}
+
+.souls-menu-item:hover:not(:disabled),
+.souls-menu-item:focus-visible:not(:disabled) {
+  outline: none;
+  border-color: rgba(226, 188, 114, 0.72);
+  border-left-color: #e8c47a;
+  background: linear-gradient(90deg, rgba(58, 38, 22, 0.84) 0%, rgba(22, 16, 18, 0.62) 100%);
+  color: #fff3d6;
+  transform: translateX(4px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.55), inset 0 0 18px rgba(214, 158, 66, 0.14);
+}
+
+.souls-menu-item.is-primary:not(:disabled) {
+  border-color: rgba(214, 172, 98, 0.48);
+  border-left: 3px solid #dfb462;
+  background: linear-gradient(90deg, rgba(64, 24, 24, 0.80) 0%, rgba(22, 14, 18, 0.62) 100%);
+  color: #f9ebd0;
+}
+
+.souls-menu-item.is-disabled,
+.souls-menu-item:disabled {
+  opacity: 0.42;
+  cursor: default;
+  border-color: rgba(140, 128, 112, 0.16);
+  border-left-color: rgba(140, 128, 112, 0.24);
+}
+
+.souls-menu-item-label {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.souls-menu-item-sub,
+.souls-menu-item-tag {
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: rgba(214, 186, 134, 0.78);
+  white-space: nowrap;
+}
+
+.souls-menu-item-tag {
+  padding: 2px 8px;
+  border: 1px solid rgba(206, 168, 102, 0.36);
+  border-radius: 3px;
+  background: rgba(14, 12, 18, 0.78);
+  color: #e6c684;
+}
+
+.souls-menu-diff-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.souls-diff-drawer {
+  padding: 10px 12px;
+  border: 1px solid rgba(190, 154, 92, 0.30);
+  border-radius: 3px;
+  background: rgba(11, 9, 15, 0.90);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.souls-diff-drawer.hidden {
+  display: none !important;
+}
+
+.souls-diff-pills {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.souls-diff-pill {
+  padding: 7px 6px;
+  border: 1px solid rgba(180, 148, 92, 0.28);
+  border-radius: 3px;
+  background: rgba(20, 17, 25, 0.85);
+  color: #c8bca6;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.souls-diff-pill.is-selected {
+  border-color: #e3ba6c;
+  background: rgba(78, 42, 20, 0.82);
+  color: #fff2d4;
+}
+
+.souls-diff-note {
+  font-size: 11px;
+  color: rgba(192, 178, 156, 0.74);
+  line-height: 1.3;
+}
+
+.souls-title-footer {
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(176, 160, 138, 0.56);
+}
+
+.souls-title-stage-hint {
+  position: absolute;
+  right: 22px;
+  bottom: 18px;
+  z-index: 2;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: rgba(212, 192, 156, 0.52);
+  pointer-events: none;
+}
+
+.souls-title-top-tools {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 3;
+  display: flex;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+/* Gothic Settings Modal */
+.souls-settings-panel {
+  width: min(460px, 92vw);
+  max-height: 88vh;
+  overflow-y: auto;
+  padding: 20px 22px;
+  background: linear-gradient(180deg, rgba(20, 17, 24, 0.98) 0%, rgba(10, 8, 14, 0.99) 100%);
+  border: 1px solid rgba(208, 168, 98, 0.52);
+  border-radius: 5px;
+  box-shadow: 0 18px 54px rgba(0, 0, 0, 0.88);
+}
+
+.souls-settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 10px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid rgba(208, 168, 98, 0.24);
+}
+
+.souls-settings-title {
+  margin: 0 !important;
+  font-size: 18px !important;
+  letter-spacing: 0.16em;
+  color: #efe0be;
+}
+
+.souls-settings-x {
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(208, 168, 98, 0.35);
+  border-radius: 3px;
+  background: rgba(18, 15, 22, 0.85);
+  color: #e2c588;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.souls-settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.souls-settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.souls-settings-sec-label {
+  font-family: 'Cinzel', Georgia, serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: rgba(214, 175, 102, 0.82);
+}
+
+.souls-settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.souls-settings-row-lbl {
+  font-size: 13px;
+  color: #d8ccb8;
+}
+
+.souls-settings-toggle-btn,
+.souls-settings-pill-btn {
+  padding: 7px 14px;
+  border: 1px solid rgba(206, 168, 98, 0.42);
+  border-radius: 3px;
+  background: rgba(28, 23, 32, 0.92);
+  color: #eedab2;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.souls-settings-toggle-btn.is-muted,
+.souls-settings-pill-btn.is-low {
+  border-color: rgba(196, 106, 84, 0.56);
+  color: #f0b8a8;
+}
+
+.souls-controls-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px 12px;
+}
+
+.souls-ctrl-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 3px;
+  background: rgba(24, 20, 29, 0.72);
+  border: 1px solid rgba(180, 148, 92, 0.16);
+  font-size: 11px;
+}
+
+.souls-ctrl-key {
+  color: #e6c684;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.souls-ctrl-desc {
+  color: #c8bca8;
+  text-align: right;
+}
+
+.souls-settings-footer-row {
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 10px;
+  border-top: 1px solid rgba(208, 168, 98, 0.22);
+}
+
+.souls-settings-danger-btn {
+  padding: 8px 12px;
+  border: 1px solid rgba(184, 62, 62, 0.52);
+  border-radius: 3px;
+  background: rgba(52, 16, 18, 0.78);
+  color: #e8b0a8;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.souls-settings-primary-btn {
+  padding: 8px 22px;
+  border: 1px solid rgba(226, 184, 104, 0.72);
+  border-radius: 3px;
+  background: linear-gradient(180deg, rgba(96, 56, 24, 0.92) 0%, rgba(56, 30, 14, 0.95) 100%);
+  color: #fff3d6;
+  font-family: 'Cinzel', Georgia, serif;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+}
+
+/* Compact Mobile Landscape (844x390) Title Screen Polish */
+@media (max-height: 460px) {
+  .souls-title-col {
+    width: min(350px, 50vw);
+    margin-left: 24px;
+    gap: 12px;
+  }
+  .souls-title-logo {
+    font-size: 24px;
+  }
+  .souls-title-eyebrow {
+    font-size: 10px;
+  }
+  .souls-title-rule {
+    width: 150px;
+    margin-top: 2px;
+  }
+  .souls-title-nav {
+    gap: 6px;
+    max-width: 300px;
+  }
+  .souls-menu-item {
+    min-height: 36px;
+    padding: 6px 12px;
+  }
+  .souls-menu-item-label {
+    font-size: 13px;
+  }
+  .souls-title-footer,
+  .souls-title-stage-hint {
+    display: none;
+  }
+  .souls-settings-panel {
+    padding: 14px 16px;
+  }
+  .souls-controls-grid {
+    display: none;
   }
 }

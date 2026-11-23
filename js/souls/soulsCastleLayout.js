@@ -1,5 +1,5 @@
 // 6-Zone Non-Linear Gothic Castle Layout, Pre-Boss Bonfire Checkpoint, 5-Gargoyle Flame Gauntlet,
-// Exact Wall Line-of-Sight & Doorway Steering for `Abandoned Knight Rift` (?v=20261123z71).
+// Exact Wall Line-of-Sight & Doorway Steering for `Abandoned Knight Rift` (?v=20261124z84).
 // Pure zero-dependency ES module (Vanilla JS, V8/Browser/Node compatible).
 //
 // 6-Zone Non-Linear Progression (South +Z -> North -Z, zero "narrow corridor tube"):
@@ -256,16 +256,22 @@ export const SOULS_CASTLE_ELEVATION_PLATFORMS = Object.freeze([
 // (1:1 aligned with soulsArena.js darkStoneParts rubble & fallen column geometry!)
 const _ALCOVE_MID_X = (SOULS_CASTLE_CONSTANTS.EAST_ALCOVE_MIN_X + SOULS_CASTLE_CONSTANTS.EAST_ALCOVE_MAX_X) * 0.5;
 const _COURTYARD_WALL_X = SOULS_CASTLE_CONSTANTS.COURTYARD_MAX_X - 1.0;
+const _ATRIUM_WEST_WALL_X = SOULS_CASTLE_CONSTANTS.ATRIUM_MIN_X + 0.92;
+const _ATRIUM_EAST_WALL_X = SOULS_CASTLE_CONSTANTS.ATRIUM_MAX_X - 0.90;
 const _CORRIDOR_WALL_X = SOULS_CASTLE_CONSTANTS.CORRIDOR_HALF_W - 0.9;
 const _HALL_RUBBLE_X = SOULS_CASTLE_CONSTANTS.BOSS_RADIUS - 2.4;
 
 export const SOULS_CASTLE_RUBBLE = Object.freeze([
   Object.freeze({ id: 'rubble_spawn_sw', roomId: 'spawn_hall', kind: 'rubble_box', shape: 'box', x: -_COURTYARD_WALL_X, y: 0.126, z: SOULS_CASTLE_CONSTANTS.COURTYARD_MAX_Z - 1.4, w: 0.52, h: 0.28, d: 0.44, rotX: 0.08, rotY: 0.5, rotZ: -0.06, rx: 0.08, ry: 0.5, rz: -0.06, radius: 0.38, collider: true }),
-  Object.freeze({ id: 'rubble_spawn_se', roomId: 'spawn_hall', kind: 'rubble_box', shape: 'box', x: _COURTYARD_WALL_X, y: 0.117, z: SOULS_CASTLE_CONSTANTS.COURTYARD_MAX_Z - 2.0, w: 0.48, h: 0.26, d: 0.42, rotX: 0.08, rotY: -0.6, rotZ: -0.06, rx: 0.08, ry: -0.6, rz: -0.06, radius: 0.36, collider: true }),
-  Object.freeze({ id: 'rubble_atrium_sw', roomId: 'first_duel_atrium', kind: 'rubble_box', shape: 'box', x: -_COURTYARD_WALL_X, y: 0.135, z: SOULS_CASTLE_CONSTANTS.COURTYARD_MIN_Z + 3.2, w: 0.54, h: 0.30, d: 0.42, rotX: 0.08, rotY: 0.8, rotZ: -0.06, rx: 0.08, ry: 0.8, rz: -0.06, radius: 0.38, collider: true }),
-  Object.freeze({ id: 'rubble_atrium_se', roomId: 'first_duel_atrium', kind: 'rubble_box', shape: 'box', x: _COURTYARD_WALL_X, y: 0.108, z: SOULS_CASTLE_CONSTANTS.COURTYARD_MIN_Z + 3.6, w: 0.46, h: 0.24, d: 0.40, rotX: 0.08, rotY: -0.4, rotZ: -0.06, rx: 0.08, ry: -0.4, rz: -0.06, radius: 0.35, collider: true }),
+  Object.freeze({ id: 'rubble_spawn_se', roomId: 'spawn_hall', kind: 'rubble_box', shape: 'box', x: _COURTYARD_WALL_X - 0.2, y: 0.117, z: SOULS_CASTLE_CONSTANTS.COURTYARD_MAX_Z - 1.2, w: 0.48, h: 0.26, d: 0.42, rotX: 0.08, rotY: -0.6, rotZ: -0.06, rx: 0.08, ry: -0.6, rz: -0.06, radius: 0.36, collider: true }),
+  Object.freeze({ id: 'fallen_column_spawn_ne', roomId: 'spawn_hall', kind: 'fallen_column', shape: 'cylinder', x: 9.55, y: 0.38, z: 53.35, rTop: 0.44, rBot: 0.48, length: 1.24, radialSegs: 9, rotX: Number((Math.PI * 0.485).toFixed(5)), rotY: -0.62, rotZ: -0.08, rx: Number((Math.PI * 0.485).toFixed(5)), ry: -0.62, rz: -0.08, radius: 0.68, collider: true }),
+  Object.freeze({ id: 'rubble_spawn_nw_corner', roomId: 'spawn_hall', kind: 'rubble_box', shape: 'box', x: -10.15, y: 0.13, z: 53.6, w: 0.54, h: 0.29, d: 0.44, rotX: 0.07, rotY: 0.92, rotZ: -0.05, rx: 0.07, ry: 0.92, rz: -0.05, radius: 0.38, collider: true }),
+  Object.freeze({ id: 'rubble_atrium_sw', roomId: 'first_duel_atrium', kind: 'rubble_box', shape: 'box', x: _ATRIUM_WEST_WALL_X, y: 0.135, z: SOULS_CASTLE_CONSTANTS.COURTYARD_MIN_Z + 4.8, w: 0.54, h: 0.30, d: 0.42, rotX: 0.08, rotY: 0.8, rotZ: -0.06, rx: 0.08, ry: 0.8, rz: -0.06, radius: 0.38, collider: true }),
+  Object.freeze({ id: 'rubble_atrium_se', roomId: 'first_duel_atrium', kind: 'rubble_box', shape: 'box', x: _ATRIUM_EAST_WALL_X, y: 0.108, z: SOULS_CASTLE_CONSTANTS.COURTYARD_MIN_Z + 5.2, w: 0.46, h: 0.24, d: 0.40, rotX: 0.08, rotY: -0.4, rotZ: -0.06, rx: 0.08, ry: -0.4, rz: -0.06, radius: 0.35, collider: true }),
+  Object.freeze({ id: 'fallen_column_atrium_cloister', roomId: 'first_duel_atrium', kind: 'fallen_column', shape: 'cylinder', x: -9.85, y: 0.38, z: 30.15, rTop: 0.44, rBot: 0.48, length: 1.22, radialSegs: 9, rotX: Number((Math.PI * 0.485).toFixed(5)), rotY: 0.48, rotZ: 0.09, rx: Number((Math.PI * 0.485).toFixed(5)), ry: 0.48, rz: 0.09, radius: 0.68, collider: true }),
   Object.freeze({ id: 'rubble_gauntlet_w', roomId: 'flame_gauntlet', kind: 'rubble_box', shape: 'box', x: -_CORRIDOR_WALL_X, y: 0.117, z: 9.0, w: 0.50, h: 0.26, d: 0.40, rotX: 0.08, rotY: 0.6, rotZ: -0.06, rx: 0.08, ry: 0.6, rz: -0.06, radius: 0.36, collider: true }),
   Object.freeze({ id: 'rubble_nave_e', roomId: 'knights_nave', kind: 'rubble_box', shape: 'box', x: _CORRIDOR_WALL_X, y: 0.108, z: -9.4, w: 0.48, h: 0.24, d: 0.38, rotX: 0.08, rotY: -0.5, rotZ: -0.06, rx: 0.08, ry: -0.5, rz: -0.06, radius: 0.35, collider: true }),
+  Object.freeze({ id: 'rubble_nave_ne_slab', roomId: 'knights_nave', kind: 'rubble_box', shape: 'box', x: 4.78, y: 0.115, z: 7.55, w: 0.62, h: 0.24, d: 0.46, rotX: 0.06, rotY: -0.35, rotZ: 0.05, rx: 0.06, ry: -0.35, rz: 0.05, radius: 0.38, collider: true }),
   Object.freeze({ id: 'rubble_alcove_ne', roomId: 'east_alcove', kind: 'rubble_box', shape: 'box', x: _ALCOVE_MID_X + 2.8, y: 0.117, z: SOULS_CASTLE_CONSTANTS.EAST_ALCOVE_MIN_Z + 1.2, w: 0.48, h: 0.26, d: 0.40, rotX: 0.08, rotY: 0.4, rotZ: -0.06, rx: 0.08, ry: 0.4, rz: -0.06, radius: 0.35, collider: true }),
   Object.freeze({ id: 'rubble_alcove_se', roomId: 'east_alcove', kind: 'rubble_box', shape: 'box', x: _ALCOVE_MID_X + 2.8, y: 0.108, z: SOULS_CASTLE_CONSTANTS.EAST_ALCOVE_MAX_Z - 1.2, w: 0.44, h: 0.24, d: 0.38, rotX: 0.08, rotY: -0.7, rotZ: -0.06, rx: 0.08, ry: -0.7, rz: -0.06, radius: 0.33, collider: true }),
   Object.freeze({ id: 'rubble_boss_nw', roomId: 'boss_hall', kind: 'rubble_box', shape: 'box', x: -_HALL_RUBBLE_X, y: 0.153, z: SOULS_CASTLE_CONSTANTS.BOSS_CENTER_Z - 4.2, w: 0.62, h: 0.34, d: 0.50, rotX: 0.08, rotY: 0.7, rotZ: -0.06, rx: 0.08, ry: 0.7, rz: -0.06, radius: 0.44, collider: true }),
@@ -1600,6 +1606,10 @@ export const SOULS_CASTLE_PILLARS = Object.freeze([
   Object.freeze({ id: 'pillar_atrium_cloister_n', roomId: 'first_duel_atrium', x: -8.8, z: 31.5, height: 6.5, broken: true, collider: true, radius: 0.85 }),
   Object.freeze({ id: 'pillar_atrium_east', roomId: 'first_duel_atrium', x: 6.4, z: 36.0, height: 8.0, broken: false, collider: true, radius: 0.85 }),
 
+  // Zone 4: Knights' Nave asymmetric flanking columns (architectural richness + physical arrow cover!)
+  Object.freeze({ id: 'pillar_nave_se', roomId: 'knights_nave', x: 2.35, z: 0.4, height: 8.0, broken: false, collider: true, radius: 0.82 }),
+  Object.freeze({ id: 'pillar_nave_nw', roomId: 'knights_nave', x: -2.35, z: -9.2, height: 6.6, broken: true, collider: true, radius: 0.82 }),
+
   // Zone 5: Pre-Boss Sanctuary flanking columns
   Object.freeze({ id: 'pillar_sanctuary_w', roomId: 'pre_boss_sanctuary', x: -6.0, z: -24.0, height: 8.0, broken: false, collider: true, radius: 0.85 }),
   Object.freeze({ id: 'pillar_sanctuary_e', roomId: 'pre_boss_sanctuary', x: 6.2, z: -28.2, height: 8.0, broken: false, collider: true, radius: 0.85 }),
@@ -1704,13 +1714,26 @@ export const SOULS_CASTLE_WALL_LANTERNS = Object.freeze([
 export const SOULS_CASTLE_SCONCES = SOULS_CASTLE_WALL_LANTERNS;
 
 export const SOULS_CASTLE_CANDLE_CLUSTERS = Object.freeze([
-  // Pre-Boss Bonfire Sanctuary candle clusters around `(2.6, -24.0)`
-  Object.freeze({ id: 'candles_bonfire_w', roomId: 'pre_boss_sanctuary', x: 1.0, y: 0, z: -23.0, count: 5, radius: 0.42 }),
-  Object.freeze({ id: 'candles_bonfire_e', roomId: 'pre_boss_sanctuary', x: 4.2, y: 0, z: -23.3, count: 4, radius: 0.38 }),
-  Object.freeze({ id: 'candles_bonfire_n', roomId: 'pre_boss_sanctuary', x: 2.2, y: 0, z: -25.6, count: 4, radius: 0.35 }),
+  // Zone 1: Founder Sarcophagus votive candles in Awakening Hall
+  Object.freeze({ id: 'candles_spawn_founder_w', roomId: 'spawn_hall', x: -1.48, y: 0, z: 66.82, count: 4, radius: 0.34 }),
+  Object.freeze({ id: 'candles_spawn_founder_e', roomId: 'spawn_hall', x: 1.48, y: 0, z: 66.82, count: 4, radius: 0.34 }),
+  // Zone 2: Elevated Skull Reliquary Niche votive candles (unbreakable inside high stone niches!)
+  Object.freeze({ id: 'candles_niche_atrium_w', roomId: 'first_duel_atrium', x: -13.12, y: 1.18, z: 36.0, count: 4, scale: 0.82, radius: 0.28, breakable: false }),
+  Object.freeze({ id: 'candles_niche_atrium_sw', roomId: 'first_duel_atrium', x: -12.25, y: 1.18, z: 45.62, count: 3, scale: 0.80, radius: 0.26, breakable: false }),
+  Object.freeze({ id: 'candles_niche_atrium_e1', roomId: 'first_duel_atrium', x: 8.12, y: 1.18, z: 33.4, count: 4, scale: 0.82, radius: 0.28, breakable: false }),
+  Object.freeze({ id: 'candles_niche_atrium_e2', roomId: 'first_duel_atrium', x: 8.12, y: 1.18, z: 38.6, count: 3, scale: 0.80, radius: 0.26, breakable: false }),
+  // Zone 4: Knights' Nave & West Side-Chapel Saint Shrines
+  Object.freeze({ id: 'candles_nave_shrine_es', roomId: 'knights_nave', x: 4.55, y: 0, z: 2.75, count: 3, radius: 0.30 }),
+  Object.freeze({ id: 'candles_chapel_shrine_nw', roomId: 'west_wing', x: -11.42, y: 0, z: -8.6, count: 4, radius: 0.32 }),
+  Object.freeze({ id: 'candles_chapel_shrine_sw', roomId: 'west_wing', x: -11.42, y: 0, z: -3.4, count: 4, radius: 0.32 }),
   // East Armory Relic Shrine `(12.4, -4.0)`
   Object.freeze({ id: 'candles_shrine_n', roomId: 'east_alcove', x: 11.6, y: 0, z: -5.25, count: 5, radius: 0.4 }),
   Object.freeze({ id: 'candles_shrine_s', roomId: 'east_alcove', x: 11.6, y: 0, z: -2.75, count: 5, radius: 0.4 }),
+  // Zone 5: Pre-Boss Bonfire Sanctuary candle clusters around `(2.6, -24.0)` & Kneeling Watcher
+  Object.freeze({ id: 'candles_bonfire_w', roomId: 'pre_boss_sanctuary', x: 1.0, y: 0, z: -23.0, count: 5, radius: 0.42 }),
+  Object.freeze({ id: 'candles_bonfire_e', roomId: 'pre_boss_sanctuary', x: 4.2, y: 0, z: -23.3, count: 4, radius: 0.38 }),
+  Object.freeze({ id: 'candles_bonfire_n', roomId: 'pre_boss_sanctuary', x: 2.2, y: 0, z: -25.6, count: 4, radius: 0.35 }),
+  Object.freeze({ id: 'candles_sanctuary_watcher', roomId: 'pre_boss_sanctuary', x: -5.45, y: 0, z: -27.1, count: 4, radius: 0.32 }),
   // Boss Door jambs `(z = -32.0)`
   Object.freeze({ id: 'candles_door_w', roomId: 'pre_boss_sanctuary', x: -3.35, y: 0, z: -30.25, count: 4, radius: 0.36 }),
   Object.freeze({ id: 'candles_door_e', roomId: 'pre_boss_sanctuary', x: 3.35, y: 0, z: -30.25, count: 4, radius: 0.36 }),
@@ -1720,16 +1743,29 @@ export const SOULS_CASTLE_CANDLE_CLUSTERS = Object.freeze([
 ]);
 
 export const SOULS_CASTLE_BANNERS = Object.freeze([
+  // Zone 1: Awakening Hall royal banners
   Object.freeze({ id: 'banner_spawn_w', roomId: 'spawn_hall', x: -10.88, y: 5.2, z: 57.0, normalX: 1, normalZ: 0, width: 1.3, height: 3.4 }),
   Object.freeze({ id: 'banner_spawn_e', roomId: 'spawn_hall', x: 10.88, y: 5.2, z: 57.0, normalX: -1, normalZ: 0, width: 1.3, height: 3.4 }),
+  Object.freeze({ id: 'banner_spawn_s_w', roomId: 'spawn_hall', x: -7.6, y: 5.3, z: 67.86, normalX: 0, normalZ: -1, width: 1.28, height: 3.35 }),
+  Object.freeze({ id: 'banner_spawn_s_e', roomId: 'spawn_hall', x: 7.6, y: 5.3, z: 67.86, normalX: 0, normalZ: -1, width: 1.28, height: 3.35 }),
+  // Zone 2: Duel Atrium & West Cloister tattered heraldic banners
+  Object.freeze({ id: 'banner_atrium_w_south', roomId: 'first_duel_atrium', x: -13.38, y: 5.1, z: 43.5, normalX: 1, normalZ: 0, width: 1.25, height: 3.3 }),
+  Object.freeze({ id: 'banner_atrium_w_north', roomId: 'first_duel_atrium', x: -13.38, y: 5.1, z: 28.5, normalX: 1, normalZ: 0, width: 1.25, height: 3.3 }),
+  Object.freeze({ id: 'banner_atrium_e_mid', roomId: 'first_duel_atrium', x: 8.38, y: 5.1, z: 36.0, normalX: -1, normalZ: 0, width: 1.25, height: 3.3 }),
   Object.freeze({ id: 'banner_atrium_nw', roomId: 'first_duel_atrium', x: -9.5, y: 5.0, z: 26.12, normalX: 0, normalZ: 1, width: 1.25, height: 3.2 }),
   Object.freeze({ id: 'banner_atrium_ne', roomId: 'first_duel_atrium', x: 6.8, y: 5.0, z: 26.12, normalX: 0, normalZ: 1, width: 1.25, height: 3.2 }),
+  // Zone 4: Knights' Nave, West Side-Chapel & East Armory Alcove
   Object.freeze({ id: 'banner_nave_w', roomId: 'knights_nave', x: -5.38, y: 4.8, z: -13.4, normalX: 1, normalZ: 0, width: 1.15, height: 3.0 }),
+  Object.freeze({ id: 'banner_nave_e', roomId: 'knights_nave', x: 5.38, y: 4.8, z: -10.8, normalX: -1, normalZ: 0, width: 1.15, height: 3.0 }),
   Object.freeze({ id: 'banner_west_wing', roomId: 'west_wing', x: -12.38, y: 4.6, z: -6.0, normalX: 1, normalZ: 0, width: 1.2, height: 3.1 }),
   Object.freeze({ id: 'banner_alcove_n', roomId: 'east_alcove', x: 13.88, y: 4.5, z: -6.2, normalX: -1, normalZ: 0, width: 1.1, height: 2.9 }),
   Object.freeze({ id: 'banner_alcove_s', roomId: 'east_alcove', x: 13.88, y: 4.5, z: -1.8, normalX: -1, normalZ: 0, width: 1.1, height: 2.9 }),
-  Object.freeze({ id: 'banner_sanctuary_w', roomId: 'pre_boss_sanctuary', x: -5.2, y: 5.0, z: -31.85, normalX: 0, normalZ: 1, width: 1.3, height: 3.3 }),
-  Object.freeze({ id: 'banner_sanctuary_e', roomId: 'pre_boss_sanctuary', x: 5.2, y: 5.0, z: -31.85, normalX: 0, normalZ: 1, width: 1.3, height: 3.3 }),
+  // Zone 5: Pre-Boss Sanctuary tattered ceremonial tapestries flanking the great Boss Gate (`z = -31.18` proud of stone jambs!) & outer walls
+  Object.freeze({ id: 'banner_sanctuary_w', roomId: 'pre_boss_sanctuary', x: -6.25, y: 5.05, z: -31.18, normalX: 0, normalZ: 1, width: 1.52, height: 3.95 }),
+  Object.freeze({ id: 'banner_sanctuary_e', roomId: 'pre_boss_sanctuary', x: 6.25, y: 5.05, z: -31.18, normalX: 0, normalZ: 1, width: 1.52, height: 3.95 }),
+  Object.freeze({ id: 'banner_sanctuary_side_w', roomId: 'pre_boss_sanctuary', x: -7.86, y: 5.1, z: -24.2, normalX: 1, normalZ: 0, width: 1.32, height: 3.45 }),
+  Object.freeze({ id: 'banner_sanctuary_side_e', roomId: 'pre_boss_sanctuary', x: 7.86, y: 5.1, z: -24.2, normalX: -1, normalZ: 0, width: 1.32, height: 3.45 }),
+  // Zone 6: Boss Hall Cathedral
   Object.freeze({ id: 'banner_boss_nw', roomId: 'boss_hall', x: -4.8, y: 6.2, z: -61.8, normalX: 0.3, normalZ: 0.95, width: 1.65, height: 4.4 }),
   Object.freeze({ id: 'banner_boss_ne', roomId: 'boss_hall', x: 4.8, y: 6.2, z: -61.8, normalX: -0.3, normalZ: 0.95, width: 1.65, height: 4.4 })
 ]);
@@ -1869,6 +1905,87 @@ export const SOULS_CASTLE_CLERESTORY_SHAFTS = Object.freeze([
 
 export const SOULS_CASTLE_GOD_RAYS = SOULS_CASTLE_CLERESTORY_SHAFTS;
 
+// Environmental Storytelling & Armory Decor across ALL 5 Pre-Boss Zones (`z` from +68 to -31.2; 0 inside Boss Arena!)
+export const SOULS_CASTLE_STORY_DECOR = Object.freeze([
+  // --- Zone 1: Awakening Hall (`spawn_hall`: sarcophagi/tomb effigies, broken portcullis/chains, Vigilant Knight statues, fallen shields) ---
+  Object.freeze({ id: 'sarcophagus_spawn_founder', roomId: 'spawn_hall', kind: 'stone_sarcophagus', style: 'founder_effigy', x: 0.0, y: 0, z: 67.05, facing: Math.PI, width: 2.36, depth: 1.12, collider: true, radius: 0.56 }),
+  Object.freeze({ id: 'sarcophagus_spawn_w', roomId: 'spawn_hall', kind: 'stone_sarcophagus', style: 'knight_effigy', x: -10.18, y: 0, z: 57.0, facing: Math.PI * 0.5, width: 2.28, depth: 1.06, collider: true, radius: 0.53 }),
+  Object.freeze({ id: 'sarcophagus_spawn_e', roomId: 'spawn_hall', kind: 'stone_sarcophagus', style: 'cracked_tomb', x: 10.18, y: 0, z: 57.0, facing: -Math.PI * 0.5, width: 2.28, depth: 1.06, collider: true, radius: 0.53 }),
+  Object.freeze({ id: 'sarcophagus_spawn_nw', roomId: 'spawn_hall', kind: 'stone_sarcophagus', style: 'knight_effigy', x: -10.18, y: 0, z: 48.4, facing: Math.PI * 0.5, width: 2.20, depth: 1.04, collider: true, radius: 0.52 }),
+  Object.freeze({ id: 'statue_spawn_sw', roomId: 'spawn_hall', kind: 'knight_statue', style: 'vigilant_sentinel', x: -2.85, y: 0, z: 67.12, facing: Math.PI, scale: 1.04, collider: true, radius: 0.62 }),
+  Object.freeze({ id: 'statue_spawn_se', roomId: 'spawn_hall', kind: 'knight_statue', style: 'vigilant_sentinel', x: 2.85, y: 0, z: 67.12, facing: Math.PI, scale: 1.04, collider: true, radius: 0.62 }),
+  Object.freeze({ id: 'statue_spawn_e_south', roomId: 'spawn_hall', kind: 'knight_statue', style: 'weathered_guardian', x: 10.22, y: 0, z: 64.9, facing: -Math.PI * 0.5, scale: 1.0, collider: true, radius: 0.60 }),
+  Object.freeze({ id: 'statue_spawn_ne_step', roomId: 'spawn_hall', kind: 'knight_statue', style: 'weathered_guardian', x: 9.85, y: 0, z: 47.05, facing: 0.35, scale: 1.02, collider: true, radius: 0.60 }),
+  Object.freeze({ id: 'portcullis_spawn_arch', roomId: 'spawn_hall', kind: 'broken_portcullis', x: -1.25, y: 0, z: 46.0, spanWidth: 19.5, springY: 5.8, apexY: 9.4, minCenterSpikeY: 5.05, collider: false }),
+  Object.freeze({ id: 'fallen_shields_spawn_ne', roomId: 'spawn_hall', kind: 'fallen_shield_cluster', x: 8.95, y: 0, z: 51.4, facing: -0.9, collider: false }),
+  Object.freeze({ id: 'fallen_shields_spawn_sw', roomId: 'spawn_hall', kind: 'fallen_shield_cluster', x: -8.95, y: 0, z: 62.8, facing: 0.75, collider: false }),
+  Object.freeze({ id: 'wall_shield_spawn_founder', roomId: 'spawn_hall', kind: 'wall_shield', crest: 'relic_sun_shield', crossedSwords: true, x: 0.0, y: 4.15, z: 67.88, normalX: 0, normalZ: -1, scale: 1.32, collider: false }),
+
+  // --- Zone 2: Asymmetric West Cloister / Duel Atrium (`first_duel_atrium`: weapon racks, armor stands, skull reliquary niches, shields, portcullis) ---
+  Object.freeze({ id: 'atrium_weapon_rack_w1', roomId: 'first_duel_atrium', kind: 'weapon_rack', style: 'greatswords_halberds', x: -12.82, y: 0, z: 43.5, facing: Math.PI * 0.5, width: 1.85, height: 1.85, depth: 0.65, collider: true, radius: 0.36 }),
+  Object.freeze({ id: 'atrium_weapon_rack_w2', roomId: 'first_duel_atrium', kind: 'weapon_rack', style: 'halberds_shields', x: -12.82, y: 0, z: 33.6, facing: Math.PI * 0.5, width: 1.85, height: 1.85, depth: 0.65, collider: true, radius: 0.36 }),
+  Object.freeze({ id: 'atrium_weapon_rack_nw', roomId: 'first_duel_atrium', kind: 'weapon_rack', style: 'longswords_spears', x: -11.3, y: 0, z: 26.68, facing: 0, width: 1.80, height: 1.85, depth: 0.65, collider: true, radius: 0.36 }),
+  Object.freeze({ id: 'atrium_weapon_rack_e1', roomId: 'first_duel_atrium', kind: 'weapon_rack', style: 'halberds_shields', x: 7.82, y: 0, z: 43.4, facing: -Math.PI * 0.5, width: 1.80, height: 1.85, depth: 0.65, collider: true, radius: 0.36 }),
+  Object.freeze({ id: 'atrium_armor_stand_w1', roomId: 'first_duel_atrium', kind: 'armor_stand', style: 'ashen_plate', x: -12.75, y: 0, z: 38.6, facing: Math.PI * 0.45, collider: true, radius: 0.48 }),
+  Object.freeze({ id: 'atrium_armor_stand_w2', roomId: 'first_duel_atrium', kind: 'armor_stand', style: 'battle_scarred', x: -12.75, y: 0, z: 28.4, facing: Math.PI * 0.35, collider: true, radius: 0.48 }),
+  Object.freeze({ id: 'atrium_armor_stand_e1', roomId: 'first_duel_atrium', kind: 'armor_stand', style: 'battle_scarred', x: 7.75, y: 0, z: 28.8, facing: -Math.PI * 0.60, collider: true, radius: 0.48 }),
+  Object.freeze({ id: 'niche_atrium_w_main', roomId: 'first_duel_atrium', kind: 'reliquary_niche', x: -13.42, y: 0, z: 36.0, normalX: 1, normalZ: 0, scale: 1.05, collider: false }),
+  Object.freeze({ id: 'niche_atrium_sw_step', roomId: 'first_duel_atrium', kind: 'reliquary_niche', x: -12.25, y: 0, z: 45.92, normalX: 0, normalZ: -1, scale: 1.0, collider: false }),
+  Object.freeze({ id: 'niche_atrium_e_south', roomId: 'first_duel_atrium', kind: 'reliquary_niche', x: 8.42, y: 0, z: 38.6, normalX: -1, normalZ: 0, scale: 1.0, collider: false }),
+  Object.freeze({ id: 'niche_atrium_e_north', roomId: 'first_duel_atrium', kind: 'reliquary_niche', x: 8.42, y: 0, z: 33.4, normalX: -1, normalZ: 0, scale: 1.0, collider: false }),
+  Object.freeze({ id: 'atrium_shield_w1', roomId: 'first_duel_atrium', kind: 'wall_shield', crest: 'ashen_crown', crossedSwords: true, x: -13.42, y: 3.1, z: 43.5, normalX: 1, normalZ: 0, scale: 1.02, collider: false }),
+  Object.freeze({ id: 'atrium_shield_w2', roomId: 'first_duel_atrium', kind: 'wall_shield', crest: 'iron_cross', crossedSwords: true, x: -13.42, y: 3.1, z: 33.6, normalX: 1, normalZ: 0, scale: 1.0, collider: false }),
+  Object.freeze({ id: 'atrium_shield_e1', roomId: 'first_duel_atrium', kind: 'wall_shield', crest: 'ashen_crown', crossedSwords: true, x: 8.42, y: 3.1, z: 43.4, normalX: -1, normalZ: 0, scale: 1.02, collider: false }),
+  Object.freeze({ id: 'portcullis_gauntlet_arch', roomId: 'first_duel_atrium', kind: 'broken_portcullis', x: 0.0, y: 0, z: 25.6, spanWidth: 10.4, springY: 5.0, apexY: 7.9, minCenterSpikeY: 4.65, collider: false }),
+
+  // --- Zone 3: 5-Gargoyle Flame Gauntlet (`flame_gauntlet`: swaying overhead prisoner cages + safe-recess charred skeletal remains) ---
+  Object.freeze({ id: 'cage_gauntlet_1', roomId: 'flame_gauntlet', kind: 'hanging_cage', x: 3.12, y: 0, z: 24.3, dropLen: 5.25, hasSkeleton: true, phase: 0.2, collider: false }),
+  Object.freeze({ id: 'cage_gauntlet_2', roomId: 'flame_gauntlet', kind: 'hanging_cage', x: -3.12, y: 0, z: 21.0, dropLen: 5.00, hasSkeleton: true, phase: 1.5, collider: false }),
+  Object.freeze({ id: 'cage_gauntlet_3', roomId: 'flame_gauntlet', kind: 'hanging_cage', x: 3.18, y: 0, z: 17.8, dropLen: 4.85, hasSkeleton: false, phase: 2.8, collider: false }),
+  Object.freeze({ id: 'cage_gauntlet_4', roomId: 'flame_gauntlet', kind: 'hanging_cage', x: -3.18, y: 0, z: 16.4, dropLen: 5.15, hasSkeleton: true, phase: 3.9, collider: false }),
+  Object.freeze({ id: 'cage_gauntlet_5', roomId: 'flame_gauntlet', kind: 'hanging_cage', x: -3.10, y: 0, z: 13.3, dropLen: 5.30, hasSkeleton: true, phase: 5.1, collider: false }),
+  Object.freeze({ id: 'cage_gauntlet_6', roomId: 'flame_gauntlet', kind: 'hanging_cage', x: 3.10, y: 0, z: 9.6, dropLen: 5.05, hasSkeleton: true, phase: 0.9, collider: false }),
+  Object.freeze({ id: 'remains_gauntlet_1', roomId: 'flame_gauntlet', kind: 'charred_remains', pose: 'seated_knight', x: 4.78, y: 0, z: 24.5, facing: -Math.PI * 0.5, collider: false }),
+  Object.freeze({ id: 'remains_gauntlet_2', roomId: 'flame_gauntlet', kind: 'charred_remains', pose: 'crawling_husk', x: -4.78, y: 0, z: 20.8, facing: Math.PI * 0.45, collider: false }),
+  Object.freeze({ id: 'remains_gauntlet_3', roomId: 'flame_gauntlet', kind: 'charred_remains', pose: 'shield_pile', x: -4.78, y: 0, z: 17.1, facing: Math.PI * 0.55, collider: false }),
+  Object.freeze({ id: 'remains_gauntlet_4', roomId: 'flame_gauntlet', kind: 'charred_remains', pose: 'seated_knight', x: 4.78, y: 0, z: 13.2, facing: -Math.PI * 0.5, collider: false }),
+  Object.freeze({ id: 'remains_gauntlet_5', roomId: 'flame_gauntlet', kind: 'charred_remains', pose: 'crawling_husk', x: -4.78, y: 0, z: 13.3, facing: Math.PI * 0.5, collider: false }),
+  Object.freeze({ id: 'remains_gauntlet_6', roomId: 'flame_gauntlet', kind: 'charred_remains', pose: 'shield_pile', x: 4.78, y: 0, z: 9.4, facing: -Math.PI * 0.55, collider: false }),
+
+  // --- Zone 4: Knights' Nave & West Side-Chapel (`knights_nave` + `west_wing`: side-wall pews, Gothic shrines, hanging censers, fallen slabs) ---
+  Object.freeze({ id: 'pew_nave_ws1', roomId: 'knights_nave', kind: 'cathedral_pew', style: 'intact', x: -4.84, y: 0, z: 6.1, facing: Math.PI * 0.5, width: 2.00, depth: 0.64, collider: true, radius: 0.32 }),
+  Object.freeze({ id: 'pew_nave_ws2', roomId: 'knights_nave', kind: 'cathedral_pew', style: 'shattered', x: -4.84, y: 0, z: 1.4, facing: Math.PI * 0.5, width: 1.90, depth: 0.64, collider: true, radius: 0.32 }),
+  Object.freeze({ id: 'pew_nave_es1', roomId: 'knights_nave', kind: 'cathedral_pew', style: 'shattered', x: 4.84, y: 0, z: 6.2, facing: -Math.PI * 0.5, width: 2.00, depth: 0.64, collider: true, radius: 0.32 }),
+  Object.freeze({ id: 'pew_nave_wn1', roomId: 'knights_nave', kind: 'cathedral_pew', style: 'shattered', x: -4.84, y: 0, z: -14.4, facing: Math.PI * 0.5, width: 1.90, depth: 0.64, collider: true, radius: 0.32 }),
+  Object.freeze({ id: 'pew_nave_en1', roomId: 'knights_nave', kind: 'cathedral_pew', style: 'intact', x: 4.84, y: 0, z: -14.4, facing: -Math.PI * 0.5, width: 1.95, depth: 0.64, collider: true, radius: 0.32 }),
+  Object.freeze({ id: 'pew_chapel_s', roomId: 'west_wing', kind: 'cathedral_pew', style: 'intact', x: -9.4, y: 0, z: -1.64, facing: Math.PI, width: 2.00, depth: 0.64, collider: true, radius: 0.32 }),
+  Object.freeze({ id: 'pew_chapel_n', roomId: 'west_wing', kind: 'cathedral_pew', style: 'shattered', x: -7.6, y: 0, z: -10.36, facing: 0, width: 1.85, depth: 0.64, collider: true, radius: 0.32 }),
+  Object.freeze({ id: 'shrine_nave_es', roomId: 'knights_nave', kind: 'gothic_wall_shrine', x: 5.04, y: 0, z: 2.75, facing: -Math.PI * 0.5, collider: true, radius: 0.48 }),
+  Object.freeze({ id: 'shrine_nave_wn', roomId: 'knights_nave', kind: 'gothic_wall_shrine', x: -5.04, y: 0, z: -11.8, facing: Math.PI * 0.5, collider: true, radius: 0.48 }),
+  Object.freeze({ id: 'shrine_chapel_nw', roomId: 'west_wing', kind: 'gothic_wall_shrine', x: -12.02, y: 0, z: -8.6, facing: Math.PI * 0.5, collider: true, radius: 0.48 }),
+  Object.freeze({ id: 'shrine_chapel_sw', roomId: 'west_wing', kind: 'gothic_wall_shrine', x: -12.02, y: 0, z: -3.4, facing: Math.PI * 0.5, collider: true, radius: 0.48 }),
+  Object.freeze({ id: 'censer_nave_1', roomId: 'knights_nave', kind: 'hanging_censer', x: -2.85, y: 0, z: 4.4, dropLen: 5.15, phase: 0.4, collider: false }),
+  Object.freeze({ id: 'censer_nave_2', roomId: 'knights_nave', kind: 'hanging_censer', x: 2.85, y: 0, z: 4.4, dropLen: 5.05, phase: 1.9, collider: false }),
+  Object.freeze({ id: 'censer_nave_3', roomId: 'knights_nave', kind: 'hanging_censer', x: -2.95, y: 0, z: -1.8, dropLen: 5.20, phase: 3.1, collider: false }),
+  Object.freeze({ id: 'censer_nave_4', roomId: 'knights_nave', kind: 'hanging_censer', x: -2.85, y: 0, z: -12.4, dropLen: 5.15, phase: 4.4, collider: false }),
+  Object.freeze({ id: 'censer_nave_5', roomId: 'knights_nave', kind: 'hanging_censer', x: 2.85, y: 0, z: -12.4, dropLen: 5.05, phase: 5.6, collider: false }),
+  Object.freeze({ id: 'censer_west_chapel', roomId: 'west_wing', kind: 'hanging_censer', x: -9.2, y: 0, z: -6.0, dropLen: 4.85, phase: 2.3, collider: false }),
+  Object.freeze({ id: 'slab_nave_pillar_nw', roomId: 'knights_nave', kind: 'fallen_masonry_slab', x: -2.35, y: 0, z: -9.2, facing: 0.42, collider: false }),
+  Object.freeze({ id: 'slab_nave_ws_corner', roomId: 'knights_nave', kind: 'fallen_masonry_slab', x: -4.88, y: 0, z: 7.55, facing: 0.32, collider: false }),
+  Object.freeze({ id: 'slab_chapel_nw_corner', roomId: 'west_wing', kind: 'fallen_masonry_slab', x: -11.75, y: 0, z: -10.2, facing: 0.85, collider: false }),
+
+  // --- Zone 5: Pre-Boss Bonfire Sanctuary (`pre_boss_sanctuary`: kneeling armored watchers, pilgrim stone benches, leaning greatswords) ---
+  Object.freeze({ id: 'kneeling_knight_sanctuary_ne', roomId: 'pre_boss_sanctuary', kind: 'kneeling_knight', x: 6.55, y: 0, z: -27.8, facing: Math.PI + 0.22, collider: true, radius: 0.56 }),
+  Object.freeze({ id: 'kneeling_knight_sanctuary_sw', roomId: 'pre_boss_sanctuary', kind: 'kneeling_knight', x: -6.55, y: 0, z: -18.6, facing: Math.PI - 0.14, collider: true, radius: 0.56 }),
+  Object.freeze({ id: 'kneeling_knight_sanctuary_se', roomId: 'pre_boss_sanctuary', kind: 'kneeling_knight', x: 6.55, y: 0, z: -18.6, facing: Math.PI + 0.14, collider: true, radius: 0.56 }),
+  Object.freeze({ id: 'bench_sanctuary_w', roomId: 'pre_boss_sanctuary', kind: 'pilgrim_bench', x: -7.30, y: 0, z: -21.8, facing: Math.PI * 0.5, width: 1.92, depth: 0.64, collider: true, radius: 0.32 }),
+  Object.freeze({ id: 'bench_sanctuary_e', roomId: 'pre_boss_sanctuary', kind: 'pilgrim_bench', x: 7.30, y: 0, z: -24.0, facing: -Math.PI * 0.5, width: 1.92, depth: 0.64, collider: true, radius: 0.32 }),
+  Object.freeze({ id: 'resting_arms_sanctuary_w', roomId: 'pre_boss_sanctuary', kind: 'leaning_greatsword', style: 'greatsword_shield', x: -7.52, y: 0, z: -25.8, facing: Math.PI * 0.5, collider: false }),
+  Object.freeze({ id: 'resting_arms_sanctuary_e', roomId: 'pre_boss_sanctuary', kind: 'leaning_greatsword', style: 'pilgrim_staff_sword', x: 7.52, y: 0, z: -26.2, facing: -Math.PI * 0.5, collider: false }),
+  Object.freeze({ id: 'resting_arms_sanctuary_sw', roomId: 'pre_boss_sanctuary', kind: 'leaning_greatsword', style: 'greatsword_shield', x: -7.15, y: 0, z: -16.52, facing: 0, collider: false }),
+  Object.freeze({ id: 'resting_arms_sanctuary_se', roomId: 'pre_boss_sanctuary', kind: 'leaning_greatsword', style: 'halberd_urn', x: 7.15, y: 0, z: -16.52, facing: 0, collider: false })
+]);
+
 export const SOULS_CASTLE_ALCOVE_DECOR = Object.freeze([
   // East Armory Alcove (`x in [6.3, 14.0], z in [-9.0, +1.0]`, centered at `z = -4.0`)
   Object.freeze({ id: 'alcove_weapon_rack_nw', roomId: 'east_alcove', kind: 'weapon_rack', style: 'greatswords_halberds', x: 9.8, y: 0, z: -8.35, facing: 0, width: 1.8, height: 1.85, depth: 0.65, collider: true, radius: 0.62 }),
@@ -1879,7 +1996,9 @@ export const SOULS_CASTLE_ALCOVE_DECOR = Object.freeze([
   Object.freeze({ id: 'alcove_shield_n2', roomId: 'east_alcove', kind: 'wall_shield', crest: 'iron_cross', crossedSwords: false, x: 11.4, y: 2.85, z: -8.92, normalX: 0, normalZ: 1, scale: 0.95, collider: false }),
   Object.freeze({ id: 'alcove_shield_s1', roomId: 'east_alcove', kind: 'wall_shield', crest: 'ashen_crown', crossedSwords: true, x: 8.2, y: 2.85, z: 0.92, normalX: 0, normalZ: -1, scale: 1.0, collider: false }),
   Object.freeze({ id: 'alcove_shield_s2', roomId: 'east_alcove', kind: 'wall_shield', crest: 'iron_cross', crossedSwords: false, x: 11.4, y: 2.85, z: 0.92, normalX: 0, normalZ: -1, scale: 0.95, collider: false }),
-  Object.freeze({ id: 'alcove_shield_shrine_crest', roomId: 'east_alcove', kind: 'wall_shield', crest: 'relic_sun_shield', crossedSwords: true, x: 13.92, y: 3.65, z: -4.0, normalX: -1, normalZ: 0, scale: 1.28, collider: false })
+  Object.freeze({ id: 'alcove_shield_shrine_crest', roomId: 'east_alcove', kind: 'wall_shield', crest: 'relic_sun_shield', crossedSwords: true, x: 13.92, y: 3.65, z: -4.0, normalX: -1, normalZ: 0, scale: 1.28, collider: false }),
+  // All Zone 1–5 Pre-Boss Environmental Storytelling Props
+  ...SOULS_CASTLE_STORY_DECOR
 ]);
 
 // ============================================================================
@@ -2038,12 +2157,19 @@ export const SOULS_CASTLE_AMBUSHES = Object.freeze([
     encounterId: 'east_alcove_warden',
     baitEncounterId: 'nave_acolyte',
     roomId: 'east_alcove',
-    // Triggers ONLY when player reaches the East Archway opening itself (z in [-6.4, -2.4], x >= -2.6)!
+    // Triggers when player steps toward the East Archway line for the Shrine (x >= 2.2, z in [-6.6, -1.4])
+    // OR blindly sprints past the East Archway along the right flank (rushTriggerBox) without checking!
     triggerBox: Object.freeze({
-      minX: -2.6,
+      minX: 2.2,
       maxX: 6.8,
-      minZ: -6.4,
-      maxZ: -2.4
+      minZ: -6.6,
+      maxZ: -1.4
+    }),
+    rushTriggerBox: Object.freeze({
+      minX: 0.4,
+      maxX: 5.5,
+      minZ: -9.6,
+      maxZ: -6.6
     }),
     waitPos: Object.freeze({ x: 8.8, z: -4.0, facing: -Math.PI * 0.5 }),
     exitArchPos: Object.freeze({ x: 4.5, z: -4.0 }),
@@ -2064,7 +2190,11 @@ export function checkCastleAmbushTrigger(x, z, triggeredIds = null) {
       if (done) continue;
     }
     const b = amb.triggerBox;
-    if (x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ) {
+    if (b && x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ) {
+      return amb;
+    }
+    const rb = amb.rushTriggerBox;
+    if (rb && x >= rb.minX && x <= rb.maxX && z >= rb.minZ && z <= rb.maxZ) {
       return amb;
     }
   }
@@ -2088,7 +2218,7 @@ export const SOULS_CASTLE_RELICS = Object.freeze([
     damageBonusPct: 0,
     titleRu: 'Алтарь Пепельной Фляги',
     promptRu: 'Забрать Реликвию (+1 Фляга Эстуса)',
-    claimedToastRu: '🔥 РЕЛИКВИЯ ПОЛУЧЕНА • +1 Фляга Эстуса (5/5)!',
+    claimedToastRu: 'РЕЛИКВИЯ ПОЛУЧЕНА • +1 Фляга Эстуса (5/5)!',
     glowColor: 0xf59e0b
   })
 ]);
@@ -2125,10 +2255,10 @@ export const SOULS_CASTLE_ENCOUNTERS = Object.freeze([
     id: 'nave_vanguard',
     type: 'cursed_footman',
     roomId: 'knights_nave',
-    x: -2.2,
-    z: 1.5,
+    x: -1.6,
+    z: 2.6,
     facing: 0,
-    patrolMinZ: -2.5,
+    patrolMinZ: -0.4,
     patrolMaxZ: 5.4,
     nameRu: 'Щитоносец Нефа',
     hp: 230,
@@ -2141,21 +2271,21 @@ export const SOULS_CASTLE_ENCOUNTERS = Object.freeze([
     staggerMax: 130,
     flatDef: 14,
     physNegation: 0.08,
-    aggroRange: 9.0,
+    aggroRange: 8.8,
     isOptional: false,
     isAmbushGuard: false
   }),
 
-  // Zone 4 (Enemy 2/4): Western Side-Chapel Knight (`west_wing`)
+  // Zone 4 (Enemy 2/4): Western Side-Chapel Knight (`west_wing` — reacts ONLY when player enters western archway line!)
   Object.freeze({
     id: 'west_wing_guard',
     type: 'iron_knight',
     roomId: 'west_wing',
-    x: -8.5,
-    z: -5.8,
+    x: -9.2,
+    z: -6.0,
     facing: Math.PI * 0.5,
-    patrolMinZ: -9.4,
-    patrolMaxZ: -2.6,
+    patrolMinZ: -9.2,
+    patrolMaxZ: -2.8,
     nameRu: 'Рыцарь Западного Придела',
     hp: 255,
     damage: 27,
@@ -2167,12 +2297,13 @@ export const SOULS_CASTLE_ENCOUNTERS = Object.freeze([
     staggerMax: 145,
     flatDef: 20,
     physNegation: 0.12,
-    aggroRange: 7.5,
+    aggroRange: 7.0,
+    aggroBounds: Object.freeze({ maxX: -3.4, minZ: -10.6, maxZ: -1.4 }),
     isOptional: true,
     isAmbushGuard: false
   }),
 
-  // Zone 4 (Enemy 3/4): Eastern Armory Alcove Warden (`east_alcove`, directly opposite arch `z = -4.0`)
+  // Zone 4 (Enemy 3/4): Eastern Armory Alcove Warden (`east_alcove`, guards Relic Shrine & punishes blind flank rushes!)
   Object.freeze({
     id: 'east_alcove_warden',
     type: 'iron_knight',
@@ -2193,24 +2324,24 @@ export const SOULS_CASTLE_ENCOUNTERS = Object.freeze([
     staggerMax: 145,
     flatDef: 20,
     physNegation: 0.12,
-    aggroRange: 7.2,
+    aggroRange: 6.8,
     isOptional: true,
     isAmbushGuard: true,
     ambushId: 'east_alcove_flank_ambush',
-    ambushTriggerBounds: Object.freeze({ minX: -2.6, maxX: 6.8, minZ: -6.4, maxZ: -2.4 }),
+    ambushTriggerBounds: Object.freeze({ minX: 2.2, maxX: 6.8, minZ: -6.6, maxZ: -1.4 }),
     guardsRelicId: 'east_estus_shrine'
   }),
 
-  // Zone 4 (Enemy 4/4): Northern Nave Ash Acolyte before Pre-Boss Sanctuary
+  // Zone 4 (Enemy 4/4): Northern Nave Ash Acolyte holding the northern half of Knights' Nave (`z = -12.4`)
   Object.freeze({
     id: 'nave_acolyte',
     type: 'bone_archer',
     roomId: 'knights_nave',
-    x: 2.0,
-    z: -11.5,
+    x: 1.85,
+    z: -12.4,
     facing: 0,
-    patrolMinZ: -14.6,
-    patrolMaxZ: -8.5,
+    patrolMinZ: -14.8,
+    patrolMaxZ: -10.2,
     nameRu: 'Пепельный Стрелок',
     hp: 165,
     damage: 20,
@@ -2222,7 +2353,7 @@ export const SOULS_CASTLE_ENCOUNTERS = Object.freeze([
     staggerMax: 95,
     flatDef: 10,
     physNegation: 0.02,
-    aggroRange: 11.5,
+    aggroRange: 9.8,
     isOptional: false,
     isAmbushGuard: false
   })
@@ -2519,25 +2650,47 @@ export function getCastleStaticColliders(options = null) {
   for (let i = 0; i < SOULS_CASTLE_ALCOVE_DECOR.length; i++) {
     const d = SOULS_CASTLE_ALCOVE_DECOR[i];
     if (!d.collider) continue;
-    if (d.kind === 'weapon_rack' && Number.isFinite(d.width) && Number.isFinite(d.depth)) {
-      const halfW = Number((d.width * 0.5).toFixed(3));
-      const halfD = Number((Math.max(d.depth, 0.72) * 0.5).toFixed(3));
+    const isRectProp =
+      d.shape === 'aabb' ||
+      ((d.kind === 'weapon_rack' ||
+        d.kind === 'stone_sarcophagus' ||
+        d.kind === 'cathedral_pew' ||
+        d.kind === 'pilgrim_bench') &&
+        Number.isFinite(d.width) &&
+        Number.isFinite(d.depth));
+    if (isRectProp) {
+      const yaw = Number.isFinite(d.facing) ? d.facing : (Number.isFinite(d.rotY) ? d.rotY : 0);
+      const swapped = Math.abs(Math.sin(yaw)) > 0.7071;
+      const localHalfX = d.width * 0.5;
+      const localHalfZ = (d.kind === 'weapon_rack' ? Math.max(d.depth, 0.72) : d.depth) * 0.5;
+      const halfW = Number((Number.isFinite(d.halfW) ? d.halfW : (swapped ? localHalfZ : localHalfX)).toFixed(3));
+      const halfD = Number((Number.isFinite(d.halfD) ? d.halfD : (swapped ? localHalfX : localHalfZ)).toFixed(3));
       const inscribedR = Math.min(halfW, halfD);
       cols.push({
         id: d.id,
         kind: d.kind,
+        roomId: d.roomId,
         shape: 'aabb',
         x: d.x,
         z: d.z,
         halfW,
         halfD,
-        width: halfW * 2,
-        depth: halfD * 2,
+        width: Number((halfW * 2).toFixed(3)),
+        depth: Number((halfD * 2).toFixed(3)),
         radius: inscribedR,
         r: inscribedR
       });
     } else {
-      cols.push({ id: d.id, kind: d.kind, shape: 'circle', x: d.x, z: d.z, radius: d.radius, r: d.radius });
+      cols.push({
+        id: d.id,
+        kind: d.kind,
+        roomId: d.roomId,
+        shape: 'circle',
+        x: d.x,
+        z: d.z,
+        radius: d.radius,
+        r: d.radius
+      });
     }
   }
   for (let i = 0; i < SOULS_CASTLE_RUBBLE.length; i++) {

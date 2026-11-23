@@ -1,5 +1,5 @@
 // Monumental Cinematic Gothic Castle Doors for Chapter 26 — «Abandoned Knight Rift»
-// Exclusive ES module (Wave 2 Ultra-Detail & Physical PBR Upgrade — ?v=20261123z71):
+// Exclusive ES module (Wave 2 Ultra-Detail & Physical PBR Upgrade — ?v=20261124z84):
 //   - High-poly sculpted 3D Gothic oak coffers & lancet raised panels (3D-филёнки), chamfered planks,
 //     carved timber medallions & 1024px PC procedural oak albedo + bumpMap + roughnessMap
 //   - High-poly forged wrought-iron hardware: domed 3D rivets with washer collars, multi-scrollwork
@@ -21,7 +21,7 @@
 
 import * as THREE from '../../vendor/three.module.js';
 import { mergeGeometries } from '../../vendor/BufferGeometryUtils.js';
-import { SOULS_CASTLE_CONSTANTS } from './soulsCastleLayout.js?v=20261123z71';
+import { SOULS_CASTLE_CONSTANTS } from './soulsCastleLayout.js?v=20261124z84';
 
 const DEFAULT_DOOR_Z = SOULS_CASTLE_CONSTANTS?.BOSS_DOOR_Z ?? -32.0;
 const OPENING_HALF_W = SOULS_CASTLE_CONSTANTS?.BOSS_PORTAL_HALF_W ?? 3.15; // 6.30 m clear doorway span

@@ -1,11 +1,11 @@
 // Procedural Web Audio API Dark-Fantasy Synthesizer + Abandoned Knight Rift Studio Audio Router
 // Instant startup, crisp dynamics, full suspend/mute compliance.
 
-import { createSoulsEnvAudio } from './souls/soulsEnvAudio.js?v=20261123z71';
-import { createSoulsHeroAudio } from './souls/soulsHeroAudio.js?v=20261123z71';
-import { createSoulsEnemyAudio } from './souls/soulsEnemyAudio.js?v=20261123z71';
-import { createSoulsMusicManager } from './souls/soulsMusicManager.js?v=20261123z71';
-import { createSoulsSpatialAudio } from './souls/soulsSpatialAudio.js?v=20261123z71';
+import { createSoulsEnvAudio } from './souls/soulsEnvAudio.js?v=20261124z84';
+import { createSoulsHeroAudio } from './souls/soulsHeroAudio.js?v=20261124z84';
+import { createSoulsEnemyAudio } from './souls/soulsEnemyAudio.js?v=20261124z84';
+import { createSoulsMusicManager } from './souls/soulsMusicManager.js?v=20261124z84';
+import { createSoulsSpatialAudio } from './souls/soulsSpatialAudio.js?v=20261124z84';
 
 export function createAudioEngine() {
   let ctx = null;
@@ -25,27 +25,14 @@ export function createAudioEngine() {
 
   function preloadExternalSamples(audioCtx) {
     if (!audioCtx || typeof fetch === 'undefined') return;
-    const stepVer = '20261123z71';
+    const stepVer = '20261124z84';
     const files = [
-      ['usp_1', './assets/audio/usp_shot_1.wav?v=20261117z25'],
-      ['usp_2', './assets/audio/usp_shot_2.wav?v=20261117z25'],
-      ['usp_3', './assets/audio/usp_shot_3.wav?v=20261117z25'],
-      ['map_open', './assets/audio/map_open.wav?v=20261117z25'],
-      ['portal_enter', './assets/audio/portal_enter.wav?v=20261117z25'],
       ['step_warrior_1', `./assets/audio/step_warrior_1.wav?v=${stepVer}`],
       ['step_warrior_2', `./assets/audio/step_warrior_2.wav?v=${stepVer}`],
       ['step_warrior_3', `./assets/audio/step_warrior_3.wav?v=${stepVer}`],
       ['step_warrior_4', `./assets/audio/step_warrior_4.wav?v=${stepVer}`],
       ['step_warrior_5', `./assets/audio/step_warrior_5.wav?v=${stepVer}`],
-      ['step_warrior_6', `./assets/audio/step_warrior_6.wav?v=${stepVer}`],
-      ['step_gunslinger_1', `./assets/audio/step_gunslinger_1.wav?v=${stepVer}`],
-      ['step_gunslinger_2', `./assets/audio/step_gunslinger_2.wav?v=${stepVer}`],
-      ['step_gunslinger_3', `./assets/audio/step_gunslinger_3.wav?v=${stepVer}`],
-      ['step_gunslinger_4', `./assets/audio/step_gunslinger_4.wav?v=${stepVer}`],
-      ['step_mage_1', `./assets/audio/step_mage_1.wav?v=${stepVer}`],
-      ['step_mage_2', `./assets/audio/step_mage_2.wav?v=${stepVer}`],
-      ['step_mage_3', `./assets/audio/step_mage_3.wav?v=${stepVer}`],
-      ['step_mage_4', `./assets/audio/step_mage_4.wav?v=${stepVer}`]
+      ['step_warrior_6', `./assets/audio/step_warrior_6.wav?v=${stepVer}`]
     ];
     for (const [key, url] of files) {
       if (externalSampleBuffers.has(key)) continue;
@@ -153,6 +140,7 @@ export function createAudioEngine() {
   let userVolume = 0.72;
   let sfxVolume = 0.75;
   let musicVolume = 0.38;
+  let cutsceneVoiceVolume = 1.0;
   try {
     const savedVol = localStorage.getItem('grimborne_volume');
     if (savedVol !== null && Number.isFinite(Number(savedVol))) {
@@ -167,6 +155,10 @@ export function createAudioEngine() {
     const savedMusic = localStorage.getItem('grimborne_music_volume');
     if (savedMusic !== null && Number.isFinite(Number(savedMusic))) {
       musicVolume = Math.max(0, Math.min(1, Number(savedMusic)));
+    }
+    const savedVoice = localStorage.getItem('grimborne_voice_volume');
+    if (savedVoice !== null && Number.isFinite(Number(savedVoice))) {
+      cutsceneVoiceVolume = Math.max(0, Math.min(1.5, Number(savedVoice)));
     }
     const savedMute = localStorage.getItem('grimborne_muted');
     if (savedMute === '1') muted = true;
@@ -259,13 +251,14 @@ export function createAudioEngine() {
   });
   soulsSpatial.setMuted(muted);
   soulsSpatial.setVolume(Math.max(0, Math.min(1, sfxVolume * 0.92)));
+  soulsSpatial.setVoiceVolume?.(Math.max(0, Math.min(1.6, cutsceneVoiceVolume * 1.08)));
 
   // Dedicated studio soundtracks for Abandoned Knight Rift:
   // - rift_explore: Elden Castle Drone (Bonfire / Castle Corridor / East Alcove)
   // - boss_phase1/boss_phase2: unified Epic Boss Battle (God of War Style)
   // Routed directly to masterGain (bypassing retro 980Hz musicFilter lowpass!) with own musicVolume scaling
-  const SOULS_EXPLORE_TRACK_URL = './assets/audio/music_rift_explore.mp3?v=20261123z71';
-  const SOULS_BOSS_TRACK_URL = './assets/audio/music_boss_rift.mp3?v=20261123z71';
+  const SOULS_EXPLORE_TRACK_URL = './assets/audio/music_rift_explore.mp3?v=20261124z84';
+  const SOULS_BOSS_TRACK_URL = './assets/audio/music_boss_rift.mp3?v=20261124z84';
   let soulsAmbientActive = false;
   const soulsMusic = createSoulsMusicManager({
     getCtx: () => ctx,
@@ -807,171 +800,140 @@ export function createAudioEngine() {
       if (!readyToPlay() || !canTrigger('melee', 42)) return;
       const weaponId = typeof weaponOrHeavy === 'string' ? weaponOrHeavy : weaponOrHeavy ? 'axe' : 'club';
       const jitter = 0.94 + Math.random() * 0.12;
+      const critLift = isCrit ? 1.12 : 1.0;
 
+      // Pure soft aerodynamic air-displacement whooshes (ZERO metallic tones, ZERO impact thuds!)
       if (weaponId === 'spear') {
-        // Fast aerodynamic spear lunge tear + crisp wooden shaft snap
         playFilteredNoise({
           brown: false,
           filterType: 'bandpass',
-          freqStart: 1580 * jitter,
-          freqEnd: 410 * jitter,
-          q: 2.2,
-          duration: 0.13,
-          gainPeak: 0.30,
-          attack: 0.008
-        });
-        playTone({
-          type: 'triangle',
-          freqStart: 320 * jitter,
-          freqEnd: 92,
-          startTime: 0.01,
-          duration: 0.11,
-          gainPeak: 0.24,
-          attack: 0.003
-        });
-        playTone({
-          type: 'sine',
-          freqStart: 1320 * jitter,
-          freqEnd: 640,
-          startTime: 0.02,
+          freqStart: 480 * jitter,
+          freqEnd: 1180 * jitter,
+          q: 1.35,
           duration: 0.08,
-          gainPeak: isCrit ? 0.14 : 0.09,
-          attack: 0.002
+          gainPeak: 0.18 * critLift,
+          attack: 0.016
+        });
+        playFilteredNoise({
+          brown: false,
+          filterType: 'bandpass',
+          freqStart: 1120 * jitter,
+          freqEnd: 340 * jitter,
+          q: 1.25,
+          startTime: 0.045,
+          duration: 0.11,
+          gainPeak: 0.16 * critLift,
+          attack: 0.012
         });
         return;
       }
 
       if (weaponId === 'zweihander') {
-        // Massive heavy two-handed greatsword air cleave + resonant steel ring
+        playFilteredNoise({
+          brown: true,
+          filterType: 'lowpass',
+          freqStart: 540 * jitter,
+          freqEnd: 165 * jitter,
+          q: 0.95,
+          duration: 0.28,
+          gainPeak: 0.28 * critLift,
+          attack: 0.036
+        });
         playFilteredNoise({
           brown: false,
           filterType: 'bandpass',
-          freqStart: 620 * jitter,
-          freqEnd: 118 * jitter,
-          q: 1.75,
-          duration: 0.29,
-          gainPeak: 0.38,
+          freqStart: 220 * jitter,
+          freqEnd: 560 * jitter,
+          q: 1.10,
+          duration: 0.14,
+          gainPeak: 0.20 * critLift,
+          attack: 0.032
+        });
+        playFilteredNoise({
+          brown: false,
+          filterType: 'bandpass',
+          freqStart: 560 * jitter,
+          freqEnd: 185 * jitter,
+          q: 1.05,
+          startTime: 0.09,
+          duration: 0.20,
+          gainPeak: 0.18 * critLift,
           attack: 0.018
-        });
-        playDistortedThump({
-          type: 'triangle',
-          freqStart: 158 * jitter,
-          freqEnd: 32,
-          startTime: 0.03,
-          duration: 0.25,
-          gainPeak: 0.36,
-          attack: 0.006,
-          filterFreq: 480
-        });
-        playTone({
-          type: 'sawtooth',
-          freqStart: 270 * jitter,
-          freqEnd: 98,
-          startTime: 0.035,
-          duration: 0.19,
-          gainPeak: 0.15,
-          attack: 0.004
         });
         return;
       }
 
       if (weaponId === 'axe' || weaponId === 'cleaver') {
-        // Brutal heavy double-blade axe cleave + iron chop
         playFilteredNoise({
           brown: true,
           filterType: 'lowpass',
-          freqStart: 920 * jitter,
-          freqEnd: 140 * jitter,
-          q: 1.3,
-          duration: 0.25,
-          gainPeak: 0.42,
-          attack: 0.012
+          freqStart: 620 * jitter,
+          freqEnd: 180 * jitter,
+          q: 1.0,
+          duration: 0.24,
+          gainPeak: 0.26 * critLift,
+          attack: 0.028
         });
         playFilteredNoise({
           brown: false,
           filterType: 'bandpass',
-          freqStart: 1150 * jitter,
-          freqEnd: 260,
-          q: 1.5,
-          duration: 0.17,
-          gainPeak: 0.26,
-          attack: 0.010
-        });
-        playDistortedThump({
-          type: 'sawtooth',
-          freqStart: 185 * jitter,
-          freqEnd: 38,
-          startTime: 0.02,
-          duration: 0.20,
-          gainPeak: 0.34,
-          attack: 0.004,
-          filterFreq: 540
+          freqStart: 640 * jitter,
+          freqEnd: 240 * jitter,
+          q: 1.15,
+          startTime: 0.035,
+          duration: 0.18,
+          gainPeak: 0.18 * critLift,
+          attack: 0.018
         });
         return;
       }
 
       if (weaponId === 'boss_hammer' || weaponId === 'flail') {
-        // Seismic warhammer wind roar + deep stone/anvil impact boom
         playFilteredNoise({
           brown: true,
           filterType: 'lowpass',
-          freqStart: 540 * jitter,
-          freqEnd: 85 * jitter,
-          q: 1.1,
-          duration: 0.32,
-          gainPeak: 0.46,
-          attack: 0.018
+          freqStart: 460 * jitter,
+          freqEnd: 130 * jitter,
+          q: 0.90,
+          duration: 0.34,
+          gainPeak: 0.32 * critLift,
+          attack: 0.042
         });
-        playDistortedThump({
-          type: 'sine',
-          freqStart: 132 * jitter,
-          freqEnd: 24,
-          startTime: 0.04,
-          duration: 0.32,
-          gainPeak: 0.50,
-          attack: 0.004,
-          filterFreq: 380
-        });
-        playTone({
-          type: 'triangle',
+        playFilteredNoise({
+          brown: false,
+          filterType: 'bandpass',
           freqStart: 420 * jitter,
-          freqEnd: 165,
-          startTime: 0.045,
-          duration: 0.18,
-          gainPeak: 0.16,
-          attack: 0.002
+          freqEnd: 155 * jitter,
+          q: 1.05,
+          startTime: 0.06,
+          duration: 0.24,
+          gainPeak: 0.20 * critLift,
+          attack: 0.024
         });
         return;
       }
 
-      // Default / 'club' (Рыцарский меч): agile broadsword cut + steel flash
+      // Default / 'club' (Рыцарский меч): soft agile broadsword air slice
       playFilteredNoise({
         brown: false,
         filterType: 'bandpass',
-        freqStart: (isCrit ? 1160 : 980) * jitter,
-        freqEnd: 230 * jitter,
-        q: 1.5,
-        duration: 0.15,
-        gainPeak: 0.27,
-        attack: 0.010
-      });
-      playTone({
-        type: 'triangle',
-        freqStart: 195 * jitter,
-        freqEnd: 52,
-        startTime: 0.02,
-        duration: 0.13,
-        gainPeak: 0.26,
-        attack: 0.004
-      });
-      playTone({
-        type: 'sine',
-        freqStart: 690 * jitter,
-        freqEnd: 290,
-        startTime: 0.015,
+        freqStart: 320 * jitter,
+        freqEnd: 820 * jitter,
+        q: 1.20,
         duration: 0.09,
-        gainPeak: isCrit ? 0.14 : 0.08,
-        attack: 0.002
+        gainPeak: 0.19 * critLift,
+        attack: 0.018
+      });
+      playFilteredNoise({
+        brown: false,
+        filterType: 'bandpass',
+        freqStart: 800 * jitter,
+        freqEnd: 250 * jitter,
+        q: 1.10,
+        startTime: 0.05,
+        duration: 0.13,
+        gainPeak: 0.16 * critLift,
+        attack: 0.012
       });
     },
 
@@ -2047,6 +2009,53 @@ export function createAudioEngine() {
       });
     },
 
+    playPlayerHitByEnemy(damageLevel = 'light', opts = {}) {
+      const isBossHit = Boolean(opts && typeof opts === 'object' && opts.isBoss);
+      if (!readyToPlay() || !canTrigger(isBossHit ? 'player_hit_boss' : 'player_hit_heavy', 45)) return;
+      const isHeavy = damageLevel === 'heavy' || damageLevel === 'knockdown';
+
+      if (isBossHit) {
+        // Boss warhammer hitting Hero's bare plate armor when unblocked & undodged (souls_boss_hit_hero_armor.wav)
+        preloadSoulsAudio(ctx);
+        soulsMusic.duck(-5.0, 0.03, 0.55);
+        soulsHero.playBossHitHeroArmor({ isHeavy });
+        return;
+      }
+
+      // Regular mob: clean existing body thump without new sword/spear metal clangs (User Rule #5)
+      const jitter = 0.94 + Math.random() * 0.12;
+      soulsMusic.duck(isHeavy ? -4.0 : -2.5, 0.04, isHeavy ? 0.45 : 0.28);
+      // 1. Deep chest-punch sub impact (136 -> 34 Hz)
+      playTone({
+        type: 'sine',
+        freqStart: (isHeavy ? 142 : 124) * jitter,
+        freqEnd: isHeavy ? 32 : 38,
+        duration: isHeavy ? 0.24 : 0.17,
+        gainPeak: isHeavy ? 0.56 : 0.44,
+        attack: 0.002
+      });
+      // 2. Damped heavy body/leather thump (320 -> 148 Hz, non-ringing)
+      playTone({
+        type: 'triangle',
+        freqStart: (isHeavy ? 295 : 340) * jitter,
+        freqEnd: 138,
+        duration: isHeavy ? 0.13 : 0.095,
+        gainPeak: isHeavy ? 0.38 : 0.30,
+        attack: 0.0015
+      });
+      // 3. Visceral leather/flesh crunch transient (980 -> 280 Hz)
+      playFilteredNoise({
+        brown: false,
+        filterType: 'bandpass',
+        freqStart: (isHeavy ? 1120 : 940) * jitter,
+        freqEnd: 260,
+        q: 1.35,
+        duration: isHeavy ? 0.16 : 0.11,
+        gainPeak: isHeavy ? 0.46 : 0.36,
+        attack: 0.0015
+      });
+    },
+
     playHit(weaponId = null) {
       if (!readyToPlay() || !canTrigger('hit', 30)) return;
       const jitter = 0.92 + Math.random() * 0.16;
@@ -2300,36 +2309,31 @@ export function createAudioEngine() {
     playBlock() {
       if (!readyToPlay() || !canTrigger('block', 45)) return;
       const jitter = 0.95 + Math.random() * 0.10;
-      // Solid forged-iron shield body thud
+      // Solid heavy oak wooden shield body thud (ZERO 3kHz steel bell partials!)
       playTone({
-        type: 'triangle',
-        freqStart: 220 * jitter,
-        freqEnd: 82,
-        duration: 0.095,
-        gainPeak: 0.28,
+        type: 'sine',
+        freqStart: 175 * jitter,
+        freqEnd: 56,
+        duration: 0.12,
+        gainPeak: 0.34,
         attack: 0.0012
       });
-      // Enhanced resonant forged-steel shield clang partials
-      const partials = [490, 742, 1185, 1890, 2740];
-      const gains = [0.26, 0.22, 0.17, 0.12, 0.08];
-      for (let i = 0; i < partials.length; i++) {
-        playTone({
-          type: i % 2 === 0 ? 'triangle' : 'sine',
-          freqStart: partials[i] * jitter,
-          freqEnd: partials[i] * jitter * 0.965,
-          duration: 0.29 - i * 0.032,
-          gainPeak: gains[i],
-          attack: 0.0012
-        });
-      }
+      playTone({
+        type: 'triangle',
+        freqStart: 285 * jitter,
+        freqEnd: 152,
+        duration: 0.075,
+        gainPeak: 0.24,
+        attack: 0.0012
+      });
       playFilteredNoise({
         brown: false,
         filterType: 'bandpass',
-        freqStart: 3600 * jitter,
-        freqEnd: 1450,
-        q: 1.9,
-        duration: 0.07,
-        gainPeak: 0.22,
+        freqStart: 1420 * jitter,
+        freqEnd: 480,
+        q: 1.5,
+        duration: 0.08,
+        gainPeak: 0.28,
         attack: 0.001
       });
     },
@@ -2338,16 +2342,24 @@ export function createAudioEngine() {
     // Abandoned Knight Rift — Routed 44.1 kHz Studio Souls Audio API
     // =========================================================================
 
-    updateSoulsSpatial(listenerX = 0, listenerZ = 0, listenerYaw = 0, isInSouls = false, bossAwakened = false, dt = 0.016) {
+    updateSoulsSpatial(listenerX = 0, listenerZ = 0, listenerYaw = 0, isInSouls = false, bossAwakened = false, dt = 0.016, trapStates = null) {
       if (!isInSouls) {
-        try { soulsSpatial.update?.(listenerX, listenerZ, listenerYaw, false, false, dt); } catch {}
+        try { soulsSpatial.update?.(listenerX, listenerZ, listenerYaw, false, false, dt, null); } catch {}
         return;
       }
       if (muted || suspendedBySystem || !ctx || !unlocked) return;
       try {
         soulsSpatial.attachContext?.(ctx, masterGain || sfxGain || compressor);
-        soulsSpatial.update?.(listenerX, listenerZ, listenerYaw, true, Boolean(bossAwakened), dt);
+        soulsSpatial.update?.(listenerX, listenerZ, listenerYaw, true, Boolean(bossAwakened), dt, trapStates);
       } catch {}
+    },
+
+    getSoulsSpatialDebugState() {
+      try {
+        return soulsSpatial?.getDebugState?.() || null;
+      } catch {
+        return null;
+      }
     },
 
     playCinematicBossDoorSequence(opts = {}) {
@@ -2464,7 +2476,10 @@ export function createAudioEngine() {
         soulsEnv.setAmbientActive(false);
         try {
           soulsSpatial.update?.(0, 0, 0, false, false, 0.016);
-          if (!soulsAmbientActive) soulsSpatial.stopCinematicSequence?.(0.08);
+          if (!soulsAmbientActive) {
+            soulsSpatial.stopCinematicSequence?.(0.08);
+            soulsEnemy.stopBossRoar?.(0.08);
+          }
         } catch {}
         syncSoulsBossMusic();
         return;
@@ -2509,14 +2524,14 @@ export function createAudioEngine() {
       soulsHero.playSwordHit(opts);
     },
 
-    playShieldBlock(opts) {
+    playShieldBlock(opts = {}) {
       if (!readyToPlay()) return;
-      if (opts !== undefined || soulsEnv.isAmbientActive?.()) {
-        preloadSoulsAudio(ctx);
-        soulsHero.playShieldBlock(opts && typeof opts === 'object' ? opts : {});
-        return;
+      const normOpts = opts && typeof opts === 'object' ? opts : {};
+      preloadSoulsAudio(ctx);
+      if (normOpts.isBoss) {
+        soulsMusic.duck(-3.2, 0.05, 0.38);
       }
-      this.playBlock();
+      soulsHero.playShieldBlock(normOpts);
     },
 
     playParrySuccess() {
@@ -2604,6 +2619,14 @@ export function createAudioEngine() {
       if (!readyToPlay()) return;
       preloadSoulsAudio(ctx);
       soulsEnemy.playBossRoar();
+    },
+
+    stopBossRoar(fadeSec = 0.16) {
+      try {
+        return Boolean(soulsEnemy.stopBossRoar?.(fadeSec));
+      } catch {
+        return false;
+      }
     },
 
     playStanceBreak() {
@@ -2993,6 +3016,7 @@ export function createAudioEngine() {
       try {
         soulsSpatial.update?.(0, 0, 0, false, false, 0.016);
         soulsSpatial.stopCinematicSequence?.(0.08);
+        soulsEnemy.stopBossRoar?.(0.08);
       } catch {}
       soulsMusic.stop(0.5);
     },
@@ -3056,6 +3080,22 @@ export function createAudioEngine() {
 
     getSfxVolume() {
       return sfxVolume;
+    },
+
+    setVoiceVolume(val) {
+      const num = Number(val);
+      if (Number.isFinite(num)) {
+        cutsceneVoiceVolume = Math.max(0, Math.min(1.5, num));
+        soulsSpatial.setVoiceVolume?.(Math.max(0, Math.min(1.6, cutsceneVoiceVolume * 1.08)));
+        try {
+          localStorage.setItem('grimborne_voice_volume', String(cutsceneVoiceVolume));
+        } catch {}
+      }
+      return cutsceneVoiceVolume;
+    },
+
+    getVoiceVolume() {
+      return cutsceneVoiceVolume;
     },
 
     setVolume(val) {

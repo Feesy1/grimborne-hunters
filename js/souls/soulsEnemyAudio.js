@@ -3,10 +3,11 @@
 // reinforcement, presence EQ to cut through orchestral boss music, transparent soft-limiter,
 // optional music ducking hook, anti-spam protection, and zero-dependency Web Audio fallbacks.
 
-const ASSET_VER = '20261123z71';
+const ASSET_VER = '20261124z84';
 
 export const SOULS_ENEMY_AUDIO_MANIFEST = Object.freeze({
   // New Pass-1 ElevenLabs / Studio Boss & Heavy Mob Assets (highest priority)
+  boss_roar_z83: `./assets/audio/souls_boss_roar_z83.wav?v=${ASSET_VER}`,
   boss_roar_el: `./assets/audio/boss_roar_el.mp3?v=${ASSET_VER}`,
   boss_cutscene_roar: `./assets/audio/souls_boss_cutscene_roar.wav?v=${ASSET_VER}`,
   boss_leap_el: `./assets/audio/boss_leap_el.mp3?v=${ASSET_VER}`,
@@ -51,9 +52,10 @@ const MOB_ATTACK_GRUNT_KEYS = ['mob_attack_grunt_1', 'mob_attack_grunt_2', 'mob_
 const MISSING_RETRY_MS = 15000;
 
 export const MOB_AUDIO_ANTISPAM = Object.freeze({
-  attackGruntGlobalMs: 920,
-  attackGruntPerMobMs: 1850,
-  attackGruntNormalChance: 0.65,
+  attackGruntGlobalMs: 2400,
+  attackGruntPerMobMs: 4200,
+  attackGruntNormalChance: 0.0,
+  attackGruntHeavyChance: 0.32,
   footstepGlobalMs: 480,
   footstepMaxDistNorm: 0.75, // < 12 m under combat.js 16 m normalization
   hurtGlobalMs: 420
@@ -232,6 +234,7 @@ export function createSoulsEnemyAudio({
   let whooshCycleIdx = 0;
   let lastAttackGruntKey = null;
   let activeVoices = 0;
+  let activeBossRoar = null;
   let fallbackNoiseCtx = null;
   let fallbackNoiseBuf = null;
 
@@ -575,7 +578,8 @@ export function createSoulsEnemyAudio({
     priority = false,
     stereoWide = true,
     pan = 0,
-    subBoost = null
+    subBoost = null,
+    onVoiceCreated = null
   } = {}) {
     const ctx = resolveAudioContext();
     const rawDest = resolveSfxDest(ctx);
@@ -667,8 +671,8 @@ export function createSoulsEnemyAudio({
     const reverbDest = resolveReverbDest();
     if (reverbDest && reverbSend > 0.005) {
       const revGain = ctx.createGain();
-      revGain.gain.setValueAtTime(clamp(safeGain * reverbSend, 0.001, 0.52), t0);
-      tail.connect(revGain);
+      revGain.gain.setValueAtTime(clamp(reverbSend, 0.001, 0.65), t0);
+      g.connect(revGain);
       revGain.connect(reverbDest);
       nodes.push(revGain);
     }
@@ -681,7 +685,27 @@ export function createSoulsEnemyAudio({
     }
 
     const releaseVoice = trackVoiceStart(buf.duration / safeRate);
+    let voiceMeta = null;
+    if (typeof onVoiceCreated === 'function') {
+      voiceMeta = {
+        ctx,
+        src,
+        gainNode: g,
+        initialGain: safeGain,
+        releaseVoice,
+        nodes,
+        cleanupTimer: null
+      };
+      onVoiceCreated(voiceMeta);
+    }
     src.onended = () => {
+      if (voiceMeta && voiceMeta.cleanupTimer) {
+        clearTimeout(voiceMeta.cleanupTimer);
+        voiceMeta.cleanupTimer = null;
+      }
+      if (voiceMeta && activeBossRoar && activeBossRoar.src === src) {
+        activeBossRoar = null;
+      }
       releaseVoice();
       safeDisconnect(nodes);
     };
@@ -827,18 +851,22 @@ export function createSoulsEnemyAudio({
     if (poly <= 0) return;
 
     const t0 = ctx.currentTime;
-    const dur = heavy ? 0.48 : 0.38;
-    const peak = clamp((heavy ? 0.88 : 0.72) * poly, 0.14, 0.98);
+    const dur = heavy ? 0.46 : 0.36;
+    const peak = clamp((heavy ? 0.50 : 0.40) * poly, 0.08, 0.58);
     const nodes = [];
 
     const nSrc = ctx.createBufferSource();
     nSrc.buffer = getFallbackNoiseBuffer(ctx);
     const bp = ctx.createBiquadFilter();
     bp.type = 'bandpass';
-    bp.Q.setValueAtTime(1.25, t0);
-    bp.frequency.setValueAtTime(heavy ? 95 : 130, t0);
-    bp.frequency.exponentialRampToValueAtTime(heavy ? 480 : 680, t0 + dur * 0.40);
-    bp.frequency.exponentialRampToValueAtTime(110, t0 + dur);
+    bp.Q.setValueAtTime(1.05, t0);
+    bp.frequency.setValueAtTime(heavy ? 105 : 140, t0);
+    bp.frequency.exponentialRampToValueAtTime(heavy ? 430 : 580, t0 + dur * 0.38);
+    bp.frequency.exponentialRampToValueAtTime(115, t0 + dur);
+
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(heavy ? 1550 : 1850, t0);
 
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, t0);
@@ -846,9 +874,10 @@ export function createSoulsEnemyAudio({
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
 
     nSrc.connect(bp);
-    bp.connect(g);
+    bp.connect(lp);
+    lp.connect(g);
     g.connect(dest);
-    nodes.push(nSrc, bp, g);
+    nodes.push(nSrc, bp, lp, g);
 
     const release = trackVoiceStart(dur);
     nSrc.onended = () => {
@@ -978,62 +1007,115 @@ export function createSoulsEnemyAudio({
     if (poly <= 0) return;
 
     const t0 = ctx.currentTime;
-    const dur = 1.15;
-    const peak = clamp(0.88 * poly, 0.20, 1.0);
+    const dur = 1.65;
+    const peak = clamp(0.88 * poly, 0.24, 0.96);
     const nodes = [];
 
-    const osc = ctx.createOscillator();
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(64, t0);
-    osc.frequency.linearRampToValueAtTime(94, t0 + 0.28);
-    osc.frequency.exponentialRampToValueAtTime(44, t0 + dur);
+    const roarOut = ctx.createGain();
+    roarOut.gain.setValueAtTime(1.0, t0);
+    roarOut.connect(dest);
+    nodes.push(roarOut);
+
+    // 1. Deep chest sub-body (58 -> 36 Hz sine, zero sawtooth buzz)
+    const sub = ctx.createOscillator();
+    sub.type = 'sine';
+    sub.frequency.setValueAtTime(58, t0);
+    sub.frequency.linearRampToValueAtTime(66, t0 + 0.24);
+    sub.frequency.exponentialRampToValueAtTime(36, t0 + dur);
+    const subG = ctx.createGain();
+    subG.gain.setValueAtTime(0.0001, t0);
+    subG.gain.linearRampToValueAtTime(peak * 0.62, t0 + 0.12);
+    subG.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    sub.connect(subG);
+    subG.connect(roarOut);
+    nodes.push(sub, subG);
+
+    // 2. Organic helm-chest vocal breath formants (zero sawtooth buzz!)
+    const throat = ctx.createOscillator();
+    throat.type = 'triangle';
+    throat.frequency.setValueAtTime(84, t0);
+    throat.frequency.linearRampToValueAtTime(98, t0 + 0.28);
+    throat.frequency.exponentialRampToValueAtTime(58, t0 + dur);
 
     const nSrc = ctx.createBufferSource();
     nSrc.buffer = getFallbackNoiseBuffer(ctx);
+    nSrc.loop = true;
 
     const f1 = ctx.createBiquadFilter();
     f1.type = 'bandpass';
-    f1.frequency.setValueAtTime(280, t0);
-    f1.frequency.linearRampToValueAtTime(460, t0 + 0.30);
-    f1.frequency.linearRampToValueAtTime(240, t0 + dur);
-    f1.Q.setValueAtTime(2.4, t0);
+    f1.frequency.setValueAtTime(185, t0);
+    f1.frequency.linearRampToValueAtTime(280, t0 + 0.32);
+    f1.frequency.linearRampToValueAtTime(155, t0 + dur);
+    f1.Q.setValueAtTime(1.9, t0);
 
     const f2 = ctx.createBiquadFilter();
     f2.type = 'bandpass';
-    f2.frequency.setValueAtTime(720, t0);
-    f2.frequency.linearRampToValueAtTime(980, t0 + 0.30);
-    f2.frequency.linearRampToValueAtTime(520, t0 + dur);
-    f2.Q.setValueAtTime(2.9, t0);
+    f2.frequency.setValueAtTime(440, t0);
+    f2.frequency.linearRampToValueAtTime(620, t0 + 0.30);
+    f2.frequency.linearRampToValueAtTime(320, t0 + dur);
+    f2.Q.setValueAtTime(2.1, t0);
+
+    const helmLp = ctx.createBiquadFilter();
+    helmLp.type = 'lowpass';
+    helmLp.frequency.setValueAtTime(920, t0);
 
     const mix = ctx.createGain();
     mix.gain.setValueAtTime(0.0001, t0);
-    mix.gain.linearRampToValueAtTime(peak, t0 + 0.14);
+    mix.gain.linearRampToValueAtTime(peak * 0.80, t0 + 0.14);
     mix.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
 
-    osc.connect(f1);
+    throat.connect(f1);
     nSrc.connect(f1);
     nSrc.connect(f2);
-    f1.connect(mix);
-    f2.connect(mix);
-    mix.connect(dest);
-    nodes.push(osc, nSrc, f1, f2, mix);
+    f1.connect(helmLp);
+    f2.connect(helmLp);
+    helmLp.connect(mix);
+    mix.connect(roarOut);
+    nodes.push(throat, nSrc, f1, f2, helmLp, mix);
 
     const rev = resolveReverbDest();
     if (rev) {
       const rG = ctx.createGain();
-      rG.gain.setValueAtTime(0.40, t0);
-      mix.connect(rG);
+      rG.gain.setValueAtTime(0.42, t0);
+      roarOut.connect(rG);
       rG.connect(rev);
       nodes.push(rG);
     }
 
     const release = trackVoiceStart(dur);
-    osc.onended = () => {
+    const handle = {
+      ctx,
+      src: nSrc,
+      gainNode: roarOut,
+      initialGain: 1.0,
+      stopped: false,
+      stop(fadeSec = 0.16) {
+        if (handle.stopped) return;
+        handle.stopped = true;
+        const fadeDur = clamp(Number(fadeSec) || 0.16, 0.015, 1.5);
+        try {
+          const now = ctx.currentTime;
+          const curVal = Math.max(0.0001, roarOut.gain.value || 1.0);
+          roarOut.gain.cancelScheduledValues(now);
+          roarOut.gain.setValueAtTime(curVal, now);
+          roarOut.gain.exponentialRampToValueAtTime(0.0001, now + fadeDur);
+          sub.stop(now + fadeDur + 0.02);
+          throat.stop(now + fadeDur + 0.02);
+          nSrc.stop(now + fadeDur + 0.02);
+        } catch {}
+      }
+    };
+    activeBossRoar = handle;
+
+    throat.onended = () => {
+      if (activeBossRoar === handle) activeBossRoar = null;
       release();
       safeDisconnect(nodes);
     };
-    osc.start(t0);
-    osc.stop(t0 + dur + 0.02);
+    sub.start(t0);
+    sub.stop(t0 + dur + 0.02);
+    throat.start(t0);
+    throat.stop(t0 + dur + 0.02);
     nSrc.start(t0);
     nSrc.stop(t0 + dur + 0.02);
   }
@@ -1167,28 +1249,34 @@ export function createSoulsEnemyAudio({
     if (poly <= 0) return;
 
     const t0 = ctx.currentTime;
-    const dur = heavy ? 0.42 : 0.26;
-    const peak = clamp((heavy ? 0.72 : 0.54) * poly, 0.08, 0.86);
+    const dur = heavy ? 0.36 : 0.24;
+    const peak = clamp((heavy ? 0.38 : 0.28) * poly, 0.05, 0.44);
     const nodes = [];
 
+    // Pure aerodynamic low-mid air displacement WHOOSH (ZERO metallic clang on misses!)
     const nSrc = ctx.createBufferSource();
     nSrc.buffer = getFallbackNoiseBuffer(ctx);
     const bp = ctx.createBiquadFilter();
     bp.type = 'bandpass';
-    bp.Q.setValueAtTime(heavy ? 1.45 : 1.8, t0);
-    bp.frequency.setValueAtTime(heavy ? 210 : 340, t0);
-    bp.frequency.exponentialRampToValueAtTime(heavy ? 1150 : 1650, t0 + dur * 0.34);
-    bp.frequency.exponentialRampToValueAtTime(heavy ? 260 : 420, t0 + dur);
+    bp.Q.setValueAtTime(heavy ? 1.05 : 1.15, t0);
+    bp.frequency.setValueAtTime(heavy ? 155 : 220, t0);
+    bp.frequency.exponentialRampToValueAtTime(heavy ? 500 : 680, t0 + dur * 0.36);
+    bp.frequency.exponentialRampToValueAtTime(heavy ? 165 : 230, t0 + dur);
+
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(heavy ? 1100 : 1380, t0);
 
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, t0);
-    g.gain.linearRampToValueAtTime(peak, t0 + dur * 0.28);
+    g.gain.linearRampToValueAtTime(peak, t0 + dur * 0.30);
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
 
     nSrc.connect(bp);
-    bp.connect(g);
+    bp.connect(lp);
+    lp.connect(g);
     g.connect(dest);
-    nodes.push(nSrc, bp, g);
+    nodes.push(nSrc, bp, lp, g);
 
     const release = trackVoiceStart(dur);
     nSrc.onended = () => {
@@ -1696,24 +1784,33 @@ export function createSoulsEnemyAudio({
   }
 
   function playMobHeavyWhooshInternal(distanceNorm = 0, pitchScale = 1.0) {
-    if (!canTrigger('mob_heavy_whoosh', 110)) return false;
+    if (!canTrigger('mob_heavy_whoosh', 120)) return false;
     const d = clamp(distanceNorm, 0, 1);
     const atten = Math.pow(1 - 0.68 * d, 1.1);
-    const hasDedicated = Boolean(sampleBuffers.get('mob_heavy_whoosh'));
-    const baseGain = hasDedicated ? 0.86 : 0.82;
-    const baseRate = hasDedicated ? randRange(0.94, 1.05) : randRange(0.78, 0.86);
-    const played = playFirstAvailable(['mob_heavy_whoosh', 'mob_knight_swing'], {
-      gain: clamp(baseGain * atten, 0.14, 0.92),
-      rate: clamp(baseRate * pitchScale, 0.68, 1.28),
-      lpFreq: d > 0.05 ? 7600 * Math.pow(0.18, d) : 0,
-      lowShelfDb: hasDedicated ? 2.0 : 3.5,
-      presenceDb: 1.8,
-      reverbSend: 0.20 + 0.12 * d,
-      stereoWide: true,
+    // Pure heavy air displacement only — soft aerodynamic whoosh, ZERO metal clang or thud!
+    const played = playBufferedSample('mob_heavy_whoosh', {
+      gain: clamp(0.42 * atten, 0.08, 0.46),
+      rate: clamp(randRange(0.94, 1.04) * pitchScale, 0.72, 1.24),
+      lpFreq: clamp(1850 * Math.pow(0.28, d), 580, 1850),
+      lowShelfDb: 0.6,
+      presenceDb: -2.5,
+      reverbSend: 0.14 + 0.08 * d,
+      stereoWide: false,
       pan: randRange(-0.12, 0.12)
     });
     if (!played) fallbackMobKnightSwing(true);
     return true;
+  }
+
+  function stopBossRoarInternal(fadeSec = 0.16) {
+    if (!activeBossRoar) return false;
+    const handle = activeBossRoar;
+    activeBossRoar = null;
+    if (typeof handle.stop === 'function') {
+      handle.stop(fadeSec);
+      return true;
+    }
+    return false;
   }
 
   return {
@@ -1783,19 +1880,18 @@ export function createSoulsEnemyAudio({
       if (!canTrigger('boss_whoosh', 120)) return false;
       const isHeavy = Boolean(heavy);
       const key = whooshCycleIdx++ % 2 === 0 ? 'boss_hammer_whoosh_1' : 'boss_hammer_whoosh_2';
-      if (isHeavy) triggerMusicDuck(-2.5, 0.05, 0.38);
+      // Pure colossal aerodynamic air displacement (ZERO sub-drop impact thud or metal presence!)
       const played = playBufferedSample(key, {
-        gain: isHeavy ? 1.02 : 0.88,
-        rate: isHeavy ? randRange(0.84, 0.92) : randRange(0.96, 1.05),
-        lowShelfDb: isHeavy ? 4.0 : 2.5,
-        presenceDb: isHeavy ? 3.2 : 2.4,
-        reverbSend: isHeavy ? 0.30 : 0.22,
+        gain: isHeavy ? 0.62 : 0.50,
+        rate: isHeavy ? randRange(0.86, 0.94) : randRange(0.96, 1.05),
+        lpFreq: isHeavy ? 1650 : 1950,
+        lowShelfDb: isHeavy ? 1.8 : 1.0,
+        presenceDb: -1.5,
+        reverbSend: isHeavy ? 0.22 : 0.16,
         priority: true,
         stereoWide: true,
         pan: whooshCycleIdx % 2 === 0 ? -0.12 : 0.12,
-        subBoost: isHeavy
-          ? { startHz: 76, endHz: 38, durationSec: 0.26, gain: 0.18 }
-          : null
+        subBoost: null
       });
       if (!played) fallbackBossHammerWhoosh(isHeavy);
       return true;
@@ -1834,25 +1930,57 @@ export function createSoulsEnemyAudio({
     },
 
     playBossRoar() {
-      if (!canTrigger('boss_roar', 480)) return false;
-      triggerMusicDuck(-5.2, 0.08, 0.90);
-      const played = playFirstAvailable(['boss_roar_el', 'boss_cutscene_roar', 'boss_roar'], {
-        gain: 1.04,
+      if (!canTrigger('boss_roar', 420)) return false;
+      stopBossRoarInternal(0.05);
+      triggerMusicDuck(-5.2, 0.06, 1.15);
+
+      // Deep, monstrous, organic Titan bellow (~1.85s souls_boss_roar_z83.wav at natural 1.0x pitch).
+      // Play ONLY the sample; invoke fallbackBossRoar() strictly if the sample is not loaded yet!
+      const played = playFirstAvailable(['boss_roar_z83', 'boss_roar'], {
+        gain: 0.96,
         rate: randRange(0.97, 1.03),
-        lowShelfDb: 3.2,
-        presenceDb: 2.6,
+        lpFreq: 4200,
+        lowShelfDb: 2.5,
+        presenceDb: 1.2,
         reverbSend: 0.38,
         priority: true,
         stereoWide: true,
-        subBoost: {
-          startHz: 84,
-          endHz: 40,
-          durationSec: 0.42,
-          gain: 0.18
+        onVoiceCreated(voice) {
+          let stopped = false;
+          activeBossRoar = {
+            ctx: voice.ctx,
+            src: voice.src,
+            gainNode: voice.gainNode,
+            stop(fadeSec = 0.16) {
+              if (stopped) return;
+              stopped = true;
+              const fadeDur = clamp(Number(fadeSec) || 0.16, 0.015, 1.5);
+              try {
+                const now = voice.ctx.currentTime;
+                const gParam = voice.gainNode.gain;
+                const curVal = Math.max(0.0001, gParam.value || voice.initialGain || 0.90);
+                gParam.cancelScheduledValues(now);
+                gParam.setValueAtTime(curVal, now);
+                gParam.exponentialRampToValueAtTime(0.0001, now + fadeDur);
+                voice.src.stop(now + fadeDur + 0.018);
+              } catch {}
+              if (typeof setTimeout === 'function') {
+                voice.cleanupTimer = setTimeout(() => {
+                  voice.cleanupTimer = null;
+                  voice.releaseVoice();
+                  safeDisconnect(voice.nodes);
+                }, Math.ceil((fadeDur + 0.08) * 1000));
+              }
+            }
+          };
         }
       });
       if (!played) fallbackBossRoar();
       return true;
+    },
+
+    stopBossRoar(fadeSec = 0.16) {
+      return stopBossRoarInternal(fadeSec);
     },
 
     playStanceBreak() {
@@ -1894,14 +2022,17 @@ export function createSoulsEnemyAudio({
 
     playMobKnightSwing(heavy = false) {
       if (heavy) return playMobHeavyWhooshInternal();
-      if (!canTrigger('mob_knight_swing', 100)) return false;
-      const played = playBufferedSample('mob_knight_swing', {
-        gain: 0.78,
-        rate: randRange(0.93, 1.08),
-        presenceDb: 1.6,
-        reverbSend: 0.18,
+      if (!canTrigger('mob_knight_swing', 115)) return false;
+      // Soft aerodynamic air-cutting whoosh (ZERO metallic clang on empty swings!)
+      const played = playBufferedSample('mob_heavy_whoosh', {
+        gain: 0.32,
+        rate: randRange(1.26, 1.38),
+        lpFreq: 1950,
+        lowShelfDb: 0,
+        presenceDb: -2.2,
+        reverbSend: 0.12,
         stereoWide: false,
-        pan: randRange(-0.14, 0.14)
+        pan: randRange(-0.12, 0.12)
       });
       if (!played) fallbackMobKnightSwing(false);
       return true;
@@ -2014,39 +2145,16 @@ export function createSoulsEnemyAudio({
       const isHeavy = Boolean(heavy);
       const d = clamp(distanceNorm, 0, 1);
       const atten = Math.pow(1 - 0.68 * d, 1.15);
-      const lpFreq = d > 0.05 ? clamp(6400 * Math.pow(0.20, d) * profile.lpScale, 750, 7800) : 0;
+      const lpFreq = d > 0.05 ? clamp(5200 * Math.pow(0.20, d) * profile.lpScale, 700, 6200) : 4800;
       const instPitch = resolveInstancePitchScale(resolvedId);
 
-      // 1. Weapon swing whoosh always stays responsive for readable combat timing
-      let swingPlayed = false;
-      if (isHeavy) {
-        swingPlayed = playMobHeavyWhooshInternal(
-          d,
-          clamp(0.96 + (profile.pitch - 1.0) * 0.45, 0.82, 1.16)
-        );
-      } else if (!profile.isRanged) {
-        if (canTrigger('mob_knight_swing', 105)) {
-          const ok = playBufferedSample('mob_knight_swing', {
-            gain: clamp(0.70 * atten, 0.12, 0.76),
-            rate: clamp(profile.pitch * instPitch * randRange(0.94, 1.06), 0.80, 1.24),
-            lpFreq,
-            presenceDb: 1.4,
-            reverbSend: 0.16,
-            stereoWide: false,
-            pan: randRange(-0.14, 0.14)
-          });
-          if (!ok) fallbackMobKnightSwing(false);
-          swingPlayed = true;
-        }
-      }
-
-      // 2. Strict anti-spam vocal grunt gating:
-      //    - 100% for heavy attacks, 65% probability for normal attacks
-      //    - Global >= 920 ms, Per-mob >= 1850 ms (atomic check so failed checks never burn timers)
-      //    - Non-repeating rotation across mob_attack_grunt_1..3.mp3 + archetype/instance pitch
+      // Strict anti-spam vocal grunt gating ONLY (zero premature swing sound during windup!):
+      //   - 0% on normal attacks, 32% on heavy attacks (no constant screaming on every swing!)
+      //   - Global >= 2400 ms, Per-mob >= 4200 ms
       let vocalPlayed = false;
-      const passChance = isHeavy || Math.random() < MOB_AUDIO_ANTISPAM.attackGruntNormalChance;
-      if (d < 0.90 && passChance) {
+      const chance = isHeavy ? MOB_AUDIO_ANTISPAM.attackGruntHeavyChance : MOB_AUDIO_ANTISPAM.attackGruntNormalChance;
+      const passChance = Math.random() < chance;
+      if (d < 0.85 && passChance) {
         const mobKey = `mob_attack_grunt_mob_${resolvedId != null ? resolvedId : profile.id}`;
         if (
           canTriggerPair(
@@ -2059,11 +2167,11 @@ export function createSoulsEnemyAudio({
           const ctx = resolveAudioContext();
           if (ctx) preload(ctx);
 
-          const gain = clamp(profile.gruntGain * (isHeavy ? 1.04 : 0.86) * atten, 0.14, 0.86);
+          const gain = clamp(profile.gruntGain * 0.62 * atten, 0.10, 0.54);
           const rate = clamp(
-            profile.pitch * instPitch * (isHeavy ? 0.92 : 1.0) * randRange(0.95, 1.05),
+            profile.pitch * instPitch * (isHeavy ? 0.90 : 0.96) * randRange(0.95, 1.05),
             0.72,
-            1.34
+            1.28
           );
           const gruntKey = pickNonRepeatingGruntKey();
           const ok = gruntKey
@@ -2071,10 +2179,10 @@ export function createSoulsEnemyAudio({
                 gain,
                 rate,
                 lpFreq,
-                lowShelfDb: isHeavy ? 2.4 : 1.0,
-                presenceDb: 2.0,
-                reverbSend: 0.18 + 0.12 * d,
-                stereoWide: isHeavy,
+                lowShelfDb: 1.5,
+                presenceDb: 0.8,
+                reverbSend: 0.20 + 0.12 * d,
+                stereoWide: false,
                 pan: randRange(-0.16, 0.16)
               })
             : false;
@@ -2083,7 +2191,7 @@ export function createSoulsEnemyAudio({
         }
       }
 
-      return vocalPlayed || swingPlayed;
+      return vocalPlayed;
     },
 
     playMobHurt(enemyType = 'default', distanceNorm = 0, actorId = null) {
@@ -2136,6 +2244,7 @@ export function createSoulsEnemyAudio({
     },
 
     dispose() {
+      stopBossRoarInternal(0.02);
       safeDisconnect(busNodes);
       busNodes = [];
       busCtx = null;

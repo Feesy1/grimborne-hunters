@@ -3,11 +3,11 @@
 // Deterministic across 30 FPS mobile (Yandex Games) and 60/144 FPS desktop sub-steps.
 
 export const SOULS_ROLL_CFG = Object.freeze({
-  duration: 0.56,
-  iframesPc: 0.38,
-  iframesTouch: 0.41,
-  targetDist: 3.42,
-  rollingAttackCancelU: 0.80,
+  duration: 0.6833,
+  iframesPc: 0.42,
+  iframesTouch: 0.45,
+  targetDist: 3.72,
+  rollingAttackCancelU: 0.78,
   staminaCost: 14
 });
 
@@ -44,30 +44,40 @@ export function getSoulsRollIframes(inputSource = 'mouse_kb') {
 //   Phase 3: 0.35 * (5.45 - 4.05 / 2.32)        = 1.296513
 //   Total raw integral                          = 5.930854
 // Scaled so integral_0^1 sampleSoulsRollSpeed(u) du * 0.56 === 3.4200 m.
-const RAW_ROLL_INTEGRAL =
-  0.25 * (7.95 + (0.42 * 2) / Math.PI) +
-  0.40 * 6.45 +
-  0.35 * (5.45 - 4.05 / 2.32);
-const ROLL_SPEED_CALIBRATION = SOULS_ROLL_CFG.targetDist / (SOULS_ROLL_CFG.duration * RAW_ROLL_INTEGRAL);
-
+// 4-phase Elden Ring Medium Dive-Roll Root Motion speed profile (m/s):
+//   Phase 1 [0.00 .. 0.10]: athletic knee compression & explosive leg push-off (4.20 -> 8.95 m/s)
+//   Phase 2 [0.10 .. 0.42]: airborne forward shoulder-dive flight               (8.95 -> 7.40 m/s)
+//   Phase 3 [0.42 .. 0.68]: heavy stone shoulder-to-back roll                   (7.40 -> 4.55 m/s)
+//   Phase 4 [0.68 .. 1.00]: grounded boot-plant squat deceleration              (4.55 -> 0.55 m/s)
 function sampleRawRollSpeed(u) {
   const x = clamp(u, 0, 1);
-  if (x <= 0.25) {
-    // Explosive launch peaking near u=0.07, easing smoothly into mid-roll tuck at u=0.25
-    const t = x / 0.25;
-    const peakBoost = Math.sin(t * Math.PI) * 0.42;
-    return 8.45 + (7.45 - 8.45) * smoothstep01(t) + peakBoost;
+  if (x <= 0.10) {
+    const t = x / 0.10;
+    return 4.20 + (8.95 - 4.20) * smoothstep01(t);
   }
-  if (x <= 0.65) {
-    // Steady rolling glide across shoulder/back (0.25 -> 0.65)
-    const t = (x - 0.25) / 0.40;
-    return 7.45 + (5.45 - 7.45) * smoothstep01(t);
+  if (x <= 0.42) {
+    const t = (x - 0.10) / 0.32;
+    const diveSurge = Math.sin(t * Math.PI) * 0.35;
+    return 8.95 + (7.40 - 8.95) * smoothstep01(t) + diveSurge;
   }
-  // Grounded boot-plant deceleration (0.65 -> 1.00) with firm catch around u=0.80
-  const t = (x - 0.65) / 0.35;
-  const brakeCurve = Math.pow(t, 1.32);
-  return 5.45 + (1.40 - 5.45) * brakeCurve;
+  if (x <= 0.68) {
+    const t = (x - 0.42) / 0.26;
+    return 7.40 + (4.55 - 7.40) * smoothstep01(t);
+  }
+  const t = (x - 0.68) / 0.32;
+  const brakeCurve = Math.pow(t, 1.25);
+  return 4.55 + (0.55 - 4.55) * brakeCurve;
 }
+
+const RAW_ROLL_INTEGRAL = (() => {
+  const N = 128;
+  let sum = sampleRawRollSpeed(0) + sampleRawRollSpeed(1);
+  for (let i = 1; i < N; i++) {
+    sum += (i % 2 === 1 ? 4 : 2) * sampleRawRollSpeed(i / N);
+  }
+  return sum / (3 * N);
+})();
+const ROLL_SPEED_CALIBRATION = SOULS_ROLL_CFG.targetDist / (SOULS_ROLL_CFG.duration * RAW_ROLL_INTEGRAL);
 
 /**
  * Exact Elden Ring Medium Roll Root Motion velocity curve (m/s) at normalized roll progress u in [0, 1].

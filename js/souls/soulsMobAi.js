@@ -19,7 +19,7 @@
 //   - Calm Elden Ring pacing, Pack Token Coordination (`<= 2` melee attackers),
 //     smooth C1 step-in (`1.2–2.2 m/s`), live velocity lead & shield-turtle reads.
 
-import * as CASTLE_LAYOUT from './soulsCastleLayout.js?v=20261123z71';
+import * as CASTLE_LAYOUT from './soulsCastleLayout.js?v=20261124z84';
 
 const TWO_PI = Math.PI * 2;
 const _tmpClampOut = { x: 0, z: 0 };
@@ -185,6 +185,18 @@ const PUNISH_STAGGER_MULT = Object.freeze({
   light: 1.25
 });
 
+export const SOULS_BONFIRE_PHYSICAL_RADIUS = 1.35;
+
+export function isPlayerRestingAtBonfire(opts = {}) {
+  return Boolean(
+    opts?.playerRestingAtBonfire ||
+    opts?.bonfireRestActive ||
+    opts?.souls?.bonfireRestActive ||
+    Number(opts?.souls?.bonfireRestTimer) > 0 ||
+    Number(opts?.souls?.bonfireHealCooldown) > 0
+  );
+}
+
 export function getBonfireSafeZone(opts = {}) {
   const bf = opts.bonfirePos || CASTLE_LAYOUT.SOULS_CASTLE_BONFIRE || { x: 0, z: 32.5 };
   const radius = Number(opts.bonfireSafeRadius) > 0
@@ -192,11 +204,22 @@ export function getBonfireSafeZone(opts = {}) {
     : (Number(CASTLE_LAYOUT.SOULS_BONFIRE_SAFE_RADIUS) > 0
       ? Number(CASTLE_LAYOUT.SOULS_BONFIRE_SAFE_RADIUS)
       : 9.5);
+  const colliderRadius = Number(bf.colliderRadius) > 0 ? Number(bf.colliderRadius) : 1.05;
   return {
     x: Number.isFinite(bf.x) ? bf.x : 0,
     z: Number.isFinite(bf.z) ? bf.z : 32.5,
-    radius
+    radius,
+    colliderRadius,
+    physicalRadius: Math.max(SOULS_BONFIRE_PHYSICAL_RADIUS, colliderRadius + 0.30)
   };
+}
+
+export function getEffectiveBonfireRepulsionRadius(opts = {}) {
+  const zone = getBonfireSafeZone(opts);
+  if (isPlayerRestingAtBonfire(opts)) {
+    return Math.max(1.5, zone.radius - 0.35);
+  }
+  return zone.physicalRadius;
 }
 
 export function isPlayerInBonfireSafeZone(px, pz, opts = {}) {
@@ -272,7 +295,9 @@ function segmentHitsCircle(x1, z1, x2, z2, cx, cz, radius) {
  * with a built-in geometric test over `SOULS_CASTLE_WALL_SEGMENTS` & `SOULS_CASTLE_PILLARS`.
  */
 export function hasMobWallLineOfSight(x1, z1, x2, z2, opts = {}) {
-  if (opts?.hasLineOfSight === false) return false;
+  if (opts?.hasLineOfSight === false && !opts?.ignorePillars && !opts?.forceGeometricLOS) {
+    return false;
+  }
   if (!Number.isFinite(x1) || !Number.isFinite(z1) || !Number.isFinite(x2) || !Number.isFinite(z2)) {
     return false;
   }
@@ -337,12 +362,222 @@ export function hasMobWallLineOfSight(x1, z1, x2, z2, opts = {}) {
 }
 
 /**
- * Smart archway doorway router (`getCastleDoorwaySteerTarget` integration + fallback).
+ * Latched tangent bypass solver around stone castle pillars (`pillar_sanctuary_w/e`, `pillar_nave_se/nw`, etc.).
+ * Latches `mob._pillarBypassSign` & `mob._pillarBypassId` (preserving world-space side normal) until the mob
+ * has genuinely cleared the blocking column, eliminating left-right (`+X / -X`) ping-pong oscillation!
+ */
+export function resolveLatchedPillarBypass(mob, fromX, fromZ, toX, toZ, zDom = null, opts = {}) {
+  const pillars = CASTLE_LAYOUT.SOULS_CASTLE_PILLARS;
+  if (!Array.isArray(pillars) || pillars.length === 0) return null;
+
+  const distGoal = Math.hypot(toX - fromX, toZ - fromZ);
+  if (distGoal < 0.35) {
+    if (mob) {
+      mob._pillarBypassId = null;
+      mob._pillarBypassSign = 0;
+    }
+    return null;
+  }
+
+  const mobR = Number(mob?.radius) > 0 ? Number(mob.radius) : 0.55;
+  const minSafeZ = Number.isFinite(zDom?.minZ) ? zDom.minZ + 0.28 : -31.72;
+  const maxSafeZ = Number.isFinite(zDom?.maxZ) ? zDom.maxZ - 0.28 : 67.2;
+
+  let targetCol = null;
+  let bestDistFromMob = Infinity;
+
+  for (let i = 0; i < pillars.length; i++) {
+    const p = pillars[i];
+    if (!p || p.collider === false) continue;
+    const colR = Number(p.radius) || 0.85;
+    const hitR = colR + mobR + 0.22;
+    if (segmentHitsCircle(fromX, fromZ, toX, toZ, p.x, p.z, hitR)) {
+      const d = Math.hypot(fromX - p.x, fromZ - p.z);
+      if (d < bestDistFromMob) {
+        bestDistFromMob = d;
+        targetCol = p;
+      }
+    }
+  }
+
+  // Keep existing pillar latch alive while the mob is still rounding its shoulder
+  if (!targetCol && mob && mob._pillarBypassId) {
+    for (let i = 0; i < pillars.length; i++) {
+      const p = pillars[i];
+      if (!p || p.id !== mob._pillarBypassId || p.collider === false) continue;
+      const colR = Number(p.radius) || 0.85;
+      const dMob = Math.hypot(fromX - p.x, fromZ - p.z);
+      const gpX = toX - p.x;
+      const gpZ = toZ - p.z;
+      const gpLen = Math.hypot(gpX, gpZ) || 1;
+      const along = ((fromX - p.x) * gpX + (fromZ - p.z) * gpZ) / gpLen;
+      const holdActive = (mob._pillarBypassHoldTimer || 0) > 0;
+      if ((dMob < colR + mobR + 0.72 && along < colR * 0.45) || (holdActive && dMob < colR + mobR + 1.05)) {
+        targetCol = p;
+      }
+      break;
+    }
+  }
+
+  if (!targetCol) {
+    if (mob && (mob._pillarBypassHoldTimer || 0) <= 0) {
+      mob._pillarBypassId = null;
+      mob._pillarBypassSign = 0;
+    }
+    return null;
+  }
+
+  const colR = Number(targetCol.radius) || 0.85;
+  const bypassR = colR + mobR + 0.52;
+
+  const gpX = toX - targetCol.x;
+  const gpZ = toZ - targetCol.z;
+  const gpLen = Math.hypot(gpX, gpZ);
+  let uAxisX;
+  let uAxisZ;
+  if (gpLen > 0.42) {
+    uAxisX = gpX / gpLen;
+    uAxisZ = gpZ / gpLen;
+  } else {
+    const mpX = targetCol.x - fromX;
+    const mpZ = targetCol.z - fromZ;
+    const mpLen = Math.hypot(mpX, mpZ) || 1;
+    uAxisX = mpX / mpLen;
+    uAxisZ = mpZ / mpLen;
+  }
+
+  const tanPX = -uAxisZ;
+  const tanPZ = uAxisX;
+
+  const wxPlus = targetCol.x + tanPX * bypassR;
+  const wzPlus = clamp(targetCol.z + tanPZ * bypassR, minSafeZ, maxSafeZ);
+  const wxMinus = targetCol.x - tanPX * bypassR;
+  const wzMinus = clamp(targetCol.z - tanPZ * bypassR, minSafeZ, maxSafeZ);
+
+  let penPlus = Math.abs(targetCol.z + tanPZ * bypassR - wzPlus);
+  let penMinus = Math.abs(targetCol.z - tanPZ * bypassR - wzMinus);
+
+  if (typeof CASTLE_LAYOUT.clampCastlePosition === 'function') {
+    const probeR = mobR + 0.28;
+    const projPlus = CASTLE_LAYOUT.clampCastlePosition(wxPlus, wzPlus, probeR, {
+      bossDoorState: 'closed',
+      allowBossHall: false,
+      out: _tmpClampOut
+    });
+    penPlus += Math.hypot(projPlus.x - wxPlus, projPlus.z - wzPlus);
+
+    const projMinus = CASTLE_LAYOUT.clampCastlePosition(wxMinus, wzMinus, probeR, {
+      bossDoorState: 'closed',
+      allowBossHall: false,
+      out: _tmpClampOut
+    });
+    penMinus += Math.hypot(projMinus.x - wxMinus, projMinus.z - wzMinus);
+  } else {
+    const maxXPlus = getCorridorMaxX(wzPlus, mobR + 0.25);
+    const maxXMinus = getCorridorMaxX(wzMinus, mobR + 0.25);
+    if (Math.abs(wxPlus) > maxXPlus) penPlus += Math.abs(wxPlus) - maxXPlus;
+    if (Math.abs(wxMinus) > maxXMinus) penMinus += Math.abs(wxMinus) - maxXMinus;
+  }
+
+  const bfZone = getBonfireSafeZone(opts);
+  const minBf = getEffectiveBonfireRepulsionRadius(opts);
+  const bfDistPlus = Math.hypot(wxPlus - bfZone.x, wzPlus - bfZone.z);
+  const bfDistMinus = Math.hypot(wxMinus - bfZone.x, wzMinus - bfZone.z);
+  if (bfDistPlus < minBf) penPlus += minBf - bfDistPlus;
+  if (bfDistMinus < minBf) penMinus += minBf - bfDistMinus;
+
+  let chosenSign;
+  if (penPlus > 0.14 && penMinus + 0.08 < penPlus) {
+    chosenSign = -1;
+  } else if (penMinus > 0.14 && penPlus + 0.08 < penMinus) {
+    chosenSign = 1;
+  } else if (
+    mob &&
+    mob._pillarBypassId === targetCol.id &&
+    (mob._pillarBypassSign === 1 || mob._pillarBypassSign === -1)
+  ) {
+    if (Number.isFinite(mob._pillarBypassSideX) && Number.isFinite(mob._pillarBypassSideZ)) {
+      const worldDot = tanPX * mob._pillarBypassSideX + tanPZ * mob._pillarBypassSideZ;
+      chosenSign = worldDot >= 0 ? 1 : -1;
+    } else {
+      chosenSign = mob._pillarBypassSign;
+    }
+  } else {
+    const latOff = (fromX - targetCol.x) * tanPX + (fromZ - targetCol.z) * tanPZ;
+    if (Math.abs(latOff) >= 0.18) {
+      chosenSign = latOff >= 0 ? 1 : -1;
+    } else {
+      // Near dead-center: favor the side with wider open hall space toward castle centerline X=0
+      chosenSign = Math.abs(wxPlus) <= Math.abs(wxMinus) ? 1 : -1;
+    }
+  }
+
+  if (mob) {
+    if (mob._pillarBypassId !== targetCol.id) {
+      mob._pillarBypassHoldTimer = 0.52;
+    }
+    mob._pillarBypassId = targetCol.id;
+    mob._pillarBypassSign = chosenSign;
+    mob._pillarBypassSideX = tanPX * chosenSign;
+    mob._pillarBypassSideZ = tanPZ * chosenSign;
+  }
+
+  const relX = fromX - targetCol.x;
+  const relZ = fromZ - targetCol.z;
+  const along = relX * uAxisX + relZ * uAxisZ;
+  const lat = (relX * tanPX + relZ * tanPZ) * chosenSign;
+
+  let wpX;
+  let wpZ;
+  if (lat < bypassR * 0.74 && along < 0.16) {
+    wpX = targetCol.x + tanPX * chosenSign * bypassR + uAxisX * 0.26;
+    wpZ = targetCol.z + tanPZ * chosenSign * bypassR + uAxisZ * 0.26;
+  } else {
+    const wrapAdvance = Math.min(Math.max(0.55, gpLen), colR + mobR + 0.72);
+    wpX = targetCol.x + tanPX * chosenSign * (bypassR * 0.70) + uAxisX * wrapAdvance;
+    wpZ = targetCol.z + tanPZ * chosenSign * (bypassR * 0.70) + uAxisZ * wrapAdvance;
+  }
+  wpZ = clamp(wpZ, minSafeZ, maxSafeZ);
+
+  if (typeof CASTLE_LAYOUT.clampCastlePosition === 'function') {
+    const projWp = CASTLE_LAYOUT.clampCastlePosition(wpX, wpZ, mobR + 0.06, {
+      bossDoorState: 'closed',
+      allowBossHall: false,
+      out: _tmpClampOut
+    });
+    wpX = projWp.x;
+    wpZ = clamp(projWp.z, minSafeZ, maxSafeZ);
+  }
+
+  return {
+    x: +wpX.toFixed(3),
+    z: +wpZ.toFixed(3),
+    viaDoorway: true,
+    viaPillar: true,
+    pillarId: targetCol.id,
+    sign: chosenSign
+  };
+}
+
+/**
+ * Smart archway doorway router (`getCastleDoorwaySteerTarget` integration + latched pillar bypass).
  * Ensures mobs inside East Alcove or West Wing thread cleanly through the center
- * of the connecting gothic archway (e.g. `{ x: 4.5, z: -0.4 }`) and NEVER slam into walls!
+ * of the connecting gothic archway (e.g. `{ x: 4.5, z: -0.4 }`) and walk cleanly around pillars!
  */
 export function resolveDoorwaySteerTarget(fromX, fromZ, toX, toZ, opts = {}) {
-  const clearLOS = hasMobWallLineOfSight(fromX, fromZ, toX, toZ, { ...opts, ignorePillars: true });
+  const distGoal = Math.hypot(toX - fromX, toZ - fromZ);
+  const clearWallLOS = hasMobWallLineOfSight(fromX, fromZ, toX, toZ, {
+    ...opts,
+    ignorePillars: true,
+    forceGeometricLOS: true
+  });
+  const clearFullLOS = distGoal > 0.40
+    ? hasMobWallLineOfSight(fromX, fromZ, toX, toZ, {
+        ...opts,
+        ignorePillars: false,
+        forceGeometricLOS: true
+      })
+    : clearWallLOS;
 
   if (typeof CASTLE_LAYOUT.getCastleDoorwaySteerTarget === 'function') {
     const res = CASTLE_LAYOUT.getCastleDoorwaySteerTarget(fromX, fromZ, toX, toZ);
@@ -350,16 +585,28 @@ export function resolveDoorwaySteerTarget(fromX, fromZ, toX, toZ, opts = {}) {
       const deltaToGoal = Math.hypot(res.x - toX, res.z - toZ);
       const distToSteer = Math.hypot(res.x - fromX, res.z - fromZ);
       if (deltaToGoal > 0.25 && distToSteer > 0.22) {
-        return { x: res.x, z: res.z, viaDoorway: true };
+        return { x: res.x, z: res.z, viaDoorway: true, viaPillar: false };
       }
-    }
-    if (clearLOS) {
-      return { x: toX, z: toZ, viaDoorway: false };
     }
   }
 
-  if (clearLOS) {
-    return { x: toX, z: toZ, viaDoorway: false };
+  // Check latched pillar bypass whenever walls are clear (including while rounding a latched pillar shoulder!)
+  if (clearWallLOS) {
+    if (!clearFullLOS || opts?.mob?._pillarBypassId) {
+      const pSteer = resolveLatchedPillarBypass(
+        opts?.mob || null,
+        fromX,
+        fromZ,
+        toX,
+        toZ,
+        opts?.zDom || null,
+        opts
+      );
+      if (pSteer) {
+        return pSteer;
+      }
+    }
+    return { x: toX, z: toZ, viaDoorway: false, viaPillar: false };
   }
 
   // Geometric archway search over `SOULS_CASTLE_ARCHES` (handles East Alcove, West Wing & Nave arches)
@@ -451,21 +698,21 @@ const IRON_KNIGHT_SLASH_1 = Object.freeze({
   attackAnimClip: 'Attack_Slash_1',
   releaseAnimClip: 'Attack_Slash_1',
   label: 'Диагональный разрез I',
-  windup: 0.66,
-  active: 0.09,
-  recovery: 0.6,
-  trackingCutoff01: 0.68,
-  staminaDamage: 30,
+  windup: 0.62,
+  active: 0.17,
+  recovery: 0.54,
+  trackingCutoff01: 0.87,
+  staminaDamage: 32,
   damageLevel: 'light',
   damageMult: 1.0,
-  reach: 2.6,
-  arcRad: Math.PI * 0.78,
-  telegraphForward: 1.5,
+  reach: 2.75,
+  arcRad: Math.PI * 0.96,
+  telegraphForward: 1.6,
   telegraphRadius: 0,
-  lungeSpeed: 1.55,
-  stepStart01: 0.45,
+  lungeSpeed: 3.15,
+  stepStart01: 0.34,
   stepPeak01: 0.88,
-  lungeWindowSec: 0.28,
+  lungeWindowSec: 0.34,
   followThroughSlide: 0.0,
   canParry: true,
   parryable: true,
@@ -485,21 +732,21 @@ const IRON_KNIGHT_SLASH_2 = Object.freeze({
   attackAnimClip: 'Attack_Slash_2',
   releaseAnimClip: 'Attack_Slash_2',
   label: 'Обратный взмах II',
-  windup: 0.57,
-  active: 0.09,
-  recovery: 0.65,
-  trackingCutoff01: 0.67,
-  staminaDamage: 34,
+  windup: 0.56,
+  active: 0.17,
+  recovery: 0.56,
+  trackingCutoff01: 0.88,
+  staminaDamage: 36,
   damageLevel: 'light',
-  damageMult: 1.08,
-  reach: 2.65,
-  arcRad: Math.PI * 0.82,
-  telegraphForward: 1.55,
+  damageMult: 1.10,
+  reach: 2.85,
+  arcRad: Math.PI * 1.02,
+  telegraphForward: 1.65,
   telegraphRadius: 0,
-  lungeSpeed: 1.65,
-  stepStart01: 0.42,
+  lungeSpeed: 3.35,
+  stepStart01: 0.32,
   stepPeak01: 0.88,
-  lungeWindowSec: 0.26,
+  lungeWindowSec: 0.32,
   followThroughSlide: 0.0,
   canParry: true,
   parryable: true,
@@ -519,21 +766,21 @@ const IRON_KNIGHT_OVERHEAD_CRUSH = Object.freeze({
   attackAnimClip: 'Attack_Overhead_Crush',
   releaseAnimClip: 'Attack_Overhead_Crush',
   label: 'Дробящий удар сверху',
-  windup: 0.94,
-  active: 0.1,
-  recovery: 0.95,
-  trackingCutoff01: 0.65,
-  staminaDamage: 50,
+  windup: 0.88,
+  active: 0.18,
+  recovery: 0.74,
+  trackingCutoff01: 0.85,
+  staminaDamage: 52,
   damageLevel: 'heavy',
-  damageMult: 1.32,
-  reach: 2.8,
-  arcRad: Math.PI * 0.54,
-  telegraphForward: 1.7,
+  damageMult: 1.34,
+  reach: 2.95,
+  arcRad: Math.PI * 0.66,
+  telegraphForward: 1.8,
   telegraphRadius: 0,
-  lungeSpeed: 1.85,
-  stepStart01: 0.54,
-  stepPeak01: 0.9,
-  lungeWindowSec: 0.34,
+  lungeSpeed: 3.55,
+  stepStart01: 0.42,
+  stepPeak01: 0.90,
+  lungeWindowSec: 0.38,
   followThroughSlide: 0.0,
   canParry: true,
   parryable: true,
@@ -553,21 +800,21 @@ const IRON_KNIGHT_THRUST_LUNGE = Object.freeze({
   attackAnimClip: 'Attack_Thrust_Lunge',
   releaseAnimClip: 'Attack_Thrust_Lunge',
   label: 'Пробивной выпад',
-  windup: 0.71,
-  active: 0.09,
-  recovery: 0.8,
-  trackingCutoff01: 0.66,
-  staminaDamage: 38,
+  windup: 0.66,
+  active: 0.17,
+  recovery: 0.64,
+  trackingCutoff01: 0.86,
+  staminaDamage: 40,
   damageLevel: 'heavy',
-  damageMult: 1.18,
-  reach: 3.0,
-  arcRad: Math.PI * 0.36,
-  telegraphForward: 1.9,
+  damageMult: 1.20,
+  reach: 3.25,
+  arcRad: Math.PI * 0.52,
+  telegraphForward: 2.1,
   telegraphRadius: 0,
-  lungeSpeed: 2.2,
-  stepStart01: 0.44,
-  stepPeak01: 0.88,
-  lungeWindowSec: 0.34,
+  lungeSpeed: 4.85,
+  stepStart01: 0.34,
+  stepPeak01: 0.90,
+  lungeWindowSec: 0.38,
   followThroughSlide: 0.0,
   canParry: true,
   parryable: true,
@@ -578,7 +825,7 @@ const IRON_KNIGHT_THRUST_LUNGE = Object.freeze({
   punishTier: 'heavy',
   punishDmgMult: 1.25,
   punishStaggerMult: 1.35,
-  followUpIds: Object.freeze([])
+  followUpIds: Object.freeze(['slash_2'])
 });
 
 const FOOTMAN_THRUST_1 = Object.freeze({
@@ -588,20 +835,20 @@ const FOOTMAN_THRUST_1 = Object.freeze({
   releaseAnimClip: 'Attack_Thrust_1',
   label: 'Колющий выпад из-за щита',
   windup: 0.54,
-  active: 0.08,
-  recovery: 0.55,
-  trackingCutoff01: 0.66,
-  staminaDamage: 26,
+  active: 0.16,
+  recovery: 0.50,
+  trackingCutoff01: 0.87,
+  staminaDamage: 28,
   damageLevel: 'light',
-  damageMult: 0.96,
-  reach: 2.65,
-  arcRad: Math.PI * 0.42,
-  telegraphForward: 1.6,
+  damageMult: 0.98,
+  reach: 2.75,
+  arcRad: Math.PI * 0.58,
+  telegraphForward: 1.65,
   telegraphRadius: 0,
-  lungeSpeed: 1.95,
-  stepStart01: 0.42,
+  lungeSpeed: 3.45,
+  stepStart01: 0.34,
   stepPeak01: 0.88,
-  lungeWindowSec: 0.26,
+  lungeWindowSec: 0.30,
   followThroughSlide: 0.0,
   canParry: true,
   parryable: true,
@@ -623,21 +870,21 @@ const FOOTMAN_SWEEP_2 = Object.freeze({
   attackAnimClip: 'Attack_Sweep_2',
   releaseAnimClip: 'Attack_Sweep_2',
   label: 'Размах алебардой II',
-  windup: 0.61,
-  active: 0.09,
-  recovery: 0.68,
-  trackingCutoff01: 0.67,
-  staminaDamage: 30,
+  windup: 0.58,
+  active: 0.17,
+  recovery: 0.54,
+  trackingCutoff01: 0.88,
+  staminaDamage: 32,
   damageLevel: 'light',
-  damageMult: 1.06,
-  reach: 2.55,
-  arcRad: Math.PI * 0.78,
-  telegraphForward: 1.45,
+  damageMult: 1.08,
+  reach: 2.75,
+  arcRad: Math.PI * 0.96,
+  telegraphForward: 1.55,
   telegraphRadius: 0,
-  lungeSpeed: 1.45,
-  stepStart01: 0.45,
+  lungeSpeed: 3.10,
+  stepStart01: 0.34,
   stepPeak01: 0.88,
-  lungeWindowSec: 0.26,
+  lungeWindowSec: 0.30,
   followThroughSlide: 0.0,
   canParry: true,
   parryable: true,
@@ -659,21 +906,21 @@ const FOOTMAN_SHIELD_BASH = Object.freeze({
   attackAnimClip: 'Attack_Shield_Bash',
   releaseAnimClip: 'Attack_Shield_Bash',
   label: 'Таранный удар щитом',
-  windup: 0.64,
-  active: 0.09,
-  recovery: 0.82,
-  trackingCutoff01: 0.66,
-  staminaDamage: 56,
+  windup: 0.60,
+  active: 0.16,
+  recovery: 0.64,
+  trackingCutoff01: 0.86,
+  staminaDamage: 58,
   damageLevel: 'heavy',
-  damageMult: 0.92,
-  reach: 2.25,
-  arcRad: Math.PI * 0.56,
-  telegraphForward: 1.25,
+  damageMult: 0.95,
+  reach: 2.45,
+  arcRad: Math.PI * 0.72,
+  telegraphForward: 1.35,
   telegraphRadius: 0,
-  lungeSpeed: 2.1,
-  stepStart01: 0.46,
-  stepPeak01: 0.9,
-  lungeWindowSec: 0.28,
+  lungeSpeed: 3.95,
+  stepStart01: 0.36,
+  stepPeak01: 0.90,
+  lungeWindowSec: 0.32,
   followThroughSlide: 0.0,
   canParry: false,
   parryable: false,
@@ -694,21 +941,21 @@ const FOOTMAN_OVERHEAD_POKE = Object.freeze({
   attackAnimClip: 'Attack_Overhead_Poke',
   releaseAnimClip: 'Attack_Overhead_Poke',
   label: 'Высокий укол поверх щита',
-  windup: 0.73,
-  active: 0.08,
-  recovery: 0.72,
-  trackingCutoff01: 0.66,
-  staminaDamage: 34,
+  windup: 0.66,
+  active: 0.16,
+  recovery: 0.58,
+  trackingCutoff01: 0.86,
+  staminaDamage: 36,
   damageLevel: 'light',
-  damageMult: 1.12,
-  reach: 2.7,
-  arcRad: Math.PI * 0.38,
-  telegraphForward: 1.6,
+  damageMult: 1.14,
+  reach: 2.85,
+  arcRad: Math.PI * 0.56,
+  telegraphForward: 1.65,
   telegraphRadius: 0,
-  lungeSpeed: 1.35,
-  stepStart01: 0.48,
+  lungeSpeed: 3.15,
+  stepStart01: 0.38,
   stepPeak01: 0.88,
-  lungeWindowSec: 0.28,
+  lungeWindowSec: 0.32,
   followThroughSlide: 0.0,
   canParry: true,
   parryable: true,
@@ -721,7 +968,7 @@ const FOOTMAN_OVERHEAD_POKE = Object.freeze({
   punishTier: 'light',
   punishDmgMult: 1.2,
   punishStaggerMult: 1.25,
-  followUpIds: Object.freeze([])
+  followUpIds: Object.freeze(['sweep_2'])
 });
 
 const ARCHER_AIM_SHOT = Object.freeze({
@@ -730,11 +977,11 @@ const ARCHER_AIM_SHOT = Object.freeze({
   attackAnimClip: 'Aim_Draw',
   releaseAnimClip: 'Shot_Release',
   label: 'Прицельный выстрел',
-  windup: 0.9,
+  windup: 0.74,
   active: 0.08,
-  recovery: 1.08,
-  trackingCutoff01: 0.68,
-  staminaDamage: 22,
+  recovery: 0.82,
+  trackingCutoff01: 0.86,
+  staminaDamage: 24,
   damageLevel: 'light',
   damageMult: 1.0,
   reach: 14.5,
@@ -746,8 +993,8 @@ const ARCHER_AIM_SHOT = Object.freeze({
   stepPeak01: 0,
   lungeWindowSec: 0,
   followThroughSlide: 0,
-  projectileSpeed: 18.0,
-  projectileMaxDist: 17.5,
+  projectileSpeed: 21.0,
+  projectileMaxDist: 18.0,
   canParry: false,
   parryable: false,
   isPierce: true,
@@ -806,28 +1053,28 @@ export const SOULS_MOB_PROFILES = Object.freeze({
     staggerMax: 145,
     flatDef: 22,
     physNegation: 0.14,
-    preferredDist: 3.1,
-    retreatDist: 1.65,
-    strafeSpeed: 1.65,
-    approachSpeedMult: 0.92,
-    inertiaAccel: 8.5,
-    refWalkSpeed: 2.55,
-    aggroRange: 9.2,
-    parriesToKneel: 1,
+    preferredDist: 2.65,
+    retreatDist: 1.35,
+    strafeSpeed: 2.25,
+    approachSpeedMult: 1.28,
+    inertiaAccel: 11.0,
+    refWalkSpeed: 2.65,
+    aggroRange: 9.8,
+    parriesToKneel: 2,
     isRanged: false,
-    strafeSwitchMinSec: 1.6,
-    strafeSwitchMaxSec: 2.8,
-    neutralDecisionMinSec: 1.4,
-    neutralDecisionMaxSec: 2.45,
-    assessIntervalMinSec: 2.4,
-    assessIntervalMaxSec: 3.8,
-    assessPauseMinSec: 0.45,
-    assessPauseMaxSec: 0.78,
-    postComboBackstepDist: 2.15,
-    postComboBackstepChance: 0.36,
-    backstepSpeed: 3.1,
-    backstepDuration: 0.34,
-    trackingTurnRate: 6.2,
+    strafeSwitchMinSec: 1.2,
+    strafeSwitchMaxSec: 2.1,
+    neutralDecisionMinSec: 0.58,
+    neutralDecisionMaxSec: 1.18,
+    assessIntervalMinSec: 3.2,
+    assessIntervalMaxSec: 5.0,
+    assessPauseMinSec: 0.18,
+    assessPauseMaxSec: 0.34,
+    postComboBackstepDist: 1.65,
+    postComboBackstepChance: 0.12,
+    backstepSpeed: 3.3,
+    backstepDuration: 0.30,
+    trackingTurnRate: 11.2,
     telegraphColor: null,
     patrolSpeed: 1.2,
     patrolRadiusMin: 1.5,
@@ -854,28 +1101,76 @@ export const SOULS_MOB_PROFILES = Object.freeze({
     staggerMax: 130,
     flatDef: 12,
     physNegation: 0.06,
-    preferredDist: 2.6,
-    retreatDist: 1.45,
-    strafeSpeed: 1.9,
-    approachSpeedMult: 0.96,
-    inertiaAccel: 11.5,
-    refWalkSpeed: 2.45,
-    aggroRange: 10.2,
+    preferredDist: 2.35,
+    retreatDist: 1.25,
+    strafeSpeed: 2.45,
+    approachSpeedMult: 1.32,
+    inertiaAccel: 13.0,
+    refWalkSpeed: 2.55,
+    aggroRange: 10.4,
     parriesToKneel: 1,
     isRanged: false,
-    strafeSwitchMinSec: 1.5,
-    strafeSwitchMaxSec: 2.5,
-    neutralDecisionMinSec: 1.35,
-    neutralDecisionMaxSec: 2.35,
-    assessIntervalMinSec: 2.3,
-    assessIntervalMaxSec: 3.6,
-    assessPauseMinSec: 0.42,
-    assessPauseMaxSec: 0.7,
-    postComboBackstepDist: 2.1,
-    postComboBackstepChance: 0.38,
-    backstepSpeed: 3.25,
-    backstepDuration: 0.34,
-    trackingTurnRate: 7.0,
+    strafeSwitchMinSec: 1.1,
+    strafeSwitchMaxSec: 2.0,
+    neutralDecisionMinSec: 0.52,
+    neutralDecisionMaxSec: 1.10,
+    assessIntervalMinSec: 3.2,
+    assessIntervalMaxSec: 4.8,
+    assessPauseMinSec: 0.16,
+    assessPauseMaxSec: 0.30,
+    postComboBackstepDist: 1.60,
+    postComboBackstepChance: 0.14,
+    backstepSpeed: 3.35,
+    backstepDuration: 0.30,
+    trackingTurnRate: 12.4,
+    telegraphColor: null,
+    patrolSpeed: 1.26,
+    patrolRadiusMin: 1.5,
+    patrolRadiusMax: 2.2,
+    patrolIdleMinSec: 2.4,
+    patrolIdleMaxSec: 4.0,
+    patrolWalkMinSec: 1.8,
+    patrolWalkMaxSec: 2.9,
+    patrolAnimSpeedMult: 0.48,
+    attackMetas: Object.freeze({
+      thrust_1: FOOTMAN_THRUST_1,
+      sweep_2: FOOTMAN_SWEEP_2,
+      shield_bash: FOOTMAN_SHIELD_BASH,
+      overhead_poke: FOOTMAN_OVERHEAD_POKE,
+      thrust: FOOTMAN_THRUST_1,
+      slash: FOOTMAN_SWEEP_2
+    })
+  }),
+
+  ember_skeleton: Object.freeze({
+    id: 'ember_skeleton',
+    glbName: 'Rift_Vanguard_Tripo.glb',
+    role: 'guard',
+    staggerMax: 120,
+    flatDef: 12,
+    physNegation: 0.06,
+    preferredDist: 2.35,
+    retreatDist: 1.25,
+    strafeSpeed: 2.45,
+    approachSpeedMult: 1.32,
+    inertiaAccel: 13.0,
+    refWalkSpeed: 2.55,
+    aggroRange: 10.4,
+    parriesToKneel: 1,
+    isRanged: false,
+    strafeSwitchMinSec: 1.1,
+    strafeSwitchMaxSec: 2.0,
+    neutralDecisionMinSec: 0.52,
+    neutralDecisionMaxSec: 1.10,
+    assessIntervalMinSec: 3.2,
+    assessIntervalMaxSec: 4.8,
+    assessPauseMinSec: 0.16,
+    assessPauseMaxSec: 0.30,
+    postComboBackstepDist: 1.60,
+    postComboBackstepChance: 0.14,
+    backstepSpeed: 3.35,
+    backstepDuration: 0.30,
+    trackingTurnRate: 12.4,
     telegraphColor: null,
     patrolSpeed: 1.26,
     patrolRadiusMin: 1.5,
@@ -913,17 +1208,17 @@ export const SOULS_MOB_PROFILES = Object.freeze({
     isRanged: true,
     strafeSwitchMinSec: 1.6,
     strafeSwitchMaxSec: 2.7,
-    neutralDecisionMinSec: 1.45,
-    neutralDecisionMaxSec: 2.5,
-    assessIntervalMinSec: 2.6,
-    assessIntervalMaxSec: 4.0,
-    assessPauseMinSec: 0.4,
-    assessPauseMaxSec: 0.68,
+    neutralDecisionMinSec: 0.75,
+    neutralDecisionMaxSec: 1.45,
+    assessIntervalMinSec: 3.2,
+    assessIntervalMaxSec: 4.8,
+    assessPauseMinSec: 0.18,
+    assessPauseMaxSec: 0.34,
     postComboBackstepDist: 6.2,
-    postComboBackstepChance: 0.72,
-    backstepSpeed: 3.05,
-    backstepDuration: 0.34,
-    trackingTurnRate: 6.8,
+    postComboBackstepChance: 0.62,
+    backstepSpeed: 3.25,
+    backstepDuration: 0.32,
+    trackingTurnRate: 10.2,
     telegraphColor: null,
     patrolSpeed: 1.12,
     patrolRadiusMin: 1.0,
@@ -947,6 +1242,46 @@ const ROLE_TO_PROFILE_ID = Object.freeze({
   guard: 'cursed_footman',
   archer: 'bone_archer'
 });
+
+export const SOULS_MOB_LEASH_PROFILES = Object.freeze({
+  iron_knight: Object.freeze({
+    maxPursuitDist: 15.5,
+    noLosDisengageDist: 11.5,
+    noLosDisengageSec: 1.8,
+    reaggroDist: 9.5,
+    returnWalkSpeed: 1.75
+  }),
+  cursed_footman: Object.freeze({
+    maxPursuitDist: 17.5,
+    noLosDisengageDist: 13.0,
+    noLosDisengageSec: 2.0,
+    reaggroDist: 9.5,
+    returnWalkSpeed: 1.85
+  }),
+  ember_skeleton: Object.freeze({
+    maxPursuitDist: 17.5,
+    noLosDisengageDist: 13.0,
+    noLosDisengageSec: 2.0,
+    reaggroDist: 9.5,
+    returnWalkSpeed: 1.85
+  }),
+  bone_archer: Object.freeze({
+    maxPursuitDist: 22.0,
+    noLosDisengageDist: 16.0,
+    noLosDisengageSec: 2.5,
+    reaggroDist: 9.5,
+    returnWalkSpeed: 1.70
+  })
+});
+
+export function getMobLeashConfig(e, profile) {
+  const key =
+    (typeof e?.type === 'string' && SOULS_MOB_LEASH_PROFILES[e.type] ? e.type : null) ||
+    (profile?.id && SOULS_MOB_LEASH_PROFILES[profile.id] ? profile.id : null) ||
+    (e?.soulsRole && SOULS_MOB_LEASH_PROFILES[ROLE_TO_PROFILE_ID[e.soulsRole]] ? ROLE_TO_PROFILE_ID[e.soulsRole] : null) ||
+    'iron_knight';
+  return SOULS_MOB_LEASH_PROFILES[key] || SOULS_MOB_LEASH_PROFILES.iron_knight;
+}
 
 // ============================================================================
 // 3. Pack Attack Token Director & Anti-Clumping Registry
@@ -1205,9 +1540,11 @@ function isInEastAlcoveZone(e, x, z) {
 }
 
 function resolveMobAllowedZDomain(e, liveBounds, flameBand) {
-  const anchorZ = Number.isFinite(e?.patrolHomeZ)
-    ? e.patrolHomeZ
-    : (Number.isFinite(e?.z) ? e.z : 0);
+  const anchorZ = Number.isFinite(e?.homeZ)
+    ? e.homeZ
+    : (Number.isFinite(e?.patrolHomeZ)
+      ? e.patrolHomeZ
+      : (Number.isFinite(e?.z) ? e.z : 0));
   const bandMidZ = (flameBand.minZ + flameBand.maxZ) * 0.5;
 
   // Mobs spawned south of the Flame Gauntlet (e.g. `starter_duelist` in Zone 2)
@@ -1265,14 +1602,15 @@ export function clampSoulsCorridorVelocity(e, vx, vz, dt = 0.016, opts = {}) {
     }
   }
 
-  // Keep enemies out of the Bonfire Sanctuary circle when active
+  // Only enforce the 8.5m Bonfire Sanctuary repulsion when the player is ACTUALLY resting at the Bonfire;
+  // during active combat/pursuit/return-home, use ONLY the physical Bonfire hearth radius (~1.35m)!
   const bfZone = getBonfireSafeZone(opts);
   const candX0 = x + outVx * safeDt;
   const candZ0 = clamp(z + outVz * safeDt, minZ, maxZ);
   const bdx = candX0 - bfZone.x;
   const bdz = candZ0 - bfZone.z;
   const bDist = Math.hypot(bdx, bdz);
-  const minBfDist = Math.max(1.5, bfZone.radius - 0.35);
+  const minBfDist = getEffectiveBonfireRepulsionRadius(opts);
   if (bDist < minBfDist && bDist > 1e-4 && Math.hypot(x - bfZone.x, z - bfZone.z) >= minBfDist - 0.1) {
     const pushX = bfZone.x + (bdx / bDist) * minBfDist;
     const pushZ = clamp(bfZone.z + (bdz / bDist) * minBfDist, minZ, maxZ);
@@ -1379,11 +1717,11 @@ function checkAmbushTrigger(e, px, pz, dist, ctx) {
   const inArchCorridorBand =
     pz >= b.eastArchMinZ - 0.6 &&
     pz <= b.eastArchMaxZ + 0.6 &&
-    px >= -2.6;
-  if (inArchCorridorBand && dist <= (Number(e.ambushAggroRange) || 10.5)) {
+    px >= 2.2;
+  if (inArchCorridorBand && dist <= (Number(e.ambushAggroRange) || 8.5)) {
     return true;
   }
-  const closeAmbushR = Number(e.ambushAggroRange) > 0 ? Math.min(Number(e.ambushAggroRange), 5.6) : 5.4;
+  const closeAmbushR = Number(e.ambushAggroRange) > 0 ? Math.min(Number(e.ambushAggroRange), 4.6) : 4.4;
   return dist <= closeAmbushR;
 }
 
@@ -1534,7 +1872,7 @@ function resolveStrafeAnimMode({ e = null, isMoving, isPatrol, aiState, localX, 
     }
   }
 
-  // Schmitt-trigger minimum hold time (0.22s) between locomotion gaits prevents rapid flip-flop twitching
+  // Crisp hysteresis (0.09s) between locomotion gaits avoids rapid twitching without wrong-way footwork lag
   const isGaitPrev = prevMode === 'combat_walk' || prevMode === 'strafe_left' || prevMode === 'strafe_right' || prevMode === 'backstep';
   const isGaitNext = nextMode === 'combat_walk' || nextMode === 'strafe_left' || nextMode === 'strafe_right' || nextMode === 'backstep';
   if (e && nextMode !== prevMode) {
@@ -1542,7 +1880,7 @@ function resolveStrafeAnimMode({ e = null, isMoving, isPatrol, aiState, localX, 
       return prevMode;
     }
     e._soulsPrevAnimMode = nextMode;
-    e._soulsAnimModeHoldTimer = isGaitNext ? 0.22 : 0.12;
+    e._soulsAnimModeHoldTimer = isGaitNext ? 0.09 : 0.06;
   }
   return nextMode;
 }
@@ -1675,9 +2013,11 @@ export function onSoulsMobParried(e, opts = {}) {
 
   e._soulsParryCount = (e._soulsParryCount || 0) + 1;
   const parriesNeeded = Math.max(1, Number(e.parriesToKneel) || 1);
-  const fullKneel = e._soulsParryCount >= parriesNeeded;
-  const riposteSec = Number(opts.riposteSec ?? (fullKneel ? 2.6 : 1.5));
-  const stunSec = Number(opts.stunSec ?? (fullKneel ? 2.4 : 1.35));
+  const parryGain = e.staggerMax > 0 ? Math.ceil((e.staggerMax / parriesNeeded) * 1.04) : 82;
+  const nextStagger = e.staggerMax > 0 ? Math.min(e.staggerMax, (e.stagger || 0) + parryGain) : 0;
+  const fullKneel = e._soulsParryCount >= parriesNeeded || (e.staggerMax > 0 && nextStagger >= e.staggerMax);
+  const riposteSec = fullKneel ? Number(opts.riposteSec ?? 2.8) : 0;
+  const stunSec = fullKneel ? Number(opts.stunSec ?? 2.6) : 0.95;
 
   e.currentAttackMeta = null;
   e.soulsComboLeft = 0;
@@ -1697,31 +2037,43 @@ export function onSoulsMobParried(e, opts = {}) {
       e.stagger = e.staggerMax;
     }
     e.staggeredTimer = Math.max(e.staggeredTimer || 0, stunSec);
+    e.parriedRiposteTimer = Math.max(e.parriedRiposteTimer || 0, riposteSec);
+    e.soulsRiposteUsed = false;
+    e.soulsRiposteInvuln = false;
     e.soulsState = 'stagger_kneel';
     e.attackAnimClip = 'Stagger_Kneel';
+    e.aiState = 'stunned';
+    e.stunTimer = Math.max(e.stunTimer || 0, stunSec);
+    e.soulsTimer = Math.max(e.soulsTimer || 0, stunSec);
+    openPunishWindow(e, riposteSec, 'heavy', 1.25, 1.4);
   } else {
+    // Elite Executioner 1st parry: heavy recoil & +52% stance damage, NOT instant riposte!
     if (e.staggerMax > 0) {
-      e.stagger = Math.min(e.staggerMax, (e.stagger || 0) + Math.ceil(e.staggerMax / parriesNeeded));
+      e.stagger = nextStagger;
     }
+    e.lastStaggerHitAge = 0;
+    e.parriedRiposteTimer = 0;
+    e.staggeredTimer = 0;
     e.soulsState = 'recover';
+    e.aiState = 'recover';
     e.attackAnimClip = 'Hit_React';
+    e.stunTimer = stunSec;
+    e.soulsTimer = stunSec;
+    openPunishWindow(e, stunSec, 'light', 1.15, 1.25);
   }
 
-  e.aiState = 'stunned';
   e.combatPhase = 'recover';
   e.combatPhase01 = 0;
   e.strafeAnimMode = 'idle';
   e.animSpeedMult = 0;
-  e.stunTimer = Math.max(e.stunTimer || 0, stunSec);
-  e.parriedRiposteTimer = Math.max(e.parriedRiposteTimer || 0, riposteSec);
-  e.soulsTimer = Math.max(e.soulsTimer || 0, stunSec);
-  openPunishWindow(e, riposteSec, 'heavy', 1.25, 1.4);
   e.vx = 0;
   e.vz = 0;
 
   return {
     staggered: fullKneel,
-    riposteOpen: true,
+    riposteOpen: fullKneel,
+    parryCount: fullKneel ? parriesNeeded : e._soulsParryCount,
+    parriesNeeded,
     stunSec,
     riposteSec
   };
@@ -1732,6 +2084,13 @@ export function onSoulsMobInterrupted(e, recoverSec = 0.56) {
   if (!e._soulsMobAiInit) initSoulsMobState(e);
   releaseSoulsAttackToken(e);
 
+  const wasAttacking =
+    e.soulsState === 'windup' ||
+    e.soulsState === 'active' ||
+    e.aiState === 'windup' ||
+    e.aiState === 'active';
+
+  e._mobActiveSwing = null;
   e.currentAttackMeta = null;
   e.soulsComboLeft = 0;
   e._soulsPendingBackstep = null;
@@ -1744,18 +2103,18 @@ export function onSoulsMobInterrupted(e, recoverSec = 0.56) {
   e._velX = 0;
   e._velZ = 0;
 
-  if (e.soulsState === 'windup' || e.soulsState === 'active') {
-    const dur = Math.max(0.28, Number(recoverSec) || 0.56);
-    e.aiState = 'hit_react';
-    e.soulsState = 'recover';
-    e.soulsTimer = dur;
-    e._soulsRecoverDuration = dur;
-    e._soulsRecoverElapsed = 0;
-    e.attackAnimClip = 'Hit_React';
-    e.combatPhase = 'recover';
-    e.combatPhase01 = 0;
-    e.strafeAnimMode = 'idle';
-    e.animSpeedMult = 0;
+  const dur = Math.max(0.32, Number(recoverSec) || 0.56);
+  e.aiState = 'hit_react';
+  e.soulsState = 'recover';
+  e.soulsTimer = Math.max(e.soulsTimer || 0, dur);
+  e._soulsRecoverDuration = dur;
+  e._soulsRecoverElapsed = 0;
+  e.attackAnimClip = 'Hit_React';
+  e.combatPhase = 'recover';
+  e.combatPhase01 = 0;
+  e.strafeAnimMode = 'idle';
+  e.animSpeedMult = 0;
+  if (wasAttacking) {
     openPunishWindow(e, dur, 'light', 1.15, 1.2);
   }
   e.vx = 0;
@@ -1773,6 +2132,7 @@ function beginAttackWindup(e, profile, attackId, dirToPlayerX, dirToPlayerZ, ang
 
   renewAttackTokenOnCombo(e, profile.isRanged, Math.atan2(-dirToPlayerX, -dirToPlayerZ));
 
+  e._lastSwingConnected = false;
   e.currentAttackMeta = meta;
   e.aiState = 'windup';
   e.soulsState = 'windup';
@@ -1813,7 +2173,8 @@ function beginAttackWindup(e, profile, attackId, dirToPlayerX, dirToPlayerZ, ang
 }
 
 function chooseInitialAttack(e, profile, dist, reads, liveFogGateZ, rng) {
-  const { playerHealing, playerBlocking, playerTurtleBlocking, playerPanicRolling, playerRollSpam, playerBehind } = reads;
+  const { playerHealing, playerBlocking, playerTurtleBlocking, playerPanicRolling, playerRollSpam, playerBehind, playerFlanking, playerRetreatSpeed = 0 } = reads;
+  const predDist = dist + Math.max(0, playerRetreatSpeed) * 0.22;
 
   if (profile.id === 'bone_archer') {
     const nearGate = (e.z || 0) <= liveFogGateZ + 1.65;
@@ -1821,34 +2182,52 @@ function chooseInitialAttack(e, profile, dist, reads, liveFogGateZ, rng) {
     return { attackId: id, comboLeft: 0 };
   }
 
-  if (profile.id === 'cursed_footman') {
-    if ((playerTurtleBlocking || (playerBlocking && dist <= 2.6) || dist < 1.85) && dist <= 2.95 && e._soulsLastAttackId !== 'shield_bash') {
+  if (profile.id === 'cursed_footman' || profile.id === 'ember_skeleton') {
+    // Strict reach awareness: NEVER swing short slashes/bashes into thin air if player is outside reach!
+    if (predDist > 3.05) {
+      return null;
+    }
+    if ((playerBehind || playerFlanking) && predDist <= 2.65) {
+      return { attackId: 'sweep_2', comboLeft: 1 };
+    }
+    if ((playerTurtleBlocking || (playerBlocking && dist <= 2.35) || dist < 1.75) && predDist <= 2.40 && e._soulsLastAttackId !== 'shield_bash') {
       return { attackId: 'shield_bash', comboLeft: 0 };
     }
     const r = rng();
-    if (playerHealing || dist >= 2.25 || r < 0.56) {
-      const links = playerBlocking ? 2 : (r < 0.42 ? 0 : (r < 0.82 ? 1 : 2));
-      return { attackId: 'thrust_1', comboLeft: links };
+    if (playerHealing || predDist >= 2.45) {
+      return { attackId: 'thrust_1', comboLeft: r < 0.25 ? 1 : 2 };
     }
-    if (r < 0.8 && e._soulsLastAttackId !== 'overhead_poke') {
-      return { attackId: 'overhead_poke', comboLeft: 0 };
+    if ((playerPanicRolling || playerRollSpam) && e._soulsLastAttackId !== 'overhead_poke' && predDist <= 2.85) {
+      return { attackId: 'overhead_poke', comboLeft: 1 };
     }
-    return { attackId: 'sweep_2', comboLeft: playerBlocking ? 1 : 0 };
+    if (r < 0.46 && predDist <= 2.68) {
+      return { attackId: 'sweep_2', comboLeft: 1 };
+    }
+    if (r < 0.80) {
+      return { attackId: 'thrust_1', comboLeft: r < 0.55 ? 1 : 2 };
+    }
+    return { attackId: 'overhead_poke', comboLeft: 1 };
   }
 
   const r = rng();
   const avoidRepeatHeavy = e._soulsLastAttackId === 'overhead_crush' || e._soulsLastAttackId === 'thrust_lunge';
 
-  if (playerBehind && dist <= 2.9) {
-    return { attackId: 'slash_2', comboLeft: 1 };
+  // Long gap-closer lunge ONLY when thrust_lunge is available and can genuinely connect (2.75..4.15m)
+  if ((playerHealing || dist > 2.72) && !avoidRepeatHeavy && predDist <= 4.15) {
+    return { attackId: 'thrust_lunge', comboLeft: 1 };
   }
-  if ((playerHealing || dist > 3.45) && !avoidRepeatHeavy && dist <= 5.4) {
-    return { attackId: 'thrust_lunge', comboLeft: 0 };
+  // If player is beyond standard sword reach (predDist > 2.92m) and thrust_lunge is on anti-repeat,
+  // return null so the mob sprints closer instead of whiffing slash_1 into empty air!
+  if (predDist > 2.92) {
+    return null;
   }
-  if ((playerRollSpam || playerTurtleBlocking || playerPanicRolling || r < 0.24) && !avoidRepeatHeavy) {
+  if ((playerBehind || playerFlanking) && predDist <= 2.75) {
+    return { attackId: r < 0.55 ? 'slash_2' : 'slash_1', comboLeft: 2 };
+  }
+  if ((playerRollSpam || playerTurtleBlocking || playerPanicRolling || r < 0.22) && !avoidRepeatHeavy && predDist <= 2.90) {
     return { attackId: 'overhead_crush', comboLeft: 0 };
   }
-  const links = r < 0.35 ? 0 : (r < 0.78 ? 1 : 2);
+  const links = r < 0.25 ? 1 : 2;
   return { attackId: 'slash_1', comboLeft: links };
 }
 
@@ -1857,82 +2236,122 @@ function chooseComboFollowUp(e, profile, prevMeta, dist, relAngleRad, reads, rng
     return null;
   }
   if ((e.soulsComboLeft || 0) <= 0) return null;
-  if (dist > (prevMeta.reach || 2.6) + 1.65) return null;
-  if (Math.abs(relAngleRad) > 1.75) return null;
+  // Honest reach awareness: if player backed out of followup strike range, abort combo immediately and pursue!
+  const predDist = dist + Math.max(0, reads?.playerRetreatSpeed || 0) * 0.20;
+  const maxFollowDist = (prevMeta.reach || 2.75) + 0.32;
+  if (predDist > maxFollowDist || dist > (prevMeta.reach || 2.75) + 0.45) return null;
+  if (Math.abs(relAngleRad) > 1.95) return null;
 
-  const { playerBlocking, playerTurtleBlocking, playerPanicRolling, playerRollSpam } = reads;
+  const { playerBlocking, playerTurtleBlocking, playerPanicRolling, playerRollSpam, playerFlanking } = reads;
 
   if (profile.id === 'iron_knight') {
     if (prevMeta.id === 'slash_1') {
-      if ((playerPanicRolling || playerRollSpam) && dist <= 3.5 && rng() < 0.65) {
+      if ((playerPanicRolling || playerRollSpam) && predDist <= 3.00 && rng() < 0.62) {
         return 'overhead_crush';
       }
-      return 'slash_2';
+      return predDist <= 2.92 ? 'slash_2' : null;
+    }
+    if (prevMeta.id === 'thrust_lunge') {
+      if (predDist <= 2.92) return 'slash_2';
+      return null;
     }
     if (prevMeta.id === 'slash_2') {
-      if (playerPanicRolling || playerRollSpam || playerTurtleBlocking || (dist <= 3.25 && rng() < 0.42)) {
+      if ((playerPanicRolling || playerRollSpam || playerTurtleBlocking || (predDist <= 2.85 && rng() < 0.58)) && predDist <= 3.00) {
         return 'overhead_crush';
       }
       return null;
     }
   }
 
-  if (profile.id === 'cursed_footman') {
+  if (profile.id === 'cursed_footman' || profile.id === 'ember_skeleton') {
     if (prevMeta.id === 'thrust_1') {
-      if ((playerBlocking || playerTurtleBlocking) && dist <= 2.85 && rng() < 0.72) {
+      if ((playerBlocking || playerTurtleBlocking) && !playerFlanking && predDist <= 2.45 && rng() < 0.68) {
         return 'shield_bash';
       }
-      return 'sweep_2';
+      return predDist <= 2.78 ? 'sweep_2' : null;
+    }
+    if (prevMeta.id === 'overhead_poke') {
+      return predDist <= 2.78 ? 'sweep_2' : null;
     }
     if (prevMeta.id === 'sweep_2') {
-      if ((playerBlocking || playerTurtleBlocking) && dist <= 2.95) {
+      if ((playerBlocking || playerTurtleBlocking || (predDist <= 2.42 && rng() < 0.52)) && predDist <= 2.50) {
         return 'shield_bash';
       }
       return null;
     }
   }
 
-  return prevMeta.followUpIds[0];
+  return predDist <= 2.85 ? prevMeta.followUpIds[0] : null;
 }
 
-function updateStrafeTimerAndWallBounce(e, profile, dt, tanX, tanZ, preferredFlankDir, rng) {
+function isStrafeDirectionBlocked(x0, z0, ux, uz, distProbe, radius, zDom) {
+  const probeX = x0 + ux * distProbe;
+  const probeZ = z0 + uz * distProbe;
+  if (zDom) {
+    if (probeZ <= zDom.minZ + 0.14 || probeZ >= zDom.maxZ - 0.14) {
+      return true;
+    }
+  }
+  if (typeof CASTLE_LAYOUT.clampCastlePosition === 'function') {
+    const proj = CASTLE_LAYOUT.clampCastlePosition(probeX, probeZ, radius + 0.14, {
+      bossDoorState: 'closed',
+      allowBossHall: false,
+      out: _tmpSteerClamp
+    });
+    return Math.hypot(proj.x - probeX, proj.z - probeZ) > 0.08;
+  }
+  if (typeof CASTLE_LAYOUT.isInsideCastleWalkable === 'function') {
+    return !CASTLE_LAYOUT.isInsideCastleWalkable(probeX, probeZ, radius + 0.12, {
+      bossDoorState: 'closed',
+      allowBossHall: false
+    });
+  }
+  const maxX = getCorridorMaxX(z0, radius);
+  return Math.abs(probeX) >= maxX - 0.1;
+}
+
+function updateStrafeTimerAndWallBounce(e, profile, dt, tanX, tanZ, preferredFlankDir, zDom, rng) {
   e._soulsWallFlipCooldown = Math.max(0, (e._soulsWallFlipCooldown || 0) - dt);
   e.strafeTimer = (e.strafeTimer || 0) - dt;
 
   const radius = Number(e.radius) > 0 ? Number(e.radius) : 0.55;
-  const sDir = e.strafeDir || 1;
-  const probeX = (e.x || 0) + tanX * sDir * 0.65;
-  const probeZ = (e.z || 0) + tanZ * sDir * 0.65;
+  const x0 = e.x || 0;
+  const z0 = e.z || 0;
 
-  let hitWall = false;
-  if (typeof CASTLE_LAYOUT.isInsideCastleWalkable === 'function') {
-    hitWall = !CASTLE_LAYOUT.isInsideCastleWalkable(probeX, probeZ, radius + 0.12, {
-      bossDoorState: 'closed',
-      allowBossHall: false
-    });
-  } else {
-    const maxX = getCorridorMaxX(e.z || 0, radius);
-    hitWall = Math.abs(probeX) >= maxX - 0.1;
+  // If currently bypassing a stone pillar, lock strafe direction to the latched world-space bypass side!
+  if (e._pillarBypassId && Number.isFinite(e._pillarBypassSideX) && Number.isFinite(e._pillarBypassSideZ)) {
+    const sideAlign = tanX * e._pillarBypassSideX + tanZ * e._pillarBypassSideZ;
+    const lockedDir = sideAlign >= 0 ? 1 : -1;
+    if (!isStrafeDirectionBlocked(x0, z0, tanX * lockedDir, tanZ * lockedDir, 0.65, radius, zDom)) {
+      e.strafeDir = lockedDir;
+      e.strafeTimer = Math.max(e.strafeTimer, 0.85);
+      e._soulsWallFlipCooldown = Math.max(e._soulsWallFlipCooldown, 0.55);
+    }
   }
 
+  const curDir = e.strafeDir || 1;
+  const hitWall = isStrafeDirectionBlocked(x0, z0, tanX * curDir, tanZ * curDir, 0.72, radius, zDom);
+
   if (hitWall && e._soulsWallFlipCooldown <= 0) {
-    e.strafeDir = -sDir;
+    const oppBlocked = isStrafeDirectionBlocked(x0, z0, -tanX * curDir, -tanZ * curDir, 0.72, radius, zDom);
+    if (!oppBlocked) {
+      e.strafeDir = -curDir;
+    }
     e.strafeTimer = randRange(profile.strafeSwitchMinSec, profile.strafeSwitchMaxSec, rng);
-    e._soulsWallFlipCooldown = 0.55;
-  } else if (preferredFlankDir !== 0 && e.strafeDir !== preferredFlankDir && e._soulsWallFlipCooldown <= 0) {
-    // Only take preferredFlankDir if that side is NOT blocked by a wall (stops corridor wall ping-pong!)
-    const fProbeX = (e.x || 0) + tanX * preferredFlankDir * 1.15;
-    const fProbeZ = (e.z || 0) + tanZ * preferredFlankDir * 1.15;
-    const flankHitsWall = typeof CASTLE_LAYOUT.isInsideCastleWalkable === 'function'
-      ? !CASTLE_LAYOUT.isInsideCastleWalkable(fProbeX, fProbeZ, radius + 0.12, { bossDoorState: 'closed', allowBossHall: false })
-      : Math.abs(fProbeX) >= getCorridorMaxX(e.z || 0, radius) - 0.1;
+    e._soulsWallFlipCooldown = 1.05;
+  } else if (preferredFlankDir !== 0 && e.strafeDir !== preferredFlankDir && e._soulsWallFlipCooldown <= 0 && !e._pillarBypassId) {
+    // Only take preferredFlankDir if that side is NOT blocked by a wall, pillar, or jamb!
+    const flankHitsWall = isStrafeDirectionBlocked(x0, z0, tanX * preferredFlankDir, tanZ * preferredFlankDir, 1.15, radius, zDom);
     if (!flankHitsWall) {
       e.strafeDir = preferredFlankDir;
-      e.strafeTimer = randRange(profile.strafeSwitchMinSec * 0.8, profile.strafeSwitchMaxSec, rng);
-      e._soulsWallFlipCooldown = 0.45;
+      e.strafeTimer = randRange(profile.strafeSwitchMinSec * 0.85, profile.strafeSwitchMaxSec, rng);
+      e._soulsWallFlipCooldown = 0.75;
     }
   } else if (e.strafeTimer <= 0) {
-    e.strafeDir = -sDir;
+    const oppBlocked = isStrafeDirectionBlocked(x0, z0, -tanX * curDir, -tanZ * curDir, 0.90, radius, zDom);
+    if (!oppBlocked) {
+      e.strafeDir = -curDir;
+    }
     e.strafeTimer = randRange(profile.strafeSwitchMinSec, profile.strafeSwitchMaxSec, rng);
   }
 
@@ -2018,6 +2437,197 @@ function createEmptyOut(facing = 0) {
   };
 }
 
+const _STEER_CANDIDATE_ANGLES = Object.freeze([
+  0.0,
+  0.48, -0.48,
+  0.96, -0.96,
+  1.42, -1.42,
+  1.92, -1.92,
+  2.40, -2.40
+]);
+const _tmpSteerClamp = { x: 0, z: 0 };
+
+function evalMobProbeProgress(e, x, z, ux, uz, probeDist, radius, zDom, bfZone, ctx) {
+  const candX = x + ux * probeDist;
+  const candZ = z + uz * probeDist;
+  let projX = candX;
+  let projZ = clamp(candZ, zDom.minZ + 0.08, zDom.maxZ - 0.08);
+
+  if (typeof CASTLE_LAYOUT.clampCastlePosition === 'function') {
+    const p = CASTLE_LAYOUT.clampCastlePosition(projX, projZ, radius + 0.08, {
+      bossDoorState: 'closed',
+      allowBossHall: false,
+      out: _tmpSteerClamp
+    });
+    projX = p.x;
+    projZ = clamp(p.z, zDom.minZ + 0.08, zDom.maxZ - 0.08);
+  } else {
+    const maxX = getCorridorMaxX(projZ, radius);
+    projX = clamp(projX, -maxX, maxX);
+  }
+
+  // Repel from stone pillars & world obstacles (braziers, shrines, columns)
+  const pillars = CASTLE_LAYOUT.SOULS_CASTLE_PILLARS;
+  if (Array.isArray(pillars)) {
+    for (let i = 0; i < pillars.length; i++) {
+      const col = pillars[i];
+      if (!col || col.collider === false) continue;
+      const minR = (Number(col.radius) || 0.85) + radius + 0.14;
+      const dx = projX - col.x;
+      const dz = projZ - col.z;
+      const d = Math.hypot(dx, dz);
+      if (d < minR) {
+        if (d > 1e-4) {
+          projX = col.x + (dx / d) * minR;
+          projZ = clamp(col.z + (dz / d) * minR, zDom.minZ + 0.08, zDom.maxZ - 0.08);
+        } else {
+          return 0;
+        }
+      }
+    }
+  }
+  const extraObs = ctx?.obstacles;
+  if (Array.isArray(extraObs)) {
+    for (let i = 0; i < extraObs.length; i++) {
+      const o = extraObs[i];
+      if (!o || o.isBonfire) continue;
+      if (o.radius != null && o.radius >= 0.4) {
+        const minR = o.radius + radius + 0.12;
+        const dx = projX - o.x;
+        const dz = projZ - o.z;
+        const d = Math.hypot(dx, dz);
+        if (d < minR && d > 1e-4) {
+          projX = o.x + (dx / d) * minR;
+          projZ = clamp(o.z + (dz / d) * minR, zDom.minZ + 0.08, zDom.maxZ - 0.08);
+        }
+      }
+    }
+  }
+
+  // Bonfire repulsion: enforce the 8.5m safe circle ONLY while player is resting at Bonfire;
+  // during active combat/pursuit, treat Bonfire strictly as its ~1.35m physical hearth obstacle!
+  const bdx = projX - bfZone.x;
+  const bdz = projZ - bfZone.z;
+  const bDist = Math.hypot(bdx, bdz);
+  if (isPlayerRestingAtBonfire(ctx)) {
+    const minBf = Math.max(1.5, bfZone.radius - 0.30);
+    if (bDist < minBf && Math.hypot(x - bfZone.x, z - bfZone.z) >= minBf - 0.15) {
+      return 0.05;
+    }
+  } else {
+    const physBf = Math.max(SOULS_BONFIRE_PHYSICAL_RADIUS, (bfZone.colliderRadius || 1.05) + radius + 0.08);
+    if (bDist < physBf) {
+      if (bDist > 1e-4) {
+        projX = bfZone.x + (bdx / bDist) * physBf;
+        projZ = clamp(bfZone.z + (bdz / bDist) * physBf, zDom.minZ + 0.08, zDom.maxZ - 0.08);
+      } else {
+        return 0;
+      }
+    }
+  }
+
+  const adv = (projX - x) * ux + (projZ - z) * uz;
+  return clamp(adv / Math.max(0.05, probeDist), 0, 1);
+}
+
+/**
+ * Multi-angle obstacle, pillar & corner-unstick steering solver for Souls mobs.
+ * Honors latched `e._pillarBypassSign` & `e._pillarBypassSideX/Z` so mobs walk cleanly
+ * around pillars (`pillar_sanctuary_w/e`, `pillar_nave_se/nw`) without left-right oscillation!
+ */
+function steerMobAroundCornersAndObstacles(e, vx, vz, goalX, goalZ, zDom, dt, ctx) {
+  e._pillarBypassHoldTimer = Math.max(0, (e._pillarBypassHoldTimer || 0) - dt);
+  const spd = Math.hypot(vx, vz);
+  if (spd < 0.12) {
+    e._prevCmdSpd = 0;
+    return { vx, vz, steered: false };
+  }
+  const x = Number.isFinite(e.x) ? e.x : 0;
+  const z = Number.isFinite(e.z) ? e.z : 0;
+  const radius = Number(e.radius) > 0 ? Number(e.radius) : 0.55;
+
+  // Detect real frame-to-frame corner stall (commanded movement > 0.5 m/s yet displaced < 32%!)
+  if (Number.isFinite(e._prevSteerX) && Number.isFinite(e._prevSteerZ) && (e._prevCmdSpd || 0) > 0.55 && dt >= 0.004) {
+    const moved = Math.hypot(x - e._prevSteerX, z - e._prevSteerZ);
+    const expected = e._prevCmdSpd * dt;
+    if (expected > 0.004 && moved < expected * 0.32) {
+      e._cornerStuckSec = Math.min(1.5, (e._cornerStuckSec || 0) + dt);
+    } else {
+      e._cornerStuckSec = Math.max(0, (e._cornerStuckSec || 0) - dt * 2.2);
+    }
+  }
+  e._prevSteerX = x;
+  e._prevSteerZ = z;
+  e._prevCmdSpd = spd;
+
+  e._cornerUnstickTimer = Math.max(0, (e._cornerUnstickTimer || 0) - dt);
+
+  const baseAng = Math.atan2(vx, vz);
+  const gDx = goalX - x;
+  const gDz = goalZ - z;
+  const gLen = Math.hypot(gDx, gDz) || 1;
+  const goalDirX = gDx / gLen;
+  const goalDirZ = gDz / gLen;
+  const bfZone = getBonfireSafeZone(ctx);
+  const probeDist = clamp(spd * 0.36, 0.58, 1.15);
+
+  const fwdProg = evalMobProbeProgress(e, x, z, vx / spd, vz / spd, probeDist, radius, zDom, bfZone, ctx);
+  const isStuckInCorner = (e._cornerStuckSec || 0) >= 0.11;
+
+  if (fwdProg >= 0.85 && !isStuckInCorner && (e._cornerUnstickTimer || 0) <= 0) {
+    return { vx, vz, steered: false };
+  }
+
+  let bestAng = baseAng;
+  let bestScore = -999;
+  let bestSign = e._pillarBypassSign || e._cornerUnstickSign || 1;
+  const hasLatchedPillarSide =
+    Boolean(e._pillarBypassId) &&
+    Number.isFinite(e._pillarBypassSideX) &&
+    Number.isFinite(e._pillarBypassSideZ);
+
+  for (let i = 0; i < _STEER_CANDIDATE_ANGLES.length; i++) {
+    const off = _STEER_CANDIDATE_ANGLES[i];
+    if (isStuckInCorner && Math.abs(off) < 0.35) continue;
+    const candAng = baseAng + off;
+    const ux = Math.sin(candAng);
+    const uz = Math.cos(candAng);
+    const prog = evalMobProbeProgress(e, x, z, ux, uz, probeDist, radius, zDom, bfZone, ctx);
+    if (prog < 0.25) continue;
+
+    const alignCmd = Math.cos(off);
+    const alignGoal = ux * goalDirX + uz * goalDirZ;
+    let signMatch = 0;
+    if (hasLatchedPillarSide) {
+      const sideDot = ux * e._pillarBypassSideX + uz * e._pillarBypassSideZ;
+      signMatch += sideDot * 0.55;
+    } else if ((e._cornerUnstickTimer || 0) > 0 && off !== 0 && Math.sign(off) === (e._cornerUnstickSign || 1)) {
+      signMatch += 0.42;
+    }
+    const score = prog * 1.35 + alignCmd * 0.36 + alignGoal * 0.32 + signMatch;
+    if (score > bestScore) {
+      bestScore = score;
+      bestAng = candAng;
+      if (off !== 0) bestSign = Math.sign(off);
+    }
+  }
+
+  if (bestScore <= -900) {
+    return { vx, vz, steered: false };
+  }
+  if (Math.abs(normalizeAngle(bestAng - baseAng)) > 0.20) {
+    e._cornerUnstickSign = bestSign;
+    e._cornerUnstickTimer = isStuckInCorner ? 0.85 : 0.60;
+    if (isStuckInCorner) e._cornerStuckSec = 0.04;
+    return {
+      vx: Math.sin(bestAng) * spd,
+      vz: Math.cos(bestAng) * spd,
+      steered: true
+    };
+  }
+  return { vx, vz, steered: false };
+}
+
 // ============================================================================
 // 7. Main Simulation Step: stepSoulsMobAi(e, ctx)
 // ============================================================================
@@ -2029,6 +2639,14 @@ export function stepSoulsMobAi(e, ctx = {}) {
 
   if (!e._soulsMobAiInit) {
     initSoulsMobState(e, { rng: ctx.rng });
+  }
+
+  // Latch initial guard spawn pose on first tick (after spawn caller sets e.x, e.z, e.facing)
+  if (Number.isFinite(e.x)) e.homeX ??= e.x;
+  if (Number.isFinite(e.z)) e.homeZ ??= e.z;
+  e.homeFacing ??= Number.isFinite(e.facing) ? e.facing : 0;
+  if (e.isAmbushGuard && !Number.isFinite(e.ambushFacing)) {
+    e.ambushFacing = e.homeFacing;
   }
 
   const profile = getSoulsMobProfile(e);
@@ -2120,13 +2738,17 @@ export function stepSoulsMobAi(e, ctx = {}) {
     playerBlocking && dist <= 3.8 ? externalBlockHold : 0
   );
   const relFacingToPlayer = Math.abs(normalizeAngle(angToPlayer - prevFacing));
+  const pLatSpeed = Math.abs(-pvx * dirZ + pvz * dirX);
+  const playerRetreatSpeed = pvx * dirX + pvz * dirZ;
   const reads = {
     playerHealing,
     playerBlocking: playerBlocking || e._soulsPlayerBlockMemory > 0.12,
     playerTurtleBlocking: effectiveBlockHold >= 1.1,
     playerPanicRolling: playerRollingNow || e._soulsPlayerRollMemory > 0,
     playerRollSpam: (e._soulsRollCount || 0) >= 2,
-    playerBehind: relFacingToPlayer > 2.0
+    playerBehind: relFacingToPlayer > 1.85,
+    playerFlanking: relFacingToPlayer > 0.60 || (pLatSpeed > 1.35 && dist <= 3.6),
+    playerRetreatSpeed
   };
 
   const out = createEmptyOut(prevFacing);
@@ -2200,12 +2822,12 @@ export function stepSoulsMobAi(e, ctx = {}) {
   // -------------------------------------------------------------------------
   if (!e.soulsAwake) {
     releaseSoulsAttackToken(e);
+    const bfZone = getBonfireSafeZone(ctx);
+    const restingAtBonfire = isPlayerRestingAtBonfire(ctx);
+    const unawakeSafeRadius = restingAtBonfire ? bfZone.radius : 4.2;
     const playerInBonfireSanctuary =
       !ctx.ignoreBonfireSafeZone &&
-      isPlayerInBonfireSafeZone(px, pz, {
-        bonfirePos: ctx.bonfirePos,
-        bonfireSafeRadius: ctx.bonfireSafeRadius
-      });
+      Math.hypot(px - bfZone.x, pz - bfZone.z) <= unawakeSafeRadius;
 
     // 2A. EAST ALCOVE AMBUSH GUARD: wakes ONLY when trigger crossed AND Wall LOS is clear!
     if (e.isAmbushGuard) {
@@ -2249,9 +2871,16 @@ export function stepSoulsMobAi(e, ctx = {}) {
         return out;
       }
     } else {
-      // 2B. STANDARD SENTRY: strictly requires `hasWallLOS` so mobs NEVER aggro through stone walls!
+      // 2B. STANDARD SENTRY: strictly requires `hasWallLOS` (plus optional side-wing `aggroBounds`) so mobs NEVER aggro through stone walls or from unentered side rooms!
       const aggroRange = Number(e.soulsAggroRange) > 0 ? Number(e.soulsAggroRange) : profile.aggroRange;
-      if (autoWake && !playerInBonfireSanctuary && hasWallLOS && dist <= aggroRange) {
+      const ab = e.aggroBounds;
+      const inAggroBounds = !ab || (
+        (!Number.isFinite(ab.minX) || px >= ab.minX) &&
+        (!Number.isFinite(ab.maxX) || px <= ab.maxX) &&
+        (!Number.isFinite(ab.minZ) || pz >= ab.minZ) &&
+        (!Number.isFinite(ab.maxZ) || pz <= ab.maxZ)
+      );
+      if (autoWake && !playerInBonfireSanctuary && hasWallLOS && inAggroBounds && dist <= aggroRange) {
         e.soulsAwake = true;
         e._patrolPhase = 'idle';
         e.aiState = dist > (e.preferredDist || profile.preferredDist) + 0.5 ? 'approach' : 'circle';
@@ -2422,7 +3051,8 @@ export function stepSoulsMobAi(e, ctx = {}) {
     e._soulsStepEndRawSpeed = 0;
     e._velX = 0;
     e._velZ = 0;
-    out.desiredFacing = isRiposteVictim ? prevFacing : lerpAngle(prevFacing, angToPlayer, dt * 1.2);
+    // Freeze facing 100% while stunned / kneeling on Stagger_Kneel so mob never rotates toward circling player!
+    out.desiredFacing = prevFacing;
     out.turnDelta = normalizeAngle(out.desiredFacing - prevFacing);
     const openT = Math.max(e.stunTimer || 0, e.staggeredTimer || 0, e.parriedRiposteTimer || 0, e.punishWindowTimer || 0);
     e.punishWindowTimer = openT;
@@ -2474,6 +3104,204 @@ export function stepSoulsMobAi(e, ctx = {}) {
     return out;
   }
 
+  // -------------------------------------------------------------------------
+  // 3B. ARCHETYPE VISIBILITY / SPRINT-ESCAPE LEASH & RETURN-TO-HOME
+  // -------------------------------------------------------------------------
+  const leash = getMobLeashConfig(e, profile);
+  const hasDirectLOS = ctx.hasLineOfSight !== false && hasWallLOS;
+  const restingAtBonfire = isPlayerRestingAtBonfire(ctx);
+  const recentlyHit =
+    Number.isFinite(ctx.elapsedTime) &&
+    Number.isFinite(e.soulsLastHitAt) &&
+    ctx.elapsedTime - e.soulsLastHitAt < 1.0;
+
+  if (hasDirectLOS || recentlyHit) {
+    e._noLosPursuitTimer = 0;
+  } else {
+    e._noLosPursuitTimer = (e._noLosPursuitTimer || 0) + dt;
+  }
+
+  const exceededVisibilityLeash =
+    restingAtBonfire ||
+    dist > leash.maxPursuitDist ||
+    (dist > leash.noLosDisengageDist && e._noLosPursuitTimer > leash.noLosDisengageSec);
+
+  if (e.aiState !== 'return_home' && e.soulsState !== 'return_home' && exceededVisibilityLeash) {
+    releaseSoulsAttackToken(e);
+    _activeMobRegistry.delete(getMobTokenId(e));
+    e._mobActiveSwing = null;
+    e.currentAttackMeta = null;
+    e.attackAnimClip = null;
+    e.soulsComboLeft = 0;
+    e._soulsPendingBackstep = null;
+    e._soulsTrackingLocked = false;
+    e._soulsStepEndRawSpeed = 0;
+    e._pillarBypassId = null;
+    e._pillarBypassSign = 0;
+    clearPunishWindow(e);
+    e.aiState = 'return_home';
+    e.soulsState = 'return_home';
+  }
+
+  if (e.aiState === 'return_home' || e.soulsState === 'return_home') {
+    if (!restingAtBonfire && hasDirectLOS && dist <= leash.reaggroDist) {
+      e._noLosPursuitTimer = 0;
+      e._pillarBypassId = null;
+      e._pillarBypassSign = 0;
+      e.aiState = dist > (e.preferredDist || profile.preferredDist) + 0.5 ? 'approach' : 'circle';
+      e.soulsState = 'stalk';
+      e.soulsTimer = randRange(0.45, 0.85, rng);
+      _activeMobRegistry.set(getMobTokenId(e), {
+        id: getMobTokenId(e),
+        x: e.x || 0,
+        z: e.z || 0,
+        isRanged: profile.isRanged,
+        lastSeenAt: _packSimClock
+      });
+    } else {
+      releaseSoulsAttackToken(e);
+      _activeMobRegistry.delete(getMobTokenId(e));
+      e._mobActiveSwing = null;
+      e.currentAttackMeta = null;
+      e.attackAnimClip = null;
+
+      const homeX = Number.isFinite(e.homeX)
+        ? e.homeX
+        : (Number.isFinite(e.patrolHomeX) ? e.patrolHomeX : (e.x || 0));
+      const homeZ = clamp(
+        Number.isFinite(e.homeZ)
+          ? e.homeZ
+          : (Number.isFinite(e.patrolHomeZ) ? e.patrolHomeZ : (e.z || 0)),
+        zDom.minZ + 0.30,
+        zDom.maxZ - 0.30
+      );
+      const homeFacing = Number.isFinite(e.homeFacing) ? e.homeFacing : 0;
+      const hdx = homeX - (e.x || 0);
+      const hdz = homeZ - (e.z || 0);
+      const distToHome = Math.hypot(hdx, hdz);
+
+      if (distToHome <= 0.45) {
+        e.soulsAwake = false;
+        e.aiState = 'idle';
+        e.soulsState = 'idle';
+        e.facing = homeFacing;
+        e._noLosPursuitTimer = 0;
+        e._pillarBypassId = null;
+        e._pillarBypassSign = 0;
+        e._patrolPhase = 'idle';
+        e._patrolTimer = randRange(profile.patrolIdleMinSec || 2.8, profile.patrolIdleMaxSec || 4.4, rng);
+        e._patrolLookOffset = 0;
+        e._velX = 0;
+        e._velZ = 0;
+        e.aiVx = 0;
+        e.aiVz = 0;
+        e.vx = 0;
+        e.vz = 0;
+        e.animSpeedMult = 0;
+        e.strafeAnimMode = 'idle';
+        e.attackAnimClip = null;
+        e.combatPhase = 'neutral';
+        e.combatPhase01 = 0;
+
+        out.desiredFacing = homeFacing;
+        out.turnDelta = normalizeAngle(homeFacing - prevFacing);
+        out.vx = 0;
+        out.vz = 0;
+        out.isMoving = false;
+        out.animSpeedMult = 0;
+        out.patrolMoveSpeedRatio = 0;
+        out.strafeAnimMode = 'idle';
+        out.aiState = 'idle';
+        out.soulsState = 'idle';
+        out.combatPhase = 'neutral';
+        out.combatPhase01 = 0;
+        return out;
+      }
+
+      const navCtx = {
+        ...ctx,
+        hasLineOfSight: undefined,
+        forceGeometricLOS: true,
+        mob: e,
+        zDom
+      };
+      const homeSteer = resolveDoorwaySteerTarget(e.x || 0, e.z || 0, homeX, homeZ, navCtx);
+      out.viaDoorway = Boolean(homeSteer.viaDoorway);
+      const goalX = homeSteer.x;
+      const goalZ = homeSteer.z;
+      const gdx = goalX - (e.x || 0);
+      const gdz = goalZ - (e.z || 0);
+      const gLen = Math.hypot(gdx, gdz) || 1;
+      const arriveScale = clamp(distToHome / 0.85, 0.48, 1.0);
+      const calmWalkSpd = (leash.returnWalkSpeed || 1.8) * frostSlow * arriveScale;
+
+      let retVx = (gdx / gLen) * calmWalkSpd;
+      let retVz = (gdz / gLen) * calmWalkSpd;
+      const steeredHome = steerMobAroundCornersAndObstacles(e, retVx, retVz, goalX, goalZ, zDom, dt, navCtx);
+      retVx = steeredHome.vx;
+      retVz = steeredHome.vz;
+
+      const damp = 1 - Math.exp(-8.5 * dt);
+      e._velX = (e._velX || 0) + (retVx - (e._velX || 0)) * damp;
+      e._velZ = (e._velZ || 0) + (retVz - (e._velZ || 0)) * damp;
+
+      const clampedHome = clampSoulsCorridorVelocity(e, e._velX, e._velZ, dt, ctx);
+      const homeSpd = Math.hypot(clampedHome.vx, clampedHome.vz);
+      const walkYaw = homeSpd > 0.08 ? Math.atan2(clampedHome.vx, clampedHome.vz) : Math.atan2(gdx, gdz);
+      out.desiredFacing = lerpAngle(prevFacing, walkYaw, dt * 6.2);
+      out.turnDelta = normalizeAngle(out.desiredFacing - prevFacing);
+      const locHome = projectLocalVelocity(clampedHome.vx, clampedHome.vz, out.desiredFacing);
+      const isHomeMoving = homeSpd > 0.08;
+      const basePatrolRatio = Number(profile.patrolAnimSpeedMult) || 0.48;
+      const returnAnimRatio = isHomeMoving
+        ? clamp(basePatrolRatio * (homeSpd / Math.max(0.5, profile.patrolSpeed || 1.2)), 0.32, 0.72)
+        : 0;
+
+      out.vx = clampedHome.vx;
+      out.vz = clampedHome.vz;
+      out.moveLocalX = locHome.localX;
+      out.moveLocalZ = locHome.localZ;
+      out.isMoving = isHomeMoving;
+      out.animSpeedMult = returnAnimRatio;
+      out.patrolMoveSpeedRatio = returnAnimRatio;
+      out.strafeAnimMode = isHomeMoving ? 'patrol' : 'idle';
+      out.aiState = 'return_home';
+      out.soulsState = 'return_home';
+      out.combatPhase = 'neutral';
+      out.combatPhase01 = 0;
+      out.fogGateClamped = clampedHome.fogGateClamped;
+      out.flameTrapClamped = clampedHome.flameTrapClamped;
+
+      e.aiState = 'return_home';
+      e.soulsState = 'return_home';
+      e.facing = out.desiredFacing;
+      e.aiVx = out.vx;
+      e.aiVz = out.vz;
+      e.vx = 0;
+      e.vz = 0;
+      e.animSpeedMult = returnAnimRatio;
+      e.strafeAnimMode = out.strafeAnimMode;
+      e.attackAnimClip = null;
+      e.combatPhase = 'neutral';
+      e.combatPhase01 = 0;
+
+      if (applyPosition && dt > 0) {
+        e.x = (e.x || 0) + out.vx * dt;
+        e.z = clamp((e.z || 0) + out.vz * dt, clampedHome.minZ, clampedHome.maxZ);
+        if (typeof CASTLE_LAYOUT.clampCastlePosition === 'function') {
+          const p = CASTLE_LAYOUT.clampCastlePosition(e.x, e.z, e.radius || 0.55, {
+            bossDoorState: 'closed',
+            allowBossHall: false,
+            out: _tmpClampOut
+          });
+          e.x = p.x;
+          e.z = clamp(p.z, clampedHome.minZ, clampedHome.maxZ);
+        }
+      }
+      return out;
+    }
+  }
+
   const prevTimer = Number(e.soulsTimer) || 0;
   e.soulsTimer = Math.max(0, prevTimer - dt);
 
@@ -2482,20 +3310,26 @@ export function stepSoulsMobAi(e, ctx = {}) {
   let useInertialSmoothing = false;
   let suppressLocomotionBlend = false;
 
-  const minMeleeGap = playerRadius + (Number(e.radius) || 0.55) + 0.52;
-  const maxMeleeTokens = Number(ctx.maxConcurrentAttackers ?? SOULS_PACK_CFG.maxMeleeTokens);
+  const minMeleeGap = playerRadius + (Number(e.radius) || 0.55) + 0.14;
+  const rawMaxMeleeTokens = Number(ctx.maxConcurrentAttackers ?? SOULS_PACK_CFG.maxMeleeTokens);
+  // Crossfire fairness: while a ranged archer actively holds a shot token, cap concurrent melee swings to 1
+  // so a second knight circles/flanks instead of double-hitting in the exact same frame as a bolt!
+  const maxMeleeTokens =
+    !profile.isRanged && _rangedTokenHolders.size > 0
+      ? Math.min(rawMaxMeleeTokens, 1)
+      : rawMaxMeleeTokens;
   const maxRangedTokens = Number(ctx.maxConcurrentRanged ?? SOULS_PACK_CFG.maxRangedTokens);
 
   // -------------------------------------------------------------------------
-  // 4. STATE: WINDUP (Tapered 65–68% Cutoff + Single-Scaled C1 Step-In + 0 Red Circles)
+  // 4. STATE: WINDUP (Elden Ring Late-Lock 85–88% Tracking + Velocity Lead + Real Forward Lunge)
   // -------------------------------------------------------------------------
   if (e.soulsState === 'windup' || e.aiState === 'windup') {
     suppressLocomotionBlend = true;
     refreshAttackToken(e, profile.isRanged, angleFromPlayer);
 
     const meta = e.currentAttackMeta || Object.values(e.attackMetas || profile.attackMetas)[0];
-    const windupDur = Math.max(0.08, Number(meta?.windup) || 0.66);
-    const cutoff01 = clamp(Number(meta?.trackingCutoff01) || 0.66, 0.3, 0.85);
+    const windupDur = Math.max(0.08, Number(meta?.windup) || 0.56);
+    const cutoff01 = clamp(Number(meta?.trackingCutoff01) || 0.86, 0.35, 0.92);
 
     e._soulsAttackElapsed = (e._soulsAttackElapsed || 0) + dt;
     const progress01 = clamp(e._soulsAttackElapsed / windupDur, 0, 1);
@@ -2506,20 +3340,34 @@ export function stepSoulsMobAi(e, ctx = {}) {
 
     if (progress01 <= cutoff01) {
       let targetAimAng = angToPlayer;
-      if (meta?.isRanged && (Math.abs(pvx) > 0.05 || Math.abs(pvz) > 0.05)) {
-        const projSpd = Math.max(8, Number(meta.projectileSpeed) || 18);
-        const leadSec = clamp((dist / projSpd) * 0.55, 0, 0.28);
+      const pSpeed = Math.hypot(pvx, pvz);
+      if (meta?.isRanged && pSpeed > 0.08) {
+        const projSpd = Math.max(10, Number(meta.projectileSpeed) || 21);
+        const leadSec = clamp((dist / projSpd) * 0.65, 0, 0.32);
+        const ldx = (px + pvx * leadSec) - (e.x || 0);
+        const ldz = (pz + pvz * leadSec) - (e.z || 0);
+        if (Math.hypot(ldx, ldz) > 0.1) {
+          targetAimAng = Math.atan2(ldx, ldz);
+        }
+      } else if (!meta?.isRanged && pSpeed > 0.9) {
+        // Elden Ring melee strafe interception lead: prevents 1mm side-walk whiffing!
+        const leadSec = clamp(0.07 + dist * 0.025, 0.07, 0.15) * (1.0 - progress01 * 0.55);
         const ldx = (px + pvx * leadSec) - (e.x || 0);
         const ldz = (pz + pvz * leadSec) - (e.z || 0);
         if (Math.hypot(ldx, ldz) > 0.1) {
           targetAimAng = Math.atan2(ldx, ldz);
         }
       }
-      const taperStart = cutoff01 * 0.72;
+      const taperStart = cutoff01 * 0.84;
       const taperFactor = progress01 <= taperStart
         ? 1.0
-        : 1.0 - smoothstep01((progress01 - taperStart) / Math.max(0.05, cutoff01 - taperStart));
-      out.desiredFacing = lerpAngle(prevFacing, targetAimAng, dt * profile.trackingTurnRate * Math.max(0.12, taperFactor));
+        : 1.0 - smoothstep01((progress01 - taperStart) / Math.max(0.04, cutoff01 - taperStart));
+      const comboTurnBoost = (e.soulsComboLeft || 0) > 0 ? 1.25 : 1.0;
+      out.desiredFacing = lerpAngle(
+        prevFacing,
+        targetAimAng,
+        dt * profile.trackingTurnRate * comboTurnBoost * Math.max(0.36, taperFactor)
+      );
       e._soulsLockedAngle = out.desiredFacing;
       e.soulsStrikeDirX = Math.sin(out.desiredFacing);
       e.soulsStrikeDirZ = Math.cos(out.desiredFacing);
@@ -2534,8 +3382,9 @@ export function stepSoulsMobAi(e, ctx = {}) {
     }
     out.trackingLocked = Boolean(e._soulsTrackingLocked);
 
-    const lungeSpd = (Number(meta?.lungeSpeed) || 0) * 0.55;
-    const stepStart = Math.max(0.55, Number(meta?.stepStart01) || 0.55);
+    // Authentic root-motion forward step-in (removed the old *0.55 nerf & >=0.55 delay clamp!)
+    const lungeSpd = Number(meta?.lungeSpeed) || 0;
+    const stepStart = clamp(Number(meta?.stepStart01) || 0.35, 0.20, 0.72);
     const stepPeak = Number(meta?.stepPeak01) || 0.90;
     const nearGateBack = lungeSpd < 0 && (e.z || 0) <= zDom.minZ + 1.35 && -e.soulsStrikeDirZ < 0;
     if (Math.abs(lungeSpd) > 0.01 && !nearGateBack && progress01 >= stepStart) {
@@ -2544,17 +3393,16 @@ export function stepSoulsMobAi(e, ctx = {}) {
         curve = smoothstep01((progress01 - stepStart) / Math.max(0.05, stepPeak - stepStart));
       } else {
         const tailU = smoothstep01((progress01 - stepPeak) / Math.max(0.04, 1.0 - stepPeak));
-        curve = 1.0 - 0.55 * tailU;
+        curve = 1.0 - 0.35 * tailU;
       }
       const rawStep = lungeSpd * curve * frostSlow;
       e._soulsStepEndRawSpeed = rawStep;
-      const gapScale = lungeSpd > 0 ? clamp((dist - minMeleeGap) / 0.85, 0, 1) : 1.0;
+      const gapScale = lungeSpd > 0 ? clamp((dist - minMeleeGap) / 0.55, 0, 1) : 1.0;
       const effStep = rawStep * gapScale;
       rawVx = e.soulsStrikeDirX * effStep;
       rawVz = e.soulsStrikeDirZ * effStep;
     } else {
-      // Planted windup feet: kill pre-step coasting promptly so boots never skate before the lunge!
-      const plantDecay = Math.exp(-28 * dt);
+      const plantDecay = Math.exp(-26 * dt);
       rawVx = (e._velX || 0) * plantDecay;
       rawVz = (e._velZ || 0) * plantDecay;
       if (Math.hypot(rawVx, rawVz) < 0.08) {
@@ -2657,7 +3505,10 @@ export function stepSoulsMobAi(e, ctx = {}) {
         beginAttackWindup(e, profile, nextComboId, dirX, dirZ, angToPlayer, e.soulsComboLeft, out, audio, playAudio);
       } else {
         releaseSoulsAttackToken(e);
-        const recDur = Math.max(0.36, Number(meta?.recovery) || 0.65);
+        const whiffedOutOfReach = !profile.isRanged && !e._lastSwingConnected && dist > (meta?.reach || 2.75) + 0.15;
+        const baseRec = Math.max(0.34, Number(meta?.recovery) || 0.62);
+        const recDur = whiffedOutOfReach ? Math.max(0.28, baseRec * 0.72) : baseRec;
+        e._whiffedLastAttack = whiffedOutOfReach;
         e.aiState = 'recover';
         e.soulsState = 'recover';
         e.soulsTimer = recDur;
@@ -2670,8 +3521,10 @@ export function stepSoulsMobAi(e, ctx = {}) {
         openPunishWindow(e, recDur, meta?.punishTier || 'light', meta?.punishDmgMult, meta?.punishStaggerMult);
 
         const wantsBackstep =
-          Boolean(meta?.postBackstep) ||
-          (dist <= profile.postComboBackstepDist && rng() < profile.postComboBackstepChance);
+          !whiffedOutOfReach && (
+            Boolean(meta?.postBackstep) ||
+            (dist <= profile.postComboBackstepDist && rng() < profile.postComboBackstepChance)
+          );
         if (wantsBackstep) {
           e._soulsPendingBackstep = {
             speed: meta?.backstepSpeed ?? profile.backstepSpeed,
@@ -2727,10 +3580,18 @@ export function stepSoulsMobAi(e, ctx = {}) {
 
       if (pendingBackstep || archerCrowded) {
         startBackstep(e, profile, dirX, dirZ, tanX, tanZ, zDom, pendingBackstep);
-      } else {
-        e.aiState = dist > (e.preferredDist || profile.preferredDist) + 0.5 ? 'approach' : 'circle';
+      } else if (!profile.isRanged && e._whiffedLastAttack && dist > 2.45) {
+        // Relentless Elden Ring whiff-recovery pursuit: never stand frozen after missing a retreating player!
+        e._whiffedLastAttack = false;
+        e._soulsAssessTimer = 0;
+        e.aiState = 'approach';
         e.soulsState = 'stalk';
-        e.soulsTimer = randRange(profile.neutralDecisionMinSec, profile.neutralDecisionMaxSec, rng);
+        e.soulsTimer = randRange(0.12, 0.24, rng);
+      } else {
+        e._whiffedLastAttack = false;
+        e.aiState = dist > (e.preferredDist || profile.preferredDist) + 0.30 ? 'approach' : 'circle';
+        e.soulsState = 'stalk';
+        e.soulsTimer = randRange(profile.neutralDecisionMinSec * 0.85, profile.neutralDecisionMaxSec * 0.88, rng);
       }
     }
 
@@ -2777,8 +3638,12 @@ export function stepSoulsMobAi(e, ctx = {}) {
     const pack = computeAllySeparationAndFlankBias(e, px, pz, liveEnemies);
 
     // Check if mob needs to thread an archway doorway (`getCastleDoorwaySteerTarget`)
-    // instead of walking straight into a dividing stone wall!
-    const doorwaySteer = resolveDoorwaySteerTarget(e.x || 0, e.z || 0, px, pz, ctx);
+    // OR bypass an obstructing stone pillar with latched `e._pillarBypassSign`!
+    const doorwaySteer = resolveDoorwaySteerTarget(e.x || 0, e.z || 0, px, pz, {
+      ...ctx,
+      mob: e,
+      zDom
+    });
     out.viaDoorway = Boolean(doorwaySteer.viaDoorway);
 
     if (doorwaySteer.viaDoorway) {
@@ -2788,12 +3653,16 @@ export function stepSoulsMobAi(e, ctx = {}) {
       const sdz = doorwaySteer.z - (e.z || 0);
       const sLen = Math.hypot(sdx, sdz) || 1;
       const steerAng = Math.atan2(sdx, sdz);
-      out.desiredFacing = lerpAngle(prevFacing, steerAng, dt * 7.2);
-      rawVx = (sdx / sLen) * baseSpeed * 0.96 + pack.sepX * 0.35;
-      rawVz = (sdz / sLen) * baseSpeed * 0.96 + pack.sepZ * 0.35;
+      const targetFace = doorwaySteer.viaPillar && dist <= 3.4
+        ? lerpAngle(steerAng, angToPlayer, 0.35)
+        : steerAng;
+      out.desiredFacing = lerpAngle(prevFacing, targetFace, dt * 7.2);
+      const steerSpeedMult = doorwaySteer.viaPillar ? Math.max(1.04, profile.approachSpeedMult) : 0.96;
+      rawVx = (sdx / sLen) * baseSpeed * steerSpeedMult + pack.sepX * 0.35;
+      rawVz = (sdz / sLen) * baseSpeed * steerSpeedMult + pack.sepZ * 0.35;
     } else {
       out.desiredFacing = lerpAngle(prevFacing, angToPlayer, dt * 6.4);
-      updateStrafeTimerAndWallBounce(e, profile, dt, tanX, tanZ, pack.preferredFlankDir, rng);
+      updateStrafeTimerAndWallBounce(e, profile, dt, tanX, tanZ, pack.preferredFlankDir, zDom, rng);
 
       e._soulsSpacingBiasTimer = (e._soulsSpacingBiasTimer || 0) - dt;
       if (e._soulsSpacingBiasTimer <= 0) {
@@ -2872,7 +3741,7 @@ export function stepSoulsMobAi(e, ctx = {}) {
         e._soulsAssessTimer = Math.max(0, (e._soulsAssessTimer || 0) - dt);
         e._soulsAssessCooldown = Math.max(0, (e._soulsAssessCooldown || 0) - dt);
 
-        const inSweetSpot = !waitingForSlot && dist >= retreatDist && dist <= prefDist + 0.55;
+        const inSweetSpot = hasLOS && !waitingForSlot && dist >= retreatDist && dist <= prefDist + 0.55;
         if (inSweetSpot && e._soulsAssessTimer <= 0 && e._soulsAssessCooldown <= 0 && e.soulsTimer > 0.35) {
           if (dist < retreatDist + 0.5 && rng() < 0.34) {
             startBackstep(e, profile, dirX, dirZ, tanX, tanZ, zDom, { speed: 2.55, duration: 0.34 });
@@ -2890,52 +3759,82 @@ export function stepSoulsMobAi(e, ctx = {}) {
           e.aiState = 'circle';
           rawVx = tanX * sBlend * strafeSpeed * 0.85 + pack.sepX;
           rawVz = pack.sepZ * 0.4;
-        } else if (e._soulsAssessTimer > 0 && inSweetSpot) {
+        } else if (!hasLOS) {
+          // Never stand circling/assessing on the blind side of a pillar or pier — advance cleanly around cover!
+          e.aiState = 'approach';
+          e._soulsAssessTimer = 0;
+          rawVx = dirX * baseSpeed * profile.approachSpeedMult + tanX * sBlend * strafeSpeed * 0.45 + pack.sepX;
+          rawVz = dirZ * baseSpeed * profile.approachSpeedMult + tanZ * sBlend * strafeSpeed * 0.45 + pack.sepZ;
+        } else if (e._soulsAssessTimer > 0 && inSweetSpot && dist <= 2.45) {
           e.aiState = 'assess';
-          rawVx = pack.sepX * 0.5;
-          rawVz = pack.sepZ * 0.5;
+          rawVx = tanX * sBlend * strafeSpeed * 0.52 + dirX * baseSpeed * 0.24 + pack.sepX * 0.5;
+          rawVz = tanZ * sBlend * strafeSpeed * 0.52 + dirZ * baseSpeed * 0.24 + pack.sepZ * 0.5;
         } else if (waitingForSlot && dist <= prefDist + 1.2) {
           e.aiState = 'flank';
           const radialErr = clamp((dist - prefDist) * 0.45, -0.42, 0.42);
           rawVx = dirX * baseSpeed * radialErr + tanX * sBlend * strafeSpeed * 0.98 + pack.sepX;
           rawVz = dirZ * baseSpeed * radialErr + tanZ * sBlend * strafeSpeed * 0.98 + pack.sepZ;
-        } else if (dist > prefDist + 0.45) {
+        } else if (dist > prefDist + 0.25) {
           e.aiState = 'approach';
-          const weave = dist < 6.5 ? 0.3 : 0.18;
-          rawVx = dirX * baseSpeed * profile.approachSpeedMult + tanX * sBlend * strafeSpeed * weave + pack.sepX;
-          rawVz = dirZ * baseSpeed * profile.approachSpeedMult + tanZ * sBlend * strafeSpeed * weave + pack.sepZ;
+          const closeSurge = dist > 3.0 ? 1.12 : 1.0;
+          const weave = dist < 5.8 ? 0.24 : 0.14;
+          rawVx = dirX * baseSpeed * profile.approachSpeedMult * closeSurge + tanX * sBlend * strafeSpeed * weave + pack.sepX;
+          rawVz = dirZ * baseSpeed * profile.approachSpeedMult * closeSurge + tanZ * sBlend * strafeSpeed * weave + pack.sepZ;
         } else if (dist < retreatDist) {
           e.aiState = 'retreat';
           rawVx = -dirX * baseSpeed * 0.42 + tanX * sBlend * strafeSpeed * 0.8 + pack.sepX;
           rawVz = -dirZ * baseSpeed * 0.42 + tanZ * sBlend * strafeSpeed * 0.8 + pack.sepZ;
         } else {
           e.aiState = 'circle';
-          const radialErr = clamp((dist - prefDist) * 0.45, -0.35, 0.38);
+          const radialErr = clamp((dist - prefDist) * 0.55, -0.32, 0.48);
           rawVx = dirX * baseSpeed * radialErr + tanX * sBlend * strafeSpeed * 0.92 + pack.sepX;
           rawVz = dirZ * baseSpeed * radialErr + tanZ * sBlend * strafeSpeed * 0.92 + pack.sepZ;
         }
 
-        const engageRange = (e.preferredDist || profile.preferredDist) +
-          (reads.playerHealing ? 2.15 : (profile.id === 'iron_knight' ? 1.35 : 1.05));
+        // Honest Souls engage range: verify `chooseInitialAttack` can genuinely reach BEFORE committing to windup!
+        const maxEngageWindow =
+          profile.id === 'iron_knight'
+            ? (reads.playerHealing ? 4.35 : 4.05)
+            : (reads.playerHealing ? 3.15 : 2.95);
 
-        if (hasLOS && !playerInFlameTraps && e.aiState !== 'backstep' && e.soulsTimer <= 0 && dist <= engageRange) {
-          if (tryAcquireAttackToken(e, false, angleFromPlayer, maxMeleeTokens, maxRangedTokens)) {
-            if (reads.playerHealing) e._soulsHealPunishCd = 4.0;
-            if (reads.playerRollSpam) e._soulsRollCount = 0;
-            if (reads.playerTurtleBlocking) e._soulsBlockHoldTime = 0;
-            e._soulsAssessTimer = 0;
-            const pick = chooseInitialAttack(e, profile, dist, reads, zDom.minZ, rng);
-            beginAttackWindup(e, profile, pick.attackId, dirX, dirZ, angToPlayer, pick.comboLeft, out, audio, playAudio);
-            const plantD = Math.exp(-14 * dt);
-            rawVx = (e._velX || 0) * plantD;
-            rawVz = (e._velZ || 0) * plantD;
-            useInertialSmoothing = false;
-            suppressLocomotionBlend = true;
+        if (hasLOS && !playerInFlameTraps && e.aiState !== 'backstep' && e.soulsTimer <= 0 && dist <= maxEngageWindow) {
+          const pick = chooseInitialAttack(e, profile, dist, reads, zDom.minZ, rng);
+          if (pick) {
+            if (tryAcquireAttackToken(e, false, angleFromPlayer, maxMeleeTokens, maxRangedTokens)) {
+              if (reads.playerHealing) e._soulsHealPunishCd = 4.0;
+              if (reads.playerRollSpam) e._soulsRollCount = 0;
+              if (reads.playerTurtleBlocking) e._soulsBlockHoldTime = 0;
+              e._soulsAssessTimer = 0;
+              beginAttackWindup(e, profile, pick.attackId, dirX, dirZ, angToPlayer, pick.comboLeft, out, audio, playAudio);
+              const plantD = Math.exp(-14 * dt);
+              rawVx = (e._velX || 0) * plantD;
+              rawVz = (e._velZ || 0) * plantD;
+              useInertialSmoothing = false;
+              suppressLocomotionBlend = true;
+            } else {
+              e.aiState = 'flank';
+              e.soulsTimer = randRange(0.38, 0.68, rng);
+            }
           } else {
-            e.aiState = 'flank';
-            e.soulsTimer = randRange(0.45, 0.78, rng);
+            // Player is just outside honest blade reach (e.g. backed away to 3.1–3.9m): surge forward to close distance!
+            e.aiState = 'approach';
+            e._soulsAssessTimer = 0;
+            rawVx = dirX * baseSpeed * profile.approachSpeedMult * 1.15 + tanX * sBlend * strafeSpeed * 0.16 + pack.sepX;
+            rawVz = dirZ * baseSpeed * profile.approachSpeedMult * 1.15 + tanZ * sBlend * strafeSpeed * 0.16 + pack.sepZ;
           }
         }
+      }
+    }
+
+    // Multi-angle obstacle, pillar & corner-unstick steering across ALL non-attack locomotion states!
+    if (!suppressLocomotionBlend && e.aiState !== 'backstep') {
+      const steerGoalX = doorwaySteer.viaDoorway ? doorwaySteer.x : px;
+      const steerGoalZ = doorwaySteer.viaDoorway ? doorwaySteer.z : pz;
+      const steeredMove = steerMobAroundCornersAndObstacles(e, rawVx, rawVz, steerGoalX, steerGoalZ, zDom, dt, ctx);
+      rawVx = steeredMove.vx;
+      rawVz = steeredMove.vz;
+      if (steeredMove.steered && Math.hypot(rawVx, rawVz) > 0.25) {
+        out.desiredFacing = lerpAngle(prevFacing, Math.atan2(rawVx, rawVz), dt * 7.8);
       }
     }
   }

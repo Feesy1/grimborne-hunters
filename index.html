@@ -14,9 +14,9 @@
   <meta http-equiv="Expires" content="0" />
   <title>Охотники Мрака — Grimborne Hunters</title>
   <link rel="icon" type="image/x-icon" href="./assets/grimborne_icon.ico?v=20261117z25" />
-  <link rel="apple-touch-icon" sizes="192x192" href="./assets/icon-192.png?v=20261123z71" />
-  <link rel="manifest" href="./manifest.json?v=20261123z71" />
-  <link rel="stylesheet" href="./css/style.css?v=20261123z71" />
+  <link rel="apple-touch-icon" sizes="192x192" href="./assets/icon-192.png?v=20261124z84" />
+  <link rel="manifest" href="./manifest.json?v=20261124z84" />
+  <link rel="stylesheet" href="./css/style.css?v=20261124z84" />
   <script>
     (function syncViewportVars() {
       var curVp = { w: 1280, h: 720, forcedRotate: false, rawW: 1280, rawH: 720 };
@@ -90,9 +90,8 @@
 <body>
   <div id="app-viewport">
     <div id="fps-badge" aria-label="Счётчик кадров">120 FPS</div>
-    <!-- Стартовый экран загрузки с полным ключевым артом и тонкой золотой шкалой прогресса -->
+    <!-- Стартовый экран загрузки Замка Пепла -->
     <div id="splash-screen" role="status" aria-live="polite">
-      <img class="splash-art-img" src="./assets/splash_battle_art.jpg?v=20261117z25" alt="" decoding="sync" fetchpriority="high" draggable="false" />
       <div class="splash-vignette"></div>
       <div class="splash-bottom-box">
         <div class="splash-ornament">✦ &nbsp; ОХОТНИКИ МРАКА &nbsp; ✦</div>
@@ -100,16 +99,13 @@
           <div id="splash-bar-fill" class="splash-bar-fill"></div>
         </div>
         <div class="splash-status-row">
-          <span id="splash-status-text">Пробуждение проклятого погоста…</span>
+          <span id="splash-status-text">Пробуждение Замка Пепла…</span>
           <span id="splash-percent">0%</span>
         </div>
       </div>
     </div>
 
-    <div id="hub-bg-plate" aria-hidden="true">
-      <video id="hub-bg-video" class="hub-bg-video" src="./assets/ui/hub_bg_loop.mp4?v=20261117z25" poster="./assets/ui/hub_stage_bg.jpg?v=20261117z25" autoplay muted playsinline preload="auto"></video>
-    </div>
-    <canvas id="game-canvas" aria-label="Игровая арена Охотники Мрака"></canvas>
+    <canvas id="game-canvas" aria-label="Охотники Мрака — Замок Пепла"></canvas>
     <div id="ui-root"></div>
   </div>
 
@@ -131,7 +127,7 @@
         closed = true;
         if (fillEl) fillEl.style.width = '100%';
         if (pctEl) pctEl.textContent = '100%';
-        if (txtEl) txtEl.textContent = 'Готово к охоте!';
+        if (txtEl) txtEl.textContent = 'Замок Пепла открыт';
         splashEl.classList.add('is-hidden');
         setTimeout(function () {
           if (splashEl && splashEl.parentNode) splashEl.parentNode.removeChild(splashEl);
@@ -178,6 +174,6 @@
       requestAnimationFrame(tick);
     })();
   </script>
-  <script type="module" src="./js/main.js?v=20261123z71"></script>
+  <script type="module" src="./js/main.js?v=20261124z84"></script>
 </body>
 </html>

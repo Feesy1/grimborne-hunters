@@ -36,70 +36,70 @@ export const CLASH_SPARK_TIERS = Object.freeze({
 const STYLE_SPECS = Object.freeze({
   hero_steel: Object.freeze({
     id: 0,
-    life: 0.22,
-    intensity: 1.0,
-    taper: 0.30,
-    buoyancy: 0.02,
-    widthPadTip: 0.015,
-    widthPadBase: 0.02,
-    edgeSparksPerMeter: 0.55,
-    edgeSparkMinSpeed: 13.0,
+    life: 0.15,
+    intensity: 0.52,
+    taper: 0.44,
+    buoyancy: 0.01,
+    widthPadTip: 0.0,
+    widthPadBase: 0.14,
+    edgeSparksPerMeter: 0.0,
+    edgeSparkMinSpeed: 99.0,
     edgeSparkHot: [1.0, 0.97, 0.88],
     edgeSparkMid: [0.95, 0.78, 0.44],
     edgeSparkCool: [0.65, 0.42, 0.18]
   }),
   hero_heavy: Object.freeze({
-    id: 1,
-    life: 0.30,
-    intensity: 1.18,
-    taper: 0.24,
-    buoyancy: 0.06,
-    widthPadTip: 0.05,
-    widthPadBase: 0.0,
-    edgeSparksPerMeter: 4.2,
-    edgeSparkMinSpeed: 4.2,
+    id: 0,
+    life: 0.18,
+    intensity: 0.62,
+    taper: 0.40,
+    buoyancy: 0.02,
+    widthPadTip: 0.01,
+    widthPadBase: 0.12,
+    edgeSparksPerMeter: 0.0,
+    edgeSparkMinSpeed: 99.0,
     edgeSparkHot: [1.0, 0.98, 0.86],
     edgeSparkMid: [1.0, 0.72, 0.22],
     edgeSparkCool: [0.88, 0.26, 0.04]
   }),
   mob_iron: Object.freeze({
     id: 2,
-    life: 0.26,
-    intensity: 1.0,
-    taper: 0.30,
-    buoyancy: 0.02,
-    widthPadTip: 0.02,
-    widthPadBase: 0.02,
-    edgeSparksPerMeter: 1.35,
-    edgeSparkMinSpeed: 9.2,
+    life: 0.17,
+    intensity: 0.48,
+    taper: 0.42,
+    buoyancy: 0.01,
+    widthPadTip: 0.0,
+    widthPadBase: 0.14,
+    edgeSparksPerMeter: 0.0,
+    edgeSparkMinSpeed: 99.0,
     edgeSparkHot: [1.0, 0.88, 0.72],
     edgeSparkMid: [0.95, 0.36, 0.12],
     edgeSparkCool: [0.62, 0.10, 0.03]
   }),
   boss_ember: Object.freeze({
-    id: 3,
-    life: 0.36,
-    intensity: 1.0,
-    taper: 0.18,
-    buoyancy: 0.42,
-    widthPadTip: 0.11,
-    widthPadBase: -0.03,
-    edgeSparksPerMeter: 5.4,
-    edgeSparkMinSpeed: 3.2,
+    id: 2,
+    life: 0.22,
+    intensity: 0.56,
+    taper: 0.34,
+    buoyancy: 0.04,
+    widthPadTip: 0.04,
+    widthPadBase: 0.08,
+    edgeSparksPerMeter: 0.0,
+    edgeSparkMinSpeed: 99.0,
     edgeSparkHot: [1.0, 0.95, 0.76],
     edgeSparkMid: [1.0, 0.54, 0.10],
     edgeSparkCool: [0.78, 0.12, 0.02]
   }),
   boss_ember_p2: Object.freeze({
     id: 3,
-    life: 0.44,
-    intensity: 1.52,
-    taper: 0.14,
-    buoyancy: 0.64,
-    widthPadTip: 0.16,
-    widthPadBase: -0.05,
-    edgeSparksPerMeter: 8.2,
-    edgeSparkMinSpeed: 2.6,
+    life: 0.38,
+    intensity: 1.38,
+    taper: 0.18,
+    buoyancy: 0.52,
+    widthPadTip: 0.12,
+    widthPadBase: -0.02,
+    edgeSparksPerMeter: 2.2,
+    edgeSparkMinSpeed: 4.5,
     edgeSparkHot: [1.0, 0.98, 0.86],
     edgeSparkMid: [1.0, 0.62, 0.14],
     edgeSparkCool: [0.86, 0.16, 0.03]
@@ -563,16 +563,16 @@ const RIBBON_FRAGMENT_SHADER = /* glsl */ `
         float warmGlint = smoothstep(0.945, 0.985, w) * (1.0 - smoothstep(0.988, 1.0, w))
                         * (1.0 - smoothstep(0.0, 0.52, along)) * env;
 
-        darkCol = vec3(0.07, 0.10, 0.16);
-        absorb = bodyMask * 0.15;
+        darkCol = vec3(0.06, 0.08, 0.11);
+        absorb = bodyMask * 0.09;
 
-        vec3 airWake = vec3(0.42, 0.54, 0.72) * streamlines;
-        vec3 temperedEdge = vec3(0.86, 0.95, 1.10) * (0.68 + 0.32 * speed);
-        vec3 champagneRim = vec3(1.08, 0.82, 0.44) * (0.78 + 0.28 * nFine);
+        vec3 airWake = vec3(0.46, 0.52, 0.60) * streamlines;
+        vec3 temperedEdge = vec3(0.78, 0.84, 0.92) * (0.65 + 0.30 * speed);
+        vec3 silverRim = vec3(0.88, 0.92, 0.98) * (0.72 + 0.24 * nFine);
 
-        glowCol = (airWake * bodyMask * 0.46
-                + temperedEdge * razorSteel * 0.72
-                + champagneRim * warmGlint * 0.78) * intensity * (0.76 + 0.26 * speed);
+        glowCol = (airWake * bodyMask * 0.34
+                + temperedEdge * razorSteel * 0.56
+                + silverRim * warmGlint * 0.48) * intensity * (0.72 + 0.24 * speed);
 
       } else if (styleId < 1.5) {
         // ------------------------------------------------------------------
@@ -615,16 +615,16 @@ const RIBBON_FRAGMENT_SHADER = /* glsl */ `
         float coldIronWire = smoothstep(0.935, 0.982, w) * outerSoft
                            * (1.0 - smoothstep(0.0, 0.45, along)) * env;
 
-        darkCol = vec3(0.09, 0.02, 0.025);
-        absorb = bodyMask * 0.38;
+        darkCol = vec3(0.05, 0.06, 0.08);
+        absorb = bodyMask * 0.18;
 
-        vec3 darkSteelWake = vec3(0.56, 0.11, 0.09) * streamlines;
-        vec3 bloodEmber = vec3(1.06, 0.22, 0.09);
-        vec3 coldIron = vec3(0.86, 0.74, 0.74);
+        vec3 darkSteelWake = vec3(0.34, 0.38, 0.44) * streamlines;
+        vec3 slateRim = vec3(0.58, 0.64, 0.72);
+        vec3 coldIron = vec3(0.76, 0.80, 0.86);
 
-        glowCol = (darkSteelWake * bodyMask * 0.58
-                + bloodEmber * crimsonRim * 0.78
-                + coldIron * coldIronWire * 0.72) * intensity * (0.76 + 0.26 * speed);
+        glowCol = (darkSteelWake * bodyMask * 0.38
+                + slateRim * crimsonRim * 0.48
+                + coldIron * coldIronWire * 0.52) * intensity * (0.72 + 0.24 * speed);
 
       } else {
         // ------------------------------------------------------------------

@@ -1087,7 +1087,9 @@ export function createAnimController(modelRoot, clipMap, idleClipName = 'Idle', 
     // If player starts running mid-swing during a stationary full-body attack (<clip>__Full),
     // smoothly hand off to its time-synced upper-body masked version so legs glide into Running_A__Lower
     // with zero discontinuity on the sword swing and strict wSum === 1.000 on every bone.
+    const isSoulsModeForHandoff = Boolean(typeof window !== 'undefined' && window.__grimborne?.world?.isSoulsArena?.());
     if (
+      !isSoulsModeForHandoff &&
       attackUsesMask &&
       activeAttackAction &&
       nextName !== idleClipName &&
@@ -1153,9 +1155,10 @@ export function createAnimController(modelRoot, clipMap, idleClipName = 'Idle', 
       activeHitAction = null;
       hitBlendInAge = 0;
     }
-    // Standing still ('Idle') -> prefer full-body attack clip (<clipName>__Full) for natural footwork/step-in!
-    // Moving ('Running_A' / 'Running_Back') -> use upper-body masked clip over <base>__Lower.
-    const isStationaryBase = !currentBaseName || currentBaseName === idleClipName;
+    // Standing still ('Idle') OR in Soulslike combat -> always play full-body attack clip (<clipName>__Full)
+    // so every strike drives through grounded feet, knees, and hips instead of jogging legs!
+    const isSoulsModeNow = Boolean(typeof window !== 'undefined' && window.__grimborne?.world?.isSoulsArena?.());
+    const isStationaryBase = isSoulsModeNow || !currentBaseName || currentBaseName === idleClipName;
     const fullAct = isStationaryBase ? getAction(`${clipName}__Full`) : null;
     const act = fullAct || getAction(clipName);
     if (!act) return;
@@ -1602,6 +1605,15 @@ export function createAnimController(modelRoot, clipMap, idleClipName = 'Idle', 
   function isDeadState() {
     return isDead || Boolean(activeDeathAction);
   }
+  function setActiveAttackTimeScale(speed) {
+    if (!activeAttackAction || !activeAttackAction.isRunning()) return false;
+    const s = Number(speed);
+    if (Number.isFinite(s) && s > 0.05) {
+      activeAttackAction.timeScale = Math.max(0.12, Math.min(3.0, s));
+      return true;
+    }
+    return false;
+  }
   return {
     mixer,
     setBaseState,
@@ -1610,6 +1622,7 @@ export function createAnimController(modelRoot, clipMap, idleClipName = 'Idle', 
     isDoorPushActive,
     setDeadState,
     isDeadState,
+    setActiveAttackTimeScale,
     getDeathClipDuration,
     syncPhase,
     getAction,

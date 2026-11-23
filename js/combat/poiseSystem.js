@@ -12,25 +12,38 @@
 //        playerFlinchCooldown = 1.45s) trigger a brief ~0.24s microstun (Warrior_Run.glb 'Impact'
 //        clip + brief slow + knockback impulse), roll-cancelable with Space after 0.16s.
 
+export const BOSS_POISE_CFG = Object.freeze({
+  basePoiseMax: 68,
+  escalationPerInterrupt: 14,
+  maxPoiseCap: 110,
+  escalationDecayDelaySec: 6.5,
+  escalationDecayRate: 3.5,
+  interruptCooldownSec: 10.5,
+  windupCutoff01: 0.68,
+  interruptMicroStunSec: 0.58,
+  interruptClip: 'Hit_React_Gut',
+  interruptClipSpeed: 1.30
+});
+
 export const POISE_PROFILES = Object.freeze({
   souls_boss: Object.freeze({
     id: 'souls_boss',
-    poiseMax: 175,
-    poiseRegenDelaySec: 2.0,
-    poiseRegenRate: 34,
+    poiseMax: BOSS_POISE_CFG.basePoiseMax,
+    poiseRegenDelaySec: 3.2,
+    poiseRegenRate: 14,
     poiseImmunitySec: 4.4,
-    microStunSec: 0.38,
-    hitClip: 'Hit_React',
-    hitSpeed: 1.65,
-    punishHitClip: 'Hit_React_Gut',
-    punishHitSpeed: 2.15,
-    punishMicroStunSec: 0.42,
+    microStunSec: BOSS_POISE_CFG.interruptMicroStunSec,
+    hitClip: BOSS_POISE_CFG.interruptClip,
+    hitSpeed: BOSS_POISE_CFG.interruptClipSpeed,
+    punishHitClip: BOSS_POISE_CFG.interruptClip,
+    punishHitSpeed: BOSS_POISE_CFG.interruptClipSpeed,
+    punishMicroStunSec: BOSS_POISE_CFG.interruptMicroStunSec,
     hyperArmorPoiseLeak: 0.25,
     hyperArmorPoiseCapRatio: 0.78,
     joltScaleNormal: 0.55,
     joltScaleHyperArmor: 0.28,
     joltScaleBreak: 1.0,
-    interruptsActiveAttack: false
+    interruptsActiveAttack: true
   }),
   boss: Object.freeze({
     id: 'boss',
@@ -66,19 +79,20 @@ export const POISE_PROFILES = Object.freeze({
   }),
   souls_mob: Object.freeze({
     id: 'souls_mob',
-    poiseMax: 68,
-    poiseRegenDelaySec: 1.6,
+    poiseMax: 22,
+    poiseRegenDelaySec: 1.4,
     poiseRegenRate: 24,
-    poiseImmunitySec: 2.6,
-    microStunSec: 0.32,
-    hitClip: 'Hit_A',
-    hitSpeed: 1.85,
-    hyperArmorPoiseLeak: 0.20,
+    poiseImmunitySec: 1.05,
+    maxConsecutiveFlinches: 2,
+    microStunSec: 0.54,
+    hitClip: 'Hit_React',
+    hitSpeed: 1.05,
+    hyperArmorPoiseLeak: 0.25,
     hyperArmorPoiseCapRatio: 0.75,
-    joltScaleNormal: 0.70,
-    joltScaleHyperArmor: 0.40,
-    joltScaleBreak: 1.0,
-    interruptsActiveAttack: false
+    joltScaleNormal: 0.80,
+    joltScaleHyperArmor: 0.45,
+    joltScaleBreak: 1.05,
+    interruptsActiveAttack: true
   }),
   mob: Object.freeze({
     id: 'mob',
@@ -115,16 +129,16 @@ export const POISE_PROFILES = Object.freeze({
 });
 
 export const PLAYER_MICROSTUN_DEFAULTS = Object.freeze({
-  flinchCooldownSec: 1.45,
-  microStunSec: 0.24,
-  cancelableAfterSec: 0.16,
-  moveSpeedMult: 0.32,
-  impulseSpeedMob: 3.4,
-  impulseSpeedBoss: 4.8,
+  flinchCooldownSec: 0.52,
+  microStunSec: 0.34,
+  cancelableAfterSec: 0.23,
+  moveSpeedMult: 0.28,
+  impulseSpeedMob: 4.1,
+  impulseSpeedBoss: 5.8,
   clipName: 'Impact',
   clipDurationSec: 1.0,
-  blendInSec: 0.028,
-  blendOutSec: 0.070
+  blendInSec: 0.025,
+  blendOutSec: 0.110
 });
 
 // Elden Ring Stance Break (Poise Damage) table per player attack class
@@ -157,24 +171,24 @@ export function getStanceRegenDelay(maxStance) {
 export const PLAYER_HITSTUN_SPECS = Object.freeze({
   light: Object.freeze({
     damageLevel: 'light',
-    duration: 0.24,
-    rollCancelAfter: 0.16,
-    moveSpeedMult: 0.32,
-    impulseMult: 1.0
+    duration: 0.34,
+    rollCancelAfter: 0.23,
+    moveSpeedMult: 0.28,
+    impulseMult: 1.08
   }),
   heavy: Object.freeze({
     damageLevel: 'heavy',
-    duration: 0.38,
-    rollCancelAfter: 0.24,
-    moveSpeedMult: 0.22,
-    impulseMult: 1.35
+    duration: 0.52,
+    rollCancelAfter: 0.35,
+    moveSpeedMult: 0.18,
+    impulseMult: 1.50
   }),
   knockdown: Object.freeze({
     damageLevel: 'knockdown',
-    duration: 0.72,
-    rollCancelAfter: 0.50,
-    moveSpeedMult: 0.08,
-    impulseMult: 1.75
+    duration: 0.88,
+    rollCancelAfter: 0.58,
+    moveSpeedMult: 0.05,
+    impulseMult: 2.05
   })
 });
 
@@ -187,13 +201,15 @@ export function getPlayerHitstunSpec(damageLevel = 'light') {
 export const SOULS_GUARD_CFG = Object.freeze({
   guardBoost: 55,
   physChipMult: 0.0,
+  mobileBlockChipMult: 0.15,
   guardBreakDuration: 1.45,
   guardCounterWindowPc: 0.48,
   guardCounterWindowTouch: 0.56,
-  parryStartupSec: 0.055,
-  parryActivePc: 0.190,
-  parryActiveTouch: 0.240,
-  partialParryTolerance: 0.065,
+  parryStartupSec: 0.115,
+  parryStartupTouch: 0.0,
+  parryActivePc: 0.115,
+  parryActiveTouch: 0.275,
+  partialParryTolerance: 0.045,
   partialParryHpMult: 0.35,
   riposteInvulnSec: 1.05
 });
@@ -299,6 +315,41 @@ export const NON_HYPER_ARMOR_STATES = new Set([
   'micro_stun'
 ]);
 
+export const BOSS_STANDARD_INTERRUPTIBLE_ATTACKS = new Set([
+  'overhead_cleave',
+  'heavy_cleave',
+  'ash_fissure',
+  'sweep_combo',
+  'delayed_crush',
+  'aaa_combo',
+  'combo_sweep_1',
+  'combo_backhand_2',
+  'combo_slam_3',
+  'whirl_windup'
+]);
+
+export const BOSS_UNINTERRUPTIBLE_STATES = new Set([
+  'stagger_kneel',
+  'kneel',
+  'kneeling',
+  'staggered',
+  'stagger_recover',
+  'recover_stagger',
+  'stand_from_kneel',
+  'riposte_victim',
+  'roar',
+  'roar_taunt',
+  'phase2_roar',
+  'phase_transition',
+  'throne_standup',
+  'leap_windup',
+  'leap_telegraph',
+  'leap_air',
+  'leaping',
+  'leap_slam',
+  'whirl_spin'
+]);
+
 const WEAPON_BASE_POISE = Object.freeze({
   boss_hammer: 42,
   hammer: 42,
@@ -316,6 +367,41 @@ function clamp01(v) {
 
 function normState(s) {
   return typeof s === 'string' ? s.trim().toLowerCase() : '';
+}
+
+function resolveSoulsBossPoiseMax(enemy, profile) {
+  const baseMax = Number(enemy?.poiseMaxOverride) > 0
+    ? Number(enemy.poiseMaxOverride)
+    : (Number(profile?.poiseMax) > 0 ? Number(profile.poiseMax) : BOSS_POISE_CFG.basePoiseMax);
+  const bonus = Math.max(0, Number(enemy?.bossPoiseBonus) || 0);
+  return Math.min(BOSS_POISE_CFG.maxPoiseCap, Math.round(baseMax + bonus));
+}
+
+function isSoulsBossEarlyWindupOpen(enemy, soulsSt) {
+  if (!enemy?.isSoulsBoss) return false;
+  if ((enemy.bossPoiseInterruptCd || 0) > 0) return false;
+  const activeAtk = normState(enemy.soulsActiveAttack);
+  const moveType = normState(enemy.soulsMoveType);
+  if (
+    BOSS_UNINTERRUPTIBLE_STATES.has(soulsSt) ||
+    BOSS_UNINTERRUPTIBLE_STATES.has(activeAtk) ||
+    BOSS_UNINTERRUPTIBLE_STATES.has(moveType)
+  ) {
+    return false;
+  }
+  const isStandardAttack =
+    BOSS_STANDARD_INTERRUPTIBLE_ATTACKS.has(soulsSt) ||
+    BOSS_STANDARD_INTERRUPTIBLE_ATTACKS.has(activeAtk) ||
+    BOSS_STANDARD_INTERRUPTIBLE_ATTACKS.has(moveType);
+  if (!isStandardAttack) return false;
+
+  const posturePhase = normState(enemy.soulsPosturePhase);
+  const phase01 = Number.isFinite(enemy.soulsPosturePhase01) ? enemy.soulsPosturePhase01 : 0;
+  if (posturePhase === 'active') return false;
+  const inWindup =
+    posturePhase === 'windup' ||
+    ((posturePhase === '' || posturePhase === 'neutral') && (enemy.soulsAttackElapsed || 0) <= 0.06);
+  return inWindup && phase01 <= BOSS_POISE_CFG.windupCutoff01;
 }
 
 export function getEnemyPoiseProfile(enemy, profileOverrides = null) {
@@ -346,7 +432,11 @@ export function getEnemyPoiseProfile(enemy, profileOverrides = null) {
 export function ensureEnemyPoiseState(enemy, opts = null) {
   if (!enemy || typeof enemy !== 'object') return null;
   const profile = getEnemyPoiseProfile(enemy, opts?.profiles);
-  if (!(Number(enemy.poiseMax) > 0)) {
+  if (!Number.isFinite(enemy.bossPoiseInterruptCd)) enemy.bossPoiseInterruptCd = 0;
+  if (!Number.isFinite(enemy.bossPoiseBonus)) enemy.bossPoiseBonus = 0;
+  if (enemy.isSoulsBoss) {
+    enemy.poiseMax = resolveSoulsBossPoiseMax(enemy, profile);
+  } else if (!(Number(enemy.poiseMax) > 0)) {
     enemy.poiseMax = profile.poiseMax;
   }
   if (!Number.isFinite(enemy.poiseDamage)) {
@@ -427,22 +517,41 @@ export function getEnemyHyperArmorState(enemy, opts = null) {
   const isEliteTier = Boolean(enemy.eliteType);
 
   if (isBossTier) {
-    // Souls Boss Punish Windows (DS3 / Elden Ring):
-    //   - short non-punishable recover (no soulsPunishWindow, e.g. after overhead_cleave) stays PROTECTED,
-    //     so greedy players get countered instead of flinching the boss;
-    //   - a real open punish window (soulsPunishWindow 'heavy' | 'light') has NO Hyper-Armor at all;
-    //   - parry stun / riposte (stunTimer, parriedRiposteTimer) is never protected.
-    if (
-      enemy.isSoulsBoss &&
-      soulsSt === 'recover' &&
-      !enemy.soulsPunishWindow &&
-      !((enemy.stunTimer || 0) > 0) &&
-      !((enemy.parriedRiposteTimer || 0) > 0)
-    ) {
-      return { active: true, reason: 'boss_short_recover' };
-    }
-    if (enemy.isSoulsBoss && enemy.soulsPunishWindow && (soulsSt === 'recover' || soulsSt === 'hit_react')) {
-      return { active: false, reason: `punish_window_${enemy.soulsPunishWindow}` };
+    if (enemy.isSoulsBoss) {
+      const activeAtk = normState(enemy.soulsActiveAttack);
+      const posturePhase = normState(enemy.soulsPosturePhase);
+      if (
+        BOSS_UNINTERRUPTIBLE_STATES.has(soulsSt) ||
+        BOSS_UNINTERRUPTIBLE_STATES.has(activeAtk) ||
+        (soulsSt === 'leap_slam' && posturePhase === 'active')
+      ) {
+        return { active: true, reason: `boss_uninterruptible_${soulsSt || activeAtk}` };
+      }
+      // Conditional DS3 / Elden Ring Boss poise window:
+      //   When `bossPoiseInterruptCd <= 0`, Boss can be poise-interrupted in neutral (`stalk` / `recover`)
+      //   OR during early/mid windup (`soulsPosturePhase === 'windup'`, `soulsPosturePhase01 <= 0.68`)
+      //   of standard attacks (`overhead_cleave`, `sweep_combo`, `delayed_crush`, `aaa_combo`, `whirl_windup`).
+      if ((enemy.bossPoiseInterruptCd || 0) <= 0) {
+        if (soulsSt === 'stalk' || soulsSt === 'recover' || NON_HYPER_ARMOR_STATES.has(soulsSt)) {
+          return {
+            active: false,
+            reason: enemy.soulsPunishWindow ? `punish_window_${enemy.soulsPunishWindow}` : 'boss_neutral_poise_open'
+          };
+        }
+        if (isSoulsBossEarlyWindupOpen(enemy, soulsSt)) {
+          return { active: false, reason: 'boss_early_windup_open' };
+        }
+      } else if (
+        soulsSt === 'recover' &&
+        !enemy.soulsPunishWindow &&
+        !((enemy.stunTimer || 0) > 0) &&
+        !((enemy.parriedRiposteTimer || 0) > 0)
+      ) {
+        return { active: true, reason: 'boss_short_recover_cd' };
+      }
+      if (enemy.soulsPunishWindow && (soulsSt === 'recover' || soulsSt === 'hit_react')) {
+        return { active: false, reason: `punish_window_${enemy.soulsPunishWindow}` };
+      }
     }
     if (BOSS_HYPER_ARMOR_STATES.has(soulsSt)) {
       return { active: true, reason: `boss_souls_${soulsSt}` };
@@ -486,16 +595,20 @@ export function getEnemyHyperArmorState(enemy, opts = null) {
   }
 
   // Ordinary Souls mobs & regular mobs:
-  // Vulnerable to micro-poise during idle/stalk/walk/recover/early windup,
-  // but committed strikes (and bull charges) keep brief follow-through Hyper-Armor.
+  // Authentic Dark Souls rule: if the player strikes a regular Souls mob FIRST during its windup
+  // (or before its blade connects), the mob does NOT get hyper-armor — its attack is cleanly interrupted!
   if (chargeSt === 'charging') {
     return { active: true, reason: 'mob_charging' };
   }
-  if (soulsSt === 'attack' || soulsSt === 'attacking' || soulsSt === 'active' || soulsSt === 'strike') {
-    return { active: true, reason: 'mob_committed_strike' };
-  }
-  if (soulsSt === 'windup' && (enemy.soulsTimer || 0) <= 0.18) {
-    return { active: true, reason: 'mob_late_windup' };
+  if (!enemy.isSoulsUnit) {
+    if (soulsSt === 'attack' || soulsSt === 'attacking' || soulsSt === 'active' || soulsSt === 'strike') {
+      return { active: true, reason: 'mob_committed_strike' };
+    }
+    if (soulsSt === 'windup' && (enemy.soulsTimer || 0) <= 0.18) {
+      return { active: true, reason: 'mob_late_windup' };
+    }
+  } else if (soulsSt === 'active' && enemy._lastSwingConnected) {
+    return { active: true, reason: 'mob_already_connected' };
   }
 
   return { active: false, reason: 'none' };
@@ -515,6 +628,41 @@ export function computeHitPoiseDamage(hitInfo = {}, enemy = null) {
   if (!hitInfo || hitInfo.isDoT) return 0;
   if (Number.isFinite(Number(hitInfo.poiseDamage))) {
     return Math.max(0, Number(hitInfo.poiseDamage));
+  }
+
+  const dmg = Number(hitInfo.damage) || 0;
+
+  // Calibrated DS3 / Elden Ring Boss poise intake (~68 base threshold, escalating +14 up to 110):
+  //   - 1 Hero heavy / charged / guard-counter / finisher strike breaks base Boss poise (72..96 >= 68).
+  //   - 2 quick R1 strikes break base Boss poise (36 + 36 = 72 >= 68), while 1 light poke (36) holds.
+  if (enemy?.isSoulsBoss && !hitInfo.isShotgunPellet && !hitInfo.isProjectile) {
+    const atkKey = typeof hitInfo.attackKey === 'string' ? hitInfo.attackKey.trim().toLowerCase() : '';
+    const isCharged = Boolean(
+      hitInfo.isCharged ||
+      hitInfo.isChargedHeavy ||
+      atkKey === 'charged_r2' ||
+      hitInfo.isParryRiposte ||
+      hitInfo.isBarrelBlast
+    );
+    if (isCharged) return 96;
+
+    const isHeavyOrCounter = Boolean(
+      hitInfo.isHeavy ||
+      hitInfo.isCounter ||
+      hitInfo.isGuardCounter ||
+      hitInfo.isPierceCounter ||
+      hitInfo.isComboFinisher ||
+      hitInfo.isWaterSlam ||
+      atkKey === 'r2' ||
+      atkKey === 'guard_counter' ||
+      atkKey === 'r1_3' ||
+      atkKey === 'jump_r2' ||
+      Number(hitInfo.stanceDmg) >= 18 ||
+      dmg >= 56
+    );
+    if (isHeavyOrCounter) return 72;
+
+    return 36;
   }
 
   let base = 24;
@@ -537,7 +685,6 @@ export function computeHitPoiseDamage(hitInfo = {}, enemy = null) {
   if (hitInfo.isWaterSlam) bonus += 38;
   if (hitInfo.isParryRiposte) bonus += 60;
 
-  const dmg = Number(hitInfo.damage) || 0;
   const maxHp = Number(enemy?.maxHp) || 0;
   if (dmg > 0 && maxHp > 0 && dmg >= maxHp * 0.08) {
     bonus += 14;
@@ -550,36 +697,43 @@ export function computeHitPoiseDamage(hitInfo = {}, enemy = null) {
  * Evaluates whether a player hit triggers a brief Hit_React / Hit_A microstun on an enemy/boss.
  * Strictly enforces:
  *   - Independent from main stagger/staggerMax (never interrupts Stagger_Kneel or Stagger_Recover).
- *   - Hyper-Armor blocks interruption during active attacks/leaps/whirlwinds/roars/throne rise.
- *   - Anti-stunlock immunity cooldown (poiseImmunitySec) prevents click-spam stunlocking.
+ *   - Hyper-Armor blocks interruption during active swings/leaps/whirlwinds/roars/throne rise.
+ *   - Conditional Souls Boss early-windup (`<= 0.68`) & neutral poise interrupt gated by `bossPoiseInterruptCd = 10.5s`.
+ *   - Regular Souls mob 1st-hit windup interrupt (`Hit_React`) + 2-hit R1 combo stagger kept 100% intact.
  */
 export function evaluateEnemyHitReact(enemy, hitInfo = {}, opts = null) {
   if (opts?.isSoulslike === false || hitInfo?.isSoulslike === false) {
     return {
       triggered: false,
       shouldReact: false,
+      shouldStun: false,
       reason: 'pve_mode_disabled',
       hyperArmored: false,
       joltScale: 0,
       clipName: null,
+      flinchAnim: null,
       clipSpeed: 1.0,
       microStunSec: 0,
       immunitySec: 0,
-      interruptsAttack: false
+      interruptsAttack: false,
+      interruptsActiveAttack: false
     };
   }
   if (!enemy || enemy.hp <= 0) {
     return {
       triggered: false,
       shouldReact: false,
+      shouldStun: false,
       reason: 'dead',
       hyperArmored: false,
       joltScale: 0,
       clipName: null,
+      flinchAnim: null,
       clipSpeed: 1.0,
       microStunSec: 0,
       immunitySec: 0,
-      interruptsAttack: false
+      interruptsAttack: false,
+      interruptsActiveAttack: false
     };
   }
 
@@ -587,15 +741,19 @@ export function evaluateEnemyHitReact(enemy, hitInfo = {}, opts = null) {
 
   if (hitInfo?.isDoT) {
     return {
+      triggered: false,
       shouldReact: false,
+      shouldStun: false,
       reason: 'dot',
       hyperArmored: false,
       joltScale: 0,
       clipName: null,
+      flinchAnim: null,
       clipSpeed: profile.hitSpeed,
       microStunSec: 0,
       immunitySec: enemy.poiseImmunityTimer,
       interruptsAttack: false,
+      interruptsActiveAttack: false,
       poise: enemy.poise,
       poiseMax: enemy.poiseMax,
       poiseDamage: enemy.poiseDamage,
@@ -606,18 +764,27 @@ export function evaluateEnemyHitReact(enemy, hitInfo = {}, opts = null) {
   const soulsSt = normState(enemy.soulsState);
   const bossSt = normState(enemy.bossSubState);
 
-  // Never override a full Stance Break (Stagger_Kneel) with a standing Hit_React!
-  if ((enemy.staggeredTimer || 0) > 0 || STAGGER_KNEEL_STATES.has(soulsSt) || STAGGER_KNEEL_STATES.has(bossSt)) {
+  // Never override a full Stance Break (Stagger_Kneel), Stagger_Recover, Riposte, Roar, or Airborne Leap!
+  if (
+    (enemy.staggeredTimer || 0) > 0 ||
+    STAGGER_KNEEL_STATES.has(soulsSt) ||
+    STAGGER_KNEEL_STATES.has(bossSt) ||
+    (enemy.isSoulsBoss && BOSS_UNINTERRUPTIBLE_STATES.has(soulsSt))
+  ) {
     return {
+      triggered: false,
       shouldReact: false,
+      shouldStun: false,
       reason: 'already_staggered',
       hyperArmored: true,
       joltScale: profile.joltScaleHyperArmor,
       clipName: null,
+      flinchAnim: null,
       clipSpeed: profile.hitSpeed,
       microStunSec: 0,
       immunitySec: enemy.poiseImmunityTimer,
       interruptsAttack: false,
+      interruptsActiveAttack: false,
       poise: enemy.poise,
       poiseMax: enemy.poiseMax,
       poiseDamage: enemy.poiseDamage,
@@ -631,11 +798,33 @@ export function evaluateEnemyHitReact(enemy, hitInfo = {}, opts = null) {
   const punishPoiseMult = punishWindow === 'heavy' ? 1.4 : punishWindow === 'light' ? 1.2 : 1.0;
   const poiseHit = Math.round(poiseHitBase * punishPoiseMult);
 
-  // 1) Hyper-Armor check (active boss/elite attack, leap, whirl, roar, throne rise, stagger_recover)
+  // Souls Boss 10.5s conditional poise interrupt cooldown: prevents infinite poise stunlocking!
+  if (enemy.isSoulsBoss && (enemy.bossPoiseInterruptCd || 0) > 0 && !hitInfo?.ignorePoiseImmunity) {
+    return {
+      triggered: false,
+      shouldReact: false,
+      shouldStun: false,
+      reason: 'boss_poise_cooldown',
+      hyperArmored: true,
+      joltScale: profile.joltScaleHyperArmor,
+      clipName: null,
+      flinchAnim: null,
+      clipSpeed: profile.hitSpeed,
+      microStunSec: 0,
+      immunitySec: enemy.bossPoiseInterruptCd,
+      bossPoiseInterruptCd: enemy.bossPoiseInterruptCd,
+      interruptsAttack: false,
+      interruptsActiveAttack: false,
+      poise: enemy.poise,
+      poiseMax: enemy.poiseMax,
+      poiseDamage: enemy.poiseDamage,
+      poiseRatio: enemy.poiseMax > 0 ? clamp01(enemy.poise / enemy.poiseMax) : 1
+    };
+  }
+
+  // 1) Hyper-Armor check (committed late windup, active swing, leap, whirl_spin, roar, throne rise, stagger_recover)
   const haState = getEnemyHyperArmorState(enemy, opts);
   if (haState.active && !hitInfo?.bypassHyperArmor) {
-    // Allow a small capped poise chip during Hyper-Armor without ever breaking or interrupting
-    // (main stagger / staggerMax accumulates separately and breaks through at 100%).
     if (poiseHit > 0 && profile.hyperArmorPoiseLeak > 0 && enemy.poiseImmunityTimer <= 0) {
       const cap = enemy.poiseMax * profile.hyperArmorPoiseCapRatio;
       if (enemy.poiseDamage < cap) {
@@ -645,16 +834,20 @@ export function evaluateEnemyHitReact(enemy, hitInfo = {}, opts = null) {
       enemy.poiseLastHitAge = 0;
     }
     return {
+      triggered: false,
       shouldReact: false,
+      shouldStun: false,
       reason: 'hyper_armor',
       hyperArmorReason: haState.reason,
       hyperArmored: true,
       joltScale: profile.joltScaleHyperArmor,
       clipName: null,
+      flinchAnim: null,
       clipSpeed: profile.hitSpeed,
       microStunSec: 0,
       immunitySec: enemy.poiseImmunityTimer,
       interruptsAttack: false,
+      interruptsActiveAttack: false,
       poise: enemy.poise,
       poiseMax: enemy.poiseMax,
       poiseDamage: enemy.poiseDamage,
@@ -662,18 +855,36 @@ export function evaluateEnemyHitReact(enemy, hitInfo = {}, opts = null) {
     };
   }
 
-  // 2) Anti-stunlock immunity cooldown check (prevents consecutive flinch chains!)
-  if ((enemy.poiseMicroStunTimer || 0) > 0) {
+  // 2) Anti-stunlock immunity & Dark Souls 2-hit combo / counter-hit interrupt check:
+  //    - Regular Souls mobs allow up to `maxConsecutiveFlinches` (2 consecutive R1 staggers, e.g. R1_1 -> R1_2)
+  //      before arming brief poise escape (`1.05s`), AND striking a regular mob FIRST while it is winding up an
+  //      attack ALWAYS interrupts its attack!
+  const isRegularSoulsMob = Boolean(enemy.isSoulsUnit && !enemy.isSoulsBoss && !enemy.isBoss);
+  const maxChainFlinches = Math.max(1, Number(profile.maxConsecutiveFlinches) || 1);
+  const isCounteringMobAttack =
+    isRegularSoulsMob &&
+    (soulsSt === 'windup' || normState(enemy.aiState) === 'windup' || (soulsSt === 'active' && !enemy._lastSwingConnected));
+  const curChainFlinches = Number(enemy._consecFlinches) || 0;
+  const allowChainFollowup =
+    isRegularSoulsMob &&
+    curChainFlinches < maxChainFlinches &&
+    (enemy.poiseLastHitAge || 0) >= 0.12;
+
+  if ((enemy.poiseMicroStunTimer || 0) > 0 && !allowChainFollowup && !isCounteringMobAttack) {
     return {
+      triggered: false,
       shouldReact: false,
+      shouldStun: false,
       reason: 'already_flinching',
       hyperArmored: false,
       joltScale: profile.joltScaleHyperArmor,
       clipName: null,
+      flinchAnim: null,
       clipSpeed: profile.hitSpeed,
       microStunSec: 0,
       immunitySec: enemy.poiseImmunityTimer,
       interruptsAttack: false,
+      interruptsActiveAttack: false,
       poise: enemy.poise,
       poiseMax: enemy.poiseMax,
       poiseDamage: enemy.poiseDamage,
@@ -681,17 +892,21 @@ export function evaluateEnemyHitReact(enemy, hitInfo = {}, opts = null) {
     };
   }
 
-  if ((enemy.poiseImmunityTimer || 0) > 0 && !hitInfo?.ignorePoiseImmunity) {
+  if ((enemy.poiseImmunityTimer || 0) > 0 && !hitInfo?.ignorePoiseImmunity && !isCounteringMobAttack) {
     return {
+      triggered: false,
       shouldReact: false,
+      shouldStun: false,
       reason: 'immunity_cooldown',
       hyperArmored: false,
       joltScale: profile.joltScaleNormal,
       clipName: null,
+      flinchAnim: null,
       clipSpeed: profile.hitSpeed,
       microStunSec: 0,
       immunitySec: enemy.poiseImmunityTimer,
       interruptsAttack: false,
+      interruptsActiveAttack: false,
       poise: enemy.poise,
       poiseMax: enemy.poiseMax,
       poiseDamage: enemy.poiseDamage,
@@ -699,22 +914,26 @@ export function evaluateEnemyHitReact(enemy, hitInfo = {}, opts = null) {
     };
   }
 
-  // 3) Outside Hyper-Armor & off immunity cooldown -> accumulate micro-poise
+  // 3) Outside Hyper-Armor & off immunity cooldown -> accumulate poise damage
   enemy.poiseLastHitAge = 0;
   enemy.poiseDamage = Math.min(enemy.poiseMax, enemy.poiseDamage + poiseHit);
   enemy.poise = Math.max(0, enemy.poiseMax - enemy.poiseDamage);
 
-  if (enemy.poiseDamage < enemy.poiseMax && !hitInfo?.forceMicroStun) {
+  if (enemy.poiseDamage < enemy.poiseMax && !hitInfo?.forceMicroStun && !isCounteringMobAttack) {
     return {
+      triggered: false,
       shouldReact: false,
+      shouldStun: false,
       reason: 'poise_holding',
       hyperArmored: false,
       joltScale: profile.joltScaleNormal,
       clipName: null,
+      flinchAnim: null,
       clipSpeed: profile.hitSpeed,
       microStunSec: 0,
       immunitySec: 0,
       interruptsAttack: false,
+      interruptsActiveAttack: false,
       poise: enemy.poise,
       poiseMax: enemy.poiseMax,
       poiseDamage: enemy.poiseDamage,
@@ -722,36 +941,80 @@ export function evaluateEnemyHitReact(enemy, hitInfo = {}, opts = null) {
     };
   }
 
-  // 4) Micro-poise threshold reached -> trigger single expressive Hit_React / Hit_React_Gut / Hit_A + arm immunity!
+  // 4) Poise threshold reached -> trigger Hit_React_Gut (Souls Boss) or Hit_React (Souls Mob)!
   enemy.poiseDamage = 0;
-  enemy.poise = enemy.poiseMax;
   enemy.poiseBreakCount = (enemy.poiseBreakCount || 0) + 1;
-  const useGutReact =
-    Boolean(enemy.isSoulsBoss && profile.punishHitClip) &&
-    (Boolean(punishWindow) || enemy.poiseBreakCount % 2 === 0);
-  const chosenClip = useGutReact ? profile.punishHitClip : profile.hitClip;
-  const chosenSpeed = useGutReact ? (profile.punishHitSpeed || 2.15) : profile.hitSpeed;
-  const chosenMicroStunSec = useGutReact ? (profile.punishMicroStunSec || 0.42) : profile.microStunSec;
+
+  if (enemy.isSoulsBoss) {
+    const maxBonus = BOSS_POISE_CFG.maxPoiseCap - BOSS_POISE_CFG.basePoiseMax;
+    enemy.bossPoiseBonus = Math.min(
+      maxBonus,
+      Math.max(0, Number(enemy.bossPoiseBonus) || 0) + BOSS_POISE_CFG.escalationPerInterrupt
+    );
+    enemy.poiseMax = resolveSoulsBossPoiseMax(enemy, profile);
+    enemy.poise = enemy.poiseMax;
+    enemy.bossPoiseInterruptCd = BOSS_POISE_CFG.interruptCooldownSec;
+    enemy._consecFlinches = 1;
+    const bossClip = BOSS_POISE_CFG.interruptClip;
+    const bossSpeed = BOSS_POISE_CFG.interruptClipSpeed;
+    const bossStunSec = BOSS_POISE_CFG.interruptMicroStunSec;
+    enemy.poiseMicroStunTimer = bossStunSec;
+    enemy.poiseImmunityTimer = profile.poiseImmunitySec;
+
+    return {
+      triggered: true,
+      shouldReact: true,
+      shouldStun: true,
+      reason: haState.reason === 'boss_early_windup_open' ? 'boss_windup_poise_interrupt' : 'boss_poise_break',
+      hyperArmored: false,
+      joltScale: profile.joltScaleBreak,
+      clipName: bossClip,
+      flinchAnim: bossClip,
+      clipSpeed: bossSpeed,
+      microStunSec: bossStunSec,
+      immunitySec: BOSS_POISE_CFG.interruptCooldownSec,
+      bossPoiseInterruptCd: enemy.bossPoiseInterruptCd,
+      interruptsAttack: true,
+      interruptsActiveAttack: true,
+      poise: enemy.poise,
+      poiseMax: enemy.poiseMax,
+      poiseDamage: 0,
+      poiseRatio: 1
+    };
+  }
+
+  enemy.poise = enemy.poiseMax;
+  const nextChain = isCounteringMobAttack && curChainFlinches >= maxChainFlinches ? maxChainFlinches : curChainFlinches + 1;
+  enemy._consecFlinches = nextChain;
+  const chosenClip = profile.hitClip;
+  const chosenSpeed = profile.hitSpeed;
+  const chosenMicroStunSec = profile.microStunSec;
   enemy.poiseMicroStunTimer = chosenMicroStunSec;
-  enemy.poiseImmunityTimer = profile.poiseImmunitySec;
+  enemy.poiseImmunityTimer = nextChain >= maxChainFlinches ? profile.poiseImmunitySec : 0;
+  const interruptsActive = Boolean(profile.interruptsActiveAttack);
 
   return {
     triggered: true,
     shouldReact: true,
-    reason: 'poise_break',
+    shouldStun: true,
+    reason: isCounteringMobAttack ? 'counter_interrupt' : 'poise_break',
     hyperArmored: false,
     joltScale: profile.joltScaleBreak,
     clipName: chosenClip,
+    flinchAnim: chosenClip,
     clipSpeed: chosenSpeed,
     microStunSec: chosenMicroStunSec,
-    immunitySec: profile.poiseImmunitySec,
-    interruptsAttack: Boolean(profile.interruptsActiveAttack),
+    immunitySec: enemy.poiseImmunityTimer,
+    interruptsAttack: interruptsActive,
+    interruptsActiveAttack: interruptsActive,
     poise: enemy.poise,
     poiseMax: enemy.poiseMax,
     poiseDamage: 0,
     poiseRatio: 1
   };
 }
+
+export const evaluateEnemyPoiseHit = evaluateEnemyHitReact;
 
 /**
  * Evaluates whether an unblocked enemy/boss hit triggers the Warrior's tiered hitstun ('Impact').
@@ -943,16 +1206,34 @@ export function cancelPlayerMicroStun(player) {
 export function tickEnemyPoise(enemy, dt, opts = null) {
   if (!enemy || !(dt > 0)) return;
   const profile = ensureEnemyPoiseState(enemy, opts);
+  enemy.bossPoiseInterruptCd = Math.max(0, (enemy.bossPoiseInterruptCd || 0) - dt);
   if ((enemy.poiseMicroStunTimer || 0) > 0) {
     enemy.poiseMicroStunTimer = Math.max(0, enemy.poiseMicroStunTimer - dt);
   }
   if ((enemy.poiseImmunityTimer || 0) > 0) {
     enemy.poiseImmunityTimer = Math.max(0, enemy.poiseImmunityTimer - dt);
+    if (enemy.poiseImmunityTimer <= 0 && (enemy._consecFlinches || 0) > 0) {
+      enemy._consecFlinches = 0;
+    }
   }
   if ((enemy.hyperArmorTimer || 0) > 0) {
     enemy.hyperArmorTimer = Math.max(0, enemy.hyperArmorTimer - dt);
   }
   enemy.poiseLastHitAge = (enemy.poiseLastHitAge || 0) + dt;
+  if ((enemy._consecFlinches || 0) > 0 && enemy.poiseLastHitAge >= 1.35 && (enemy.poiseImmunityTimer || 0) <= 0) {
+    enemy._consecFlinches = 0;
+  }
+  if (
+    enemy.isSoulsBoss &&
+    (enemy.bossPoiseBonus || 0) > 0 &&
+    enemy.poiseMicroStunTimer <= 0 &&
+    enemy.poiseLastHitAge >= BOSS_POISE_CFG.escalationDecayDelaySec
+  ) {
+    enemy.bossPoiseBonus = Math.max(0, enemy.bossPoiseBonus - BOSS_POISE_CFG.escalationDecayRate * dt);
+    enemy.poiseMax = resolveSoulsBossPoiseMax(enemy, profile);
+    enemy.poiseDamage = Math.max(0, Math.min(enemy.poiseMax, enemy.poiseDamage));
+    enemy.poise = Math.max(0, enemy.poiseMax - enemy.poiseDamage);
+  }
   if (
     enemy.poiseDamage > 0 &&
     enemy.poiseMicroStunTimer <= 0 &&
@@ -996,6 +1277,8 @@ export function tickPoiseTimers(entity, dt, opts = null) {
   }
 }
 
+export const tickEntityPoise = tickPoiseTimers;
+
 /**
  * Initializes or resets poise / microstun state on an enemy or the player.
  * For enemies (e.g. on spawn or right after Stagger_Kneel):
@@ -1022,12 +1305,20 @@ export function resetEntityPoise(entity, opts = null) {
   }
 
   const profile = getEnemyPoiseProfile(entity, opts?.profiles);
-  entity.poiseMax = profile.poiseMax;
+  if (!opts?.keepCooldown && !opts?.grantImmunity) {
+    entity.bossPoiseInterruptCd = 0;
+    entity.bossPoiseBonus = 0;
+  } else {
+    if (!Number.isFinite(entity.bossPoiseInterruptCd)) entity.bossPoiseInterruptCd = 0;
+    if (!Number.isFinite(entity.bossPoiseBonus)) entity.bossPoiseBonus = 0;
+  }
+  entity.poiseMax = entity.isSoulsBoss ? resolveSoulsBossPoiseMax(entity, profile) : profile.poiseMax;
   entity.poiseDamage = 0;
-  entity.poise = profile.poiseMax;
+  entity.poise = entity.poiseMax;
   entity.poiseLastHitAge = 0;
   entity.poiseMicroStunTimer = 0;
   entity.poiseBreakCount = 0;
+  entity._consecFlinches = 0;
   entity.hyperArmorTimer = 0;
   if (opts?.grantImmunity) {
     entity.poiseImmunityTimer = profile.poiseImmunitySec;
@@ -1052,6 +1343,7 @@ export function createPoiseController(config = {}) {
 
   return {
     config: opts,
+    BOSS_POISE_CFG,
     STANCE_DAMAGE_TABLE,
     STANCE_REGEN_RATE,
     PLAYER_HITSTUN_SPECS,
@@ -1069,6 +1361,8 @@ export function createPoiseController(config = {}) {
       isEnemyHyperArmored(enemy, callOpts ? { ...opts, ...callOpts } : opts),
     evaluateEnemyHitReact: (enemy, hitInfo = {}, callOpts = null) =>
       evaluateEnemyHitReact(enemy, hitInfo, callOpts ? { ...opts, ...callOpts } : opts),
+    evaluateEnemyPoiseHit: (enemy, hitInfo = {}, callOpts = null) =>
+      evaluateEnemyHitReact(enemy, hitInfo, callOpts ? { ...opts, ...callOpts } : opts),
     evaluatePlayerMicroStun: (player, hitInfo = {}, callOpts = null) =>
       evaluatePlayerMicroStun(player, hitInfo, callOpts ? { ...opts, ...callOpts } : opts),
     evaluatePlayerHitReact: (player, hitInfo = {}, callOpts = null) =>
@@ -1078,6 +1372,8 @@ export function createPoiseController(config = {}) {
     tickEnemyPoise: (enemy, dt) => tickEnemyPoise(enemy, dt, opts),
     tickPlayerPoise: (player, dt) => tickPlayerPoise(player, dt, opts),
     tickPoiseTimers: (entity, dt, callOpts = null) =>
+      tickPoiseTimers(entity, dt, callOpts ? { ...opts, ...callOpts } : opts),
+    tickEntityPoise: (entity, dt, callOpts = null) =>
       tickPoiseTimers(entity, dt, callOpts ? { ...opts, ...callOpts } : opts),
     tickCombatPoise: (player, enemies, dt) => {
       if (!(dt > 0)) return;

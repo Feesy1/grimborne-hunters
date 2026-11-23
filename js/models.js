@@ -8,7 +8,7 @@ import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { DRACOLoader } from '../vendor/DRACOLoader.js';
 import { clone as cloneSkinned } from '../vendor/SkeletonUtils.js';
-import { WEAPONS } from './config.js?v=20261123z71';
+import { WEAPONS } from './config.js?v=20261124z84';
 import {
   getGeo,
   getMat,
@@ -17,63 +17,42 @@ import {
   createAnimController,
   setBoneRelEuler,
   solveMixamoArmIK
-} from './models/shared.js?v=20261123z71';
+} from './models/shared.js?v=20261124z84';
 import {
   getWarriorWeaponMountConfig,
   createWarriorStanceState,
   applyWarriorWeaponStance,
   applyWarriorAttackOverlay
-} from './models/warriorStances.js?v=20261123z71';
+} from './models/warriorStances.js?v=20261124z84';
 import {
   computeFootSyncPlaybackRate,
   computeCombatPostureDynamics,
   applyCombatPostureToObject3D,
   applyCombatRecoilImpulse
-} from './souls/soulsPhysicsFeel.js?v=20261123z71';
-import { createActorContactShadowMesh } from './souls/soulsAtmosphere.js?v=20261123z71';
+} from './souls/soulsPhysicsFeel.js?v=20261124z84';
+import { createActorContactShadowMesh } from './souls/soulsAtmosphere.js?v=20261124z84';
 import {
   applyEldenDissolveToModel,
   resetEldenDissolveFromModel
-} from './souls/soulsDissolveVfx.js?v=20261123z71';
+} from './souls/soulsDissolveVfx.js?v=20261124z84';
 
 const MODEL_PATHS = {
-  gunslinger_tripo: './assets/models/Gunslinger_Tripo.glb?v=20261120z34',
-  // New clean warrior with Mixamo "Sword And Shield Run" baked in as Running_A + custom diagonal Slash v4 + 60 FPS Turn_180 + 60 FPS Combat_Roll + 60 FPS Heavy_Thrust + 60 FPS Door_Push.
-  warrior_run: './assets/models/Warrior_Run.glb?v=20261123z71',
+  // Warrior Knight (Mixamo Sword & Shield Run + Diagonal Slash + Turn_180 + Combat_Roll + Heavy_Thrust + Door_Push)
+  warrior_run: './assets/models/Warrior_Run.glb?v=20261124z84',
 
+  // All 5 Warrior Melee Weapons + Shield (preserved for in-world discovery & future equipment!)
   sword_tripo: './assets/models/Sword_Tripo.glb?v=20261120z34',
   shield_custom: './assets/models/Shield_Custom.glb?v=20261120z34',
   spear_tripo: './assets/models/Spear_Tripo.glb?v=20261120z34',
   zweihander_tripo: './assets/models/Zweihander_Tripo.glb?v=20261120z34',
   axe_tripo: './assets/models/Axe_Tripo.glb?v=20261120z34',
   hammer_tripo: './assets/models/Hammer_Tripo.glb?v=20261120z34',
-  mage_tripo: './assets/models/Mage_Tripo.glb?v=20261120z34',
-  staff_tripo: './assets/models/Staff_Tripo.glb?v=20261120z34',
-  shotgun_tripo: './assets/models/Shotgun_Tripo.glb?v=20261120z34',
-  pistol_tripo: './assets/models/Pistol_Tripo.glb?v=20261120z34',
-  colt_tripo: './assets/models/Colt_Tripo.glb?v=20261120z34',
-  smg_tripo: './assets/models/SMG_Tripo.glb?v=20261120z34',
-  ak47_tripo: './assets/models/AK47_Tripo.glb?v=20261120z34',
-  zombie_tripo: './assets/models/Zombie_Tripo.glb?v=20261120z34',
-  tree_tripo: './assets/models/Tree_Tripo.glb?v=20261120z34',
-  dracula_tripo: './assets/models/Dracula_Tripo.glb?v=20261120z34',
-  mimic_tripo: './assets/models/Mimic_Tripo.glb?v=20261120z34',
-  chest_disguise_tripo: './assets/models/Chest_Disguise_Tripo.glb?v=20261120z34',
-  lich_tripo: './assets/models/Lich_Tripo.glb?v=20261120z34',
-  troll_tripo: './assets/models/Troll_Tripo.glb?v=20261123z71',
-  rift_boss: './assets/models/Rift_Boss_Tripo.glb?v=20261123z71',
-  rift_executioner: './assets/models/Rift_Executioner_Tripo.glb?v=20261123z71',
-  rift_vanguard: './assets/models/Rift_Vanguard_Tripo.glb?v=20261123z71',
-  rift_acolyte: './assets/models/Rift_Acolyte_Tripo.glb?v=20261123z71',
-  succubus_tripo: './assets/models/Succubus_Tripo.glb?v=20261120z34',
-  spider_tripo: './assets/models/Spider_Tripo.glb?v=20261120z34',
-  barbarian: './assets/models/Barbarian.glb?v=20261120z34',
-  knight: './assets/models/Knight.glb?v=20261120z34',
-  skel_minion: './assets/models/Skeleton_Minion.glb?v=20261120z34',
-  skel_mage: './assets/models/Skeleton_Mage.glb?v=20261120z34',
-  skel_warrior: './assets/models/Skeleton_Warrior.glb?v=20261120z34',
-  chest: './assets/env/chest.glb?v=20261120z34',
-  chest_gold: './assets/env/chest_gold.glb?v=20261120z34'
+
+  // Castle of Ash Enemies & Boss (Boss untouched!)
+  rift_boss: './assets/models/Rift_Boss_Tripo.glb?v=20261124z84',
+  rift_executioner: './assets/models/Rift_Executioner_Tripo.glb?v=20261124z84',
+  rift_vanguard: './assets/models/Rift_Vanguard_Tripo.glb?v=20261124z84',
+  rift_acolyte: './assets/models/Rift_Acolyte_Tripo.glb?v=20261124z84'
 };
 
 const gltfCache = new Map();
@@ -95,9 +74,9 @@ let cachedStaffGlobeAlphaTex = null;
 // Auto-activates in souls_citadel (uSoulsRimStrength = 0.38) and stays 0.0 in
 // Hub / PvE unless overridden via setSoulsRimLight(enabled, opts).
 // ============================================================================
-const SOULS_RIM_DEFAULT_STRENGTH = 0.38;
-const SOULS_RIM_DEFAULT_POWER = 2.55;
-const SOULS_RIM_COLOR_HEX = 0x8ab4f8;
+const SOULS_RIM_DEFAULT_STRENGTH = 0.16;
+const SOULS_RIM_DEFAULT_POWER = 2.85;
+const SOULS_RIM_COLOR_HEX = 0x687b9e;
 
 const SOULS_RIM_UNIFORMS = {
   uSoulsRimColor: { value: new THREE.Color(SOULS_RIM_COLOR_HEX) },
@@ -824,7 +803,7 @@ function loadSingleModelKey(key) {
             //    on the Hub pedestal with zero knee/foot micro-twitch while keeping natural upper-body breathing.
             if (key === 'warrior_run') {
               const LOWER_BODY_RE = /(?:Hips|UpLeg|Leg|Foot|Toe)/i;
-              if (/^(?:Running_A|Running_Back)(?:\.\d+)?$/i.test(clip.name || '')) {
+              if (/^(?:Running_A|Sprint_A|Running_Back)(?:\.\d+)?$/i.test(clip.name || '')) {
                 const legMeans = new Map();
                 for (const tr of clip.tracks || []) {
                   if (/^mixamorig:?Hips\.position$/i.test(tr?.name || '') && tr.values && tr.values.length >= 6) {
@@ -837,7 +816,7 @@ function loadSingleModelKey(key) {
                     for (let i = 0; i < count; i++) {
                       v[i * 3 + 2] -= z0 + dz * (i / denom);
                     }
-                  } else if (/^Running_A(?:\.\d+)?$/i.test(clip.name || '') && /^mixamorig:?(LeftUpLeg|RightUpLeg|LeftLeg|RightLeg)\.quaternion$/i.test(tr?.name || '') && tr.values && tr.values.length >= 8) {
+                  } else if (/^(?:Running_A|Sprint_A)(?:\.\d+)?$/i.test(clip.name || '') && /^mixamorig:?(LeftUpLeg|RightUpLeg|LeftLeg|RightLeg)\.quaternion$/i.test(tr?.name || '') && tr.values && tr.values.length >= 8) {
                     const m = tr.name.match(/^mixamorig:?(LeftUpLeg|RightUpLeg|LeftLeg|RightLeg)\.quaternion$/i);
                     const v = tr.values;
                     const cnt = Math.floor(v.length / 4);
@@ -1080,7 +1059,7 @@ function loadSingleModelKey(key) {
               }
               // Build complementary lower-body-only clip for Idle / Running_A / Running_Back
               // so upper-body attacks play at 100% pure amplitude (0% Idle/Run dilution on arms & torso!)
-              if (/^(?:Idle|Running_A|Running_Back)(?:\.\d+)?$/i.test(clip.name || '')) {
+              if (/^(?:Idle|Running_A|Sprint_A|Running_Back)(?:\.\d+)?$/i.test(clip.name || '')) {
                 const lowerTracks = (clip.tracks || []).filter((tr) => {
                   const nodePart = (tr?.name || '').split('.')[0] || '';
                   return LOWER_BODY_RE.test(nodePart);
@@ -1183,6 +1162,7 @@ function loadSingleModelKey(key) {
                   }
                   const staffCutoutAlpha = isStaffMesh && m.map?.image ? buildStaffGlobeCutoutAlphaMap(m.map.image) : null;
                   const isHeroKnight = key === 'warrior_run';
+                  const isShieldCustom = key === 'shield_custom';
                   const std = new THREE.MeshStandardMaterial({
                     map: m.map || null,
                     alphaMap: staffCutoutAlpha || null,
@@ -1191,10 +1171,10 @@ function loadSingleModelKey(key) {
                     normalScale: new THREE.Vector2(isHeroKnight ? 1.45 : 1.72, isHeroKnight ? 1.45 : 1.72),
                     roughnessMap: m.roughnessMap || null,
                     metalnessMap: m.metalnessMap || null,
-                    color: isHeroKnight ? 0xdce0e8 : 0xffffff,
-                    roughness: isHeroKnight ? 0.82 : (isTripoWeapon || isEmbeddedWeapon || key === 'warrior_tripo' ? 0.48 : 0.60),
-                    metalness: isHeroKnight ? 0.34 : (isTripoWeapon || isEmbeddedWeapon || key === 'warrior_tripo' ? 0.46 : 0.20),
-                    envMapIntensity: isHeroKnight ? 0.62 : 1.0
+                    color: isHeroKnight ? 0x868c98 : isShieldCustom ? 0x9ea3b0 : 0xffffff,
+                    roughness: isHeroKnight ? 0.78 : (isTripoWeapon || isEmbeddedWeapon || key === 'warrior_tripo' ? 0.52 : 0.60),
+                    metalness: isHeroKnight ? 0.42 : (isTripoWeapon || isEmbeddedWeapon || key === 'warrior_tripo' ? 0.48 : 0.20),
+                    envMapIntensity: isHeroKnight ? 0.44 : isShieldCustom ? 0.52 : 1.0
                   });
                   const allowEyeMap = !isEmbeddedWeapon && (key !== 'gunslinger_tripo' || /tripo_part_0/i.test(node.name));
                   if (eyeEmissiveTex && allowEyeMap) {
@@ -1262,79 +1242,43 @@ export function resetFailedModelKeys() {
   failedModelKeys.clear();
 }
 
-export function getBootModelKeys(classId = 'warrior', weaponId = null, levelDef = null) {
-  const isSouls = isSoulsLevelOrBiome(levelDef);
+export function getBootModelKeys(_classId = 'warrior', weaponId = 'club') {
   const set = new Set([
-    getHeroAssetKey(classId),
-    ...(classId === 'warrior' ? ['shield_custom'] : []),
-    getWeaponAssetKey(weaponId || (classId === 'gunslinger' ? 'usp_pistol' : classId === 'mage' ? 'spark_staff' : 'club')),
-    'zombie_tripo',
-    'chest',
-    'chest_gold',
-    'skel_minion',
-    'skel_warrior'
+    'warrior_run',
+    'shield_custom',
+    getWeaponAssetKey(weaponId || 'club'),
+    ...SOULS_RIFT_BIOME_KEYS
   ]);
-  const pool = [
-    ...(levelDef?.enemyPool || []),
-    ...(levelDef?.enemies || []),
-    ...Object.keys(levelDef?.enemyQuotas || {}),
-    ...(levelDef?.miniBossPool || []),
-    ...(levelDef?.finaleBosses || []),
-    levelDef?.bossId,
-    levelDef?.coBossId,
-    levelDef?.finaleMiniBossType
-  ];
-  for (const eType of pool) {
-    if (!eType) continue;
-    const canon = ENEMY_TYPE_ALIASES?.[eType] || eType;
-    const resolved = isSouls && SOULS_RIFT_ENEMY_MAP[canon] ? SOULS_RIFT_ENEMY_MAP[canon] : canon;
-    const k = ENEMY_MODEL_CFG?.[resolved]?.key || ENEMY_MODEL_CFG?.[canon]?.key || ENEMY_MODEL_CFG?.[eType]?.key;
-    if (k && MODEL_PATHS[k]) set.add(k);
-  }
-  if (isSouls) {
-    for (let i = 0; i < SOULS_RIFT_BIOME_KEYS.length; i++) {
-      const k = SOULS_RIFT_BIOME_KEYS[i];
-      if (MODEL_PATHS[k]) set.add(k);
-    }
-  }
-  return [...set].filter(Boolean);
+  return [...set].filter((k) => k && MODEL_PATHS[k]);
 }
 
-export function getMissingEnemyKeysForBiome(biomeOrLevel = 'souls_citadel') {
-  if (!isSoulsLevelOrBiome(biomeOrLevel)) return [];
+export function getMissingEnemyKeysForBiome() {
   return SOULS_RIFT_BIOME_KEYS.filter((k) => MODEL_PATHS[k] && !gltfCache.has(k) && !failedModelKeys.has(k));
 }
 
-export async function preloadAssetsForBiome(biomeOrLevel = 'souls_citadel') {
-  const missing = getMissingEnemyKeysForBiome(biomeOrLevel);
+export async function preloadAssetsForBiome() {
+  const missing = getMissingEnemyKeysForBiome();
   if (missing.length > 0) {
     await ensureModelKeysLoaded(missing);
   }
   return missing;
 }
 
-export function getMissingHeroOrWeaponKeys(classId = 'warrior', weaponId = null) {
+export function getMissingHeroOrWeaponKeys(_classId = 'warrior', weaponId = 'club') {
   const out = [];
-  if (classId) {
-    const hk = getHeroAssetKey(classId);
-    if (hk && MODEL_PATHS[hk] && !gltfCache.has(hk) && !failedModelKeys.has(hk)) out.push(hk);
-    if (
-      classId === 'warrior' &&
-      !WEAPONS[weaponId]?.twoHanded &&
-      MODEL_PATHS.shield_custom &&
-      !gltfCache.has('shield_custom') &&
-      !failedModelKeys.has('shield_custom')
-    ) {
-      out.push('shield_custom');
-    }
+  if (MODEL_PATHS.warrior_run && !gltfCache.has('warrior_run') && !failedModelKeys.has('warrior_run')) {
+    out.push('warrior_run');
   }
-  const wk = getWeaponAssetKey(weaponId);
+  if (!WEAPONS[weaponId]?.twoHanded && MODEL_PATHS.shield_custom && !gltfCache.has('shield_custom') && !failedModelKeys.has('shield_custom')) {
+    out.push('shield_custom');
+  }
+  const wk = getWeaponAssetKey(weaponId || 'club');
   if (wk && MODEL_PATHS[wk] && !gltfCache.has(wk) && !failedModelKeys.has(wk)) out.push(wk);
   return out;
 }
 
-export function getMissingStageModelKeys(classId = 'warrior', weaponId = null, levelDef = null) {
-  return getBootModelKeys(classId, weaponId, levelDef).filter((k) => !gltfCache.has(k) && !failedModelKeys.has(k));
+export function getMissingStageModelKeys(_classId = 'warrior', weaponId = 'club') {
+  return getBootModelKeys('warrior', weaponId).filter((k) => !gltfCache.has(k) && !failedModelKeys.has(k));
 }
 
 export function preloadModels(onProgressOrOpts, maybeOpts = null) {
@@ -1342,24 +1286,18 @@ export function preloadModels(onProgressOrOpts, maybeOpts = null) {
 
   const opts = typeof onProgressOrOpts === 'object' && onProgressOrOpts !== null ? onProgressOrOpts : maybeOpts || {};
   const onProgress = typeof onProgressOrOpts === 'function' ? onProgressOrOpts : opts.onProgress;
+  const isMobile = isMobileRuntimeDevice();
   const allKeys = Object.keys(MODEL_PATHS).filter((k) => !failedModelKeys.has(k));
   const priorityList = Array.isArray(opts.priorityKeys) && opts.priorityKeys.length > 0
     ? [...new Set(opts.priorityKeys.filter((k) => MODEL_PATHS[k] && !failedModelKeys.has(k)))]
     : null;
 
-  // Fast Progressive Boot (iPhone / MacBook / Web): await ONLY Tier-1 essential keys before opening the Hub,
-  // then stream all remaining heroes, weapons & late bosses smoothly in the background!
-  const isMobile = isMobileRuntimeDevice();
   const tier1Keys = (priorityList || [
     'warrior_run',
     'sword_tripo',
-    'zombie_tripo',
-    'chest',
-    'chest_gold',
-    'skel_minion',
-    'skel_warrior',
-    ...(isMobile ? [] : ['gunslinger_tripo', 'pistol_tripo', 'mage_tripo', 'staff_tripo'])
-  ]).filter((k) => !failedModelKeys.has(k));
+    'shield_custom',
+    ...SOULS_RIFT_BIOME_KEYS
+  ]).filter((k) => MODEL_PATHS[k] && !failedModelKeys.has(k));
   const tier1Set = new Set(tier1Keys);
   const tier2Keys = allKeys.filter((k) => !tier1Set.has(k));
 
@@ -2752,6 +2690,7 @@ const CLASS_SKELETON_ASSET = {
 const HERO_FOOT_PLANT_PHASES = {
   warrior_run: {
     Running_A: [0.315, 0.835],     // 2.200s loop: L heel-plant Fr 20.8, R heel-plant Fr 55.1
+    Sprint_A: [0.315, 0.835],      // 2.200s full-sprint loop: synchronized stride phase with Running_A
     Running_Back: [0.365, 0.835]   // 1.333s loop: L toe-plant Fr 14.6, R toe-plant Fr 33.4
   },
   gunslinger_tripo: {
@@ -2774,6 +2713,225 @@ const GUN_PIVOT_BASE_Z = 0.24;
 const TRIPO_GUN_PIVOT_X = 0.02;
 const TRIPO_GUN_PIVOT_Y = 0.78;
 const TRIPO_GUN_PIVOT_Z = 0.34;
+
+const SHIELD_DECAL_POOL_MAX = 6;
+let cachedShieldWoodGougeTex = null;
+
+function getShieldWoodGougeTexture() {
+  if (cachedShieldWoodGougeTex) return cachedShieldWoodGougeTex;
+  if (typeof document !== 'undefined') {
+    const w = 256;
+    const h = 64;
+    const cv = document.createElement('canvas');
+    cv.width = w;
+    cv.height = h;
+    const c2 = cv.getContext('2d');
+    if (c2) {
+      c2.clearRect(0, 0, w, h);
+      // 1. Jagged dark scorch / iron-scrape outer border
+      c2.beginPath();
+      c2.moveTo(8, h * 0.52);
+      const topPts = [
+        [28, h * 0.24], [58, h * 0.14], [96, h * 0.11],
+        [142, h * 0.13], [186, h * 0.17], [224, h * 0.27], [248, h * 0.48]
+      ];
+      for (let i = 0; i < topPts.length; i++) c2.lineTo(topPts[i][0], topPts[i][1]);
+      const botPts = [
+        [220, h * 0.74], [180, h * 0.85], [136, h * 0.89],
+        [90, h * 0.86], [52, h * 0.79], [24, h * 0.69]
+      ];
+      for (let i = 0; i < botPts.length; i++) c2.lineTo(botPts[i][0], botPts[i][1]);
+      c2.closePath();
+      c2.fillStyle = '#1b1008';
+      c2.fill();
+
+      // 2. Torn raw pale-oak heartwood interior gouge
+      c2.save();
+      c2.beginPath();
+      c2.moveTo(16, h * 0.51);
+      c2.lineTo(42, h * 0.29);
+      c2.lineTo(88, h * 0.20);
+      c2.lineTo(148, h * 0.21);
+      c2.lineTo(202, h * 0.28);
+      c2.lineTo(238, h * 0.49);
+      c2.lineTo(198, h * 0.72);
+      c2.lineTo(142, h * 0.79);
+      c2.lineTo(82, h * 0.77);
+      c2.lineTo(38, h * 0.66);
+      c2.closePath();
+      c2.clip();
+
+      const oakGrad = c2.createLinearGradient(0, h * 0.18, 0, h * 0.82);
+      oakGrad.addColorStop(0.0, '#7c5029');
+      oakGrad.addColorStop(0.24, '#dfc092');
+      oakGrad.addColorStop(0.52, '#ecd4ab');
+      oakGrad.addColorStop(0.78, '#c89962');
+      oakGrad.addColorStop(1.0, '#633d1d');
+      c2.fillStyle = oakGrad;
+      c2.fillRect(0, 0, w, h);
+
+      // Longitudinal raw oak grain fibers & dark splinter crevices
+      for (let f = 0; f < 22; f++) {
+        const y0 = h * (0.23 + ((f * 37) % 54) * 0.01);
+        const x0 = 18 + ((f * 29) % 45);
+        const x1 = w - 18 - ((f * 23) % 45);
+        c2.strokeStyle = f % 3 === 0 ? 'rgba(62,35,14,0.68)' : 'rgba(252,235,205,0.55)';
+        c2.lineWidth = f % 4 === 0 ? 1.8 : 1.0;
+        c2.beginPath();
+        c2.moveTo(x0, y0);
+        c2.quadraticCurveTo(w * 0.5, y0 + ((f % 2 === 0 ? 1 : -1) * 2.6), x1, y0 + ((f % 3) - 1) * 1.8);
+        c2.stroke();
+      }
+      c2.restore();
+
+      // 3. Protruding pale-oak torn splinter tongues at gouge ends
+      c2.strokeStyle = '#d9b580';
+      c2.lineWidth = 1.6;
+      const splinters = [
+        [24, h * 0.44, 6, h * 0.36],
+        [34, h * 0.64, 14, h * 0.74],
+        [218, h * 0.36, 246, h * 0.28],
+        [212, h * 0.62, 242, h * 0.70]
+      ];
+      for (let s = 0; s < splinters.length; s++) {
+        const sp = splinters[s];
+        c2.beginPath();
+        c2.moveTo(sp[0], sp[1]);
+        c2.lineTo(sp[2], sp[3]);
+        c2.stroke();
+      }
+
+      const tex = new THREE.CanvasTexture(cv);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.needsUpdate = true;
+      cachedShieldWoodGougeTex = tex;
+      return tex;
+    }
+  }
+  const data = new Uint8Array([223, 192, 146, 255, 198, 152, 98, 255, 45, 26, 13, 255, 235, 211, 172, 255]);
+  const fallback = new THREE.DataTexture(data, 2, 2);
+  fallback.needsUpdate = true;
+  cachedShieldWoodGougeTex = fallback;
+  return fallback;
+}
+
+function getShieldWoodGougeGeometry() {
+  return getGeo('hero_shield_wood_gouge_strip_v1', () => {
+    // Curved, beveled 3D splinter strip with raised center lip so gouges read with real 3D relief
+    const geo = new THREE.PlaneGeometry(0.36, 0.086, 6, 2);
+    const pos = geo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const px = pos.getX(i);
+      const py = pos.getY(i);
+      const nx = px / 0.18; // -1 .. +1
+      const ny = py / 0.043; // -1 .. +1
+      const archZ = (1 - nx * nx * 0.65) * 0.0055;
+      const lipZ = (1 - Math.abs(ny)) * 0.0038 + (ny > 0.4 ? 0.0028 * (1 - Math.abs(nx)) : 0);
+      pos.setZ(i, archZ + lipZ);
+    }
+    pos.needsUpdate = true;
+    geo.computeVertexNormals();
+    return geo;
+  });
+}
+
+const _decalMeshLocalM4 = new THREE.Matrix4();
+const _decalShieldInvM4 = new THREE.Matrix4();
+const _decalVtx = new THREE.Vector3();
+
+function ensureShieldOuterSurfaceCache(shieldObj) {
+  if (!shieldObj) return null;
+  if (shieldObj.userData._outerSurfaceCache) return shieldObj.userData._outerSurfaceCache;
+  shieldObj.updateWorldMatrix(true, true);
+  _decalShieldInvM4.copy(shieldObj.matrixWorld).invert();
+
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  let maxZ = -Infinity;
+  const GN = 7;
+  const gridMaxZ = new Float32Array(GN * GN);
+  gridMaxZ.fill(-Infinity);
+
+  const meshes = [];
+  shieldObj.traverse((n) => {
+    if (n.isMesh && n.geometry?.attributes?.position && !n.userData?.isShieldGougeDecal) {
+      meshes.push(n);
+    }
+  });
+
+  for (let m = 0; m < meshes.length; m++) {
+    const mesh = meshes[m];
+    _decalMeshLocalM4.copy(_decalShieldInvM4).multiply(mesh.matrixWorld);
+    const posAttr = mesh.geometry.attributes.position;
+    const step = Math.max(1, Math.floor(posAttr.count / 900));
+    for (let i = 0; i < posAttr.count; i += step) {
+      _decalVtx.fromBufferAttribute(posAttr, i).applyMatrix4(_decalMeshLocalM4);
+      if (_decalVtx.x < minX) minX = _decalVtx.x;
+      if (_decalVtx.x > maxX) maxX = _decalVtx.x;
+      if (_decalVtx.y < minY) minY = _decalVtx.y;
+      if (_decalVtx.y > maxY) maxY = _decalVtx.y;
+      if (_decalVtx.z > maxZ) maxZ = _decalVtx.z;
+    }
+  }
+
+  if (!Number.isFinite(minX) || maxX <= minX || maxY <= minY) {
+    const fallback = {
+      minX: -0.34,
+      maxX: 0.34,
+      minY: 0.14,
+      maxY: 0.82,
+      maxZ: 0.11,
+      gn: 0,
+      grid: null
+    };
+    shieldObj.userData._outerSurfaceCache = fallback;
+    return fallback;
+  }
+
+  const spanX = Math.max(0.05, maxX - minX);
+  const spanY = Math.max(0.05, maxY - minY);
+  for (let m = 0; m < meshes.length; m++) {
+    const mesh = meshes[m];
+    _decalMeshLocalM4.copy(_decalShieldInvM4).multiply(mesh.matrixWorld);
+    const posAttr = mesh.geometry.attributes.position;
+    const step = Math.max(1, Math.floor(posAttr.count / 1200));
+    for (let i = 0; i < posAttr.count; i += step) {
+      _decalVtx.fromBufferAttribute(posAttr, i).applyMatrix4(_decalMeshLocalM4);
+      const gx = Math.min(GN - 1, Math.max(0, Math.floor(((_decalVtx.x - minX) / spanX) * GN)));
+      const gy = Math.min(GN - 1, Math.max(0, Math.floor(((_decalVtx.y - minY) / spanY) * GN)));
+      const idx = gy * GN + gx;
+      if (_decalVtx.z > gridMaxZ[idx]) gridMaxZ[idx] = _decalVtx.z;
+    }
+  }
+  for (let k = 0; k < gridMaxZ.length; k++) {
+    if (!Number.isFinite(gridMaxZ[k])) gridMaxZ[k] = maxZ * 0.82;
+  }
+
+  const cache = { minX, maxX, minY, maxY, maxZ, gn: GN, grid: gridMaxZ };
+  shieldObj.userData._outerSurfaceCache = cache;
+  return cache;
+}
+
+function sampleShieldOuterZ(cache, x, y) {
+  if (!cache || !cache.grid || cache.gn < 2) return (cache?.maxZ ?? 0.10) + 0.004;
+  const gn = cache.gn;
+  const fx = Math.min(gn - 1.001, Math.max(0, ((x - cache.minX) / Math.max(0.05, cache.maxX - cache.minX)) * (gn - 1)));
+  const fy = Math.min(gn - 1.001, Math.max(0, ((y - cache.minY) / Math.max(0.05, cache.maxY - cache.minY)) * (gn - 1)));
+  const ix = Math.floor(fx);
+  const iy = Math.floor(fy);
+  const tx = fx - ix;
+  const ty = fy - iy;
+  const g = cache.grid;
+  const z00 = g[iy * gn + ix];
+  const z10 = g[iy * gn + ix + 1];
+  const z01 = g[(iy + 1) * gn + ix];
+  const z11 = g[(iy + 1) * gn + ix + 1];
+  const z0 = z00 + (z10 - z00) * tx;
+  const z1 = z01 + (z11 - z01) * tx;
+  return z0 + (z1 - z0) * ty;
+}
 
 export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement = 'fire') {
   if (classId && typeof classId === 'object') {
@@ -2843,6 +3001,9 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
   let mountedWeaponObj = null;
   let mountedShieldObj = null;
   let legacyWarriorShieldObj = null;
+  let shieldDecalRoot = null;
+  const shieldDecalSlots = [];
+  let shieldDecalCursor = 0;
   let estusFlaskMesh = null;
   let warriorShieldBackAnchor = null;
   let shieldStowedToModelSpace = false;
@@ -2856,6 +3017,10 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
   let warriorAttackDur = 0.45;
   let flaskDrinkAnimTimer = 0;
   let flaskDrinkAnimDur = 0.88;
+  let heroBuckleTimer = 0;
+  let heroBuckleDur = 0.36;
+  let heroBuckleTier = 'light';
+  let heroBuckleTwistSign = 1;
   const hasBakedGunslingerClips = Boolean(isTripoGunslinger && asset?.clips && asset.clips.has('Idle'));
 
   // Mixamo skeletal rig map for Tripo Gunslinger (used when IK fallback is active)
@@ -3499,7 +3664,19 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
       disposeOwnedWeaponMaterials(mountedWeaponObj);
       mountedWeaponObj = null;
     }
+    if (shieldDecalRoot) {
+      if (shieldDecalRoot.parent) shieldDecalRoot.parent.remove(shieldDecalRoot);
+      shieldDecalRoot = null;
+    }
+    for (let i = 0; i < shieldDecalSlots.length; i++) {
+      shieldDecalSlots[i]?.mat?.dispose?.();
+    }
+    shieldDecalSlots.length = 0;
+    shieldDecalCursor = 0;
     if (mountedShieldObj) {
+      if (shieldDecalRoot && shieldDecalRoot.parent === mountedShieldObj) {
+        mountedShieldObj.remove(shieldDecalRoot);
+      }
       if (mountedShieldObj.parent) {
         mountedShieldObj.parent.remove(mountedShieldObj);
       }
@@ -3794,10 +3971,13 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
     isReloadingState = Boolean(reloadingBool);
   }
 
-  function computeSyncedClipSpeed(clipName, fallbackSpeed, attackDuration) {
+  function computeSyncedClipSpeed(clipName, fallbackSpeed, attackDuration, exactSync = false) {
     if (!attackDuration || attackDuration <= 0 || !asset?.clips) return fallbackSpeed;
     const cl = asset.clips.get(clipName);
     if (!cl || !cl.duration) return fallbackSpeed;
+    if (exactSync) {
+      return Math.max(0.52, Math.min(2.4, cl.duration / Math.max(0.28, attackDuration * 1.02)));
+    }
     const minNeededSpeed = cl.duration / Math.max(0.22, attackDuration * 0.96);
     return Math.min(3.5, Math.max(fallbackSpeed, minNeededSpeed));
   }
@@ -3836,14 +4016,14 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
       const step = isHeavyThrust ? 4 : comboStep === 2 ? 2 : comboStep === 3 ? 3 : 1;
       const isHeavyWpn = currentWeaponId === 'axe' || currentWeaponId === 'boss_hammer';
       let targetClip = '1H_Melee_Attack_Slice_Horizontal';
-      // Snappy explosive 1st & 2nd combo strikes, weightier 3rd overhead finisher, dedicated Heavy_Thrust R2!
+      // Grounded Elden Ring strike cadence: readable steel blade arc (165-190ms) + physical end-of-arc arrest!
       let baseClipSpd = isHeavyThrust
-        ? (isHeavyWpn ? 0.90 : 1.0)
+        ? (isHeavyWpn ? 0.84 : 0.94)
         : step === 3
-          ? (isHeavyWpn ? 0.86 : 0.98)
+          ? (isHeavyWpn ? 0.82 : 0.92)
           : step === 2
-            ? (isHeavyWpn ? 1.18 : 1.42)
-            : (isHeavyWpn ? 1.25 : 1.55);
+            ? (isHeavyWpn ? 0.96 : 1.08)
+            : (isHeavyWpn ? 0.98 : 1.12);
       if (isTripoWarrior) {
         // Warrior_Run.glb carries 4 distinct melee attack clips:
         //   1 -> 1H_Melee_Attack_Slice_Horizontal (crisp top-right -> bottom-left R1 opener)
@@ -3882,25 +4062,25 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
       const activeClip = animCtrl.getActiveAttackClipName ? animCtrl.getActiveAttackClipName() : null;
       const cleanActiveClip = activeClip ? activeClip.replace(/__Full$/, '') : null;
       const isDifferentComboClip = Boolean(cleanActiveClip && cleanActiveClip !== targetClip);
-      if (!isHeavyThrust && remSec > (isDifferentComboClip ? 0.24 : 0.06)) return;
-      if (isHeavyThrust && !isDifferentComboClip && remSec > 0.14) return;
+      if (!isHeavyThrust && remSec > (isDifferentComboClip ? 0.68 : 0.10)) return;
+      if (isHeavyThrust && !isDifferentComboClip && remSec > 0.16) return;
 
       let finalSpd;
       if (isHeavyThrust) {
         const thrustCl = asset?.clips?.get(targetClip);
         finalSpd =
           attackDuration > 0 && thrustCl?.duration
-            ? Math.max(0.45, Math.min(2.2, thrustCl.duration / Math.max(0.30, attackDuration)))
+            ? Math.max(0.45, Math.min(2.2, thrustCl.duration / Math.max(0.32, attackDuration * 1.02)))
             : baseClipSpd;
         warriorAttackDur =
           attackDuration > 0
-            ? Math.max(0.32, Math.min(1.65, attackDuration))
+            ? Math.max(0.35, Math.min(1.85, attackDuration))
             : thrustCl?.duration
               ? Math.max(0.35, thrustCl.duration / Math.max(0.3, finalSpd))
               : 0.90;
       } else {
-        finalSpd = computeSyncedClipSpeed(targetClip, baseClipSpd, attackDuration);
-        warriorAttackDur = attackDuration > 0 ? Math.max(0.28, Math.min(1.15, attackDuration * 0.90)) : 0.52;
+        finalSpd = computeSyncedClipSpeed(targetClip, baseClipSpd, attackDuration, isTripoWarrior && attackDuration > 0);
+        warriorAttackDur = attackDuration > 0 ? Math.max(0.34, Math.min(1.65, attackDuration * 0.96)) : 0.68;
       }
       warriorAttackTimer = warriorAttackDur;
       animCtrl.triggerOneShot(targetClip, finalSpd);
@@ -4044,7 +4224,7 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
     return animCtrl.getTurn180Progress();
   }
 
-  function triggerHitReact(speed = 4.16, clipName = 'Impact', opts = null) {
+  function triggerHitReact(speed = 1.75, clipName = 'Impact', opts = null) {
     if (isDeadState || isWarriorBlocking || animCtrl?.isRollActive?.() || isDoorPushActive()) return false;
     cancelFlaskDrinkAnim();
     if (!animCtrl?.triggerHit) return false;
@@ -4053,18 +4233,30 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
       warriorAttackTimer = 0;
     }
     animCtrl.cancelTurn180?.();
+    const tier = opts?.damageLevel === 'knockdown' ? 'knockdown' : opts?.damageLevel === 'heavy' ? 'heavy' : 'light';
+    heroBuckleTier = tier;
+    heroBuckleDur = tier === 'knockdown' ? 0.88 : tier === 'heavy' ? 0.52 : 0.34;
+    heroBuckleTimer = heroBuckleDur;
+    heroBuckleTwistSign = -heroBuckleTwistSign;
+    const effClipSpeed =
+      tier === 'knockdown'
+        ? 1.08
+        : tier === 'heavy'
+          ? Math.min(1.55, Math.max(1.15, Number(speed) || 1.42))
+          : Math.min(2.10, Math.max(1.45, Number(speed) || 1.85));
     return Boolean(
-      animCtrl.triggerHit(speed, clipName, {
+      animCtrl.triggerHit(effClipSpeed, clipName, {
         interruptAttack,
         blockGuard: true,
-        blendInSec: opts?.blendInSec ?? 0.028,
-        blendOutSec: opts?.blendOutSec ?? 0.070,
+        blendInSec: opts?.blendInSec ?? 0.026,
+        blendOutSec: opts?.blendOutSec ?? (tier === 'knockdown' ? 0.18 : 0.11),
         maxWeight: opts?.maxWeight ?? 1.0
       })
     );
   }
 
   function cancelHitReact() {
+    heroBuckleTimer = 0;
     animCtrl?.cancelHit?.();
   }
 
@@ -4195,6 +4387,134 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
       if (item.mat.emissive && !item.hasEyeMap && item.baseEmissiveInt < 2.0) {
         item.mat.emissive.setHex(0xff3b30);
         item.mat.emissiveIntensity = 0.85;
+      }
+    }
+  }
+
+  function addShieldScrapeDecal(opts = null) {
+    if (isDisposed || safeClass !== 'warrior') return false;
+    const activeShield = mountedShieldObj || legacyWarriorShieldObj;
+    if (!activeShield || isCurrentWeaponTwoHanded) return false;
+
+    if (!shieldDecalRoot) {
+      shieldDecalRoot = new THREE.Group();
+      shieldDecalRoot.name = 'HeroShield_WoodGougeDecals';
+    }
+    if (shieldDecalRoot.parent !== activeShield) {
+      activeShield.add(shieldDecalRoot);
+    }
+
+    const surf = ensureShieldOuterSurfaceCache(activeShield);
+    const isBoss = Boolean(opts?.isBoss);
+    const isHeavy = Boolean(opts?.isHeavy || isBoss);
+
+    let slot = shieldDecalSlots[shieldDecalCursor] || null;
+    if (!slot) {
+      const mat = new THREE.MeshStandardMaterial({
+        map: getShieldWoodGougeTexture(),
+        color: 0xffffff,
+        roughness: 0.86,
+        metalness: 0.04,
+        transparent: true,
+        opacity: 0.96,
+        alphaTest: 0.06,
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -3,
+        polygonOffsetUnits: -3
+      });
+      const mesh = new THREE.Mesh(getShieldWoodGougeGeometry(), mat);
+      mesh.castShadow = false;
+      mesh.receiveShadow = false;
+      mesh.frustumCulled = false;
+      mesh.renderOrder = 2;
+      mesh.userData.isShieldGougeDecal = true;
+      shieldDecalRoot.add(mesh);
+      slot = {
+        mesh,
+        mat,
+        age: 0,
+        fadeStart: 14.0,
+        maxAge: 16.5,
+        baseOpacity: 0.96,
+        emberBoost: 0,
+        active: false
+      };
+      shieldDecalSlots[shieldDecalCursor] = slot;
+    }
+
+    const slotIdx = shieldDecalCursor;
+    shieldDecalCursor = (shieldDecalCursor + 1) % SHIELD_DECAL_POOL_MAX;
+
+    // Distribute 6 pooled gouges across distinct zones of the shield's outer face
+    const colIdx = slotIdx % 2;
+    const rowIdx = Math.floor(slotIdx / 2); // 0, 1, 2
+    const uNorm = (colIdx === 0 ? -0.17 : 0.17) + (Math.random() - 0.5) * 0.14;
+    const vNorm = 0.28 + rowIdx * 0.21 + (Math.random() - 0.5) * 0.10;
+    const cx = (surf.minX + surf.maxX) * 0.5 + uNorm * (surf.maxX - surf.minX);
+    const cy = surf.minY + vNorm * (surf.maxY - surf.minY);
+    const cz = sampleShieldOuterZ(surf, cx, cy) + 0.0045;
+
+    // Local convex surface tangent tilt so the strip hugs curved shield planks cleanly
+    const dxStep = 0.05;
+    const dyStep = 0.05;
+    const dzDx = (sampleShieldOuterZ(surf, cx + dxStep, cy) - sampleShieldOuterZ(surf, cx - dxStep, cy)) / (2 * dxStep);
+    const dzDy = (sampleShieldOuterZ(surf, cx, cy + dyStep) - sampleShieldOuterZ(surf, cx, cy - dyStep)) / (2 * dyStep);
+    const slashSign = slotIdx % 2 === 0 ? 1 : -1;
+    const slashRoll = slashSign * (0.34 + Math.random() * 0.44);
+
+    const lenScale = isBoss ? 1.34 : isHeavy ? 1.16 : 0.94;
+    const widScale = isBoss ? 1.26 : isHeavy ? 1.10 : 0.92;
+    // Normalize strip size against shield local span (~0.98 for Shield_Custom vs ~0.68 for legacy shield)
+    const shieldSpan = Math.max(0.45, surf.maxY - surf.minY);
+    const unitScale = shieldSpan * 1.02;
+
+    slot.mesh.position.set(cx, cy, cz);
+    slot.mesh.rotation.set(
+      Math.max(-0.42, Math.min(0.42, -dzDy * 0.85)),
+      Math.max(-0.48, Math.min(0.48, dzDx * 0.85)),
+      slashRoll
+    );
+    slot.mesh.scale.set(unitScale * lenScale, unitScale * widScale, 1.0);
+
+    slot.age = 0;
+    slot.fadeStart = 14.0;
+    slot.maxAge = 16.5;
+    slot.baseOpacity = isBoss ? 0.98 : 0.94;
+    slot.emberBoost = isBoss ? 0.38 : 0;
+    slot.mat.color.setHex(isBoss ? 0xffe4c4 : 0xf5dfc0);
+    if (slot.mat.emissive) {
+      slot.mat.emissive.setHex(isBoss ? 0x9a3412 : 0x000000);
+      slot.mat.emissiveIntensity = slot.emberBoost;
+    }
+    slot.mat.opacity = slot.baseOpacity;
+    slot.mesh.visible = true;
+    slot.active = true;
+    return true;
+  }
+
+  function updateShieldScrapeDecals(safeDt) {
+    if (shieldDecalSlots.length === 0) return;
+    const activeShield = mountedShieldObj || legacyWarriorShieldObj;
+    if (shieldDecalRoot && activeShield && !isCurrentWeaponTwoHanded && shieldDecalRoot.parent !== activeShield && !shieldStowedToModelSpace) {
+      activeShield.add(shieldDecalRoot);
+    }
+    for (let i = 0; i < shieldDecalSlots.length; i++) {
+      const slot = shieldDecalSlots[i];
+      if (!slot || !slot.active) continue;
+      slot.age += safeDt;
+      if (slot.emberBoost > 0 && slot.mat.emissive) {
+        const cool = Math.max(0, 1 - slot.age / 1.6);
+        slot.mat.emissiveIntensity = slot.emberBoost * cool * cool;
+      }
+      if (slot.age >= slot.maxAge) {
+        slot.active = false;
+        slot.mesh.visible = false;
+        slot.mat.opacity = 0;
+      } else if (slot.age > slot.fadeStart) {
+        const uFade = (slot.age - slot.fadeStart) / Math.max(0.1, slot.maxAge - slot.fadeStart);
+        const sFade = uFade * uFade * (3 - 2 * uFade);
+        slot.mat.opacity = slot.baseOpacity * (1 - sFade);
       }
     }
   }
@@ -4783,6 +5103,7 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
   function update(dt, isMoving = false, speedRatio = 1, elapsedTime = 0, moveLocalX = 0, moveLocalZ = 1, isSprinting = false) {
     const safeDt = Math.min(Math.max(dt || 0.016, 0), 0.1);
     syncSoulsRimLightFromBiome();
+    updateShieldScrapeDecals(safeDt);
 
     // Dead state: advance Death_A to its clamped final frame (or procedural collapse fallback)
     // and never overwrite weights with Idle/Running/weapon stances until setDeadState(false).
@@ -4831,19 +5152,32 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
           } else if (moveLocalZ < -0.35 && asset?.clips?.has('Running_Back')) {
             runClip = 'Running_Back';
           }
-        } else if (isTripoWarrior && !isTurning180 && !isRolling && moveLocalZ < -0.35 && asset?.clips?.has('Running_Back')) {
-          runClip = 'Running_Back';
+        } else if (isTripoWarrior && !isTurning180 && !isRolling) {
+          if (moveLocalZ < -0.35 && asset?.clips?.has('Running_Back')) {
+            runClip = 'Running_Back';
+          } else if (
+            isSprinting &&
+            moveLocalZ >= -0.15 &&
+            !isWarriorBlocking &&
+            flaskDrinkAnimTimer <= 0 &&
+            asset?.clips?.has('Sprint_A')
+          ) {
+            runClip = 'Sprint_A';
+          }
         }
         activeRunClip = runClip;
         let runScale;
         if (assetKey === 'warrior_run') {
-          // Measured heavy-armored knight cadence (Running_A ×0.84 vs legacy 3.15 -> weighty grounded footsteps, 0 chatter!)
+          // Exact z76 heavy-armored knight cadence on Running_A (2.65x -> grounded footsteps, 0 ice-skating!)
+          // + faster true forward sprint on Sprint_A (~3.25x)!
           const minRunSpd = flaskDrinkAnimTimer > 0 ? 0.72 : 1.22;
           const minBackSpd = flaskDrinkAnimTimer > 0 ? 0.75 : 1.15;
           runScale =
             runClip === 'Running_Back'
               ? Math.max(minBackSpd, Math.min(2.9, speedRatio * 2.55))
-              : Math.max(minRunSpd, Math.min(3.23, speedRatio * 2.65));
+              : runClip === 'Sprint_A'
+                ? Math.max(2.65, Math.min(3.50, speedRatio * 2.48))
+                : Math.max(minRunSpd, Math.min(3.23, speedRatio * 2.65));
         } else {
           runScale = Math.max(0.95, Math.min(2.15, speedRatio * 1.32));
         }
@@ -4902,7 +5236,8 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
     if (assetKey === 'warrior_run' && modelInstance && animCtrl) {
       const isHitReacting = Boolean(animCtrl.isHitActive?.());
       const isDoorPush = isDoorPushActive();
-      const targetSprint = isMoving && isSprinting && !isHitReacting && !isRolling && !isDoorPush && activeRunClip === 'Running_A' ? 1 : 0;
+      const isForwardGait = activeRunClip === 'Running_A' || activeRunClip === 'Sprint_A';
+      const targetSprint = isMoving && isSprinting && !isHitReacting && !isRolling && !isDoorPush && isForwardGait ? 1 : 0;
       warriorSprintBlend += (targetSprint - warriorSprintBlend) * Math.min(1, safeDt * 9);
       let runWeight = 0;
       let legMeans = null;
@@ -4917,7 +5252,7 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
         legMeans = runAct?.getClip?.()?.userData?.legMeans || null;
       }
       if (runWeight > 0.05 && legMeans) {
-        const amp = 1 + (0.28 + warriorSprintBlend * 0.26) * runWeight;
+        const amp = 1 + 0.08 * runWeight;
         for (const [boneName, qMean] of legMeans.entries()) {
           const bone = mx[boneName]?.node;
           if (!bone) continue;
@@ -4932,7 +5267,7 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
           const sinHalf = Math.hypot(_strideDelta.x, _strideDelta.y, _strideDelta.z);
           if (sinHalf > 1e-4) {
             const halfAngle = Math.atan2(sinHalf, _strideDelta.w);
-            const scaledAngle = Math.min(1.25, halfAngle * 2 * amp);
+            const scaledAngle = Math.min(1.15, halfAngle * 2 * amp);
             _strideAxis.set(_strideDelta.x / sinHalf, _strideDelta.y / sinHalf, _strideDelta.z / sinHalf);
             _strideBoostQ.setFromAxisAngle(_strideAxis, scaledAngle);
             bone.quaternion.copy(qMean).multiply(_strideBoostQ);
@@ -4941,7 +5276,7 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
       }
       const targetLean = isTurning180 || isHitReacting || isRolling || isDoorPush || isCriticalRiposteActive() || flaskDrinkAnimTimer > 0
         ? 0
-        : (isMoving && activeRunClip === 'Running_A' ? 0.035 : 0) + warriorSprintBlend * 0.11;
+        : (isMoving && isForwardGait ? 0.025 : 0) + warriorSprintBlend * 0.075;
       modelInstance.rotation.x += (targetLean - modelInstance.rotation.x) * Math.min(1, safeDt * 10);
     }
 
@@ -4985,6 +5320,58 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
       if (modelInstance.position.y !== 0) modelInstance.position.y = 0;
       if (assetKey !== 'warrior_run' && modelInstance.rotation.x !== 0) {
         modelInstance.rotation.x = 0;
+      }
+    }
+
+    // Visceral Elden Ring Hero Hit-Buckle & Colossal Slam Knockdown Tumble Overlay
+    if (heroBuckleTimer > 0 && !isRolling && !isDeadState && modelInstance) {
+      heroBuckleTimer = Math.max(0, heroBuckleTimer - safeDt);
+      const uB = heroBuckleDur > 0.01 ? Math.max(0, Math.min(1, 1 - heroBuckleTimer / heroBuckleDur)) : 1;
+      // Fast 55ms blow snap -> visceral stagger/knockdown hold -> armored scramble recovery
+      let shockEnv;
+      if (heroBuckleTier === 'knockdown') {
+        shockEnv = uB < 0.14
+          ? smoothstep01(0, 0.14, uB)
+          : uB < 0.56
+            ? 1.0 - 0.10 * smoothstep01(0.14, 0.56, uB)
+            : 0.90 * (1.0 - smoothstep01(0.56, 1.00, uB));
+      } else {
+        shockEnv = uB < 0.16
+          ? smoothstep01(0, 0.16, uB)
+          : 1.0 - smoothstep01(0.16, 1.00, uB);
+      }
+      const tierMult = heroBuckleTier === 'knockdown' ? 1.85 : heroBuckleTier === 'heavy' ? 1.25 : 0.72;
+      const archRad = -0.22 * tierMult * shockEnv;
+      const twistRad = 0.14 * tierMult * heroBuckleTwistSign * shockEnv;
+      if (heroBuckleTier === 'knockdown') {
+        modelInstance.position.y = -0.24 * shockEnv;
+        modelInstance.rotation.x = -0.28 * shockEnv;
+      } else if (heroBuckleTier === 'heavy') {
+        modelInstance.position.y = -0.07 * shockEnv;
+      }
+      const sp0 = mx.Spine?.node;
+      const sp1 = mx.Spine1?.node;
+      const sp2 = mx.Spine2?.node || chestBone;
+      const hd = mx.Head?.node || headBone;
+      if (sp0) {
+        _wEuler.set(archRad * 0.34, twistRad * 0.32, 0);
+        _wQuat.setFromEuler(_wEuler);
+        sp0.quaternion.multiply(_wQuat);
+      }
+      if (sp1) {
+        _wEuler.set(archRad * 0.36, twistRad * 0.34, 0);
+        _wQuat.setFromEuler(_wEuler);
+        sp1.quaternion.multiply(_wQuat);
+      }
+      if (sp2) {
+        _wEuler.set(archRad * 0.42, twistRad * 0.38, heroBuckleTwistSign * 0.08 * shockEnv);
+        _wQuat.setFromEuler(_wEuler);
+        sp2.quaternion.multiply(_wQuat);
+      }
+      if (hd) {
+        _wEuler.set(archRad * 0.30, -twistRad * 0.20, 0);
+        _wQuat.setFromEuler(_wEuler);
+        hd.quaternion.multiply(_wQuat);
       }
     }
 
@@ -5249,7 +5636,8 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
     setDeadState,
     resetDeath,
     isDead,
-    setBlocking
+    setBlocking,
+    addShieldScrapeDecal
   };
   root.userData.animCtrl = heroAnimFacade;
   root.userData.setWeapon = setWeapon;
@@ -5285,6 +5673,7 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
   root.userData.isHitReactActive = isHitReactActive;
   root.userData.getWeaponStyle = getWeaponStyle;
   root.userData.getWeaponSegmentWorld = getWeaponSegmentWorld;
+  root.userData.addShieldScrapeDecal = addShieldScrapeDecal;
   root.userData.flashHit = flashHit;
   root.userData.update = update;
   if (hasSyncedFootsteps) {
@@ -5318,6 +5707,15 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
       disposeOwnedWeaponMaterials(mountedWeaponObj);
       mountedWeaponObj = null;
     }
+    if (shieldDecalRoot) {
+      if (shieldDecalRoot.parent) shieldDecalRoot.parent.remove(shieldDecalRoot);
+      shieldDecalRoot = null;
+    }
+    for (let i = 0; i < shieldDecalSlots.length; i++) {
+      shieldDecalSlots[i]?.mat?.dispose?.();
+    }
+    shieldDecalSlots.length = 0;
+    shieldDecalCursor = 0;
     if (mountedShieldObj) {
       if (mountedShieldObj.parent) mountedShieldObj.parent.remove(mountedShieldObj);
       disposeOwnedWeaponMaterials(mountedShieldObj);
@@ -5388,6 +5786,7 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
     isHitReactActive,
     getWeaponStyle,
     getWeaponSegmentWorld,
+    addShieldScrapeDecal,
     flashHit,
     update
   };
@@ -7595,14 +7994,14 @@ const ENEMY_CLIP_IMPACT_FRAC = {
   'Spellcast_Raise': 0.25,
   'Heavy_Cleave': 0.48,
   // Abandoned Knight Rift AAA enemies (Executioner, Vanguard, Acolyte)
-  'Attack_Slash_1': 0.49,
-  'Attack_Slash_2': 0.48,
-  'Attack_Overhead_Crush': 0.54,
-  'Attack_Thrust_Lunge': 0.47,
-  'Attack_Thrust_1': 0.48,
-  'Attack_Sweep_2': 0.48,
-  'Attack_Shield_Bash': 0.48,
-  'Attack_Overhead_Poke': 0.50,
+  'Attack_Slash_1': 0.54,
+  'Attack_Slash_2': 0.53,
+  'Attack_Overhead_Crush': 0.58,
+  'Attack_Thrust_Lunge': 0.53,
+  'Attack_Thrust_1': 0.53,
+  'Attack_Sweep_2': 0.54,
+  'Attack_Shield_Bash': 0.52,
+  'Attack_Overhead_Poke': 0.54,
   'Aim_Draw': 0.85,
   'Shot_Release': 0.25,
   'Quick_Retreat_Shot': 0.45,
@@ -7861,13 +8260,35 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
   let weaponHammerBone = null;
   let calibratedWeaponBoneSeg = null;
   let headBone = null;
+  let neckBone = null;
   let jawBone = null;
+  let spineBone = null;
+  let spine1Bone = null;
+  let spine2Bone = null;
+  let torsoFlinchApplied = false;
+  let neckClampApplied = false;
+  const spinePreFlinchQ = new THREE.Quaternion();
+  const spine1PreFlinchQ = new THREE.Quaternion();
+  const spine2PreFlinchQ = new THREE.Quaternion();
+  const neckPreAdditiveQ = new THREE.Quaternion();
+  const jawBindQuat = new THREE.Quaternion();
+  let hasJawBindQuat = false;
+  const _jawBindInvQ = new THREE.Quaternion();
+  const _jawRelQ = new THREE.Quaternion();
+  const _headUpVecW = new THREE.Vector3();
+  const _flinchWorldAxis = new THREE.Vector3();
+  const _flinchDeltaW = new THREE.Quaternion();
+  const _flinchParentInvQ = new THREE.Quaternion();
+  const _flinchBoneW = new THREE.Quaternion();
+  let hitJoltDur = 0.26;
   let mouthOpen01 = 0;
+  let bossMouthSmooth = 0;
   let headSpeechDamped = 0;
   let jawAdditiveApplied = false;
   const jawPreAdditiveQ = new THREE.Quaternion();
   let dissolveActive = false;
   let softHitFlashMode = false;
+  const isRiftTripo = Boolean(cfg.isRiftTripo);
   let mountedEnemyWeaponProp = null;
   const instanceMats = [];
   const flashMeshSlots = [];
@@ -7916,8 +8337,6 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
       let handL = null;
       let chestBone = null;
       let foundEyeMesh = false;
-
-      const isRiftTripo = Boolean(cfg.isRiftTripo);
       const isTripoEnemy = isRiftTripo || /_tripo$/i.test(cfg.key || '');
       const useSoftHitFlash = Boolean(isRiftTripo || (cfg.isBossVisual && isTripoEnemy));
       softHitFlashMode = useSoftHitFlash;
@@ -7959,8 +8378,18 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
           (!handL && (/^hand\.?l$/i.test(nm) || /^mixamorig:?LeftHand$/i.test(nm)))
         ) handL = n;
         if (/^head$/i.test(nm) || (!headBone && /^mixamorig:?Head$/i.test(nm))) headBone = n;
-        if (/^chest$/i.test(nm) || (!chestBone && /^mixamorig:?Spine2$/i.test(nm))) chestBone = n;
-        if (!jawBone && n.isBone && /^mixamorig:?Jaw$/i.test(nm)) jawBone = n;
+        if (!neckBone && n.isBone && (/^neck$/i.test(nm) || /^mixamorig:?Neck$/i.test(nm))) neckBone = n;
+        if (/^chest$/i.test(nm) || (!chestBone && /^mixamorig:?Spine2$/i.test(nm))) {
+          chestBone = n;
+          if (!spine2Bone) spine2Bone = n;
+        }
+        if (!spineBone && n.isBone && /^mixamorig:?Spine$/i.test(nm)) spineBone = n;
+        if (!spine1Bone && n.isBone && /^mixamorig:?Spine1$/i.test(nm)) spine1Bone = n;
+        if (!jawBone && n.isBone && /^mixamorig:?Jaw$/i.test(nm)) {
+          jawBone = n;
+          jawBindQuat.copy(n.quaternion);
+          hasJawBindQuat = true;
+        }
 
         if (!cfg.isBossVisual && !isRiftTripo) {
           if (nm === 'Skeleton_Warrior_Helmet' || nm === 'Knight_Helmet') {
@@ -8035,7 +8464,8 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
                 });
               n.material = Array.isArray(n.material) ? n.material.map(mapElite) : mapElite(n.material);
             }
-            if (n.visible) {
+            // Skip material-swap flashMeshSlots on rift_boss so soulsBossVisuals's uBossHitFlash shader stays 100% bound!
+            if (n.visible && cfg.key !== 'rift_boss') {
               flashMeshSlots.push({ mesh: n, origMat: n.material, flashMat: buildSoftHitFlashSlotMat(n.material) });
             }
             return;
@@ -8295,7 +8725,7 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
   let eliteCrest = null;
   const eliteCrestBaseY = (cfg.scale || 0.9) * effectiveScaleMult * 2.18;
 
-  if (!cfg.isBossVisual && (eliteVariant === 'purple' || eliteVariant === 'blue' || eliteVariant === 'warden')) {
+  if (!cfg.isBossVisual && !isRiftTripo && (eliteVariant === 'purple' || eliteVariant === 'blue' || eliteVariant === 'warden')) {
     const crestColor =
       eliteVariant === 'purple' ? 0xc084fc : eliteVariant === 'warden' ? 0xfbbf24 : 0x38bdf8;
     const glowColor =
@@ -8425,6 +8855,7 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
   let baseClipOverride = null;
   let baseClipOverrideSpeed = null;
   let activeClampedAction = null;
+  let activeClampedClipName = null;
   let prevClampedFromAction = null;
   let activeClampedDuration = 0;
   let activeClampedElapsed = 0;
@@ -8641,8 +9072,8 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
     };
   }
 
-  // Additive live Boss jaw & gentle damped head-speech accent: undone before every mixer evaluation and
-  // re-applied after it, so neither bone EVER accumulates drift or stretches the face mask UVs.
+  // Additive live Boss jaw, forward neck/head chest-clearance clamp & gentle damped head-speech accent:
+  // undone before every mixer evaluation and re-applied after it, so no bone EVER accumulates drift.
   let headAdditiveApplied = false;
   const headPreAdditiveQ = new THREE.Quaternion();
   function restoreJawAdditive() {
@@ -8652,25 +9083,193 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
     if (headAdditiveApplied && headBone) {
       headBone.quaternion.copy(headPreAdditiveQ);
     }
+    if (neckClampApplied && neckBone) {
+      neckBone.quaternion.copy(neckPreAdditiveQ);
+    }
+    if (torsoFlinchApplied) {
+      if (spineBone) spineBone.quaternion.copy(spinePreFlinchQ);
+      if (spine1Bone) spine1Bone.quaternion.copy(spine1PreFlinchQ);
+      if (spine2Bone) spine2Bone.quaternion.copy(spine2PreFlinchQ);
+    }
     jawAdditiveApplied = false;
     headAdditiveApplied = false;
+    neckClampApplied = false;
+    torsoFlinchApplied = false;
+  }
+
+  function clampBossNeckHeadForwardPitch() {
+    if (isDying || cfg.key !== 'rift_boss' || (!neckBone && !headBone)) return;
+    const yaw = root.rotation?.y || 0;
+    const fwdX = Math.sin(yaw);
+    const fwdZ = Math.cos(yaw);
+    // Right axis in world space = (cos(yaw), 0, -sin(yaw)); +angle pitches forward/down, -angle lifts upward/back!
+    const rx = Math.cos(yaw);
+    const rz = -Math.sin(yaw);
+
+    if (neckBone && neckBone.parent) {
+      neckBone.parent.updateWorldMatrix(true, false);
+      neckBone.updateWorldMatrix(false, false);
+      neckBone.getWorldQuaternion(_flinchBoneW);
+      _headUpVecW.set(0, 1, 0).applyQuaternion(_flinchBoneW);
+      const fwdTilt = Math.atan2(_headUpVecW.x * fwdX + _headUpVecW.z * fwdZ, Math.max(0.05, _headUpVecW.y));
+      if (fwdTilt > 0.34) {
+        if (!neckClampApplied) {
+          neckPreAdditiveQ.copy(neckBone.quaternion);
+          neckClampApplied = true;
+        }
+        const corr = -(fwdTilt - 0.34);
+        neckBone.parent.getWorldQuaternion(_flinchParentInvQ).invert();
+        _flinchWorldAxis.set(rx, 0, rz).normalize();
+        _flinchDeltaW.setFromAxisAngle(_flinchWorldAxis, corr);
+        _flinchBoneW.premultiply(_flinchDeltaW);
+        neckBone.quaternion.copy(_flinchParentInvQ).multiply(_flinchBoneW).normalize();
+        neckBone.updateMatrixWorld(false);
+      }
+    }
+
+    if (headBone && headBone.parent) {
+      headBone.parent.updateWorldMatrix(true, false);
+      headBone.updateWorldMatrix(false, false);
+      headBone.getWorldQuaternion(_flinchBoneW);
+      _headUpVecW.set(0, 1, 0).applyQuaternion(_flinchBoneW);
+      const fwdTilt = Math.atan2(_headUpVecW.x * fwdX + _headUpVecW.z * fwdZ, Math.max(0.05, _headUpVecW.y));
+      if (fwdTilt > 0.38) {
+        if (!headAdditiveApplied) {
+          headPreAdditiveQ.copy(headBone.quaternion);
+          headAdditiveApplied = true;
+        }
+        const corr = -(fwdTilt - 0.38);
+        headBone.parent.getWorldQuaternion(_flinchParentInvQ).invert();
+        _flinchWorldAxis.set(rx, 0, rz).normalize();
+        _flinchDeltaW.setFromAxisAngle(_flinchWorldAxis, corr);
+        _flinchBoneW.premultiply(_flinchDeltaW);
+        headBone.quaternion.copy(_flinchParentInvQ).multiply(_flinchBoneW).normalize();
+        headBone.updateMatrixWorld(false);
+      }
+    }
+  }
+
+  function applyRiftTorsoFlinch(safeDt) {
+    if (hitJoltTimer <= 0 || isDying || activeCutsceneAction || activeClampedAction) {
+      hitJoltTimer = Math.max(0, hitJoltTimer - safeDt);
+      return;
+    }
+    hitJoltTimer = Math.max(0, hitJoltTimer - safeDt);
+    if (!cfg.isRiftTripo || (!spineBone && !spine1Bone && !spine2Bone)) return;
+    const u = hitJoltDur > 0.01 ? Math.max(0, Math.min(1, 1 - hitJoltTimer / hitJoltDur)) : 1;
+    const env = Math.sin(Math.pow(u, 0.58) * Math.PI) * Math.exp(-2.1 * u);
+    if (env <= 0.004) return;
+
+    if (spineBone) spinePreFlinchQ.copy(spineBone.quaternion);
+    if (spine1Bone) spine1PreFlinchQ.copy(spine1Bone.quaternion);
+    if (spine2Bone) spine2PreFlinchQ.copy(spine2Bone.quaternion);
+    torsoFlinchApplied = true;
+
+    const isBossRig = cfg.key === 'rift_boss';
+    const baseRad = isBossRig ? 0.24 : 0.42;
+    const maxAmp = isBossRig ? 1.30 : 1.85;
+    const clampedAmp = Math.min(maxAmp, Math.max(0.45, hitJoltAmp));
+    // Strictly negative (<= 0) backward chest recoil so flinches NEVER pitch torso/head downward!
+    const totalPitchBack = -Math.abs(baseRad * clampedAmp * env);
+    const totalYawWrench = baseRad * 0.64 * hitTwistDir * Math.min(isBossRig ? 1.25 : 1.75, clampedAmp) * env;
+    const yaw = root.rotation?.y || 0;
+    // Right axis in world space = (cos(yaw), 0, -sin(yaw)); +angle pitches forward, so negative pitches backward!
+    const rx = Math.cos(yaw);
+    const rz = -Math.sin(yaw);
+
+    const applyBoneShare = (bone, share) => {
+      if (!bone || !bone.parent) return;
+      bone.parent.updateWorldMatrix(true, false);
+      bone.updateWorldMatrix(false, false);
+      bone.parent.getWorldQuaternion(_flinchParentInvQ).invert();
+      bone.getWorldQuaternion(_flinchBoneW);
+      _flinchWorldAxis.set(rx, 0, rz).normalize();
+      _flinchDeltaW.setFromAxisAngle(_flinchWorldAxis, totalPitchBack * share);
+      _flinchBoneW.premultiply(_flinchDeltaW);
+      _flinchWorldAxis.set(0, 1, 0);
+      _flinchDeltaW.setFromAxisAngle(_flinchWorldAxis, totalYawWrench * share);
+      _flinchBoneW.premultiply(_flinchDeltaW);
+      bone.quaternion.copy(_flinchParentInvQ).multiply(_flinchBoneW).normalize();
+      bone.updateMatrixWorld(false);
+    };
+
+    applyBoneShare(spineBone, 0.32);
+    applyBoneShare(spine1Bone, 0.38);
+    applyBoneShare(spine2Bone, 0.44);
+  }
+
+  function computeBossRoarJawOpen01() {
+    if (cfg.key !== 'rift_boss' || isDying) return 0;
+    const isRoarClamped =
+      Boolean(activeClampedAction) &&
+      (activeClampedClipName === 'Roar_Taunt' || activeClampedClipName === 'Cutscene_Rise_Roar');
+    const isRoarState =
+      physicsActorState.soulsState === 'roar_taunt' || physicsActorState.soulsState === 'phase2_roar';
+    if (!isRoarClamped && !isRoarState) return 0;
+    if (isRoarClamped && activeClampedDuration > 0.05) {
+      const u = Math.max(0, Math.min(1, activeClampedElapsed / activeClampedDuration));
+      const env = smoothstep01(0.01, 0.10, u) * (1 - smoothstep01(0.80, 0.97, u));
+      const tremor = 1 - 0.04 * (0.5 - 0.5 * Math.cos(activeClampedElapsed * 22.0));
+      return Math.max(0, Math.min(1, env * tremor));
+    }
+    return 0.92;
   }
 
   function applyJawAdditive() {
-    if (isDying || (mouthOpen01 <= 0.001 && headSpeechDamped <= 0.001)) return;
-    if (jawBone && mouthOpen01 > 0.001) {
-      jawPreAdditiveQ.copy(jawBone.quaternion);
-      // Keep rift_boss jaw subtle & non-distorting (0.045 rad max — ZERO rubber-band UV stretching on painted grin!)
-      const maxJawRad = cfg.key === 'rift_boss' ? 0.045 : 0.11;
-      jawBone.rotateX(mouthOpen01 * maxJawRad);
-      jawAdditiveApplied = true;
+    if (isDying) return;
+    const roarOpen01 = computeBossRoarJawOpen01();
+    const effSpeech01 = cfg.key === 'rift_boss' ? bossMouthSmooth : mouthOpen01;
+    if (effSpeech01 <= 0.001 && roarOpen01 <= 0.001 && headSpeechDamped <= 0.001) return;
+
+    if (jawBone) {
+      if (cfg.key === 'rift_boss') {
+        // Real lower-jaw articulation on Rift_Boss_Tripo.glb (z83 isolated Jaw skin weights below mouth):
+        //   - Dialogue speech: 0 .. 0.26 rad driven by bossMouthSmooth
+        //   - Roar_Taunt / phase2_roar: opens up to 0.30 rad
+        const targetJawRad = Math.max(effSpeech01 * 0.26, roarOpen01 * 0.30);
+        if (targetJawRad > 0.0008) {
+          let addRad = targetJawRad;
+          if (hasJawBindQuat && roarOpen01 > 0.001) {
+            _jawBindInvQ.copy(jawBindQuat).invert();
+            _jawRelQ.copy(_jawBindInvQ).multiply(jawBone.quaternion);
+            if (_jawRelQ.w < 0) {
+              _jawRelQ.x = -_jawRelQ.x;
+              _jawRelQ.w = -_jawRelQ.w;
+            }
+            const bakedPitchX = 2 * Math.atan2(_jawRelQ.x, Math.max(1e-4, _jawRelQ.w));
+            if (bakedPitchX > 0) {
+              addRad = Math.max(0, targetJawRad - bakedPitchX);
+            }
+          }
+          if (addRad > 0.0005) {
+            jawPreAdditiveQ.copy(jawBone.quaternion);
+            jawBone.rotateX(Math.min(0.30, addRad));
+            jawAdditiveApplied = true;
+          }
+        }
+      } else if (mouthOpen01 > 0.001) {
+        jawPreAdditiveQ.copy(jawBone.quaternion);
+        jawBone.rotateX(mouthOpen01 * 0.11);
+        jawAdditiveApplied = true;
+      }
     }
     if (headBone && cfg.key === 'rift_boss') {
-      const headWeight = headSpeechDamped > 0.001 ? headSpeechDamped : mouthOpen01;
-      if (headWeight > 0.001) {
-        headPreAdditiveQ.copy(headBone.quaternion);
-        headBone.rotateX(-headWeight * 0.035);
-        headAdditiveApplied = true;
+      const headWeight = headSpeechDamped > 0.001 ? headSpeechDamped : effSpeech01;
+      if (headWeight > 0.001 && headBone.parent) {
+        if (!headAdditiveApplied) {
+          headPreAdditiveQ.copy(headBone.quaternion);
+          headAdditiveApplied = true;
+        }
+        const yaw = root.rotation?.y || 0;
+        headBone.parent.updateWorldMatrix(true, false);
+        headBone.updateWorldMatrix(false, false);
+        headBone.parent.getWorldQuaternion(_flinchParentInvQ).invert();
+        headBone.getWorldQuaternion(_flinchBoneW);
+        _flinchWorldAxis.set(Math.cos(yaw), 0, -Math.sin(yaw)).normalize();
+        _flinchDeltaW.setFromAxisAngle(_flinchWorldAxis, -headWeight * 0.028);
+        _flinchBoneW.premultiply(_flinchDeltaW);
+        headBone.quaternion.copy(_flinchParentInvQ).multiply(_flinchBoneW).normalize();
+        headBone.updateMatrixWorld(false);
       }
     }
   }
@@ -8728,6 +9327,7 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
       activeClampedAction.stop();
       activeClampedAction = null;
     }
+    activeClampedClipName = null;
     activeClampedDuration = 0;
     activeClampedElapsed = 0;
   }
@@ -8738,15 +9338,19 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
     contactShadow,
     getWeaponSegmentWorld,
     hasJawBone: Boolean(jawBone),
-    // Real-time Boss lip-sync: clean non-distorting jaw articulation + gentle damped head speech accent layered after the mixer.
+    // Real-time Boss lip-sync: clean lower-jaw articulation (0..0.26 rad) + gentle damped head speech accent layered after the mixer.
     setBossMouthOpen(open01 = 0) {
       const v = Number(open01);
       mouthOpen01 = Number.isFinite(v) ? (v < 0 ? 0 : v > 1 ? 1 : v) : 0;
+      bossMouthSmooth = mouthOpen01 <= 0.001
+        ? (bossMouthSmooth < 0.008 ? 0 : bossMouthSmooth * 0.55)
+        : (bossMouthSmooth + (mouthOpen01 - bossMouthSmooth) * 0.52);
       headSpeechDamped = mouthOpen01 <= 0.001
         ? 0
         : (headSpeechDamped + (mouthOpen01 - headSpeechDamped) * 0.35);
       if (!jawBone && !(headBone && cfg.key === 'rift_boss')) return false;
       restoreJawAdditive();
+      clampBossNeckHeadForwardPitch();
       applyJawAdditive();
       return true;
     },
@@ -8871,6 +9475,7 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
       }
       restoreJawAdditive();
       animCtrl.mixer.update(0);
+      clampBossNeckHeadForwardPitch();
       applyJawAdditive();
       return true;
     },
@@ -8891,6 +9496,7 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
       }
       restoreJawAdditive();
       animCtrl.mixer.update(0);
+      clampBossNeckHeadForwardPitch();
       applyJawAdditive();
       return true;
     },
@@ -8921,6 +9527,7 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
         }
         prevClampedFromAction = null;
         activeClampedAction = null;
+        activeClampedClipName = null;
         activeClampedDuration = 0;
         activeClampedElapsed = 0;
         baseClipOverride = null;
@@ -8981,6 +9588,7 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
       }
       restoreJawAdditive();
       animCtrl.mixer.update(0);
+      clampBossNeckHeadForwardPitch();
       applyJawAdditive();
       return true;
     },
@@ -9080,8 +9688,10 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
       act.setEffectiveWeight(prevClampedFromAction ? 0.001 : 1.0);
       act.play();
       activeClampedAction = act;
+      activeClampedClipName = clipName;
       restoreJawAdditive();
       animCtrl.mixer.update(0);
+      clampBossNeckHeadForwardPitch();
       applyJawAdditive();
       return { ok: true, duration: activeClampedDuration };
     },
@@ -9098,6 +9708,7 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
         prevClampedFromAction = null;
       }
       activeClampedAction = null;
+      activeClampedClipName = null;
       activeClampedDuration = 0;
       activeClampedElapsed = 0;
       baseClipOverride = null;
@@ -9128,6 +9739,7 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
       stopClampedInternal();
       restoreJawAdditive();
       mouthOpen01 = 0;
+      bossMouthSmooth = 0;
       headSpeechDamped = 0;
       resetEldenDissolveFromModel(spawnedInst || root);
       dissolveActive = false;
@@ -9204,12 +9816,15 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
       if (isDying) return false;
       const isObj = Boolean(opts && typeof opts === 'object');
       const playClip = isObj && opts.playClip !== undefined ? Boolean(opts.playClip) : true;
-      const joltScale =
+      const rawJolt =
         isObj && Number.isFinite(Number(opts.joltScale))
-          ? Math.max(0, Math.min(1.5, Number(opts.joltScale)))
+          ? Math.max(0, Number(opts.joltScale))
           : 1.0;
+      const isBossRig = cfg.key === 'rift_boss';
+      const mobJoltBoost = isBossRig ? 1.0 : 1.25;
+      const joltScale = Math.max(0, Math.min(isBossRig ? 1.35 : 1.88, rawJolt * mobJoltBoost));
       if (joltScale > 0.01 && !activeClampedAction && !activeCutsceneAction) {
-        // Unified critically damped physics recoil spring (removed legacy hitJoltTimer which froze & double-snapped recoil!)
+        // Unified critically damped physics recoil spring + grounded Rift skeletal torso flinch!
         applyCombatRecoilImpulse(physicsActorState, {
           kind: 'hitRecoil',
           dirX: isObj ? opts.dirX : undefined,
@@ -9217,8 +9832,13 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
           intensity: joltScale,
           isHeavy: Boolean(isObj && opts.isHeavy)
         });
+        hitJoltDur = isBossRig ? 0.25 : 0.30;
+        hitJoltTimer = hitJoltDur;
+        hitJoltAmp = joltScale * (isObj && opts.isHeavy ? 1.32 : 1.0);
+        hitTwistDir = -hitTwistDir;
       }
-      if (!playClip || activeClampedAction || activeCutsceneAction || hitReactCooldown > 0) {
+      const forceRestart = Boolean(isObj && (opts.forceRestart || opts.interruptAttack));
+      if (!playClip || activeClampedAction || activeCutsceneAction || (!forceRestart && hitReactCooldown > 0)) {
         return false;
       }
       const clipName = isObj && typeof opts.clipName === 'string' && opts.clipName ? opts.clipName : null;
@@ -9230,7 +9850,7 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
         blendOutSec: isObj && Number.isFinite(Number(opts.blendOutSec)) ? Number(opts.blendOutSec) : 0.09,
         maxWeight: isObj && Number.isFinite(Number(opts.maxWeight)) ? Number(opts.maxWeight) : 1.0
       });
-      hitReactCooldown = playedClip ? 0.18 : 0.08;
+      hitReactCooldown = playedClip ? 0.12 : 0.06;
       return Boolean(playedClip);
     },
     cancelHitReact() {
@@ -9257,7 +9877,7 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
       if (halo) halo.visible = false;
       if (innerBossHalo) innerBossHalo.visible = false;
       if (eliteCrest) eliteCrest.visible = false;
-      const deathSpeed = cfg.isBossVisual ? 1.0 : 1.38;
+      const deathSpeed = cfg.isBossVisual || isRiftTripo ? 1.0 : 1.38;
       const hasClip = animCtrl?.triggerDeath?.(deathSpeed);
       proceduralFall = !hasClip;
     },
@@ -9356,7 +9976,8 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
             if (clipDur > 0.05) {
               const impactFrac = ENEMY_CLIP_IMPACT_FRAC[targetClip] ?? 0.45;
               const impactTimeAt1x = clipDur * impactFrac;
-              spd = Math.max(0.45, Math.min(2.5, impactTimeAt1x / impactSec));
+              const maxSyncSpd = isRiftTripo ? 1.24 : 2.5;
+              spd = Math.max(0.45, Math.min(maxSyncSpd, impactTimeAt1x / impactSec));
             }
           }
         }
@@ -9391,6 +10012,9 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
     },
     cancelAttackAnim() {
       animCtrl?.cancelOneShot?.();
+    },
+    setActiveAttackTimeScale(speed) {
+      return animCtrl?.setActiveAttackTimeScale?.(speed) || false;
     },
     flashHit() {
       // Never flash a dissolving corpse (keeps the Elden ember-edge dissolve shader bound!)
@@ -9463,6 +10087,13 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
       const safeDt = Number.isFinite(dt) ? Math.min(Math.max(dt, 0), 0.1) : 0.016;
       // Undo last frame's additive jaw lip-sync BEFORE the mixer evaluates (0 drift)
       restoreJawAdditive();
+      if (cfg.key === 'rift_boss') {
+        const mAlpha = 1 - Math.exp(-safeDt * 18);
+        bossMouthSmooth += (mouthOpen01 - bossMouthSmooth) * mAlpha;
+        if (mouthOpen01 <= 0.001 && bossMouthSmooth < 0.002) {
+          bossMouthSmooth = 0;
+        }
+      }
       let isMoving = true;
       let rawSpeedMult = 1;
       let elapsedTime = 0;
@@ -9711,7 +10342,9 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
             useFallbackIdleBreath = true;
           }
         }
-        // Re-apply Boss additive jaw lip-sync strictly AFTER mixer.update so jaw tracks never fight or drift
+        // Re-apply Boss additive jaw lip-sync, forward neck/head clamp & grounded Rift torso hit-flinch strictly AFTER mixer.update
+        applyRiftTorsoFlinch(safeDt);
+        clampBossNeckHeadForwardPitch();
         applyJawAdditive();
       }
       if (procRig) {
@@ -9719,8 +10352,14 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
       }
 
       if (!isDying && spawnedInst && !procRig) {
-        if (activeCutsceneAction || activeClampedAction) {
-          // Pure baked cutscene/stagger pose while normalized cutscene or clamped clip drives the skeleton
+        const isFullBodyBakedRift =
+          cfg.key === 'rift_boss' ||
+          cfg.key === 'rift_executioner' ||
+          cfg.key === 'rift_vanguard' ||
+          cfg.key === 'rift_acolyte';
+        if (activeCutsceneAction || activeClampedAction || isFullBodyBakedRift) {
+          // Pure baked grounded skeleton pose — NEVER tilt whole GLB root above feet (kills boot underground clipping,
+          // rear-boot hover, bowling-pin lean, and planted-foot yaw skating!)
           if (spawnedInst.rotation.x !== 0 || spawnedInst.rotation.y !== 0 || spawnedInst.rotation.z !== 0) {
             spawnedInst.rotation.set(0, 0, 0);
           }
@@ -9738,8 +10377,17 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
 
           if (phase === 'neutral' && animCtrl?.isOneShotActive?.()) {
             const activeClip = animCtrl.getActiveAttackClipName?.() || lastAttackClipPlayed;
-            // Never misclassify Recover_Heft / breather clips as a 'slash' attack!
-            if (activeClip && activeClip !== 'Recover_Heft') {
+            // Never misclassify non-attack reaction/breather clips as a 'slash' attack!
+            const isNonAttackClip =
+              !activeClip ||
+              activeClip === 'Recover_Heft' ||
+              activeClip === 'Roar_Taunt' ||
+              activeClip === 'Hit_React' ||
+              activeClip === 'Hit_React_Gut' ||
+              activeClip === 'Block_React' ||
+              activeClip === 'Shield_Block_Hit' ||
+              activeClip === 'Backstep_Evade';
+            if (!isNonAttackClip) {
               const prog = animCtrl.getActiveAttackProgress01?.() ?? 0;
               const impFrac = ENEMY_CLIP_IMPACT_FRAC[activeClip] ?? 0.48;
               const windEnd = Math.max(0.15, impFrac * 0.82);
