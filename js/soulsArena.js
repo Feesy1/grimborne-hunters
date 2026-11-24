@@ -13,8 +13,8 @@ import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { DRACOLoader } from '../vendor/DRACOLoader.js';
 import { mergeGeometries } from '../vendor/BufferGeometryUtils.js';
-import { createSoulsPbrTextures } from './souls/soulsPbrTextures.js?v=20261124z88';
-import * as CastleLayout from './souls/soulsCastleLayout.js?v=20261124z88';
+import { createSoulsPbrTextures } from './souls/soulsPbrTextures.js?v=20261124z89';
+import * as CastleLayout from './souls/soulsCastleLayout.js?v=20261124z89';
 import {
   SOULS_CASTLE_CONSTANTS,
   SOULS_CASTLE_BONFIRE,
@@ -38,26 +38,26 @@ import {
   clampCastlePosition,
   getCastleSurfaceType,
   getCastleStaticColliders
-} from './souls/soulsCastleLayout.js?v=20261124z88';
-import { createWallFlameJetTraps } from './souls/soulsFireVfx.js?v=20261124z88';
-import { createSoulsCastleDoors } from './souls/soulsCastleDoors.js?v=20261124z88';
+} from './souls/soulsCastleLayout.js?v=20261124z89';
+import { createWallFlameJetTraps } from './souls/soulsFireVfx.js?v=20261124z89';
+import { createSoulsCastleDoors } from './souls/soulsCastleDoors.js?v=20261124z89';
 import {
   createHeroBonfire3D,
   createGothicLanternBraziers3D,
   createMeltedCandleClusters3D,
   createCastleBannersAndShrines3D
-} from './souls/soulsCastleProps.js?v=20261124z88';
-import { createSoulsCastleRoof } from './souls/soulsCastleRoof.js?v=20261124z88';
-import { createCastleAtmosphere } from './souls/soulsAtmosphere.js?v=20261124z88';
+} from './souls/soulsCastleProps.js?v=20261124z89';
+import { createSoulsCastleRoof } from './souls/soulsCastleRoof.js?v=20261124z89';
+import { createCastleAtmosphere } from './souls/soulsAtmosphere.js?v=20261124z89';
 import {
   createSoulsFireShadowRig,
   buildFireSourcesFromCastleLayout
-} from './souls/soulsLightingRig.js?v=20261124z88';
+} from './souls/soulsLightingRig.js?v=20261124z89';
 
 const sharedDracoLoader = new DRACOLoader();
 sharedDracoLoader.setDecoderPath('./vendor/draco/');
 
-const THRONE_GLB_URL = './assets/env/souls_throne.glb?v=20261124z88';
+const THRONE_GLB_URL = './assets/env/souls_throne.glb?v=20261124z89';
 
 const BOSS_CENTER_Z = SOULS_CASTLE_CONSTANTS.BOSS_CENTER_Z;
 const BOSS_RADIUS = SOULS_CASTLE_CONSTANTS.BOSS_RADIUS;

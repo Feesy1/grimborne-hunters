@@ -9,7 +9,7 @@ import {
   LEVELS,
   getLevelDef,
   RUN_UPGRADES
-} from './config.js?v=20261124z88';
+} from './config.js?v=20261124z89';
 import {
   TWO_PI,
   ARENA_PLAYER_LIMIT,
@@ -21,7 +21,7 @@ import {
   lerpAngle,
   resolveArenaBiomeForLevel,
   createCombatBridge
-} from './combat/bridge.js?v=20261124z88';
+} from './combat/bridge.js?v=20261124z89';
 import {
   updateBossAI,
   updateSoulsBossAI,
@@ -31,7 +31,7 @@ import {
   cancelSoulsBossTelegraph,
   applySoulsBossParry,
   SOULS_BOSS_MULTI_PARRY
-} from './combat/bossAi.js?v=20261124z88';
+} from './combat/bossAi.js?v=20261124z89';
 import {
   createPoiseController,
   STANCE_DAMAGE_TABLE,
@@ -40,26 +40,26 @@ import {
   getPlayerHitstunSpec,
   SOULS_GUARD_CFG,
   computeBlockedStaminaCost
-} from './combat/poiseSystem.js?v=20261124z88';
+} from './combat/poiseSystem.js?v=20261124z89';
 import {
   SOULS_ROLL_CFG,
   getSoulsRollIframes,
   sampleSoulsRollStepDist,
   sampleAttackLungeStep,
   createAliveStanceSmoother
-} from './souls/soulsLocomotion.js?v=20261124z88';
+} from './souls/soulsLocomotion.js?v=20261124z89';
 import {
   SOULS_STAMINA_CFG,
   createSoulsStaminaController,
   createSoulsActionBuffer
-} from './souls/soulsStaminaBuffer.js?v=20261124z88';
+} from './souls/soulsStaminaBuffer.js?v=20261124z89';
 import {
   SOULS_ATTACK_SPECS,
   getSoulsAttackSpec,
   computeSoulsDamage,
   testSweptBladeHits
-} from './souls/soulsHitboxDamage.js?v=20261124z88';
-import * as SOULS_MOB_AI from './souls/soulsMobAi.js?v=20261124z88';
+} from './souls/soulsHitboxDamage.js?v=20261124z89';
+import * as SOULS_MOB_AI from './souls/soulsMobAi.js?v=20261124z89';
 import {
   initSoulsMobState,
   stepSoulsMobAi,
@@ -67,7 +67,7 @@ import {
   onSoulsMobInterrupted,
   resetSoulsPackCoordinator,
   releaseSoulsAttackToken
-} from './souls/soulsMobAi.js?v=20261124z88';
+} from './souls/soulsMobAi.js?v=20261124z89';
 import {
   SOULS_CASTLE_CONSTANTS,
   SOULS_CASTLE_BONFIRE,
@@ -86,32 +86,32 @@ import {
   canInteractWithBossDoor,
   findInteractableRelic,
   clampCastlePosition
-} from './souls/soulsCastleLayout.js?v=20261124z88';
+} from './souls/soulsCastleLayout.js?v=20261124z89';
 import {
   createDissolveAshSystem
-} from './souls/soulsDissolveVfx.js?v=20261124z88';
+} from './souls/soulsDissolveVfx.js?v=20261124z89';
 import {
   enhanceSoulsBossModel,
   updateSoulsBossVisuals,
   triggerSoulsBossHitFlash,
   disposeSoulsBossVisuals
-} from './souls/soulsBossVisuals.js?v=20261124z88';
+} from './souls/soulsBossVisuals.js?v=20261124z89';
 import {
   createSoulsGameFeel,
   getImpactSparkBurst
-} from './souls/soulsGameFeel.js?v=20261124z88';
+} from './souls/soulsGameFeel.js?v=20261124z89';
 import {
   BOSS_DOOR_CUTSCENE_DURATION,
   BOSS_DOOR_CUTSCENE_ACTS
-} from './souls/soulsCutsceneChoreography.js?v=20261124z88';
+} from './souls/soulsCutsceneChoreography.js?v=20261124z89';
 import {
   resetActorPhysics,
   applyKnockbackImpulse,
   stepActorPhysicsBody
-} from './souls/soulsPhysicsFeel.js?v=20261124z88';
+} from './souls/soulsPhysicsFeel.js?v=20261124z89';
 import {
   createWeaponTrailSystem
-} from './souls/soulsWeaponTrails.js?v=20261124z88';
+} from './souls/soulsWeaponTrails.js?v=20261124z89';
 
 export function createCombatController({
   world,
