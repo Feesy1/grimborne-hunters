@@ -2,7 +2,7 @@
 // Studio 44.1 kHz 16-bit WAV samples + acoustic procedural fallbacks during decode.
 // Strictly isolated from PvE biomes; zero external dependencies (Vanilla ES Module).
 
-export const SOULS_ENV_AUDIO_VERSION = '20261124z98';
+export const SOULS_ENV_AUDIO_VERSION = '20261124z99';
 
 const BASE_AUDIO_PATH = './assets/audio';
 
@@ -21,7 +21,7 @@ export const SOULS_ENV_SAMPLE_MANIFEST = Object.freeze([
   ['roll_stone_2', `${BASE_AUDIO_PATH}/souls_env_roll_stone_2.wav?v=${SOULS_ENV_AUDIO_VERSION}`],
   ['turn_scrape_1', `${BASE_AUDIO_PATH}/souls_env_turn_scrape_1.wav?v=${SOULS_ENV_AUDIO_VERSION}`],
   ['turn_scrape_2', `${BASE_AUDIO_PATH}/souls_env_turn_scrape_2.wav?v=${SOULS_ENV_AUDIO_VERSION}`],
-  ['bonfire_crackle', `${BASE_AUDIO_PATH}/souls_env_bonfire_crackle.wav?v=${SOULS_ENV_AUDIO_VERSION}`],
+  ['bonfire_crackle', `${BASE_AUDIO_PATH}/souls_env_fire_crackle.wav?v=${SOULS_ENV_AUDIO_VERSION}`],
   ['fog_gate', `${BASE_AUDIO_PATH}/souls_env_fog_gate.wav?v=${SOULS_ENV_AUDIO_VERSION}`],
   ['cathedral_drone', `${BASE_AUDIO_PATH}/souls_env_cathedral_drone.wav?v=${SOULS_ENV_AUDIO_VERSION}`],
   ['door_open', `${BASE_AUDIO_PATH}/souls_env_door_open.wav?v=${SOULS_ENV_AUDIO_VERSION}`],
@@ -143,7 +143,8 @@ export function createSoulsEnvAudio({
   }
 
   function getReflAmount(surface, base = 0.34) {
-    if (SHORE_SURFACES.has(surface)) return 0.16;
+    // Outdoor Exterior Shore is open air — zero indoor 28/64ms stone comb-delay ringing!
+    if (SHORE_SURFACES.has(surface)) return 0.0;
     if (surface === 'cathedral_stone') return base * 1.45;
     if (surface === 'stone_bridge') return base * 1.18;
     return base;
@@ -325,28 +326,6 @@ export function createSoulsEnvAudio({
       };
       archOsc.start(t0 + 0.0015);
       archOsc.stop(t0 + archDur + 0.01);
-    }
-
-    // Layer 3: Subtle plate sabaton metallic ring (4-8 kHz)
-    if (isWarrior) {
-      const clinkT = t0 + 0.004;
-      const o1 = ctx.createOscillator();
-      const g1 = ctx.createGain();
-      const f1 = (4500 + Math.random() * 1400) * footTilt;
-      o1.type = 'sine';
-      o1.frequency.setValueAtTime(f1, clinkT);
-      o1.frequency.exponentialRampToValueAtTime(f1 * 0.975, clinkT + 0.028);
-      g1.gain.setValueAtTime(0.0001, clinkT);
-      g1.gain.linearRampToValueAtTime(0.045 * level, clinkT + 0.001);
-      g1.gain.exponentialRampToValueAtTime(0.0001, clinkT + 0.028);
-      o1.connect(g1);
-      g1.connect(bus);
-      o1.onended = () => {
-        try { o1.disconnect(); } catch {}
-        try { g1.disconnect(); } catch {}
-      };
-      o1.start(clinkT);
-      o1.stop(clinkT + 0.035);
     }
 
     setTimeout(() => {
@@ -844,9 +823,10 @@ export function createSoulsEnvAudio({
         }
       }
       if (bonfireGain) {
-        const bonfireTarget = Math.max(0.0001, 0.26 * effectiveBonfire);
+        // Gentle restrained hearth warmth in Castle (soulsSpatialAudio handles main spatial fire!)
+        const bonfireTarget = Math.max(0.0001, 0.10 * effectiveBonfire);
         bonfireGain.gain.cancelScheduledValues(t);
-        bonfireGain.gain.setTargetAtTime(bonfireTarget, t, 0.28);
+        bonfireGain.gain.setTargetAtTime(bonfireTarget, t, 0.36);
       }
     } else if (bonfireGain) {
       bonfireGain.gain.cancelScheduledValues(t);
@@ -951,10 +931,12 @@ export function createSoulsEnvAudio({
     const gainJit = 0.95 + Math.random() * 0.10;
     const gainPeak = Math.min(0.96, 0.78 * classWeight * sprintMult * gainJit);
 
-    // Ultra-faithful ±1.5% pitch spread so footsteps preserve 100% of the exact reference timbre!
+    // Ultra-faithful ±1.5% pitch spread & dry ground EQ (zero high-frequency shelf boost!)
     const footTilt = parity === 0 ? 0.992 : 1.008;
     const rate = footTilt * (isSprinting ? 1.02 : 1.0) * (0.985 + Math.random() * 0.03);
-    const highShelfDb = isWarrior ? 0.6 : isMage ? -2.4 : -1.0;
+    const highShelfDb = SHORE_SURFACES.has(surface)
+      ? (isMage ? -2.8 : -1.2)
+      : (isWarrior ? 0.0 : isMage ? -2.4 : -1.0);
 
     return playLoadedBuffer(ctx, buf, {
       dest: sfxDest,
@@ -963,7 +945,7 @@ export function createSoulsEnvAudio({
       rate,
       reverbSend: getReflAmount(surface, 0.34),
       highShelfDb,
-      highShelfFreq: 3800
+      highShelfFreq: 3000
     });
   }
 

@@ -1,12 +1,12 @@
 // Procedural Web Audio API Dark-Fantasy Synthesizer + Abandoned Knight Rift Studio Audio Router
 // Instant startup, crisp dynamics, full suspend/mute compliance.
 
-import { createSoulsEnvAudio } from './souls/soulsEnvAudio.js?v=20261124z98';
-import { createSoulsHeroAudio } from './souls/soulsHeroAudio.js?v=20261124z98';
-import { createSoulsEnemyAudio } from './souls/soulsEnemyAudio.js?v=20261124z98';
-import { createSoulsMusicManager } from './souls/soulsMusicManager.js?v=20261124z98';
-import { createSoulsSpatialAudio } from './souls/soulsSpatialAudio.js?v=20261124z98';
-import { createSoulsEscapeAudio } from './souls/soulsEscapeAudio.js?v=20261124z98';
+import { createSoulsEnvAudio } from './souls/soulsEnvAudio.js?v=20261124z99';
+import { createSoulsHeroAudio } from './souls/soulsHeroAudio.js?v=20261124z99';
+import { createSoulsEnemyAudio } from './souls/soulsEnemyAudio.js?v=20261124z99';
+import { createSoulsMusicManager } from './souls/soulsMusicManager.js?v=20261124z99';
+import { createSoulsSpatialAudio } from './souls/soulsSpatialAudio.js?v=20261124z99';
+import { createSoulsEscapeAudio } from './souls/soulsEscapeAudio.js?v=20261124z99';
 
 export function createAudioEngine() {
   let ctx = null;
@@ -26,7 +26,7 @@ export function createAudioEngine() {
 
   function preloadExternalSamples(audioCtx) {
     if (!audioCtx || typeof fetch === 'undefined') return;
-    const stepVer = '20261124z98';
+    const stepVer = '20261124z99';
     const files = [
       ['step_warrior_1', `./assets/audio/step_warrior_1.wav?v=${stepVer}`],
       ['step_warrior_2', `./assets/audio/step_warrior_2.wav?v=${stepVer}`],
@@ -261,7 +261,7 @@ export function createAudioEngine() {
     getVoiceVolume: () => cutsceneVoiceVolume,
     getStoneReverbDest: () => getOrCreateStoneReverbSend(),
     duckMusic: (db, holdSec, relSec) => soulsMusic?.duck?.(db, holdSec, relSec),
-    assetVer: '20261124z98'
+    assetVer: '20261124z99'
   });
   soulsEscape.setMuted?.(muted);
   soulsEscape.setVoiceVolume?.(Math.max(0, Math.min(1.6, cutsceneVoiceVolume * 1.08)));
@@ -270,8 +270,8 @@ export function createAudioEngine() {
   // - rift_explore: Elden Castle Drone (Bonfire / Castle Corridor / East Alcove)
   // - boss_phase1/boss_phase2: unified Epic Boss Battle (God of War Style)
   // Routed directly to masterGain (bypassing retro 980Hz musicFilter lowpass!) with own musicVolume scaling
-  const SOULS_EXPLORE_TRACK_URL = './assets/audio/music_rift_explore.mp3?v=20261124z98';
-  const SOULS_BOSS_TRACK_URL = './assets/audio/music_boss_rift.mp3?v=20261124z98';
+  const SOULS_EXPLORE_TRACK_URL = './assets/audio/music_rift_explore.mp3?v=20261124z99';
+  const SOULS_BOSS_TRACK_URL = './assets/audio/music_boss_rift.mp3?v=20261124z99';
   let soulsAmbientActive = false;
   const soulsMusic = createSoulsMusicManager({
     getCtx: () => ctx,
@@ -2526,19 +2526,15 @@ export function createAudioEngine() {
 
     setExteriorShoreAmbient(active, opts = null) {
       const want = Boolean(active);
+      // Exterior Shore fire is handled smoothly by soulsEscapeAudio (`souls_env_fire_crackle.wav`) —
+      // never double-layer soulsEnv's bonfire node on Exterior Shore!
+      try { soulsEnv?.setShoreBonfireLevel?.(0); } catch {}
       if (want && (!readyToPlay() || muted || suspendedBySystem)) {
         try { soulsEscape?.setExteriorShoreAmbient?.(false); } catch {}
-        try { soulsEnv?.setShoreBonfireLevel?.(0); } catch {}
         return;
       }
       if (want) preloadSoulsAudio(ctx);
-      try { soulsEscape?.setExteriorShoreAmbient?.(want); } catch {}
-      try {
-        const bfProx = want && opts && Number.isFinite(Number(opts.bonfireProximity))
-          ? Number(opts.bonfireProximity)
-          : 0;
-        soulsEnv?.setShoreBonfireLevel?.(bfProx);
-      } catch {}
+      try { soulsEscape?.setExteriorShoreAmbient?.(want, opts); } catch {}
     },
 
     playHeroRoll(heavy = false) {
@@ -2639,7 +2635,10 @@ export function createAudioEngine() {
         envAmbientActive: Boolean(soulsEnv?.isAmbientActive?.()),
         shoreAmbientActive: Boolean(soulsEscape?.isExteriorShoreAmbientActive?.()),
         shoreWindLoaded: Boolean(soulsEscape?.isShoreWindSampleLoaded?.()),
-        usingRealShoreWind: Boolean(soulsEscape?.isUsingShoreWindSample?.())
+        usingRealShoreWind: Boolean(soulsEscape?.isUsingShoreWindSample?.()),
+        shoreFireLoaded: Boolean(soulsEscape?.isShoreFireLoaded?.()),
+        shoreFireActive: Boolean(soulsEscape?.isShoreFireActive?.()),
+        shoreFireTargetGain: Number(soulsEscape?.getShoreFireTargetGain?.() || 0)
       };
     },
 

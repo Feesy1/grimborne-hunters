@@ -8,7 +8,7 @@
 //      + exact 30-FPS lip-sync curves (`BOSS_ESCAPE_VO_DURATIONS_SEC`, `sampleEscapeBossMouthOpen`)
 //   2. Lightweight filtered-noise environmental beds (chasm fall wind, river plunge, exterior shore river/waterfall).
 
-export const SOULS_ESCAPE_AUDIO_VERSION = '20261124z98';
+export const SOULS_ESCAPE_AUDIO_VERSION = '20261124z99';
 export const BOSS_ESCAPE_VO_COUNT = 3;
 export const BOSS_ESCAPE_LIPSYNC_FPS = 30;
 
@@ -175,10 +175,18 @@ export function createSoulsEscapeAudio(getCtxOrOpts, getMasterGainArg, getSfxVol
   const voLoading = new Map();
   let shoreWindBuf = null;
   let shoreWindLoading = null;
+  let shoreFireBuf = null;
+  let shoreFireLoading = null;
   let shoreAmbientWanted = false;
+  let lastShoreFireOpts = null;
+  let lastShoreFireGain = 0;
   let activeVo = null;
   let chasmWindHandle = null;
   let shoreAmbientHandle = null;
+  let shoreFireHandle = null;
+  const _shoreFireXs = new Float32Array(3);
+  const _shoreFireZs = new Float32Array(3);
+  const _shoreFireWs = new Float32Array(3);
   const activeOneShots = new Set();
 
   function computeVoiceGain() {
@@ -269,6 +277,34 @@ export function createSoulsEscapeAudio(getCtxOrOpts, getMasterGainArg, getSfxVol
     return p;
   }
 
+  function fetchShoreFireBuf(ctx) {
+    if (shoreFireBuf) return Promise.resolve(shoreFireBuf);
+    if (shoreFireLoading) return shoreFireLoading;
+    if (!ctx || typeof fetch !== 'function') return Promise.resolve(null);
+    // Exact same warm, natural 6.0s crackling fire loop as the Castle (`soulsSpatialAudio.js`)!
+    const url = `${BASE_AUDIO_PATH}/souls_env_fire_crackle.wav?v=${encodeURIComponent(assetVer)}`;
+    const p = fetch(url)
+      .then((res) => (res && res.ok ? res.arrayBuffer() : null))
+      .then((ab) => (ab && !disposed ? decodeAudioBuffer(ctx, ab) : null))
+      .then((buf) => {
+        shoreFireLoading = null;
+        if (buf && !disposed) {
+          shoreFireBuf = buf;
+          if (shoreAmbientWanted && !isMuted && !shoreFireHandle) {
+            startShoreFireHandle(ctx);
+            if (lastShoreFireOpts) updateShoreFireParams(ctx, lastShoreFireOpts);
+          }
+        }
+        return buf || null;
+      })
+      .catch(() => {
+        shoreFireLoading = null;
+        return null;
+      });
+    shoreFireLoading = p;
+    return p;
+  }
+
   function preload(ctxOverride = null) {
     const ctx = ensureGraph(ctxOverride);
     if (!ctx) return;
@@ -276,6 +312,7 @@ export function createSoulsEscapeAudio(getCtxOrOpts, getMasterGainArg, getSfxVol
       fetchVoCue(ctx, i);
     }
     fetchShoreWindBuf(ctx);
+    fetchShoreFireBuf(ctx);
   }
 
   function stopEscapeVoice(fadeSec = 0.08) {
@@ -488,6 +525,181 @@ export function createSoulsEscapeAudio(getCtxOrOpts, getMasterGainArg, getSfxVol
     }
   }
 
+  function stopShoreFireHandle(fadeSec = 0.35) {
+    const h = shoreFireHandle;
+    shoreFireHandle = null;
+    lastShoreFireGain = 0;
+    if (!h) return;
+    const ctx = boundCtx || getCtx();
+    const fade = clamp(fadeSec, 0.04, 0.8);
+    if (ctx && h.gain) {
+      const now = ctx.currentTime;
+      try {
+        h.gain.gain.cancelScheduledValues(now);
+        h.gain.gain.setValueAtTime(Math.max(0.0001, h.gain.gain.value || 0.0001), now);
+        h.gain.gain.exponentialRampToValueAtTime(0.0001, now + fade);
+      } catch {}
+      setTimeout(() => {
+        safeStop(h.src);
+        safeDisconnect(h.src);
+        safeDisconnect(h.lpf);
+        safeDisconnect(h.panner);
+        safeDisconnect(h.gain);
+      }, Math.ceil(fade * 1000) + 40);
+    } else {
+      safeStop(h.src);
+      safeDisconnect(h.src);
+      safeDisconnect(h.lpf);
+      safeDisconnect(h.panner);
+      safeDisconnect(h.gain);
+    }
+  }
+
+  function startShoreFireHandle(ctx) {
+    if (!ctx || !envBus || shoreFireHandle || !shoreFireBuf) return;
+    const now = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = shoreFireBuf;
+    src.loop = true;
+
+    const lpf = ctx.createBiquadFilter();
+    lpf.type = 'lowpass';
+    lpf.frequency.setValueAtTime(2800, now);
+    lpf.Q.setValueAtTime(0.65, now);
+
+    let panner = null;
+    if (typeof ctx.createStereoPanner === 'function') {
+      try {
+        panner = ctx.createStereoPanner();
+        panner.pan.setValueAtTime(0, now);
+      } catch {
+        panner = null;
+      }
+    }
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, now);
+    lastShoreFireGain = 0;
+
+    src.connect(lpf);
+    if (panner) {
+      lpf.connect(panner);
+      panner.connect(gain);
+    } else {
+      lpf.connect(gain);
+    }
+    gain.connect(envBus);
+    src.start(now);
+    shoreFireHandle = {
+      src,
+      lpf,
+      panner,
+      gain,
+      lastGain: 0.0001,
+      lastCutoff: 2800,
+      lastPan: 0
+    };
+  }
+
+  function updateShoreFireParams(ctx, opts = null) {
+    const h = shoreFireHandle;
+    if (!ctx || !h || !h.gain || !h.lpf) return;
+
+    const bonfireLit = Boolean(opts && opts.bonfireLit);
+    const hasCoords = Boolean(
+      opts &&
+      Number.isFinite(Number(opts.listenerX)) &&
+      Number.isFinite(Number(opts.listenerZ))
+    );
+
+    // Strictly 3D object-bound spatial fire (identical acoustic model to Castle `soulsSpatialAudio.js` —
+    // NOT a constant background bed! Silent far away, smoothly fading in with stereo direction &
+    // air-absorption LPF as you approach the lit Shore Bonfire or Twin Gate Braziers).
+    let bestAtten = 0;
+    let secondaryEnergy = 0;
+    let bestDist = Infinity;
+    let pan = 0;
+    if (hasCoords) {
+      const lx = Number(opts.listenerX);
+      const lz = Number(opts.listenerZ);
+      const yaw = Number.isFinite(Number(opts.listenerYaw)) ? Number(opts.listenerYaw) : 0;
+      const cosY = Math.cos(yaw);
+      const sinY = Math.sin(yaw);
+      const rightX = cosY;
+      const rightZ = -sinY;
+
+      const bfX = Number.isFinite(Number(opts.bonfireX)) ? Number(opts.bonfireX) : -2.2;
+      const bfZ = Number.isFinite(Number(opts.bonfireZ)) ? Number(opts.bonfireZ) : 15.0;
+
+      // 3 physical 3D hearth objects:
+      //   [0] Shore Bonfire (-2.2, 15.0): full 17m smooth radius when lit; silent when unlit (tiny dying ember only <4.5m)
+      //   [1,2] Twin always-lit Ash Gorge Gate Braziers (±3.55, 29.3): smooth 14m radius
+      _shoreFireXs[0] = bfX;   _shoreFireZs[0] = bfZ;  _shoreFireWs[0] = bonfireLit ? 1.0 : 0.24;
+      _shoreFireXs[1] = -3.55; _shoreFireZs[1] = 29.3; _shoreFireWs[1] = 0.82;
+      _shoreFireXs[2] = 3.55;  _shoreFireZs[2] = 29.3; _shoreFireWs[2] = 0.82;
+
+      let weightedPan = 0;
+      let sumW = 0;
+      for (let i = 0; i < 3; i++) {
+        const refDist = i === 0 ? 1.8 : 1.5;
+        const maxDist = i === 0 ? (bonfireLit ? 17.5 : 4.8) : 14.0;
+        const dx = _shoreFireXs[i] - lx;
+        const dz = _shoreFireZs[i] - lz;
+        const dSq = dx * dx + dz * dz;
+        if (dSq >= maxDist * maxDist) continue;
+        const d = Math.sqrt(dSq);
+        const norm = clamp((d - refDist) / Math.max(0.5, maxDist - refDist), 0, 1);
+        // Smooth zero-slope perceptual rolloff (same curve as Castle `soulsSpatialAudio.js`, zero abrupt step!)
+        const atten = Math.pow(1.0 - norm, 2.15) * _shoreFireWs[i];
+        if (atten <= 0.0005) continue;
+        if (atten > bestAtten) {
+          secondaryEnergy += bestAtten * 0.22;
+          bestAtten = atten;
+          bestDist = d;
+        } else {
+          secondaryEnergy += atten * 0.22;
+        }
+        if (d > 0.08) {
+          const projR = (dx * rightX + dz * rightZ) / d;
+          const nearScale = d < 1.35 ? clamp(d / 1.35, 0.14, 1.0) : 1.0;
+          const srcPan = clamp(projR * 0.82 * nearScale, -0.88, 0.88);
+          const pw = atten * atten;
+          weightedPan += srcPan * pw;
+          sumW += pw;
+        }
+      }
+      if (sumW > 1e-6) pan = clamp(weightedPan / sumW, -0.88, 0.88);
+    } else if (opts && Number.isFinite(Number(opts.bonfireProximity))) {
+      bestAtten = Math.pow(clamp(Number(opts.bonfireProximity), 0, 1), 1.6);
+      bestDist = 1.8 + (1.0 - bestAtten) * 14.0;
+    }
+
+    const totalPresence = clamp(bestAtten + Math.min(0.22, secondaryEnergy), 0, 1.15);
+    // Restrained, cozy campfire ceiling (0.0001 silent far -> 0.24 right beside lit bonfire; NEVER a loud blast!)
+    const targetGain = totalPresence > 0.003
+      ? clamp(totalPresence * 0.235, 0.0001, 0.26)
+      : 0.0001;
+    // Distance air-absorption filter: warm 1.7 kHz distant -> crisp gentle 6.8 kHz up close (matching Castle!)
+    const proxNorm = bestDist < Infinity ? clamp((bestDist - 1.5) / 14.0, 0, 1) : 1.0;
+    const targetCutoff = 6800 - proxNorm * 5100;
+
+    const now = ctx.currentTime;
+    if (Math.abs(targetGain - h.lastGain) > 0.0012) {
+      h.gain.gain.setTargetAtTime(targetGain, now, 0.22);
+      h.lastGain = targetGain;
+    }
+    lastShoreFireGain = targetGain > 0.0005 ? targetGain : 0;
+
+    if (Math.abs(targetCutoff - h.lastCutoff) > 28) {
+      h.lpf.frequency.setTargetAtTime(targetCutoff, now, 0.20);
+      h.lastCutoff = targetCutoff;
+    }
+    if (h.panner && h.panner.pan && Math.abs(pan - h.lastPan) > 0.006) {
+      h.panner.pan.setTargetAtTime(pan, now, 0.10);
+      h.lastPan = pan;
+    }
+  }
+
   function startShoreWindHandle(ctx, useRealSample) {
     if (!ctx || !envBus || shoreAmbientHandle) return;
     if (!useRealSample || !shoreWindBuf) return;
@@ -504,20 +716,36 @@ export function createSoulsEscapeAudio(getCtxOrOpts, getMasterGainArg, getSfxVol
     shoreAmbientHandle = { src, hp: null, lp: null, gain, isRealWind: true };
   }
 
-  function setExteriorShoreAmbient(active) {
+  function setExteriorShoreAmbient(active, opts = null) {
     const want = Boolean(active);
     shoreAmbientWanted = want;
     if (!want || isMuted) {
+      lastShoreFireOpts = null;
       stopShoreHandle(0.35);
+      stopShoreFireHandle(0.35);
       return;
+    }
+    if (opts && typeof opts === 'object') {
+      lastShoreFireOpts = opts;
     }
     const ctx = ensureGraph();
     if (!ctx || !envBus) return;
-    if (shoreAmbientHandle) return;
-    if (shoreWindBuf) {
-      startShoreWindHandle(ctx, true);
-    } else if (!shoreWindLoading) {
-      fetchShoreWindBuf(ctx);
+    if (!shoreAmbientHandle) {
+      if (shoreWindBuf) {
+        startShoreWindHandle(ctx, true);
+      } else if (!shoreWindLoading) {
+        fetchShoreWindBuf(ctx);
+      }
+    }
+    if (!shoreFireHandle) {
+      if (shoreFireBuf) {
+        startShoreFireHandle(ctx);
+      } else if (!shoreFireLoading) {
+        fetchShoreFireBuf(ctx);
+      }
+    }
+    if (shoreFireHandle) {
+      updateShoreFireParams(ctx, lastShoreFireOpts);
     }
   }
 
@@ -560,6 +788,9 @@ export function createSoulsEscapeAudio(getCtxOrOpts, getMasterGainArg, getSfxVol
     noiseBuf = null;
     shoreWindBuf = null;
     shoreWindLoading = null;
+    shoreFireBuf = null;
+    shoreFireLoading = null;
+    lastShoreFireOpts = null;
     voBuffers.clear();
     voLoading.clear();
   }
@@ -579,6 +810,9 @@ export function createSoulsEscapeAudio(getCtxOrOpts, getMasterGainArg, getSfxVol
     isExteriorShoreAmbientActive: () => Boolean(shoreAmbientHandle),
     isShoreWindSampleLoaded: () => Boolean(shoreWindBuf),
     isUsingShoreWindSample: () => Boolean(shoreAmbientHandle?.isRealWind),
+    isShoreFireLoaded: () => Boolean(shoreFireBuf),
+    isShoreFireActive: () => Boolean(shoreFireHandle),
+    getShoreFireTargetGain: () => lastShoreFireGain,
     dispose
   };
 }
