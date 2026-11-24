@@ -8,7 +8,7 @@
 //      + exact 30-FPS lip-sync curves (`BOSS_ESCAPE_VO_DURATIONS_SEC`, `sampleEscapeBossMouthOpen`)
 //   2. Lightweight filtered-noise environmental beds (chasm fall wind, river plunge, exterior shore river/waterfall).
 
-export const SOULS_ESCAPE_AUDIO_VERSION = '20261124z99';
+export const SOULS_ESCAPE_AUDIO_VERSION = '20261125z100';
 export const BOSS_ESCAPE_VO_COUNT = 3;
 export const BOSS_ESCAPE_LIPSYNC_FPS = 30;
 
@@ -631,26 +631,41 @@ export function createSoulsEscapeAudio(getCtxOrOpts, getMasterGainArg, getSfxVol
       const bfX = Number.isFinite(Number(opts.bonfireX)) ? Number(opts.bonfireX) : -2.2;
       const bfZ = Number.isFinite(Number(opts.bonfireZ)) ? Number(opts.bonfireZ) : 15.0;
 
-      // 3 physical 3D hearth objects:
-      //   [0] Shore Bonfire (-2.2, 15.0): full 17m smooth radius when lit; silent when unlit (tiny dying ember only <4.5m)
-      //   [1,2] Twin always-lit Ash Gorge Gate Braziers (±3.55, 29.3): smooth 14m radius
-      _shoreFireXs[0] = bfX;   _shoreFireZs[0] = bfZ;  _shoreFireWs[0] = bonfireLit ? 1.0 : 0.24;
-      _shoreFireXs[1] = -3.55; _shoreFireZs[1] = 29.3; _shoreFireWs[1] = 0.82;
-      _shoreFireXs[2] = 3.55;  _shoreFireZs[2] = 29.3; _shoreFireWs[2] = 0.82;
+      // All physical 3D hearth objects across Shore + Extended Gorge Road (dynamic list if provided, clean 3-hearth fallback!)
+      const customSources = Array.isArray(opts.fireSources) && opts.fireSources.length > 0 ? opts.fireSources : null;
+      const srcCount = customSources ? customSources.length : 3;
+      if (!customSources) {
+        _shoreFireXs[0] = bfX;   _shoreFireZs[0] = bfZ;  _shoreFireWs[0] = bonfireLit ? 1.0 : 0.24;
+        _shoreFireXs[1] = -3.55; _shoreFireZs[1] = 29.3; _shoreFireWs[1] = 0.82;
+        _shoreFireXs[2] = 3.55;  _shoreFireZs[2] = 29.3; _shoreFireWs[2] = 0.82;
+      }
 
       let weightedPan = 0;
       let sumW = 0;
-      for (let i = 0; i < 3; i++) {
-        const refDist = i === 0 ? 1.8 : 1.5;
-        const maxDist = i === 0 ? (bonfireLit ? 17.5 : 4.8) : 14.0;
-        const dx = _shoreFireXs[i] - lx;
-        const dz = _shoreFireZs[i] - lz;
+      for (let i = 0; i < srcCount; i++) {
+        let fx, fz, fw, refDist, maxDist;
+        if (customSources) {
+          const fs = customSources[i];
+          fx = Number(fs.x) || 0;
+          fz = Number(fs.z) || 0;
+          fw = Number.isFinite(Number(fs.weight)) ? Number(fs.weight) : 0.9;
+          refDist = fs.isBonfire ? 1.8 : 1.6;
+          maxDist = Number.isFinite(Number(fs.radius)) ? Number(fs.radius) : 16.5;
+        } else {
+          fx = _shoreFireXs[i];
+          fz = _shoreFireZs[i];
+          fw = _shoreFireWs[i];
+          refDist = i === 0 ? 1.8 : 1.5;
+          maxDist = i === 0 ? (bonfireLit ? 17.5 : 4.8) : 14.0;
+        }
+        const dx = fx - lx;
+        const dz = fz - lz;
         const dSq = dx * dx + dz * dz;
         if (dSq >= maxDist * maxDist) continue;
         const d = Math.sqrt(dSq);
         const norm = clamp((d - refDist) / Math.max(0.5, maxDist - refDist), 0, 1);
         // Smooth zero-slope perceptual rolloff (same curve as Castle `soulsSpatialAudio.js`, zero abrupt step!)
-        const atten = Math.pow(1.0 - norm, 2.15) * _shoreFireWs[i];
+        const atten = Math.pow(1.0 - norm, 2.15) * fw;
         if (atten <= 0.0005) continue;
         if (atten > bestAtten) {
           secondaryEnergy += bestAtten * 0.22;

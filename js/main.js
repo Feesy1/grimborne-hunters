@@ -3,15 +3,15 @@
 // Procedural/Sampled Spatial Audio, Gothic Title Screen & HUD.
 
 import * as THREE from '../vendor/three.module.js';
-import { SOULS_LEVEL_DEF } from './config.js?v=20261124z99';
-import { createArenaWorld } from './world.js?v=20261124z99';
-import * as models from './models.js?v=20261124z99';
-import { createProgressionStore, mergeCloudState } from './progression.js?v=20261124z99';
-import { createCombatController } from './combat.js?v=20261124z99';
-import { createAudioEngine } from './audio.js?v=20261124z99';
-import { initYandexSdk } from './yandexSdk.js?v=20261124z99';
-import { createUIManager } from './ui.js?v=20261124z99';
-import { createInputController } from './input.js?v=20261124z99';
+import { SOULS_LEVEL_DEF } from './config.js?v=20261125z100';
+import { createArenaWorld } from './world.js?v=20261125z100';
+import * as models from './models.js?v=20261125z100';
+import { createProgressionStore, mergeCloudState } from './progression.js?v=20261125z100';
+import { createCombatController } from './combat.js?v=20261125z100';
+import { createAudioEngine } from './audio.js?v=20261125z100';
+import { initYandexSdk } from './yandexSdk.js?v=20261125z100';
+import { createUIManager } from './ui.js?v=20261125z100';
+import { createInputController } from './input.js?v=20261125z100';
 
 const SOULS_LOCAL_SAVE_KEY = 'grimborne_souls_save_v1';
 

@@ -4,14 +4,14 @@
 import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { DRACOLoader } from '../vendor/DRACOLoader.js';
-import { ARENA_HALF_SIZE } from './config.js?v=20261124z99';
-import { createSoulsArena } from './soulsArena.js?v=20261124z99';
+import { ARENA_HALF_SIZE } from './config.js?v=20261125z100';
+import { createSoulsArena } from './soulsArena.js?v=20261125z100';
 import {
   BOSS_DOOR_CUTSCENE_DURATION,
   evaluateBossDoorCutscene,
   getBossDoorCutsceneSkipState,
   computeBossDoorCutsceneShakeOffset
-} from './souls/soulsCutsceneChoreography.js?v=20261124z99';
+} from './souls/soulsCutsceneChoreography.js?v=20261125z100';
 import {
   BOSS_ESCAPE_CUTSCENE_DURATION,
   BOSS_ESCAPE_CUTSCENE_SKIP_TIME,
@@ -21,19 +21,19 @@ import {
   sampleBossEscapeCutscene,
   getBossEscapeCutsceneSkipState,
   computeBossEscapeCameraShakeOffset
-} from './souls/soulsEscapeCutscene.js?v=20261124z99';
+} from './souls/soulsEscapeCutscene.js?v=20261125z100';
 import {
   EXTERIOR_SHORE_ANCHORS,
   createSoulsExteriorShore
-} from './souls/soulsExteriorShore.js?v=20261124z99';
-import { createSoulsEscapeVfx } from './souls/soulsEscapeVfx.js?v=20261124z99';
+} from './souls/soulsExteriorShore.js?v=20261125z100';
+import { createSoulsEscapeVfx } from './souls/soulsEscapeVfx.js?v=20261125z100';
 import {
   clampCastleCameraPosition,
   SOULS_CASTLE_CONSTANTS
-} from './souls/soulsCastleLayout.js?v=20261124z99';
-import { createSoulsEnvironmentMap } from './souls/soulsLightingRig.js?v=20261124z99';
-import { applyEldenDissolveToModel } from './souls/soulsDissolveVfx.js?v=20261124z99';
-import * as SoulsFireVfx from './souls/soulsFireVfx.js?v=20261124z99';
+} from './souls/soulsCastleLayout.js?v=20261125z100';
+import { createSoulsEnvironmentMap } from './souls/soulsLightingRig.js?v=20261125z100';
+import { applyEldenDissolveToModel } from './souls/soulsDissolveVfx.js?v=20261125z100';
+import * as SoulsFireVfx from './souls/soulsFireVfx.js?v=20261125z100';
 import {
   createCourtyardStoneTexture,
   createHubMistTexture,
@@ -44,7 +44,7 @@ import {
   createHubContactAoTexture,
   createArcaneCircleTexture,
   getSlashCrescentGeo
-} from './world/textures.js?v=20261124z99';
+} from './world/textures.js?v=20261125z100';
 
 const sharedDracoLoader = new DRACOLoader();
 sharedDracoLoader.setDecoderPath('./vendor/draco/');
@@ -162,11 +162,11 @@ export function createArenaWorld(canvas) {
     plazaRune: new THREE.Color(0x38bdf8)
   };
   const PALETTE_SOULS_SHORE = {
-    bg: new THREE.Color(0x0b1528),
-    fog: new THREE.Color(0x111f36),
-    hemiSky: new THREE.Color(0x8db8ee),
-    hemiGround: new THREE.Color(0x33405c),
-    dir: new THREE.Color(0xd8e8ff),
+    bg: new THREE.Color(0x0d182b),
+    fog: new THREE.Color(0x162438),
+    hemiSky: new THREE.Color(0x8cb4e8),
+    hemiGround: new THREE.Color(0x2f3b52),
+    dir: new THREE.Color(0xd6e6ff),
     plazaRune: new THREE.Color(0xf59e0b)
   };
   let soulsZoneMode = 'castle'; // 'castle' | 'shaft_river' | 'exterior_shore'
@@ -246,7 +246,7 @@ export function createArenaWorld(canvas) {
   const getCombatFogForBiome = (b = currentBiome, isModeSwitch = false) => {
     if (b === 'souls_citadel') {
       if (soulsZoneMode === 'shaft_river') return { near: 8, far: 48 };
-      if (soulsZoneMode === 'exterior_shore') return { near: 28, far: 145 };
+      if (soulsZoneMode === 'exterior_shore') return { near: 34, far: 172 };
       return { near: 14, far: 58 };
     }
     if (b === 'frost_ruins') return { near: 46, far: 116 };
@@ -516,6 +516,12 @@ export function createArenaWorld(canvas) {
         burningGroundLight.decay = 1.55;
         burningGroundLight.position.set(EXTERIOR_SHORE_ANCHORS.bonfirePos.x, 1.85, EXTERIOR_SHORE_ANCHORS.bonfirePos.z);
         burningGroundLight.intensity = soulsExteriorShore?.isBonfireLit?.() ? 9.5 : 1.8;
+        // Cinematic Dark Souls / Bloodborne outdoor over-the-shoulder pitch so Full Moon, arches & peaks frame the horizon!
+        if (orbitTargetPitch > 0.28) {
+          orbitPitch = orbitTargetPitch = 0.20;
+          orbitDist = orbitTargetDist = Math.min(orbitTargetDist, 7.2);
+          soulsCamClipDist = orbitDist;
+        }
       } else if (next === 'shaft_river') {
         hemiLight.intensity = 0.92;
         dirLight.intensity = 1.25;
@@ -6873,7 +6879,7 @@ export function createArenaWorld(canvas) {
   function adjustCombatOrbit(dYaw = 0, dPitch = 0) {
     if (cameraLocked) return;
     orbitTargetYaw += dYaw;
-    const minP = isSoulsBiome() ? 0.12 : 0.10;
+    const minP = isSoulsBiome() ? (soulsZoneMode === 'exterior_shore' ? 0.04 : 0.12) : 0.10;
     const maxP = isSoulsBiome() ? 1.10 : 1.48;
     orbitTargetPitch = Math.max(minP, Math.min(maxP, orbitTargetPitch + dPitch));
   }
@@ -6882,7 +6888,7 @@ export function createArenaWorld(canvas) {
     if (cameraLocked) return;
     if (!Number.isFinite(dx) || !Number.isFinite(dy)) return;
     orbitTargetYaw -= dx * 0.0024;
-    const minP = isSoulsBiome() ? 0.12 : 0.14;
+    const minP = isSoulsBiome() ? (soulsZoneMode === 'exterior_shore' ? 0.04 : 0.12) : 0.14;
     const maxP = isSoulsBiome() ? 1.10 : 1.25;
     orbitTargetPitch = Math.max(minP, Math.min(maxP, orbitTargetPitch + dy * 0.0018));
   }
@@ -6955,7 +6961,7 @@ export function createArenaWorld(canvas) {
     if (devEditors) return Promise.resolve(devEditors);
     if (!isDevModeEnabled()) return Promise.resolve(null);
     if (!devEditorsPromise) {
-      devEditorsPromise = import('./world/devEditors.js?v=20261124z99')
+      devEditorsPromise = import('./world/devEditors.js?v=20261125z100')
         .then((mod) => {
           devEditors = mod.createWorldDevEditors({
             scene,
@@ -7089,7 +7095,8 @@ export function createArenaWorld(canvas) {
     orbitYaw = safeYaw;
     orbitTargetYaw = safeYaw;
     if (pitch !== null && pitch !== undefined && Number.isFinite(Number(pitch))) {
-      const clampedPitch = Math.max(0.10, Math.min(1.48, Number(pitch)));
+      const minP = (isSoulsBiome() && soulsZoneMode === 'exterior_shore') ? 0.04 : 0.10;
+      const clampedPitch = Math.max(minP, Math.min(1.48, Number(pitch)));
       orbitPitch = clampedPitch;
       orbitTargetPitch = clampedPitch;
     }
@@ -8395,7 +8402,37 @@ export function createArenaWorld(canvas) {
       }
     }
 
-    if (!lowSpecMode && cameraMode !== 'hub' && burnLightWeightSum > 0.001 && burnLightPeak > 0.01) {
+    // Dynamic closest-campfire 3D warm firelight tracking across the Exterior Shore & Extended Gorge Road
+    // (reuses permanent `burningGroundLight` — ZERO extra PointLights & ZERO shader recompiles!)
+    if (!lowSpecMode && cameraMode !== 'hub' && isSouls && soulsZoneMode === 'exterior_shore' && !bossEscapeCutsceneActive) {
+      const hearths = soulsExteriorShore?.getActiveFireSources?.() || null;
+      let bestH = null;
+      let bestScore = 0;
+      if (hearths && hearths.length) {
+        for (let hi = 0; hi < hearths.length; hi++) {
+          const fh = hearths[hi];
+          const maxR = Number(fh.radius) || 17.0;
+          const dist = Math.hypot(lastHeroX - fh.x, lastHeroZ - fh.z);
+          if (dist >= maxR * 1.35) continue;
+          const prox = Math.max(0, 1.0 - dist / (maxR * 1.35));
+          const score = prox * (Number(fh.lightIntensity) || 8.0);
+          if (score > bestScore) {
+            bestScore = score;
+            bestH = fh;
+          }
+        }
+      }
+      if (bestH) {
+        burningGroundLight.color.setHex(0xff8c2b);
+        burningGroundLight.position.set(bestH.x, Number.isFinite(bestH.y) ? bestH.y : 1.85, bestH.z);
+        burningGroundLight.distance = 24.0;
+        burningGroundLight.decay = 1.55;
+        const flicker = 0.88 + 0.08 * Math.sin(t * 14.3) + 0.04 * Math.cos(t * 25.1);
+        burningGroundLight.intensity = (Number(bestH.lightIntensity) || 9.0) * flicker;
+      } else if (burningGroundLight.intensity !== 0) {
+        burningGroundLight.intensity = 0;
+      }
+    } else if (!lowSpecMode && cameraMode !== 'hub' && burnLightWeightSum > 0.001 && burnLightPeak > 0.01) {
       const invW = 1 / burnLightWeightSum;
       burningGroundLight.position.set(burnLightWx * invW, burnLightWy * invW, burnLightWz * invW);
       burningGroundLight.distance = Math.max(9.5, Math.min(19.5, burnLightMaxR * 2.65));
@@ -9117,6 +9154,8 @@ export function createArenaWorld(canvas) {
     setSoulsZoneMode,
     getSoulsZoneMode: () => soulsZoneMode,
     getExteriorShoreAnchors: () => (soulsExteriorShore?.getAnchors?.() || EXTERIOR_SHORE_ANCHORS),
+    getExteriorShoreFireSources: () => (soulsExteriorShore?.getActiveFireSources?.() || []),
+    getExteriorShoreZoneTitle: (x = 0, z = 0) => (soulsExteriorShore?.getZoneTitleAt?.(x, z) || 'Берег Пепельного Стока'),
     attachShoreRealSwordModel,
     setShoreSwordPickedUp: (picked) => ensureSoulsExteriorShore()?.setSwordPickedUp?.(Boolean(picked)),
     setShoreBonfireLit: (lit) => {
