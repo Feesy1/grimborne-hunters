@@ -12,7 +12,7 @@
 // Voiceover lip-sync curves auto-extracted from mastered boss_escape_vo_01..04.mp3
 // (300-3200 Hz speech RMS, smoothed attack/release articulation, quantized 0..100).
 
-export const SOULS_ESCAPE_AUDIO_VERSION = '20261124z91';
+export const SOULS_ESCAPE_AUDIO_VERSION = '20261124z92';
 export const BOSS_ESCAPE_VO_COUNT = 4;
 export const BOSS_ESCAPE_LIPSYNC_FPS = 30;
 
@@ -883,7 +883,11 @@ export function createSoulsEscapeAudio(getCtxArg, getMasterGainArg, getSfxVolume
 
   /**
    * 1) playSwordParryClash(intensity = 1.0)
-   * Ringing forged-steel blade clash against heavy warhammer iron shaft + blade grind scrape.
+   * Ringing forged-steel blade clash against heavy warhammer iron shaft:
+   *   - Sharp kinetic impact transient punch + high-pass steel spark snap
+   *   - Heavy iron warhammer shaft impact body
+   *   - 9 inharmonic forged-steel longsword modal resonances incl. high-frequency singing steel ring (6.4–9.6 kHz)
+   *   - Steel-on-steel sliding parry grind / rasp
    */
   function playSwordParryClash(intensity = 1.0) {
     const ctx = ensureGraph();
@@ -896,36 +900,68 @@ export function createSoulsEscapeAudio(getCtxArg, getMasterGainArg, getSfxVolume
     const stops = [];
 
     const out = ctx.createGain();
-    out.gain.setValueAtTime(0.88 * scale, t0);
+    out.gain.setValueAtTime(0.76 * scale, t0);
     out.connect(sfxBus);
-    sendToCathedral(ctx, out, 0.34, nodes);
+    sendToCathedral(ctx, out, 0.38, nodes);
     nodes.push(out);
 
-    // Layer A: Razor-sharp steel impact spark crack (2.2-6.5 kHz burst, 32ms)
+    // Layer A1: Ultra-crisp kinetic hitstop impact transient punch (192 -> 66 Hz in 36ms)
+    const punchOsc = ctx.createOscillator();
+    punchOsc.type = 'triangle';
+    punchOsc.frequency.setValueAtTime(clampFreq(ctx, 192 * pitchJitter), t0);
+    punchOsc.frequency.exponentialRampToValueAtTime(66, t0 + 0.036);
+    const punchG = ctx.createGain();
+    punchG.gain.setValueAtTime(0.0001, t0);
+    punchG.gain.linearRampToValueAtTime(0.50, t0 + 0.0015);
+    punchG.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.074);
+    punchOsc.connect(punchG);
+    punchG.connect(out);
+    punchOsc.start(t0);
+    punchOsc.stop(t0 + 0.088);
+    nodes.push(punchOsc, punchG);
+    stops.push(punchOsc);
+
+    // Layer A2: Razor-sharp steel impact transient snap (HPF 4.6 kHz, 22ms snap) + mid spark crack
+    const snapSrc = ctx.createBufferSource();
+    snapSrc.buffer = crispNoiseBuf;
+    const snapHp = ctx.createBiquadFilter();
+    snapHp.type = 'highpass';
+    snapHp.frequency.setValueAtTime(clampFreq(ctx, 4600 * pitchJitter), t0);
+    const snapG = ctx.createGain();
+    snapG.gain.setValueAtTime(0.0001, t0);
+    snapG.gain.linearRampToValueAtTime(0.64, t0 + 0.0012);
+    snapG.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.025);
+    snapSrc.connect(snapHp);
+    snapHp.connect(snapG);
+    snapG.connect(out);
+    snapSrc.start(t0, Math.random() * 0.4, 0.036);
+    nodes.push(snapSrc, snapHp, snapG);
+    stops.push(snapSrc);
+
     const sparkSrc = ctx.createBufferSource();
     sparkSrc.buffer = crispNoiseBuf;
     const sparkBp = ctx.createBiquadFilter();
     sparkBp.type = 'bandpass';
-    sparkBp.frequency.setValueAtTime(clampFreq(ctx, 3850 * pitchJitter), t0);
-    sparkBp.Q.setValueAtTime(1.1, t0);
+    sparkBp.frequency.setValueAtTime(clampFreq(ctx, 3950 * pitchJitter), t0);
+    sparkBp.Q.setValueAtTime(1.15, t0);
     const sparkG = ctx.createGain();
     sparkG.gain.setValueAtTime(0.0001, t0);
-    sparkG.gain.linearRampToValueAtTime(0.72, t0 + 0.002);
-    sparkG.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.048);
+    sparkG.gain.linearRampToValueAtTime(0.56, t0 + 0.002);
+    sparkG.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.052);
     sparkSrc.connect(sparkBp);
     sparkBp.connect(sparkG);
     sparkG.connect(out);
-    sparkSrc.start(t0, Math.random() * 0.5, 0.06);
+    sparkSrc.start(t0, Math.random() * 0.5, 0.065);
     nodes.push(sparkSrc, sparkBp, sparkG);
     stops.push(sparkSrc);
 
-    // Layer B: Heavy iron warhammer shaft impact body (240 Hz + 435 Hz)
+    // Layer B: Heavy iron warhammer shaft impact body (235 Hz + 428 Hz + 695 Hz)
     const shaftFreqs = [235, 428, 695];
     for (let i = 0; i < shaftFreqs.length; i++) {
       const osc = ctx.createOscillator();
       osc.type = i === 0 ? 'triangle' : 'sawtooth';
       const f0 = clampFreq(ctx, shaftFreqs[i] * pitchJitter);
-      osc.frequency.setValueAtTime(f0 * 1.14, t0);
+      osc.frequency.setValueAtTime(f0 * 1.16, t0);
       osc.frequency.exponentialRampToValueAtTime(f0, t0 + 0.022);
 
       const bp = ctx.createBiquadFilter();
@@ -934,40 +970,47 @@ export function createSoulsEscapeAudio(getCtxArg, getMasterGainArg, getSfxVolume
       bp.Q.setValueAtTime(3.6, t0);
 
       const g = ctx.createGain();
-      const pk = (i === 0 ? 0.42 : 0.22) * (1 - i * 0.14);
+      const pk = (i === 0 ? 0.46 : 0.24) * (1 - i * 0.14);
       g.gain.setValueAtTime(0.0001, t0);
-      g.gain.linearRampToValueAtTime(pk, t0 + 0.003);
-      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.16 + i * 0.04);
+      g.gain.linearRampToValueAtTime(pk, t0 + 0.0025);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.18 + i * 0.04);
 
       osc.connect(bp);
       bp.connect(g);
       g.connect(out);
       osc.start(t0);
-      osc.stop(t0 + 0.28);
+      osc.stop(t0 + 0.30);
       nodes.push(osc, bp, g);
       stops.push(osc);
     }
 
-    // Layer C: 5 inharmonic forged-steel longsword modal resonances (ringing shimmer!)
+    // Layer C: 9 inharmonic forged-steel blade modal resonances incl. bright high-frequency singing steel ring!
+    // Two-stage metallic sustain -> smooth fade preserves luminous blade ring without inflating t=0 peak!
     const bladeModes = [
-      { f: 912,  g: 0.24, d: 0.72, pan: -0.22 },
-      { f: 1685, g: 0.22, d: 0.64, pan:  0.25 },
-      { f: 2470, g: 0.18, d: 0.52, pan: -0.18 },
-      { f: 3640, g: 0.13, d: 0.40, pan:  0.30 },
-      { f: 5180, g: 0.08, d: 0.26, pan: -0.10 }
+      { f: 912,  g: 0.22, d: 0.78, pan: -0.22 },
+      { f: 1685, g: 0.20, d: 0.72, pan:  0.25 },
+      { f: 2470, g: 0.17, d: 0.66, pan: -0.18 },
+      { f: 3640, g: 0.14, d: 0.62, pan:  0.30 },
+      { f: 5180, g: 0.13, d: 0.76, pan: -0.24 },
+      { f: 6420, g: 0.13, d: 0.92, pan:  0.28 },
+      { f: 6429, g: 0.11, d: 0.88, pan: -0.28 }, // +9 Hz beating shimmer for authentic singing steel!
+      { f: 8160, g: 0.09, d: 0.68, pan:  0.16 },
+      { f: 9680, g: 0.06, d: 0.50, pan: -0.14 }
     ];
     for (let i = 0; i < bladeModes.length; i++) {
       const m = bladeModes[i];
       const osc = ctx.createOscillator();
       osc.type = 'sine';
       const baseF = clampFreq(ctx, m.f * pitchJitter);
-      osc.frequency.setValueAtTime(baseF * 1.035, t0);
-      osc.frequency.exponentialRampToValueAtTime(baseF, t0 + 0.035);
+      osc.frequency.setValueAtTime(baseF * 1.038, t0);
+      osc.frequency.exponentialRampToValueAtTime(baseF, t0 + 0.030);
 
       const pan = createStereoPannerSafe(ctx, m.pan);
       const g = ctx.createGain();
       g.gain.setValueAtTime(0.0001, t0);
-      g.gain.linearRampToValueAtTime(m.g, t0 + 0.0025);
+      g.gain.linearRampToValueAtTime(m.g, t0 + 0.003);
+      // Natural steel resonance sustain shoulder before cathedral tail decay
+      g.gain.exponentialRampToValueAtTime(Math.max(0.001, m.g * 0.28), t0 + m.d * 0.42);
       g.gain.exponentialRampToValueAtTime(0.0001, t0 + m.d);
 
       osc.connect(g);
@@ -979,23 +1022,23 @@ export function createSoulsEscapeAudio(getCtxArg, getMasterGainArg, getSfxVolume
       stops.push(osc);
     }
 
-    // Layer D: Steel-on-steel sliding parry grind / rasp (0.02..0.28s)
+    // Layer D: Steel-on-steel sliding parry grind / rasp (0.01..0.30s)
     const scrapeSrc = ctx.createBufferSource();
     scrapeSrc.buffer = crispNoiseBuf;
     const scrapeBp = ctx.createBiquadFilter();
     scrapeBp.type = 'bandpass';
-    scrapeBp.Q.setValueAtTime(6.5, t0);
-    scrapeBp.frequency.setValueAtTime(clampFreq(ctx, 1950 * pitchJitter), t0 + 0.015);
-    scrapeBp.frequency.exponentialRampToValueAtTime(clampFreq(ctx, 4150 * pitchJitter), t0 + 0.11);
-    scrapeBp.frequency.exponentialRampToValueAtTime(clampFreq(ctx, 2550 * pitchJitter), t0 + 0.27);
+    scrapeBp.Q.setValueAtTime(6.8, t0);
+    scrapeBp.frequency.setValueAtTime(clampFreq(ctx, 2150 * pitchJitter), t0 + 0.012);
+    scrapeBp.frequency.exponentialRampToValueAtTime(clampFreq(ctx, 4550 * pitchJitter), t0 + 0.11);
+    scrapeBp.frequency.exponentialRampToValueAtTime(clampFreq(ctx, 2750 * pitchJitter), t0 + 0.28);
     const scrapeG = ctx.createGain();
     scrapeG.gain.setValueAtTime(0.0001, t0);
-    scrapeG.gain.linearRampToValueAtTime(0.32, t0 + 0.035);
-    scrapeG.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.29);
+    scrapeG.gain.linearRampToValueAtTime(0.35, t0 + 0.032);
+    scrapeG.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.30);
     scrapeSrc.connect(scrapeBp);
     scrapeBp.connect(scrapeG);
     scrapeG.connect(out);
-    scrapeSrc.start(t0 + 0.01, Math.random() * 0.4, 0.30);
+    scrapeSrc.start(t0 + 0.01, Math.random() * 0.4, 0.31);
     nodes.push(scrapeSrc, scrapeBp, scrapeG);
     stops.push(scrapeSrc);
 
@@ -1003,11 +1046,11 @@ export function createSoulsEscapeAudio(getCtxArg, getMasterGainArg, getSfxVolume
       for (let i = 0; i < stops.length; i++) safeStop(stops[i]);
       safeDisconnectList(nodes);
     };
-    const unregister = registerOneShotCleanup(stopFn, 0.85);
+    const unregister = registerOneShotCleanup(stopFn, 1.02);
     trackTimer(() => {
       unregister();
       safeDisconnectList(nodes);
-    }, 900);
+    }, 1120);
     return true;
   }
 
@@ -1359,7 +1402,11 @@ export function createSoulsEscapeAudio(getCtxArg, getMasterGainArg, getSfxVolume
 
   /**
    * 5) playSlowMoPulse()
-   * Deep cinematic sub-bass "time-dilation whoosh" & vacuum suction dive.
+   * Inception / God of War cinematic time-dilation pulse:
+   *   - Master resonant low-pass sweep diving deep (6800 Hz -> 125 Hz) then smoothly re-opening (125 -> 2900 Hz)
+   *     right ahead of the hammer impact!
+   *   - Massive pitch-diving sub-bass sine + detuned brass-fifth pressure swell
+   *   - Vacuum air-suction whoosh + pre-impact reverse ramp swell
    */
   function playSlowMoPulse() {
     const ctx = ensureGraph();
@@ -1370,86 +1417,107 @@ export function createSoulsEscapeAudio(getCtxArg, getMasterGainArg, getSfxVolume
     const stops = [];
 
     const out = ctx.createGain();
-    out.gain.setValueAtTime(0.90, t0);
+    out.gain.setValueAtTime(0.95, t0);
     out.connect(sfxBus);
-    sendToCathedral(ctx, out, 0.44, nodes);
+    sendToCathedral(ctx, out, 0.46, nodes);
     nodes.push(out);
 
-    // Layer A: Massive pitch-diving sub-bass sine (116 -> 28 Hz over 0.92s)
+    // Master Cinema Time-Dilation Low-Pass Sweep (6800 Hz -> 125 Hz -> smooth exit to 2900 Hz before smash!)
+    const masterSweepLp = ctx.createBiquadFilter();
+    masterSweepLp.type = 'lowpass';
+    masterSweepLp.Q.setValueAtTime(2.2, t0);
+    masterSweepLp.Q.linearRampToValueAtTime(3.6, t0 + 0.30);
+    masterSweepLp.Q.linearRampToValueAtTime(1.2, t0 + 0.90);
+    masterSweepLp.frequency.setValueAtTime(clampFreq(ctx, 6800), t0);
+    masterSweepLp.frequency.exponentialRampToValueAtTime(240, t0 + 0.24);
+    masterSweepLp.frequency.exponentialRampToValueAtTime(125, t0 + 0.48);
+    masterSweepLp.frequency.linearRampToValueAtTime(155, t0 + 0.66);
+    masterSweepLp.frequency.exponentialRampToValueAtTime(clampFreq(ctx, 2900), t0 + 0.88);
+    masterSweepLp.connect(out);
+    nodes.push(masterSweepLp);
+
+    // Layer A: Massive pitch-diving sub-bass sine (122 -> 38 -> 26 Hz, bypasses LPF to preserve tactile floor weight)
     const sub = ctx.createOscillator();
     sub.type = 'sine';
-    sub.frequency.setValueAtTime(116, t0);
-    sub.frequency.exponentialRampToValueAtTime(42, t0 + 0.36);
-    sub.frequency.exponentialRampToValueAtTime(28, t0 + 0.96);
+    sub.frequency.setValueAtTime(122, t0);
+    sub.frequency.exponentialRampToValueAtTime(40, t0 + 0.32);
+    sub.frequency.exponentialRampToValueAtTime(26, t0 + 0.86);
+    sub.frequency.exponentialRampToValueAtTime(48, t0 + 1.02); // subtle upward release tension into hammer hit
     const subG = ctx.createGain();
     subG.gain.setValueAtTime(0.0001, t0);
-    subG.gain.linearRampToValueAtTime(0.82, t0 + 0.055);
-    subG.gain.linearRampToValueAtTime(0.54, t0 + 0.55);
-    subG.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.05);
+    subG.gain.linearRampToValueAtTime(0.86, t0 + 0.048);
+    subG.gain.linearRampToValueAtTime(0.60, t0 + 0.62);
+    subG.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.06);
     sub.connect(subG);
     subG.connect(out);
     sub.start(t0);
-    sub.stop(t0 + 1.08);
+    sub.stop(t0 + 1.09);
     nodes.push(sub, subG);
     stops.push(sub);
 
-    // Layer B: Dark fifth-harmonic pressure swell (174 -> 42 Hz, warm triangle)
-    const fifth = ctx.createOscillator();
-    fifth.type = 'triangle';
-    fifth.frequency.setValueAtTime(174, t0);
-    fifth.frequency.exponentialRampToValueAtTime(42, t0 + 0.92);
-    const fifthLp = ctx.createBiquadFilter();
-    fifthLp.type = 'lowpass';
-    fifthLp.frequency.setValueAtTime(340, t0);
-    fifthLp.frequency.exponentialRampToValueAtTime(95, t0 + 0.88);
-    const fifthG = ctx.createGain();
-    fifthG.gain.setValueAtTime(0.0001, t0);
-    fifthG.gain.linearRampToValueAtTime(0.36, t0 + 0.08);
-    fifthG.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.95);
-    fifth.connect(fifthLp);
-    fifthLp.connect(fifthG);
-    fifthG.connect(out);
-    fifth.start(t0);
-    fifth.stop(t0 + 0.98);
-    nodes.push(fifth, fifthLp, fifthG);
-    stops.push(fifth);
+    // Layer B: Dark Inception detuned brass-fifth pressure dive (110 + 165 Hz -> 34 + 51 Hz through master LPF sweep!)
+    const hornSpecs = [
+      { f0: 110.0, f1: 34.0, type: 'sawtooth', g: 0.32, pan: -0.22 },
+      { f0: 110.9, f1: 34.3, type: 'sawtooth', g: 0.28, pan:  0.22 },
+      { f0: 165.0, f1: 51.0, type: 'triangle', g: 0.34, pan:  0.00 }
+    ];
+    for (let i = 0; i < hornSpecs.length; i++) {
+      const h = hornSpecs[i];
+      const osc = ctx.createOscillator();
+      osc.type = h.type;
+      osc.frequency.setValueAtTime(h.f0, t0);
+      osc.frequency.exponentialRampToValueAtTime(h.f1, t0 + 0.68);
+      osc.frequency.exponentialRampToValueAtTime(h.f1 * 1.25, t0 + 0.92);
 
-    // Layer C: Time-dilation air-suction whoosh (sweeping resonant bandpass noise)
+      const pan = createStereoPannerSafe(ctx, h.pan);
+      const hg = ctx.createGain();
+      hg.gain.setValueAtTime(0.0001, t0);
+      hg.gain.linearRampToValueAtTime(h.g, t0 + 0.07);
+      hg.gain.linearRampToValueAtTime(h.g * 0.72, t0 + 0.64);
+      hg.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.98);
+      osc.connect(hg);
+      hg.connect(pan);
+      pan.connect(masterSweepLp);
+      osc.start(t0);
+      osc.stop(t0 + 1.02);
+      nodes.push(osc, hg, pan);
+      stops.push(osc);
+    }
+
+    // Layer C: Time-dilation broadband air-vacuum dive & pre-impact smooth ramp-out swell
     const airSrc = ctx.createBufferSource();
     airSrc.buffer = warmNoiseBuf;
-    const airLp = ctx.createBiquadFilter();
-    airLp.type = 'lowpass';
-    airLp.Q.setValueAtTime(2.8, t0);
-    airLp.frequency.setValueAtTime(220, t0);
-    airLp.frequency.exponentialRampToValueAtTime(980, t0 + 0.24);
-    airLp.frequency.exponentialRampToValueAtTime(125, t0 + 0.94);
     const airG = ctx.createGain();
     airG.gain.setValueAtTime(0.0001, t0);
-    airG.gain.linearRampToValueAtTime(0.52, t0 + 0.20);
+    airG.gain.linearRampToValueAtTime(0.68, t0 + 0.14);
+    airG.gain.linearRampToValueAtTime(0.42, t0 + 0.60);
+    airG.gain.linearRampToValueAtTime(0.66, t0 + 0.84); // dramatic swell as LPF re-opens into impact!
     airG.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.98);
-    airSrc.connect(airLp);
-    airLp.connect(airG);
-    airG.connect(out);
+    airSrc.connect(airG);
+    airG.connect(masterSweepLp);
     airSrc.start(t0, 0.5, 1.02);
-    nodes.push(airSrc, airLp, airG);
+    nodes.push(airSrc, airG);
     stops.push(airSrc);
 
-    // Layer D: Descending icy time-stretch metallic shimmer
+    // Layer D: Descending icy time-stretch shimmer + pre-impact reverse breath whoosh (0.58..0.88s)
     const shimSrc = ctx.createBufferSource();
     shimSrc.buffer = crispNoiseBuf;
     const shimBp = ctx.createBiquadFilter();
     shimBp.type = 'bandpass';
-    shimBp.Q.setValueAtTime(8.0, t0);
-    shimBp.frequency.setValueAtTime(2900, t0);
-    shimBp.frequency.exponentialRampToValueAtTime(640, t0 + 0.85);
+    shimBp.Q.setValueAtTime(6.2, t0);
+    shimBp.frequency.setValueAtTime(clampFreq(ctx, 3600), t0);
+    shimBp.frequency.exponentialRampToValueAtTime(340, t0 + 0.54);
+    shimBp.frequency.exponentialRampToValueAtTime(clampFreq(ctx, 2200), t0 + 0.88);
     const shimG = ctx.createGain();
     shimG.gain.setValueAtTime(0.0001, t0);
-    shimG.gain.linearRampToValueAtTime(0.16, t0 + 0.09);
-    shimG.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.88);
+    shimG.gain.linearRampToValueAtTime(0.24, t0 + 0.06);
+    shimG.gain.linearRampToValueAtTime(0.08, t0 + 0.54);
+    shimG.gain.linearRampToValueAtTime(0.28, t0 + 0.84);
+    shimG.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.94);
     shimSrc.connect(shimBp);
     shimBp.connect(shimG);
-    shimG.connect(out);
-    shimSrc.start(t0, 0.1, 0.92);
+    shimG.connect(masterSweepLp);
+    shimSrc.start(t0, 0.1, 0.98);
     nodes.push(shimSrc, shimBp, shimG);
     stops.push(shimSrc);
 
@@ -1457,17 +1525,20 @@ export function createSoulsEscapeAudio(getCtxArg, getMasterGainArg, getSfxVolume
       for (let i = 0; i < stops.length; i++) safeStop(stops[i]);
       safeDisconnectList(nodes);
     };
-    const unregister = registerOneShotCleanup(stopFn, 1.15);
+    const unregister = registerOneShotCleanup(stopFn, 1.18);
     trackTimer(() => {
       unregister();
       safeDisconnectList(nodes);
-    }, 1220);
+    }, 1260);
     return true;
   }
 
   /**
    * 6) playFloorCollapseSmash()
-   * Colossal Titan warhammer ground strike + cracking limestone slabs + cascading abyss collapse.
+   * Multilayered 3-Phase Colossal Cathedral Floor Collapse:
+   *   - Phase 1 (0.00..0.42s): Titan warhammer strike + chest-rattling 40 Hz seismic sub-drop + iron bell transient
+   *   - Phase 2 (0.05..0.42s): Violent 0.35s stereo limestone slab fracture cascade (high cleave + low slab shear)
+   *   - Phase 3 (0.32..2.25s): Deep 1.8s+ abyssal chasm collapse roar & tumbling masonry echoes down the shaft!
    */
   function playFloorCollapseSmash() {
     const ctx = ensureGraph();
@@ -1478,123 +1549,210 @@ export function createSoulsEscapeAudio(getCtxArg, getMasterGainArg, getSfxVolume
     const stops = [];
 
     const out = ctx.createGain();
-    out.gain.setValueAtTime(0.98, t0);
+    out.gain.setValueAtTime(1.02, t0);
     out.connect(sfxBus);
-    sendToCathedral(ctx, out, 0.55, nodes);
+    sendToCathedral(ctx, out, 0.60, nodes);
     nodes.push(out);
 
-    // Layer A: Tectonic Warhammer sub-shockwave (142 -> 25 Hz)
+    // ========================================================================
+    // PHASE 1 (0.00..0.42s): Hammer Impact + Dedicated 40 Hz Seismic Sub-Drop
+    // ========================================================================
     const sub = ctx.createOscillator();
     sub.type = 'sine';
-    sub.frequency.setValueAtTime(142, t0);
-    sub.frequency.exponentialRampToValueAtTime(46, t0 + 0.16);
-    sub.frequency.exponentialRampToValueAtTime(25, t0 + 0.85);
+    sub.frequency.setValueAtTime(128, t0);
+    sub.frequency.exponentialRampToValueAtTime(40.0, t0 + 0.075); // locks cleanly onto 40 Hz sub-drop!
+    sub.frequency.linearRampToValueAtTime(38.0, t0 + 0.42);
+    sub.frequency.exponentialRampToValueAtTime(24.0, t0 + 0.96);
     const subG = ctx.createGain();
     subG.gain.setValueAtTime(0.0001, t0);
-    subG.gain.linearRampToValueAtTime(0.95, t0 + 0.004);
-    subG.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.96);
+    subG.gain.linearRampToValueAtTime(0.98, t0 + 0.004);
+    subG.gain.linearRampToValueAtTime(0.74, t0 + 0.36);
+    subG.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.04);
     sub.connect(subG);
     subG.connect(out);
     sub.start(t0);
-    sub.stop(t0 + 1.0);
+    sub.stop(t0 + 1.08);
     nodes.push(sub, subG);
     stops.push(sub);
 
-    // Layer B: Heavy forged iron hammer blast transient
+    // Warm 2nd-harmonic 80 Hz sub-punch so smaller speakers also feel the 40 Hz drop weight
+    const sub2 = ctx.createOscillator();
+    sub2.type = 'triangle';
+    sub2.frequency.setValueAtTime(160, t0);
+    sub2.frequency.exponentialRampToValueAtTime(80.0, t0 + 0.08);
+    sub2.frequency.exponentialRampToValueAtTime(46.0, t0 + 0.56);
+    const sub2Lp = ctx.createBiquadFilter();
+    sub2Lp.type = 'lowpass';
+    sub2Lp.frequency.setValueAtTime(260, t0);
+    const sub2G = ctx.createGain();
+    sub2G.gain.setValueAtTime(0.0001, t0);
+    sub2G.gain.linearRampToValueAtTime(0.46, t0 + 0.005);
+    sub2G.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.58);
+    sub2.connect(sub2Lp);
+    sub2Lp.connect(sub2G);
+    sub2G.connect(out);
+    sub2.start(t0);
+    sub2.stop(t0 + 0.62);
+    nodes.push(sub2, sub2Lp, sub2G);
+    stops.push(sub2);
+
+    // Heavy forged warhammer blast & iron anvil shock transient
     const blastSrc = ctx.createBufferSource();
     blastSrc.buffer = crispNoiseBuf;
     const blastLp = ctx.createBiquadFilter();
     blastLp.type = 'lowpass';
-    blastLp.frequency.setValueAtTime(5200, t0);
-    blastLp.frequency.exponentialRampToValueAtTime(420, t0 + 0.34);
+    blastLp.frequency.setValueAtTime(5800, t0);
+    blastLp.frequency.exponentialRampToValueAtTime(380, t0 + 0.32);
     const blastG = ctx.createGain();
     blastG.gain.setValueAtTime(0.0001, t0);
-    blastG.gain.linearRampToValueAtTime(0.88, t0 + 0.002);
-    blastG.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.38);
+    blastG.gain.linearRampToValueAtTime(0.92, t0 + 0.002);
+    blastG.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.36);
     blastSrc.connect(blastLp);
     blastLp.connect(blastG);
     blastG.connect(out);
-    blastSrc.start(t0, 0, 0.42);
+    blastSrc.start(t0, 0, 0.40);
     nodes.push(blastSrc, blastLp, blastG);
     stops.push(blastSrc);
 
-    // Layer C: 6 staggered violent limestone slab fractures (0.04..0.68s)
+    const hammerRingFreqs = [152, 314, 622];
+    for (let i = 0; i < hammerRingFreqs.length; i++) {
+      const hOsc = ctx.createOscillator();
+      hOsc.type = i === 0 ? 'triangle' : 'sine';
+      hOsc.frequency.setValueAtTime(hammerRingFreqs[i], t0);
+      const hG = ctx.createGain();
+      hG.gain.setValueAtTime(0.0001, t0);
+      hG.gain.linearRampToValueAtTime(0.32 / (1 + i * 0.65), t0 + 0.003);
+      hG.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.34 - i * 0.05);
+      hOsc.connect(hG);
+      hG.connect(out);
+      hOsc.start(t0);
+      hOsc.stop(t0 + 0.38);
+      nodes.push(hOsc, hG);
+      stops.push(hOsc);
+    }
+
+    // ========================================================================
+    // PHASE 2 (0.05..0.42s): Crisp ~0.35s Limestone Slab Fracture Cascade
+    // ========================================================================
     const cracks = [
-      { at: 0.04, f: 1680, q: 2.2, g: 0.62, d: 0.14, pan: -0.35 },
-      { at: 0.12, f: 2450, q: 2.8, g: 0.54, d: 0.12, pan:  0.38 },
-      { at: 0.21, f: 1120, q: 1.9, g: 0.66, d: 0.18, pan: -0.18 },
-      { at: 0.33, f: 1940, q: 2.5, g: 0.52, d: 0.16, pan:  0.46 },
-      { at: 0.47, f: 980,  q: 1.7, g: 0.58, d: 0.22, pan: -0.44 },
-      { at: 0.64, f: 1420, q: 2.4, g: 0.46, d: 0.19, pan:  0.22 }
+      { at: 0.05, f: 2180, lo: 220, q: 2.3, g: 0.72, d: 0.13, pan: -0.38 },
+      { at: 0.11, f: 2840, lo: 185, q: 2.8, g: 0.68, d: 0.12, pan:  0.42 },
+      { at: 0.17, f: 1420, lo: 165, q: 2.0, g: 0.74, d: 0.15, pan: -0.20 },
+      { at: 0.24, f: 2450, lo: 195, q: 2.6, g: 0.64, d: 0.14, pan:  0.48 },
+      { at: 0.31, f: 1180, lo: 145, q: 1.8, g: 0.68, d: 0.17, pan: -0.46 },
+      { at: 0.38, f: 1760, lo: 155, q: 2.2, g: 0.58, d: 0.16, pan:  0.26 }
     ];
     for (let i = 0; i < cracks.length; i++) {
       const c = cracks[i];
       const tc = t0 + c.at;
+      const cPan = createStereoPannerSafe(ctx, c.pan);
+      cPan.connect(out);
+      nodes.push(cPan);
+
+      // Sharp high stone-cleave fracture snap
       const cSrc = ctx.createBufferSource();
       cSrc.buffer = crispNoiseBuf;
       const cBp = ctx.createBiquadFilter();
       cBp.type = 'bandpass';
       cBp.frequency.setValueAtTime(c.f, tc);
-      cBp.frequency.exponentialRampToValueAtTime(c.f * 0.48, tc + c.d);
+      cBp.frequency.exponentialRampToValueAtTime(c.f * 0.45, tc + c.d);
       cBp.Q.setValueAtTime(c.q, tc);
-      const cPan = createStereoPannerSafe(ctx, c.pan);
       const cG = ctx.createGain();
       cG.gain.setValueAtTime(0.0001, tc);
-      cG.gain.linearRampToValueAtTime(c.g, tc + 0.004);
+      cG.gain.linearRampToValueAtTime(c.g, tc + 0.003);
       cG.gain.exponentialRampToValueAtTime(0.0001, tc + c.d);
       cSrc.connect(cBp);
       cBp.connect(cG);
       cG.connect(cPan);
-      cPan.connect(out);
       cSrc.start(tc, (i * 0.23) % 1.0, c.d + 0.03);
-      nodes.push(cSrc, cBp, cG, cPan);
+      nodes.push(cSrc, cBp, cG);
       stops.push(cSrc);
+
+      // Heavy slab-shear low-mid crack thud
+      const sOsc = ctx.createOscillator();
+      sOsc.type = 'triangle';
+      sOsc.frequency.setValueAtTime(c.lo, tc);
+      sOsc.frequency.exponentialRampToValueAtTime(c.lo * 0.42, tc + 0.09);
+      const sG = ctx.createGain();
+      sG.gain.setValueAtTime(0.0001, tc);
+      sG.gain.linearRampToValueAtTime(c.g * 0.42, tc + 0.004);
+      sG.gain.exponentialRampToValueAtTime(0.0001, tc + 0.10);
+      sOsc.connect(sG);
+      sG.connect(cPan);
+      sOsc.start(tc);
+      sOsc.stop(tc + 0.12);
+      nodes.push(sOsc, sG);
+      stops.push(sOsc);
     }
 
-    // Layer D: Massive rolling abyssal floor collapse & cascading boulders (0.16..2.45s)
+    // ========================================================================
+    // PHASE 3 (0.32..2.25s): Deep 1.8s+ Collapsing Abyssal Chasm Rumble & Avalanche
+    // ========================================================================
+    // Deep cavernous abyss groan (0.30..2.28s, sweeping 420 -> 185 -> 78 Hz)
     const rumbleSrc = ctx.createBufferSource();
     rumbleSrc.buffer = warmNoiseBuf;
     rumbleSrc.loop = true;
     const rumbleLp = ctx.createBiquadFilter();
     rumbleLp.type = 'lowpass';
-    rumbleLp.Q.setValueAtTime(1.1, t0 + 0.16);
-    rumbleLp.frequency.setValueAtTime(520, t0 + 0.16);
-    rumbleLp.frequency.exponentialRampToValueAtTime(240, t0 + 1.15);
-    rumbleLp.frequency.exponentialRampToValueAtTime(95, t0 + 2.45);
+    rumbleLp.Q.setValueAtTime(1.35, t0 + 0.30);
+    rumbleLp.frequency.setValueAtTime(480, t0 + 0.30);
+    rumbleLp.frequency.exponentialRampToValueAtTime(210, t0 + 1.18);
+    rumbleLp.frequency.exponentialRampToValueAtTime(78, t0 + 2.25);
     const rumbleG = ctx.createGain();
-    rumbleG.gain.setValueAtTime(0.0001, t0 + 0.14);
-    rumbleG.gain.linearRampToValueAtTime(0.86, t0 + 0.34);
-    rumbleG.gain.linearRampToValueAtTime(0.56, t0 + 1.25);
-    rumbleG.gain.exponentialRampToValueAtTime(0.0001, t0 + 2.55);
+    rumbleG.gain.setValueAtTime(0.0001, t0 + 0.26);
+    rumbleG.gain.linearRampToValueAtTime(0.92, t0 + 0.46);
+    rumbleG.gain.linearRampToValueAtTime(0.68, t0 + 1.45);
+    rumbleG.gain.exponentialRampToValueAtTime(0.0001, t0 + 2.35);
     rumbleSrc.connect(rumbleLp);
     rumbleLp.connect(rumbleG);
     rumbleG.connect(out);
-    rumbleSrc.start(t0 + 0.14, 0.6);
-    rumbleSrc.stop(t0 + 2.60);
+    rumbleSrc.start(t0 + 0.26, 0.6);
+    rumbleSrc.stop(t0 + 2.40);
     nodes.push(rumbleSrc, rumbleLp, rumbleG);
     stops.push(rumbleSrc);
 
-    // Secondary tumbling stone debris clatters dropping down into the shaft (0.75..2.05s)
-    const debris = [0.78, 0.96, 1.18, 1.42, 1.70, 1.96];
+    // Cavernous sub-harmonic chasm groan oscillator (56 -> 27 Hz over 1.85s)
+    const chasmOsc = ctx.createOscillator();
+    chasmOsc.type = 'sawtooth';
+    chasmOsc.frequency.setValueAtTime(56, t0 + 0.32);
+    chasmOsc.frequency.exponentialRampToValueAtTime(27, t0 + 2.18);
+    const chasmLp = ctx.createBiquadFilter();
+    chasmLp.type = 'lowpass';
+    chasmLp.frequency.setValueAtTime(125, t0 + 0.32);
+    chasmLp.frequency.exponentialRampToValueAtTime(62, t0 + 2.18);
+    const chasmG = ctx.createGain();
+    chasmG.gain.setValueAtTime(0.0001, t0 + 0.32);
+    chasmG.gain.linearRampToValueAtTime(0.34, t0 + 0.62);
+    chasmG.gain.exponentialRampToValueAtTime(0.0001, t0 + 2.24);
+    chasmOsc.connect(chasmLp);
+    chasmLp.connect(chasmG);
+    chasmG.connect(out);
+    chasmOsc.start(t0 + 0.32);
+    chasmOsc.stop(t0 + 2.28);
+    nodes.push(chasmOsc, chasmLp, chasmG);
+    stops.push(chasmOsc);
+
+    // Secondary tumbling stone boulders cascading deeper into the dark shaft (0.55..2.05s)
+    const debris = [0.55, 0.76, 0.98, 1.22, 1.48, 1.76, 2.02];
     for (let i = 0; i < debris.length; i++) {
       const td = t0 + debris[i];
-      const depthFade = 1.0 - i * 0.13;
+      const depthFade = 1.0 - i * 0.11;
       const dSrc = ctx.createBufferSource();
       dSrc.buffer = crispNoiseBuf;
       const dBp = ctx.createBiquadFilter();
       dBp.type = 'bandpass';
-      dBp.frequency.setValueAtTime(clampFreq(ctx, (1350 - i * 145)), td);
+      dBp.frequency.setValueAtTime(clampFreq(ctx, (1480 - i * 145)), td);
       dBp.Q.setValueAtTime(1.6, td);
-      const dPan = createStereoPannerSafe(ctx, (i % 2 === 0 ? -0.52 : 0.52) * depthFade);
+      const dPan = createStereoPannerSafe(ctx, (i % 2 === 0 ? -0.56 : 0.56) * depthFade);
       const dG = ctx.createGain();
       dG.gain.setValueAtTime(0.0001, td);
-      dG.gain.linearRampToValueAtTime(0.32 * depthFade, td + 0.008);
-      dG.gain.exponentialRampToValueAtTime(0.0001, td + 0.22);
+      dG.gain.linearRampToValueAtTime(0.36 * depthFade, td + 0.008);
+      dG.gain.exponentialRampToValueAtTime(0.0001, td + 0.24);
       dSrc.connect(dBp);
       dBp.connect(dG);
       dG.connect(dPan);
       dPan.connect(out);
-      dSrc.start(td, (i * 0.27) % 1.0, 0.25);
+      dSrc.start(td, (i * 0.27) % 1.0, 0.27);
       nodes.push(dSrc, dBp, dG, dPan);
       stops.push(dSrc);
     }
@@ -1603,11 +1761,11 @@ export function createSoulsEscapeAudio(getCtxArg, getMasterGainArg, getSfxVolume
       for (let i = 0; i < stops.length; i++) safeStop(stops[i]);
       safeDisconnectList(nodes);
     };
-    const unregister = registerOneShotCleanup(stopFn, 2.7);
+    const unregister = registerOneShotCleanup(stopFn, 2.75);
     trackTimer(() => {
       unregister();
       safeDisconnectList(nodes);
-    }, 2800);
+    }, 2880);
     return true;
   }
 
@@ -1894,7 +2052,10 @@ export function createSoulsEscapeAudio(getCtxArg, getMasterGainArg, getSfxVolume
 
   /**
    * 9) playIronGrateBreak()
-   * Rusted spillway iron grate straining, snapping apart with metallic clangs + bursting water surge!
+   * Visceral rusted spillway iron grate breach:
+   *   - Loud corroded-metal shearing screech & grinding groan (dual detuned oscillators + resonant grit rasp)
+   *   - 5 violent snapped-out iron bar fractures & tumbling hollow metallic clangs across stereo L/R
+   *   - Explosive pressurized water surge + wide stereo foaming splash eruption into open night air!
    */
   function playIronGrateBreak() {
     const ctx = ensureGraph();
@@ -1905,38 +2066,71 @@ export function createSoulsEscapeAudio(getCtxArg, getMasterGainArg, getSfxVolume
     const stops = [];
 
     const out = ctx.createGain();
-    out.gain.setValueAtTime(1.18, t0);
+    out.gain.setValueAtTime(1.22, t0);
     out.connect(sfxBus);
-    sendToCathedral(ctx, out, 0.40, nodes);
+    sendToCathedral(ctx, out, 0.44, nodes);
     nodes.push(out);
 
-    // Layer A: Rusted iron strain screech / wrenching groan (0.00..0.18s)
-    const groan = ctx.createOscillator();
-    groan.type = 'sawtooth';
-    groan.frequency.setValueAtTime(295, t0);
-    groan.frequency.exponentialRampToValueAtTime(585, t0 + 0.09);
-    groan.frequency.exponentialRampToValueAtTime(215, t0 + 0.19);
-    const groanBp = ctx.createBiquadFilter();
-    groanBp.type = 'bandpass';
-    groanBp.frequency.setValueAtTime(920, t0);
-    groanBp.Q.setValueAtTime(5.5, t0);
-    const groanG = ctx.createGain();
-    groanG.gain.setValueAtTime(0.0001, t0);
-    groanG.gain.linearRampToValueAtTime(0.36, t0 + 0.025);
-    groanG.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.21);
-    groan.connect(groanBp);
-    groanBp.connect(groanG);
-    groanG.connect(out);
-    groan.start(t0);
-    groan.stop(t0 + 0.23);
-    nodes.push(groan, groanBp, groanG);
-    stops.push(groan);
+    // Layer A: Loud corroded rusted-iron shearing screech & wrenching groan (0.00..0.32s)
+    const groanSpecs = [
+      { f0: 278, fMid: 615, fEnd: 195, bp: 1050, q: 5.4, g: 0.44, pan: -0.24 },
+      { f0: 419, fMid: 885, fEnd: 268, bp: 1780, q: 6.2, g: 0.34, pan:  0.26 }
+    ];
+    for (let i = 0; i < groanSpecs.length; i++) {
+      const gs = groanSpecs[i];
+      const osc = ctx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(gs.f0, t0);
+      osc.frequency.exponentialRampToValueAtTime(gs.fMid, t0 + 0.11);
+      osc.frequency.exponentialRampToValueAtTime(gs.fEnd, t0 + 0.30);
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.setValueAtTime(gs.bp, t0);
+      bp.frequency.exponentialRampToValueAtTime(gs.bp * 1.45, t0 + 0.11);
+      bp.frequency.exponentialRampToValueAtTime(gs.bp * 0.72, t0 + 0.30);
+      bp.Q.setValueAtTime(gs.q, t0);
+      const pan = createStereoPannerSafe(ctx, gs.pan);
+      const gg = ctx.createGain();
+      gg.gain.setValueAtTime(0.0001, t0);
+      gg.gain.linearRampToValueAtTime(gs.g, t0 + 0.022);
+      gg.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.32);
+      osc.connect(bp);
+      bp.connect(gg);
+      gg.connect(pan);
+      pan.connect(out);
+      osc.start(t0);
+      osc.stop(t0 + 0.35);
+      nodes.push(osc, bp, gg, pan);
+      stops.push(osc);
+    }
 
-    // Layer B: Heavy rusted iron bar fracture snaps (0.05s, 0.12s, 0.22s)
+    // Gritty rust-on-stone iron tear rasp
+    const raspSrc = ctx.createBufferSource();
+    raspSrc.buffer = crispNoiseBuf;
+    const raspBp = ctx.createBiquadFilter();
+    raspBp.type = 'bandpass';
+    raspBp.Q.setValueAtTime(4.8, t0);
+    raspBp.frequency.setValueAtTime(1250, t0);
+    raspBp.frequency.exponentialRampToValueAtTime(3250, t0 + 0.14);
+    raspBp.frequency.exponentialRampToValueAtTime(920, t0 + 0.32);
+    const raspG = ctx.createGain();
+    raspG.gain.setValueAtTime(0.0001, t0);
+    raspG.gain.linearRampToValueAtTime(0.54, t0 + 0.025);
+    raspG.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.34);
+    raspSrc.connect(raspBp);
+    raspBp.connect(raspG);
+    raspG.connect(out);
+    raspSrc.start(t0, 0.12, 0.36);
+    nodes.push(raspSrc, raspBp, raspG);
+    stops.push(raspSrc);
+
+    // Layer B: 5 violent wrenched-out iron bar snaps & tumbling metallic clangs (0.04..0.55s)
     const snaps = [
-      { at: 0.05, base: 310, hi: 1460, g: 0.68, pan: -0.28 },
-      { at: 0.12, base: 265, hi: 1920, g: 0.60, pan:  0.34 },
-      { at: 0.23, base: 390, hi: 2480, g: 0.42, pan: -0.14 }
+      { at: 0.04, base: 318, hi: 1540, g: 0.78, pan: -0.34 },
+      { at: 0.09, base: 262, hi: 1980, g: 0.74, pan:  0.38 },
+      { at: 0.15, base: 385, hi: 2560, g: 0.66, pan: -0.18 },
+      { at: 0.23, base: 294, hi: 2210, g: 0.56, pan:  0.46 },
+      { at: 0.34, base: 430, hi: 2880, g: 0.44, pan: -0.44 }
     ];
     for (let i = 0; i < snaps.length; i++) {
       const s = snaps[i];
@@ -1945,25 +2139,43 @@ export function createSoulsEscapeAudio(getCtxArg, getMasterGainArg, getSfxVolume
       pan.connect(out);
       nodes.push(pan);
 
-      // Sharp iron shear crack
+      // Sharp brittle iron-bar shear crack
       const cSrc = ctx.createBufferSource();
       cSrc.buffer = crispNoiseBuf;
       const cBp = ctx.createBiquadFilter();
       cBp.type = 'bandpass';
-      cBp.frequency.setValueAtTime(s.hi * 1.4, ts);
-      cBp.Q.setValueAtTime(1.6, ts);
+      cBp.frequency.setValueAtTime(clampFreq(ctx, s.hi * 1.48), ts);
+      cBp.Q.setValueAtTime(1.5, ts);
       const cG = ctx.createGain();
       cG.gain.setValueAtTime(0.0001, ts);
-      cG.gain.linearRampToValueAtTime(s.g * 0.72, ts + 0.002);
-      cG.gain.exponentialRampToValueAtTime(0.0001, ts + 0.075);
+      cG.gain.linearRampToValueAtTime(s.g * 0.82, ts + 0.0018);
+      cG.gain.exponentialRampToValueAtTime(0.0001, ts + 0.085);
       cSrc.connect(cBp);
       cBp.connect(cG);
       cG.connect(pan);
-      cSrc.start(ts, i * 0.22, 0.09);
+      cSrc.start(ts, (i * 0.19) % 0.9, 0.10);
       nodes.push(cSrc, cBp, cG);
       stops.push(cSrc);
 
-      // Hollow iron-bar clang partials
+      // Punchy torn-mount iron thump on primary bar snaps
+      if (i < 3) {
+        const thOsc = ctx.createOscillator();
+        thOsc.type = 'triangle';
+        thOsc.frequency.setValueAtTime(158 - i * 14, ts);
+        thOsc.frequency.exponentialRampToValueAtTime(56, ts + 0.085);
+        const thG = ctx.createGain();
+        thG.gain.setValueAtTime(0.0001, ts);
+        thG.gain.linearRampToValueAtTime(s.g * 0.50, ts + 0.003);
+        thG.gain.exponentialRampToValueAtTime(0.0001, ts + 0.095);
+        thOsc.connect(thG);
+        thG.connect(pan);
+        thOsc.start(ts);
+        thOsc.stop(ts + 0.11);
+        nodes.push(thOsc, thG);
+        stops.push(thOsc);
+      }
+
+      // Hollow tumbling iron-bar clang partials
       const barFreqs = [s.base, s.base * 1.84, s.hi, s.hi * 1.63];
       for (let m = 0; m < barFreqs.length; m++) {
         const osc = ctx.createOscillator();
@@ -1971,46 +2183,87 @@ export function createSoulsEscapeAudio(getCtxArg, getMasterGainArg, getSfxVolume
         osc.frequency.setValueAtTime(clampFreq(ctx, barFreqs[m]), ts);
         const og = ctx.createGain();
         og.gain.setValueAtTime(0.0001, ts);
-        og.gain.linearRampToValueAtTime(s.g * (0.28 / (1 + m * 0.55)), ts + 0.003);
-        og.gain.exponentialRampToValueAtTime(0.0001, ts + 0.34 - m * 0.04);
+        og.gain.linearRampToValueAtTime(s.g * (0.30 / (1 + m * 0.55)), ts + 0.0025);
+        og.gain.exponentialRampToValueAtTime(0.0001, ts + 0.38 - m * 0.04);
         osc.connect(og);
         og.connect(pan);
         osc.start(ts);
-        osc.stop(ts + 0.38);
+        osc.stop(ts + 0.42);
         nodes.push(osc, og);
         stops.push(osc);
       }
     }
 
-    // Layer C: Breached spillway water surge rushing out into the night air (0.10..1.05s)
-    const surgeSrc = ctx.createBufferSource();
-    surgeSrc.buffer = crispNoiseBuf;
-    const surgeBp = ctx.createBiquadFilter();
-    surgeBp.type = 'bandpass';
-    surgeBp.Q.setValueAtTime(0.85, t0 + 0.10);
-    surgeBp.frequency.setValueAtTime(620, t0 + 0.10);
-    surgeBp.frequency.exponentialRampToValueAtTime(2400, t0 + 0.32);
-    surgeBp.frequency.exponentialRampToValueAtTime(840, t0 + 1.00);
-    const surgeG = ctx.createGain();
-    surgeG.gain.setValueAtTime(0.0001, t0 + 0.10);
-    surgeG.gain.linearRampToValueAtTime(0.56, t0 + 0.24);
-    surgeG.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.05);
-    surgeSrc.connect(surgeBp);
-    surgeBp.connect(surgeG);
-    surgeG.connect(out);
-    surgeSrc.start(t0 + 0.10, 0.25, 0.98);
-    nodes.push(surgeSrc, surgeBp, surgeG);
-    stops.push(surgeSrc);
+    // Layer C: Explosive breached-spillway water eruption & stereo foaming splash (0.08..1.35s)
+    // C1: Pressurized water-cavity blowout boom (132 -> 36 Hz)
+    const boomOsc = ctx.createOscillator();
+    boomOsc.type = 'sine';
+    boomOsc.frequency.setValueAtTime(132, t0 + 0.08);
+    boomOsc.frequency.exponentialRampToValueAtTime(36, t0 + 0.38);
+    const boomG = ctx.createGain();
+    boomG.gain.setValueAtTime(0.0001, t0 + 0.08);
+    boomG.gain.linearRampToValueAtTime(0.76, t0 + 0.092);
+    boomG.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.46);
+    boomOsc.connect(boomG);
+    boomG.connect(out);
+    boomOsc.start(t0 + 0.08);
+    boomOsc.stop(t0 + 0.50);
+    nodes.push(boomOsc, boomG);
+    stops.push(boomOsc);
+
+    // C2: Dual stereo decorrelated high-pressure water splash jets bursting outward
+    const splashPans = [-0.42, 0.42];
+    for (let sIdx = 0; sIdx < splashPans.length; sIdx++) {
+      const spSrc = ctx.createBufferSource();
+      spSrc.buffer = crispNoiseBuf;
+      const spBp = ctx.createBiquadFilter();
+      spBp.type = 'bandpass';
+      spBp.Q.setValueAtTime(0.72, t0 + 0.08);
+      spBp.frequency.setValueAtTime(520, t0 + 0.08);
+      spBp.frequency.exponentialRampToValueAtTime(clampFreq(ctx, 4400 - sIdx * 450), t0 + 0.24);
+      spBp.frequency.exponentialRampToValueAtTime(960, t0 + 1.24);
+      const spPan = createStereoPannerSafe(ctx, splashPans[sIdx]);
+      const spG = ctx.createGain();
+      spG.gain.setValueAtTime(0.0001, t0 + 0.08);
+      spG.gain.linearRampToValueAtTime(0.62, t0 + 0.16);
+      spG.gain.linearRampToValueAtTime(0.38, t0 + 0.62);
+      spG.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.32);
+      spSrc.connect(spBp);
+      spBp.connect(spG);
+      spG.connect(spPan);
+      spPan.connect(out);
+      spSrc.start(t0 + 0.08, 0.15 + sIdx * 0.48, 1.28);
+      nodes.push(spSrc, spBp, spG, spPan);
+      stops.push(spSrc);
+    }
+
+    // C3: Heavy rushing outfall torrent wash carrying hero out into the gorge
+    const washSrc = ctx.createBufferSource();
+    washSrc.buffer = warmNoiseBuf;
+    const washLp = ctx.createBiquadFilter();
+    washLp.type = 'lowpass';
+    washLp.frequency.setValueAtTime(1100, t0 + 0.10);
+    washLp.frequency.exponentialRampToValueAtTime(420, t0 + 1.28);
+    const washG = ctx.createGain();
+    washG.gain.setValueAtTime(0.0001, t0 + 0.10);
+    washG.gain.linearRampToValueAtTime(0.58, t0 + 0.24);
+    washG.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.35);
+    washSrc.connect(washLp);
+    washLp.connect(washG);
+    washG.connect(out);
+    washSrc.start(t0 + 0.10, 0.85, 1.30);
+    nodes.push(washSrc, washLp, washG);
+    stops.push(washSrc);
 
     const stopFn = () => {
       for (let i = 0; i < stops.length; i++) safeStop(stops[i]);
       safeDisconnectList(nodes);
     };
-    const unregister = registerOneShotCleanup(stopFn, 1.15);
+    const unregister = registerOneShotCleanup(stopFn, 1.42);
     trackTimer(() => {
       unregister();
       safeDisconnectList(nodes);
-    }, 1220);
+    }, 1520);
     return true;
   }
 

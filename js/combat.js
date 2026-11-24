@@ -9,7 +9,7 @@ import {
   LEVELS,
   getLevelDef,
   RUN_UPGRADES
-} from './config.js?v=20261124z91';
+} from './config.js?v=20261124z92';
 import {
   TWO_PI,
   ARENA_PLAYER_LIMIT,
@@ -21,7 +21,7 @@ import {
   lerpAngle,
   resolveArenaBiomeForLevel,
   createCombatBridge
-} from './combat/bridge.js?v=20261124z91';
+} from './combat/bridge.js?v=20261124z92';
 import {
   updateBossAI,
   updateSoulsBossAI,
@@ -31,7 +31,7 @@ import {
   cancelSoulsBossTelegraph,
   applySoulsBossParry,
   SOULS_BOSS_MULTI_PARRY
-} from './combat/bossAi.js?v=20261124z91';
+} from './combat/bossAi.js?v=20261124z92';
 import {
   createPoiseController,
   STANCE_DAMAGE_TABLE,
@@ -40,26 +40,26 @@ import {
   getPlayerHitstunSpec,
   SOULS_GUARD_CFG,
   computeBlockedStaminaCost
-} from './combat/poiseSystem.js?v=20261124z91';
+} from './combat/poiseSystem.js?v=20261124z92';
 import {
   SOULS_ROLL_CFG,
   getSoulsRollIframes,
   sampleSoulsRollStepDist,
   sampleAttackLungeStep,
   createAliveStanceSmoother
-} from './souls/soulsLocomotion.js?v=20261124z91';
+} from './souls/soulsLocomotion.js?v=20261124z92';
 import {
   SOULS_STAMINA_CFG,
   createSoulsStaminaController,
   createSoulsActionBuffer
-} from './souls/soulsStaminaBuffer.js?v=20261124z91';
+} from './souls/soulsStaminaBuffer.js?v=20261124z92';
 import {
   SOULS_ATTACK_SPECS,
   getSoulsAttackSpec,
   computeSoulsDamage,
   testSweptBladeHits
-} from './souls/soulsHitboxDamage.js?v=20261124z91';
-import * as SOULS_MOB_AI from './souls/soulsMobAi.js?v=20261124z91';
+} from './souls/soulsHitboxDamage.js?v=20261124z92';
+import * as SOULS_MOB_AI from './souls/soulsMobAi.js?v=20261124z92';
 import {
   initSoulsMobState,
   stepSoulsMobAi,
@@ -67,7 +67,7 @@ import {
   onSoulsMobInterrupted,
   resetSoulsPackCoordinator,
   releaseSoulsAttackToken
-} from './souls/soulsMobAi.js?v=20261124z91';
+} from './souls/soulsMobAi.js?v=20261124z92';
 import {
   SOULS_CASTLE_CONSTANTS,
   SOULS_CASTLE_BONFIRE,
@@ -86,42 +86,43 @@ import {
   canInteractWithBossDoor,
   findInteractableRelic,
   clampCastlePosition
-} from './souls/soulsCastleLayout.js?v=20261124z91';
+} from './souls/soulsCastleLayout.js?v=20261124z92';
 import {
   createDissolveAshSystem
-} from './souls/soulsDissolveVfx.js?v=20261124z91';
+} from './souls/soulsDissolveVfx.js?v=20261124z92';
 import {
   enhanceSoulsBossModel,
   updateSoulsBossVisuals,
   triggerSoulsBossHitFlash,
   disposeSoulsBossVisuals
-} from './souls/soulsBossVisuals.js?v=20261124z91';
+} from './souls/soulsBossVisuals.js?v=20261124z92';
 import {
   createSoulsGameFeel,
   getImpactSparkBurst
-} from './souls/soulsGameFeel.js?v=20261124z91';
+} from './souls/soulsGameFeel.js?v=20261124z92';
 import {
   BOSS_DOOR_CUTSCENE_DURATION,
   BOSS_DOOR_CUTSCENE_ACTS
-} from './souls/soulsCutsceneChoreography.js?v=20261124z91';
+} from './souls/soulsCutsceneChoreography.js?v=20261124z92';
 import {
   BOSS_ESCAPE_CUTSCENE_DURATION,
   BOSS_ESCAPE_ACTS
-} from './souls/soulsEscapeCutscene.js?v=20261124z91';
+} from './souls/soulsEscapeCutscene.js?v=20261124z92';
 import {
   resetActorPhysics,
   applyKnockbackImpulse,
   stepActorPhysicsBody
-} from './souls/soulsPhysicsFeel.js?v=20261124z91';
+} from './souls/soulsPhysicsFeel.js?v=20261124z92';
 import {
   createWeaponTrailSystem
-} from './souls/soulsWeaponTrails.js?v=20261124z91';
+} from './souls/soulsWeaponTrails.js?v=20261124z92';
 
 export function createCombatController({
   world,
   models,
   progression,
   audio,
+  ui = null,
   callbacks = {}
 } = {}) {
   const poiseCtrl = createPoiseController();
@@ -500,6 +501,10 @@ export function createCombatController({
       cutsceneLocationSubtitleRu: '',
       cutsceneFadeToBlack01: 0,
       cutsceneUnderwater01: 0,
+      cutsceneImpactFlash01: 0,
+      cutsceneSlowMoFactor: 1.0,
+      escapeFinalCamYaw: 0,
+      escapeFinalHeroFacing: Math.PI,
       cutsceneCanSkip: false,
       cutsceneBossTitleRu: BOSS_DOOR_CUTSCENE_ACTS.BOSS_TITLE_RU,
       cutsceneBossSubtitleRu: BOSS_DOOR_CUTSCENE_ACTS.BOSS_SUBTITLE_RU,
@@ -521,6 +526,27 @@ export function createCombatController({
 
   let souls = makeInitialSoulsState();
   let droppedSwordProp = null;
+  let shoreRealSwordAttached = false;
+
+  function ensureShoreRealSwordAttached() {
+    if (shoreRealSwordAttached) return true;
+    if (typeof models?.createRealOathSwordClone !== 'function') return false;
+    const attachNow = () => {
+      if (shoreRealSwordAttached) return true;
+      const clone = models.createRealOathSwordClone({ centerOrigin: false });
+      if (!clone) return false;
+      shoreRealSwordAttached = true;
+      world?.attachShoreRealSwordModel?.(clone);
+      return true;
+    };
+    if (attachNow()) return true;
+    if (typeof models?.ensureModelKeysLoaded === 'function') {
+      models.ensureModelKeysLoaded(['sword_tripo']).then(() => {
+        attachNow();
+      }).catch(() => {});
+    }
+    return false;
+  }
 
   function ensureDroppedSwordProp() {
     if (!droppedSwordProp && typeof models?.createDroppedSwordMesh === 'function') {
@@ -567,8 +593,36 @@ export function createCombatController({
     souls.cutsceneLocationSubtitleRu = '';
     souls.cutsceneFadeToBlack01 = 0;
     souls.cutsceneUnderwater01 = 0;
+    souls.cutsceneImpactFlash01 = 0;
+    souls.cutsceneSlowMoFactor = 1.0;
+    souls.cutsceneInstantSync = false;
     souls.cutsceneCanSkip = false;
     souls.cutsceneLetterbox01 = 0;
+  }
+
+  function syncEscapeCutsceneUiImmediate(escState, instant = false) {
+    if (!ui) return;
+    souls.cutsceneInstantSync = Boolean(instant);
+    if (typeof ui.updateHud === 'function') {
+      ui.updateHud(getHudSnapshot());
+    }
+    if (escState && typeof ui.setSoulsLetterbox === 'function') {
+      ui.setSoulsLetterbox(true, {
+        showBossTitleCard: false,
+        showLocationCard: Boolean(escState.showLocationCard),
+        locationTitleRu: escState.locationTitleRu || 'БЕРЕГ ПЕПЕЛЬНОГО СТОКА',
+        locationSubtitleRu: escState.locationSubtitleRu || 'ЗА СТЕНАМИ ЗАМКА ПЕПЛА',
+        canSkip: Boolean(escState.canSkip),
+        subtitleSpeaker: escState.subtitleSpeaker || '',
+        subtitleText: escState.subtitleText || '',
+        letterbox01: Number(escState.letterbox01) || 0,
+        fadeToBlack01: Number(escState.fadeToBlack01) || 0,
+        underwater01: Number(escState.underwater01) || 0,
+        impactFlash01: Number(escState.impactFlash01) || 0,
+        slowMoFactor: Number.isFinite(Number(escState.slowMoFactor)) ? Number(escState.slowMoFactor) : 1.0,
+        instant: Boolean(instant)
+      });
+    }
   }
 
   function resetSoulsControllers(resetAll = true) {
@@ -717,9 +771,12 @@ export function createCombatController({
   function finishBossEscapeCutsceneToShore(skipped = false, opts = null) {
     const withSword = Boolean(opts?.withSword);
     const bonfireLit = Boolean(opts?.bonfireLit);
+    const finalCamYaw = Number.isFinite(Number(souls.escapeFinalCamYaw)) ? Number(souls.escapeFinalCamYaw) : 0;
+    const finalHeroFacing = Number.isFinite(Number(souls.escapeFinalHeroFacing)) ? Number(souls.escapeFinalHeroFacing) : Math.PI;
 
     clearSoulsCutsceneUiMirror();
     hideDroppedSwordProp();
+    ensureShoreRealSwordAttached();
     soulsActionBuffer.clear();
     souls.activeAttack = null;
     souls.activeRiposte = null;
@@ -753,6 +810,7 @@ export function createCombatController({
     world?.setShoreBonfireLit?.(bonfireLit);
     world?.setBossAtmosphere?.(false);
     world?.setSoulsFogGate?.(false);
+    world?.setCombatOrbitYaw?.(finalCamYaw);
 
     clearAllCastleEnemiesForShore();
 
@@ -760,7 +818,7 @@ export function createCombatController({
     const wakePos = anchors.wakePos || { x: 0, y: 0, z: 2.5 };
     player.x = Number.isFinite(wakePos.x) ? wakePos.x : 0;
     player.z = Number.isFinite(wakePos.z) ? wakePos.z : 2.5;
-    player.facing = Math.PI;
+    player.facing = skipped ? Math.PI : finalHeroFacing;
     player.hp = player.maxHp;
     souls.flasks = souls.flasksMax;
     soulsStaminaCtrl.reset(SOULS_STAMINA_CFG.MAX_STAMINA);
@@ -790,6 +848,8 @@ export function createCombatController({
     audio?.setMusicMode?.('off');
 
     syncFollowTarget(player.x, player.z, heroModel?.obj, 0);
+    ui?.setSoulsLetterbox?.(false);
+    ui?.updateHud?.(getHudSnapshot());
     callbacks?.onEscapeCastleCompleted?.({
       escapedCastle: true,
       shoreSwordPickedUp: withSword,
@@ -802,6 +862,7 @@ export function createCombatController({
 
   function applyBossEscapeCutsceneState(escState, stepDt = 0.016, elapsed = 0, silentCues = false) {
     if (!escState) return;
+    ensureShoreRealSwordAttached();
     souls.zoneMode = escState.stageMode || 'castle';
     souls.zoneTitleRu =
       souls.zoneMode === 'exterior_shore'
@@ -819,6 +880,15 @@ export function createCombatController({
     souls.cutsceneLetterbox01 = Number(escState.letterbox01) || 0;
     souls.cutsceneFadeToBlack01 = Number(escState.fadeToBlack01) || 0;
     souls.cutsceneUnderwater01 = Number(escState.underwater01) || 0;
+    souls.cutsceneImpactFlash01 = Number(escState.impactFlash01) || 0;
+    souls.cutsceneSlowMoFactor = Number.isFinite(Number(escState.slowMoFactor)) ? Number(escState.slowMoFactor) : 1.0;
+    if (!silentCues) souls.cutsceneInstantSync = false;
+    if (Number.isFinite(Number(escState.finalCamYaw))) {
+      souls.escapeFinalCamYaw = Number(escState.finalCamYaw);
+    }
+    if (escState.stageMode === 'exterior_shore' && Number.isFinite(Number(escState.heroFacing))) {
+      souls.escapeFinalHeroFacing = Number(escState.heroFacing);
+    }
 
     // 1. Hero Pose, Position (including vertical chasm fall Y!), Clip & Disarm
     player.x = Number.isFinite(escState.heroX) ? escState.heroX : player.x;
@@ -899,6 +969,7 @@ export function createCombatController({
       world?.addScreenShake?.(clCue === 1 ? 0.34 : 0.42, 0.16);
       const midX = (player.x + (cutBoss?.x ?? 0)) * 0.5;
       const midZ = (player.z + (cutBoss?.z ?? player.z - 2)) * 0.5;
+      world?.emitEscapeParrySparks?.(midX, 1.38, midZ, clCue === 1 ? 1.0 : 1.25);
       spawnSoulsClashSparks(midX, 1.38, midZ, 0, 0.55, 1, 'parry');
       emitParticles(midX, 1.38, midZ, 0xfde047, 18, 6.2, 0.14);
     }
@@ -908,6 +979,7 @@ export function createCombatController({
       souls.escapeCutsceneLastDisarmCue = disCue;
       audio?.playSwordDisarmClatter?.();
       world?.addScreenShake?.(0.30, 0.16);
+      world?.emitEscapeParrySparks?.(player.x + 0.35, 1.18, player.z - 0.3, 1.15);
       spawnSoulsClashSparks(player.x + 0.35, 1.18, player.z - 0.3, 0.65, 0.45, 0.4, 'parry');
       emitParticles(player.x + 0.35, 1.15, player.z - 0.3, 0xfef08a, 16, 5.4, 0.12);
     }
@@ -917,6 +989,7 @@ export function createCombatController({
       souls.escapeCutsceneLastKnockdownCue = kdCue;
       audio?.playHeroKnockdownThud?.();
       world?.addScreenShake?.(0.45, 0.20);
+      world?.emitEscapeDustImpact?.(player.x, 0.14, player.z, 1.35);
       emitParticles(player.x, 0.25, player.z, 0xd6d3d1, 16, 4.4, 0.14);
       emitShockwave(player.x, player.z, 2.2, 0xf59e0b, 0.26);
     }
@@ -925,6 +998,7 @@ export function createCombatController({
     if (scCue > souls.escapeCutsceneLastScootCue) {
       souls.escapeCutsceneLastScootCue = scCue;
       audio?.playArmorScootScrape?.();
+      world?.emitEscapeDustImpact?.(player.x, 0.08, player.z, 0.55);
       emitParticles(player.x, 0.08, player.z, 0xa8a29e, 5, 1.8, 0.09);
     }
 
@@ -941,6 +1015,7 @@ export function createCombatController({
       world?.addScreenShake?.(1.30, 0.45);
       const hx = Number(escState.floorHoleX) || 0;
       const hz = Number(escState.floorHoleZ) ?? SOULS_CASTLE_CONSTANTS.BOSS_CENTER_Z;
+      world?.emitEscapeFloorCollapseBurst?.(hx, 0.25, hz);
       emitShockwave(hx, hz, 7.2, 0xf97316, 0.55);
       emitParticles(hx, 0.35, hz, 0xf97316, 32, 8.6, 0.20);
       emitParticles(hx, 0.25, hz, 0x78716c, 28, 7.2, 0.18);
@@ -960,6 +1035,7 @@ export function createCombatController({
       souls.escapeChasmWindActive = false;
       audio?.playChasmWindFall?.(false);
       audio?.playRiverSplashUnderwater?.();
+      world?.emitEscapeWaterSplash?.(player.x, 0.15, player.z, 1.35);
       emitParticles(player.x, 0.35, player.z, 0xbae6fd, 28, 6.4, 0.16);
       emitShockwave(player.x, player.z, 3.8, 0x7dd3fc, 0.40);
     }
@@ -969,6 +1045,7 @@ export function createCombatController({
       souls.escapeCutsceneLastGrateBreakCue = gbCue;
       audio?.playIronGrateBreak?.();
       world?.addScreenShake?.(0.55, 0.25);
+      world?.emitEscapeGrateBreakBurst?.(player.x, 0.55, player.z + 0.8);
       emitParticles(player.x, 0.65, player.z + 0.8, 0xfef08a, 20, 6.2, 0.14);
       emitParticles(player.x, 0.45, player.z + 0.8, 0xbae6fd, 22, 5.8, 0.15);
     }
@@ -1107,9 +1184,11 @@ export function createCombatController({
 
     const anchorX = Number.isFinite(cutBoss?.x) ? cutBoss.x : 0;
     const anchorZ = Number.isFinite(cutBoss?.z) ? cutBoss.z : SOULS_CASTLE_CONSTANTS.BOSS_CENTER_Z;
+    ensureShoreRealSwordAttached();
     const initState = world?.startBossEscapeCutscene?.(anchorX, anchorZ);
     if (initState) {
       applyBossEscapeCutsceneState(initState, 0.016, elapsedRunTime, true);
+      syncEscapeCutsceneUiImmediate(initState, true);
     }
     return Boolean(initState);
   }
@@ -1134,6 +1213,7 @@ export function createCombatController({
     const st = world?.seekBossEscapeCutscene?.(tSec);
     if (st) {
       applyBossEscapeCutsceneState(st, 0.016, elapsedRunTime, true);
+      syncEscapeCutsceneUiImmediate(st, true);
     }
     return st;
   }
@@ -11097,6 +11177,9 @@ export function createCombatController({
             locationSubtitleRu: souls.cutsceneLocationSubtitleRu || 'ЗА СТЕНАМИ ЗАМКА ПЕПЛА',
             fadeToBlack01: souls.escapeCutsceneActive ? +(souls.cutsceneFadeToBlack01 || 0).toFixed(3) : 0,
             underwater01: souls.escapeCutsceneActive ? +(souls.cutsceneUnderwater01 || 0).toFixed(3) : 0,
+            impactFlash01: souls.escapeCutsceneActive ? +(souls.cutsceneImpactFlash01 || 0).toFixed(3) : 0,
+            slowMoFactor: souls.escapeCutsceneActive ? +(souls.cutsceneSlowMoFactor ?? 1).toFixed(3) : 1,
+            cutsceneInstantSync: Boolean(souls.escapeCutsceneActive && souls.cutsceneInstantSync),
             canSkip: Boolean((souls.doorCutsceneActive || souls.escapeCutsceneActive) && souls.cutsceneCanSkip),
             bossTitleRu: souls.cutsceneBossTitleRu || BOSS_DOOR_CUTSCENE_ACTS.BOSS_TITLE_RU,
             bossSubtitleRu: souls.cutsceneBossSubtitleRu || BOSS_DOOR_CUTSCENE_ACTS.BOSS_SUBTITLE_RU,

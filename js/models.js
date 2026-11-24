@@ -8,7 +8,7 @@ import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { DRACOLoader } from '../vendor/DRACOLoader.js';
 import { clone as cloneSkinned } from '../vendor/SkeletonUtils.js';
-import { WEAPONS } from './config.js?v=20261124z91';
+import { WEAPONS } from './config.js?v=20261124z92';
 import {
   getGeo,
   getMat,
@@ -17,28 +17,28 @@ import {
   createAnimController,
   setBoneRelEuler,
   solveMixamoArmIK
-} from './models/shared.js?v=20261124z91';
+} from './models/shared.js?v=20261124z92';
 import {
   getWarriorWeaponMountConfig,
   createWarriorStanceState,
   applyWarriorWeaponStance,
   applyWarriorAttackOverlay
-} from './models/warriorStances.js?v=20261124z91';
+} from './models/warriorStances.js?v=20261124z92';
 import {
   computeFootSyncPlaybackRate,
   computeCombatPostureDynamics,
   applyCombatPostureToObject3D,
   applyCombatRecoilImpulse
-} from './souls/soulsPhysicsFeel.js?v=20261124z91';
-import { createActorContactShadowMesh } from './souls/soulsAtmosphere.js?v=20261124z91';
+} from './souls/soulsPhysicsFeel.js?v=20261124z92';
+import { createActorContactShadowMesh } from './souls/soulsAtmosphere.js?v=20261124z92';
 import {
   applyEldenDissolveToModel,
   resetEldenDissolveFromModel
-} from './souls/soulsDissolveVfx.js?v=20261124z91';
+} from './souls/soulsDissolveVfx.js?v=20261124z92';
 
 const MODEL_PATHS = {
   // Warrior Knight (Mixamo Sword & Shield Run + Diagonal Slash + Turn_180 + Combat_Roll + Heavy_Thrust + Door_Push)
-  warrior_run: './assets/models/Warrior_Run.glb?v=20261124z91',
+  warrior_run: './assets/models/Warrior_Run.glb?v=20261124z92',
 
   // All 5 Warrior Melee Weapons + Shield (preserved for in-world discovery & future equipment!)
   sword_tripo: './assets/models/Sword_Tripo.glb?v=20261120z34',
@@ -49,10 +49,10 @@ const MODEL_PATHS = {
   hammer_tripo: './assets/models/Hammer_Tripo.glb?v=20261120z34',
 
   // Castle of Ash Enemies & Boss (Boss untouched!)
-  rift_boss: './assets/models/Rift_Boss_Tripo.glb?v=20261124z91',
-  rift_executioner: './assets/models/Rift_Executioner_Tripo.glb?v=20261124z91',
-  rift_vanguard: './assets/models/Rift_Vanguard_Tripo.glb?v=20261124z91',
-  rift_acolyte: './assets/models/Rift_Acolyte_Tripo.glb?v=20261124z91'
+  rift_boss: './assets/models/Rift_Boss_Tripo.glb?v=20261124z92',
+  rift_executioner: './assets/models/Rift_Executioner_Tripo.glb?v=20261124z92',
+  rift_vanguard: './assets/models/Rift_Vanguard_Tripo.glb?v=20261124z92',
+  rift_acolyte: './assets/models/Rift_Acolyte_Tripo.glb?v=20261124z92'
 };
 
 const gltfCache = new Map();
@@ -3573,7 +3573,8 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
   let heroShieldDisarmed = false;
 
   // Normalized cutscene clip scrubber for Warrior (Boss Escape Cutscene:
-  // Cutscene_Knockdown_Scoot, Cutscene_Dodge_Fall, Cutscene_River_Tumble, Cutscene_Shore_WakeUp, Heavy_Thrust__Full)
+  // Cutscene_FinalClash_Disarm, Cutscene_Knockdown_Scoot, Cutscene_Dodge_Fall,
+  // Cutscene_River_Tumble, Cutscene_Shore_WakeUp, Heavy_Thrust__Full)
   let heroCutsceneAction = null;
   let heroPrevCutsceneFromAction = null;
   let heroCutsceneBlendElapsed = 0;
@@ -6115,42 +6116,73 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
 }
 
 // ============================================================================
-// 1b. DROPPED OATH BROADSWORD PROP (World-space flying/sliding 3D sword for Boss Escape Cutscene)
+// 1b. DROPPED & SHORE OATH BROADSWORD PROPS (Real 3D sword_tripo clone 1:1 with Hero)
 // ============================================================================
+const HERO_EQUIPPED_OATH_SWORD_LEN = 1.272; // 97.692 * 2.17 (heroBaseScale) * 0.006 (handR mount)
+
+export function createRealOathSwordClone({ targetLen = HERO_EQUIPPED_OATH_SWORD_LEN, centerOrigin = true } = {}) {
+  const swordAsset = gltfCache.get('sword_tripo');
+  if (!swordAsset?.scene) return null;
+  const wrapper = new THREE.Group();
+  wrapper.name = 'RealOathSwordTripoClone';
+  const inner = swordAsset.scene.clone(true);
+  inner.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(inner);
+  const size = new THREE.Vector3();
+  const center = new THREE.Vector3();
+  box.getSize(size);
+  box.getCenter(center);
+  const maxSpan = Math.max(size.x, size.y, size.z, 1e-4);
+  const sc = (Number(targetLen) > 0 ? Number(targetLen) : HERO_EQUIPPED_OATH_SWORD_LEN) / maxSpan;
+  inner.scale.setScalar(sc);
+  if (centerOrigin) {
+    inner.position.set(-center.x * sc, -center.y * sc, -center.z * sc);
+  } else {
+    inner.position.set(-center.x * sc, -box.min.y * sc, -center.z * sc);
+  }
+  inner.traverse((n) => {
+    if (n.isMesh) {
+      n.castShadow = true;
+      n.receiveShadow = false;
+      n.frustumCulled = false;
+    }
+  });
+  wrapper.add(inner);
+  wrapper.userData.isRealSwordTripo = true;
+  return wrapper;
+}
+
 export function createDroppedSwordMesh() {
   const root = new THREE.Group();
   root.name = 'DroppedOathSword';
-  const swordAsset = gltfCache.get('sword_tripo');
-  let inner = null;
-  if (swordAsset?.scene) {
-    inner = swordAsset.scene.clone(true);
-    inner.updateMatrixWorld(true);
-    const box = new THREE.Box3().setFromObject(inner);
-    const size = new THREE.Vector3();
-    const center = new THREE.Vector3();
-    box.getSize(size);
-    box.getCenter(center);
-    const maxSpan = Math.max(size.x, size.y, size.z, 1e-4);
-    const targetLen = 1.32;
-    const sc = targetLen / maxSpan;
-    inner.scale.setScalar(sc);
-    inner.position.set(-center.x * sc, -center.y * sc, -center.z * sc);
-    inner.traverse((n) => {
-      if (n.isMesh) {
-        n.castShadow = true;
-        n.receiveShadow = false;
-        n.frustumCulled = false;
-      }
-    });
-  } else {
+  let disposed = false;
+  let inner = createRealOathSwordClone({ targetLen: HERO_EQUIPPED_OATH_SWORD_LEN, centerOrigin: true });
+  let usingRealModel = Boolean(inner);
+  if (!inner) {
     inner = createHeroWeaponMesh('club', null);
-    inner.scale.setScalar(1.25);
+    inner.scale.setScalar(1.22);
+    if (MODEL_PATHS.sword_tripo && !failedModelKeys.has('sword_tripo')) {
+      loadSingleModelKey('sword_tripo').then(() => {
+        if (disposed || usingRealModel) return;
+        const realClone = createRealOathSwordClone({ targetLen: HERO_EQUIPPED_OATH_SWORD_LEN, centerOrigin: true });
+        if (!realClone) return;
+        if (inner) {
+          root.remove(inner);
+          disposeOwnedWeaponMaterials(inner);
+        }
+        inner = realClone;
+        usingRealModel = true;
+        root.add(inner);
+      });
+    }
   }
   root.add(inner);
   root.visible = false;
   return {
     obj: root,
+    isRealModel: () => usingRealModel,
     dispose() {
+      disposed = true;
       if (root.parent) root.parent.remove(root);
       disposeOwnedWeaponMaterials(inner);
     }

@@ -1,5 +1,6 @@
 // Chapter 26 Escape Finale & Free-Roam Exterior World — «Берег Пепельного Стока»
-// Pure Vanilla ES Module (Three.js r160, ZERO external textures, ZERO external imports, 60+ FPS).
+// AAA Dark Souls III / Elden Ring / Bloodborne Visual Overhaul (z92)
+// Pure Vanilla ES Module (Three.js r160, ZERO external textures, ZERO external imports, 60+ FPS, 0 VRAM leaks).
 //
 // Exports:
 //   - EXTERIOR_SHORE_ANCHORS
@@ -7,25 +8,24 @@
 //
 // Builds 3 cleanly isolated 3D scenic groups under `rootGroup` controlled by `setStageMode(mode)`:
 //   A) `chasmOverlayGroup`  ('chasm_only')     — Act 3: 4.6m jagged WebGL Stencil-portal chasm in the Throne Hall floor
-//                                                (supports BOTH overhead view AND looking UP from inside the abyss!),
-//                                                14m+ stratified vertical stone walls, smoldering crimson cracks,
-//                                                torn crimson royal velvet runner flaps, buckled rim flagstones &
-//                                                18 instanced tumbling stone chunks.
-//   B) `shaftAndRiverGroup` ('shaft_river')    — Act 4: 24m gloomy vertical stone shaft w/ snapped beams, roots,
-//                                                falling dust & distant crimson Throne Hall breach overhead ->
-//                                                vaulted gothic river tunnel w/ custom GLSL rushing black river,
-//                                                massive rusty iron outfall grate at z = +26m, cold moonlight beams
-//                                                pouring in from outside & explosive `triggerGrateBreak()` animation.
+//                                                (full overhead + abyss upward view down to y=-24m w/ rocky ledges,
+//                                                molten fiery rim, backlit smoky cathedral vault & 18 falling chunks).
+//   B) `shaftAndRiverGroup` ('shaft_river')    — Act 4: Full 360° gothic stone shaft (y=-2..+26m) w/ inward-facing
+//                                                relieved masonry, ring arches every 5m, hanging iron chains, roots,
+//                                                snapped beams, ragged overhead breach + 3 volumetric crimson-gold
+//                                                god-ray cones, vaulted river tunnel, AAA dark-slate whitewater river
+//                                                shader & explosive forged-iron grate break (5 central bars ripped
+//                                                78–96° wide open + 6 flying 3D shards + sparks & water spray!).
 //   C) `exteriorGroup`      ('exterior_shore') — Act 5 + Full Free-Roam Gameplay (~46x54m):
-//                                                Wet basalt pebble shore, roaring subterranean outfall waterfall &
-//                                                broken grate behind (z = -14m), curving animated black gorge river,
-//                                                MONUMENTAL CASTLE OF ASH silhouette on the high cliff (z = -56m,
-//                                                y = +18..+48m) w/ glowing crimson Throne Hall windows & rising ash
-//                                                column against a huge pale moon, drifting night clouds & stars,
-//                                                planted Oath Sword w/ golden beacon (x=2.8, z=5.2),
-//                                                Shore Bonfire w/ coiled sword & 3D FBM fire (x=-2.2, z=15.0),
-//                                                Ruined Gate of the Ash Gorge w/ twin braziers & fog wall (z=31.0),
-//                                                twisted dead pines, swaying reeds, washed-up wreckage & moonlit mist.
+//                                                Multi-octave displaced basalt cliffs & crags, monumental Gothic
+//                                                Cathedral-Citadel Castle of Ash (flying buttresses, real stone
+//                                                tracery pointed windows & rose wheel, volumetric crimson-gold glow,
+//                                                weathervanes, rising ash), giant cratered moon w/ 3-layer halo &
+//                                                floating cliff-base night clouds, multi-layered 3D outfall waterfall
+//                                                w/ ripped iron grate, AAA moonlit gorge river, rolling ground mist,
+//                                                monumental Gothic Gate of the Ash Gorge w/ golden-silver Boss Fog
+//                                                swirl veil & twin ornate braziers, arching bog reeds, gnarled dead
+//                                                pines, broken skiff wreckage, Shore Bonfire & real 3D Oath Sword slot.
 
 // ============================================================================
 // Pure Math, Deterministic PRNG, Terrain Height & River Course (Single Source of Truth)
@@ -97,9 +97,7 @@ function getPathCenterX(z) {
 function evalExteriorGroundY(x, z) {
   if (!Number.isFinite(x) || !Number.isFinite(z)) return 0;
 
-  // Base gentle slope rising slightly from the wet outfall shoal (z=2.5, y=0) toward the Bonfire & Gorge Gate
   const northRise = smoothstep(3.2, 32.0, z) * 0.56;
-  // Subtle natural coastal shingle undulation (zeroed right at wakePos so hero wakes flush on y=0.0!)
   const dWake = Math.hypot(x - 0.0, z - 2.5);
   const wakeFlatMask = smoothstep(0.9, 3.6, dWake);
   const dBonfire = Math.hypot(x + 2.2, z - 15.0);
@@ -116,32 +114,25 @@ function evalExteriorGroundY(x, z) {
 
   let h = northRise + microWave;
 
-  // River bed & plunge pool carve
   const rDist = getRiverSignedDist(x, z);
   if (rDist < 2.8) {
-    // Smooth shallow wading shelf from rDist = +2.8 down into deep river channel (rDist < -1.8)
     const shoreT = smoothstep(-2.4, 2.6, rDist);
     const bedY = lerp(-0.78, h, shoreT);
-    // Keep wakePos strictly at y=0.0 while letting water lap cleanly right beside it
     h = lerp(h, bedY, 1.0 - (1.0 - wakeFlatMask) * 0.65);
   }
 
-  // Sculpted west basalt bank rising outside playable shore (x < -10.5)
   const westSlope = smoothstep(-10.2, -19.5, x);
   h += westSlope * westSlope * 5.2;
 
-  // Steep basalt cliff apron behind the outfall arch (z < -11.2, avoiding the river arch cutout at |x| < 4.5)
   const archOpenMask = smoothstep(3.4, 6.2, Math.abs(x));
   const backSlope = smoothstep(-10.5, -16.2, z);
   h += backSlope * backSlope * (1.4 + 6.8 * archOpenMask);
 
-  // Far right gorge wall across the black river (x > riverCenterX + halfW + 1.2)
   const rcx = getRiverCenterX(z);
   const rhw = getRiverHalfWidth(z);
   const eastBankT = smoothstep(rcx + rhw + 0.6, rcx + rhw + 9.5, x);
   h += eastBankT * eastBankT * 6.4;
 
-  // Ensure exact 0.000m at wakePos (0, 2.5)
   if (dWake < 0.9) {
     h = lerp(0.0, h, smoothstep(0.25, 0.9, dWake));
   }
@@ -155,7 +146,6 @@ function evalExteriorSurfaceType(x, z) {
   if (y <= WATER_LEVEL + 0.035 || rDist <= 0.35) {
     return 'shallow_water';
   }
-  // Ancient flagstone path spine & ruined gate apron -> wet_stone
   const pathX = getPathCenterX(z);
   const onTrail = z >= 5.0 && z <= 33.5 && Math.abs(x - pathX) <= 2.35;
   const nearGate = Math.hypot(x, z - 31.0) <= 4.4;
@@ -168,21 +158,17 @@ function evalExteriorSurfaceType(x, z) {
 
 // Walkable perimeter + landmark colliders (kept 100% consistent with placed 3D props!)
 const EXTERIOR_STATIC_COLLIDERS = Object.freeze([
-  // Shore Bonfire hearth stone ring
   { x: -2.2, z: 15.0, r: 1.18 },
-  // Ruined Gate of the Ash Gorge piers & flanking braziers
   { x: -3.85, z: 31.0, r: 1.48 },
   { x:  3.85, z: 31.0, r: 1.48 },
   { x: -3.55, z: 29.3, r: 0.66 },
   { x:  3.55, z: 29.3, r: 0.66 },
-  // Prominent walkable-edge coastal boulders & dead pine trunks
   { x: -8.6, z:  0.8, r: 1.45 },
   { x: -9.4, z:  8.5, r: 1.55 },
   { x: -9.8, z: 18.8, r: 1.60 },
   { x: -8.8, z: 26.4, r: 1.55 },
   { x: -5.4, z: -2.6, r: 1.35 },
   { x:  6.4, z: 23.2, r: 1.25 },
-  // Washed-up broken hull / driftwood snag on the west-south bank
   { x: -6.2, z:  5.8, r: 1.20 }
 ]);
 
@@ -191,17 +177,14 @@ function clampExteriorPosition(x, z, r = 0.55) {
   let pz = Number.isFinite(z) ? z : 2.5;
   const rad = Number.isFinite(r) ? Math.max(0.15, r) : 0.55;
 
-  // Hard outer playable rectangle bounds (x in [-22..+22], z in [-16..+36])
   px = clamp(px, -22.0 + rad, 22.0 - rad);
   pz = clamp(pz, -16.0 + rad, 36.0 - rad);
 
-  // Organic north/south gorge ends: stop cleanly before deep plunge pool & closed Ash Gorge fog gate
   const minZWall = -4.2 + smoothstep(-8.0, 2.0, px) * 0.8 + rad;
   const maxZWall = 32.1 - rad;
   if (pz < minZWall) pz = minZWall;
   if (pz > maxZWall) pz = maxZWall;
 
-  // West basalt cliff wall curve (tighter near outfall & gate, wide coastal terrace in the middle)
   const leftCliffX =
     -11.2 +
     (1.0 - smoothstep(-4.0, 4.0, pz)) * 3.0 +
@@ -211,7 +194,6 @@ function clampExteriorPosition(x, z, r = 0.55) {
     px = leftCliffX + rad;
   }
 
-  // Right rushing black river deep channel boundary (allows wading ~1.4m into shallow water edge!)
   const rcx = getRiverCenterX(pz);
   const rhw = getRiverHalfWidth(pz);
   const maxRiverX = Math.min(rcx - rhw + 1.35, 11.8) - rad;
@@ -219,7 +201,6 @@ function clampExteriorPosition(x, z, r = 0.55) {
     px = maxRiverX;
   }
 
-  // Keep player out of the deep boiling outfall plunge pool behind wakePos
   const poolCx = 0.45;
   const poolCz = -9.6;
   const poolMinR = 5.65 + rad;
@@ -235,7 +216,6 @@ function clampExteriorPosition(x, z, r = 0.55) {
     }
   }
 
-  // Solid circle colliders (bonfire hearth, ruined gate piers, coastal boulders & wreckage)
   for (let pass = 0; pass < 2; pass++) {
     for (let i = 0; i < EXTERIOR_STATIC_COLLIDERS.length; i++) {
       const c = EXTERIOR_STATIC_COLLIDERS[i];
@@ -255,7 +235,6 @@ function clampExteriorPosition(x, z, r = 0.55) {
     }
   }
 
-  // Final box safety clamp
   px = clamp(px, -22.0 + rad, 22.0 - rad);
   pz = clamp(pz, -16.0 + rad, 36.0 - rad);
   return { x: px, z: pz };
@@ -384,8 +363,8 @@ function buildOrmTex(THREE, aoField, roughField, w, h, anisotropy, repeat = true
       const aoB = (clamp01(aoField[si]) * 255 + 0.5) | 0;
       const rgB = (clamp01(roughField[si]) * 255 + 0.5) | 0;
       const idx = (dstRow + x) * 4;
-      data[idx]     = aoB; // .r = aoMap
-      data[idx + 1] = rgB; // .g = roughnessMap
+      data[idx]     = aoB;
+      data[idx + 1] = rgB;
       data[idx + 2] = rgB;
       data[idx + 3] = 255;
     }
@@ -403,7 +382,6 @@ function buildOrmTex(THREE, aoField, roughField, w, h, anisotropy, repeat = true
   return tex;
 }
 
-// Fast tileable 2D value noise helper
 function makeNoiseSampler(gridSize, seed) {
   const rng = makeRng(seed);
   const grid = new Float32Array(gridSize * gridSize);
@@ -428,35 +406,35 @@ function makeNoiseSampler(gridSize, seed) {
   };
 }
 
-// 1) Wet Coastal Pebble & Dark Slate Shingle PBR (Shore Terrain)
+// 1) Wet Coastal Pebble, Volcanic Silt & Slate Shingle PBR (Shore Terrain)
 function buildShorePebblePbr(THREE, size, anisotropy, trackTex) {
   const c = createCanvas2D(size, size);
   const hc = createCanvas2D(size, size);
   if (!c || !hc) {
-    const fbA = trackTex(createFallbackTex(THREE, 46, 50, 60, 255, true));
-    const fbN = trackTex(createFallbackTex(THREE, 128, 128, 255, 255, false));
-    const fbO = trackTex(createFallbackTex(THREE, 210, 175, 175, 255, false));
-    return { albedo: fbA, normal: fbN, orm: fbO };
+    return {
+      albedo: trackTex(createFallbackTex(THREE, 46, 50, 60, 255, true)),
+      normal: trackTex(createFallbackTex(THREE, 128, 128, 255, 255, false)),
+      orm: trackTex(createFallbackTex(THREE, 210, 175, 175, 255, false))
+    };
   }
   const ctx = c.getContext('2d', { willReadFrequently: true });
   const hctx = hc.getContext('2d', { willReadFrequently: true });
   const rng = makeRng(774101);
   const sc = size / 512;
 
-  // Damp dark volcanic silt & slate grit bed
-  ctx.fillStyle = '#181c24';
+  ctx.fillStyle = '#161a22';
   ctx.fillRect(0, 0, size, size);
-  hctx.fillStyle = '#1c1c1c';
+  hctx.fillStyle = '#1a1a1a';
   hctx.fillRect(0, 0, size, size);
 
   const tones = [
-    [44, 49, 60],
-    [54, 59, 71],
-    [36, 40, 50],
-    [62, 65, 76],
-    [48, 54, 62],
-    [42, 48, 52], // faint damp olive-slate pebble
-    [70, 74, 86]
+    [42, 47, 58],
+    [52, 57, 69],
+    [34, 38, 48],
+    [60, 64, 75],
+    [46, 52, 60],
+    [40, 48, 50],
+    [68, 72, 84]
   ];
 
   const drawWrapped = (fn, x, y, r) => {
@@ -477,34 +455,33 @@ function buildShorePebblePbr(THREE, size, anisotropy, trackTex) {
     }
   };
 
-  // Layer 1: flat weathered river flagstones & broad slate cobbles
-  const cobbleCount = Math.round(95 * (size >= 1024 ? 1.3 : 1.0));
+  const cobbleCount = Math.round(110 * (size >= 1024 ? 1.35 : 1.0));
   for (let i = 0; i < cobbleCount; i++) {
     const cx = rng() * size;
     const cy = rng() * size;
-    const rx = (12 + rng() * 24) * sc;
-    const ry = (9 + rng() * 17) * sc;
+    const rx = (11 + rng() * 23) * sc;
+    const ry = (8 + rng() * 16) * sc;
     const rot = rng() * Math.PI;
     const t = tones[Math.floor(rng() * tones.length)];
-    const sh = Math.floor((rng() - 0.5) * 14);
-    const rr = clamp(t[0] + sh, 20, 96);
-    const gg = clamp(t[1] + sh, 22, 100);
-    const bb = clamp(t[2] + sh, 28, 114);
-    const hv = Math.round(125 + rng() * 88);
+    const sh = Math.floor((rng() - 0.5) * 16);
+    const rr = clamp(t[0] + sh, 18, 94);
+    const gg = clamp(t[1] + sh, 20, 98);
+    const bb = clamp(t[2] + sh, 26, 112);
+    const hv = Math.round(128 + rng() * 90);
 
     drawWrapped(() => {
       ctx.beginPath();
       ctx.ellipse(cx, cy, rx, ry, rot, 0, Math.PI * 2);
       ctx.fillStyle = `rgb(${rr},${gg},${bb})`;
       ctx.fill();
-      ctx.strokeStyle = 'rgba(6,8,12,0.55)';
-      ctx.lineWidth = 2.0 * sc;
+      ctx.strokeStyle = 'rgba(5,7,11,0.58)';
+      ctx.lineWidth = 1.8 * sc;
       ctx.stroke();
 
-      const g = hctx.createRadialGradient(cx, cy, rx * 0.1, cx, cy, Math.max(rx, ry));
+      const g = hctx.createRadialGradient(cx, cy, rx * 0.08, cx, cy, Math.max(rx, ry));
       g.addColorStop(0, `rgb(${hv},${hv},${hv})`);
-      g.addColorStop(0.78, `rgb(${Math.round(hv * 0.72)},${Math.round(hv * 0.72)},${Math.round(hv * 0.72)})`);
-      g.addColorStop(1, 'rgb(28,28,28)');
+      g.addColorStop(0.76, `rgb(${Math.round(hv * 0.72)},${Math.round(hv * 0.72)},${Math.round(hv * 0.72)})`);
+      g.addColorStop(1, 'rgb(24,24,24)');
       hctx.beginPath();
       hctx.ellipse(cx, cy, rx, ry, rot, 0, Math.PI * 2);
       hctx.fillStyle = g;
@@ -512,20 +489,19 @@ function buildShorePebblePbr(THREE, size, anisotropy, trackTex) {
     }, cx, cy, Math.max(rx, ry) + 4 * sc);
   }
 
-  // Layer 2: dense multi-scale river pebbles & shingle
-  const pebbleCount = Math.round(420 * (size >= 1024 ? 1.35 : 1.0));
+  const pebbleCount = Math.round(480 * (size >= 1024 ? 1.35 : 1.0));
   for (let i = 0; i < pebbleCount; i++) {
     const cx = rng() * size;
     const cy = rng() * size;
-    const rx = (3.2 + rng() * 9.5) * sc;
-    const ry = rx * (0.58 + rng() * 0.42);
+    const rx = (2.8 + rng() * 8.8) * sc;
+    const ry = rx * (0.55 + rng() * 0.44);
     const rot = rng() * Math.PI;
     const t = tones[Math.floor(rng() * tones.length)];
-    const sh = Math.floor((rng() - 0.5) * 24);
-    const rr = clamp(t[0] + sh, 18, 112);
-    const gg = clamp(t[1] + sh, 20, 116);
-    const bb = clamp(t[2] + sh, 24, 128);
-    const hv = Math.round(140 + rng() * 100);
+    const sh = Math.floor((rng() - 0.5) * 26);
+    const rr = clamp(t[0] + sh, 16, 110);
+    const gg = clamp(t[1] + sh, 18, 114);
+    const bb = clamp(t[2] + sh, 22, 126);
+    const hv = Math.round(145 + rng() * 98);
 
     drawWrapped(() => {
       ctx.beginPath();
@@ -533,7 +509,7 @@ function buildShorePebblePbr(THREE, size, anisotropy, trackTex) {
       ctx.fillStyle = `rgb(${rr},${gg},${bb})`;
       ctx.fill();
       ctx.strokeStyle = 'rgba(5,7,11,0.45)';
-      ctx.lineWidth = Math.max(1, 1.1 * sc);
+      ctx.lineWidth = Math.max(1, 1.0 * sc);
       ctx.stroke();
 
       hctx.beginPath();
@@ -563,11 +539,10 @@ function buildShorePebblePbr(THREE, size, anisotropy, trackTex) {
       const bh = hPix[p4] * (1 / 255);
       const gr = nGrain(u * 4, v * 4);
       const wet = nWet(u * 2, v * 2);
-      heightF[idx] = clamp01(bh * 0.86 + gr * 0.14);
-      aoF[idx] = clamp01(0.42 + bh * 0.58);
-      // Wet smooth pebbles glisten subtly (0.48..0.68), dark silt stays matte (0.86)
-      roughF[idx] = clamp01(lerp(0.88, 0.52 + (1.0 - wet) * 0.22, smoothstep(0.18, 0.72, bh)));
-      const grainMod = 0.88 + gr * 0.24;
+      heightF[idx] = clamp01(bh * 0.85 + gr * 0.15);
+      aoF[idx] = clamp01(0.40 + bh * 0.60);
+      roughF[idx] = clamp01(lerp(0.88, 0.46 + (1.0 - wet) * 0.26, smoothstep(0.18, 0.72, bh)));
+      const grainMod = 0.86 + gr * 0.28;
       aPix[p4]     = clamp(aPix[p4] * grainMod, 0, 255) | 0;
       aPix[p4 + 1] = clamp(aPix[p4 + 1] * grainMod, 0, 255) | 0;
       aPix[p4 + 2] = clamp(aPix[p4 + 2] * grainMod, 0, 255) | 0;
@@ -576,67 +551,81 @@ function buildShorePebblePbr(THREE, size, anisotropy, trackTex) {
   ctx.putImageData(aImg, 0, 0);
 
   const albedo = trackTex(finalizeCanvasTex(THREE, c, { isColor: true, repeat: true, anisotropy }));
-  const normal = trackTex(buildSobelNormalTex(THREE, heightF, size, size, 1.35, anisotropy, true));
+  const normal = trackTex(buildSobelNormalTex(THREE, heightF, size, size, 1.45, anisotropy, true));
   const orm = trackTex(buildOrmTex(THREE, aoF, roughF, size, size, anisotropy, true));
   hc.width = 1;
   hc.height = 1;
   return { albedo, normal, orm };
 }
 
-// 2) Stratified Wet Black Basalt & Gothic Ashlar Masonry PBR (Cliffs, Shaft, Outfall Arch, Gate)
+// 2) Stratified Wet Gothic Ashlar Masonry PBR (Shaft, Tunnel Vault, Outfall Arch, Ruined Gate)
 function buildWetBasaltPbr(THREE, size, anisotropy, trackTex) {
   const c = createCanvas2D(size, size);
   const hc = createCanvas2D(size, size);
   if (!c || !hc) {
-    const fbA = trackTex(createFallbackTex(THREE, 42, 46, 56, 255, true));
-    const fbN = trackTex(createFallbackTex(THREE, 128, 128, 255, 255, false));
-    const fbO = trackTex(createFallbackTex(THREE, 200, 190, 190, 255, false));
-    return { albedo: fbA, normal: fbN, orm: fbO };
+    return {
+      albedo: trackTex(createFallbackTex(THREE, 46, 50, 62, 255, true)),
+      normal: trackTex(createFallbackTex(THREE, 128, 128, 255, 255, false)),
+      orm: trackTex(createFallbackTex(THREE, 200, 185, 185, 255, false))
+    };
   }
   const ctx = c.getContext('2d', { willReadFrequently: true });
   const hctx = hc.getContext('2d', { willReadFrequently: true });
   const rng = makeRng(882103);
   const sc = size / 512;
 
-  ctx.fillStyle = '#12151d';
+  ctx.fillStyle = '#11141c';
   ctx.fillRect(0, 0, size, size);
-  hctx.fillStyle = '#141414';
+  hctx.fillStyle = '#121212';
   hctx.fillRect(0, 0, size, size);
 
-  // Horizontal fractured basalt & gothic ashlar strata courses
   const rows = 8;
   const rowH = size / rows;
   for (let r = 0; r < rows; r++) {
     const cols = 3 + (r % 2);
     const colW = size / cols;
-    const xOff = (r % 2) * colW * 0.45;
+    const xOff = (r % 2) * colW * 0.46;
     for (let k = -1; k <= cols; k++) {
       const bx = k * colW + xOff + 3 * sc;
       const by = r * rowH + 3 * sc;
       const bw = colW - 6 * sc;
       const bh = rowH - 6 * sc;
-      const base = 38 + Math.floor(rng() * 24);
-      const blu = base + 8 + Math.floor(rng() * 8);
-      const hv = Math.round(135 + rng() * 95);
+      const base = 42 + Math.floor(rng() * 26);
+      const blu = base + 8 + Math.floor(rng() * 9);
+      const hv = Math.round(138 + rng() * 96);
 
       const g = ctx.createLinearGradient(bx, by, bx, by + bh);
-      g.addColorStop(0, `rgb(${base + 12},${base + 14},${blu + 14})`);
-      g.addColorStop(0.55, `rgb(${base},${base + 2},${blu})`);
-      g.addColorStop(1, `rgb(${Math.max(14, base - 12)},${Math.max(16, base - 10)},${Math.max(20, blu - 8)})`);
+      g.addColorStop(0, `rgb(${base + 14},${base + 16},${blu + 16})`);
+      g.addColorStop(0.52, `rgb(${base},${base + 2},${blu})`);
+      g.addColorStop(1, `rgb(${Math.max(16, base - 12)},${Math.max(18, base - 10)},${Math.max(22, blu - 8)})`);
       ctx.fillStyle = g;
       ctx.fillRect(bx, by, bw, bh);
 
-      // Subtle damp green-charcoal cliff moss along upper ledges
-      if (rng() < 0.35) {
-        ctx.fillStyle = 'rgba(26, 46, 36, 0.28)';
-        ctx.fillRect(bx, by, bw, bh * (0.22 + rng() * 0.2));
+      // Chiseled stone bevel highlight on upper edge
+      ctx.fillStyle = 'rgba(175, 192, 224, 0.08)';
+      ctx.fillRect(bx, by, bw, 3.0 * sc);
+
+      // Damp dark moss/lichen along mortar ledges
+      if (rng() < 0.40) {
+        ctx.fillStyle = 'rgba(28, 52, 38, 0.32)';
+        ctx.fillRect(bx, by, bw, bh * (0.18 + rng() * 0.22));
       }
 
-      // Deep fracture lines across basalt blocks
-      ctx.strokeStyle = 'rgba(5,7,12,0.75)';
-      ctx.lineWidth = (1.6 + rng() * 1.4) * sc;
+      // Vertical water seepage streaks
+      if (rng() < 0.35) {
+        const sx = bx + bw * (0.15 + rng() * 0.70);
+        const sg = ctx.createLinearGradient(sx, by, sx, by + bh);
+        sg.addColorStop(0, 'rgba(8, 12, 18, 0.38)');
+        sg.addColorStop(1, 'rgba(8, 12, 18, 0.04)');
+        ctx.fillStyle = sg;
+        ctx.fillRect(sx, by, (4 + rng() * 7) * sc, bh);
+      }
+
+      // Cracks across masonry blocks
+      ctx.strokeStyle = 'rgba(5,7,12,0.78)';
+      ctx.lineWidth = (1.5 + rng() * 1.4) * sc;
       ctx.beginPath();
-      const fx = bx + bw * (0.2 + rng() * 0.6);
+      const fx = bx + bw * (0.18 + rng() * 0.64);
       ctx.moveTo(fx, by);
       ctx.lineTo(fx + (rng() - 0.5) * 18 * sc, by + bh * 0.5);
       ctx.lineTo(fx + (rng() - 0.5) * 24 * sc, by + bh);
@@ -644,7 +633,7 @@ function buildWetBasaltPbr(THREE, size, anisotropy, trackTex) {
 
       hctx.fillStyle = `rgb(${hv},${hv},${hv})`;
       hctx.fillRect(bx + 2 * sc, by + 2 * sc, Math.max(2, bw - 4 * sc), Math.max(2, bh - 4 * sc));
-      hctx.strokeStyle = 'rgb(20,20,20)';
+      hctx.strokeStyle = 'rgb(18,18,18)';
       hctx.lineWidth = 3.2 * sc;
       hctx.beginPath();
       hctx.moveTo(fx, by);
@@ -663,6 +652,7 @@ function buildWetBasaltPbr(THREE, size, anisotropy, trackTex) {
   const aoF = new Float32Array(total);
   const nBroad = makeNoiseSampler(16, 8821);
   const nFine = makeNoiseSampler(64, 8822);
+  const nDrip = makeNoiseSampler(32, 8823);
 
   for (let y = 0; y < size; y++) {
     const v = y / size;
@@ -674,11 +664,12 @@ function buildWetBasaltPbr(THREE, size, anisotropy, trackTex) {
       const bh = hPix[p4] * (1 / 255);
       const nb = nBroad(u * 2, v * 2);
       const nf = nFine(u * 5, v * 5);
+      const drip = smoothstep(0.56, 0.84, nDrip(u * 6, v * 1.2));
       heightF[idx] = clamp01(bh * 0.72 + nb * 0.16 + nf * 0.12);
-      aoF[idx] = clamp01(0.36 + bh * 0.64);
-      // Damp glossy streaks vs rough weathered stone (anti-shimmer range 0.56..0.92)
-      roughF[idx] = clamp01(0.58 + (1.0 - nb) * 0.24 + (1.0 - bh) * 0.12);
-      const mod = 0.80 + nb * 0.24 + nf * 0.16;
+      aoF[idx] = clamp01(0.35 + bh * 0.65);
+      // Glistening wet vertical seepage streaks (0.38) vs matte weathered stone (0.86)
+      roughF[idx] = clamp01(lerp(0.56 + (1.0 - nb) * 0.26 + (1.0 - bh) * 0.12, 0.36, drip * 0.72));
+      const mod = (0.80 + nb * 0.24 + nf * 0.16) * (1.0 - drip * 0.16);
       aPix[p4]     = clamp(aPix[p4] * mod, 0, 255) | 0;
       aPix[p4 + 1] = clamp(aPix[p4 + 1] * mod, 0, 255) | 0;
       aPix[p4 + 2] = clamp(aPix[p4 + 2] * mod, 0, 255) | 0;
@@ -687,21 +678,22 @@ function buildWetBasaltPbr(THREE, size, anisotropy, trackTex) {
   ctx.putImageData(aImg, 0, 0);
 
   const albedo = trackTex(finalizeCanvasTex(THREE, c, { isColor: true, repeat: true, anisotropy }));
-  const normal = trackTex(buildSobelNormalTex(THREE, heightF, size, size, 1.45, anisotropy, true));
+  const normal = trackTex(buildSobelNormalTex(THREE, heightF, size, size, 1.55, anisotropy, true));
   const orm = trackTex(buildOrmTex(THREE, aoF, roughF, size, size, anisotropy, true));
   hc.width = 1;
   hc.height = 1;
   return { albedo, normal, orm };
 }
 
-// 2b) Natural Jagged Volcanic Basalt Cliff Rock PBR (ZERO brick grid! Stratified cliff rock + vertical fissures + damp moss!)
+// 2b) Natural Jagged Volcanic Basalt Cliff Rock PBR (Stratified rock ledges, fissures & wet moss)
 function buildNaturalCliffPbr(THREE, size, anisotropy, trackTex) {
   const c = createCanvas2D(size, size);
   if (!c) {
-    const fbA = trackTex(createFallbackTex(THREE, 34, 39, 49, 255, true));
-    const fbN = trackTex(createFallbackTex(THREE, 128, 128, 255, 255, false));
-    const fbO = trackTex(createFallbackTex(THREE, 195, 195, 195, 255, false));
-    return { albedo: fbA, normal: fbN, orm: fbO };
+    return {
+      albedo: trackTex(createFallbackTex(THREE, 38, 43, 54, 255, true)),
+      normal: trackTex(createFallbackTex(THREE, 128, 128, 255, 255, false)),
+      orm: trackTex(createFallbackTex(THREE, 195, 195, 195, 255, false))
+    };
   }
   const ctx = c.getContext('2d', { willReadFrequently: true });
   const aImg = ctx.createImageData(size, size);
@@ -724,55 +716,55 @@ function buildNaturalCliffPbr(THREE, size, anisotropy, trackTex) {
       const idx = row + x;
       const p4 = idx * 4;
 
-      const warp = nStrata(u * 2, v * 2) * 0.28;
-      // Vertical columnar basalt & diagonal fractured cliff strata
-      const colWave = nCrag(u * 5 + warp, v * 1.5);
-      const ledgeWave = nCrag(u * 1.8, v * 6 + warp * 1.4);
+      const warp = nStrata(u * 2, v * 2) * 0.30;
+      const colWave = nCrag(u * 5 + warp, v * 1.4);
+      const ledgeWave = nCrag(u * 1.6, v * 6.5 + warp * 1.35);
       const fine = nFine(u * 8, v * 8);
       const ridge = 1.0 - Math.abs(colWave * 2.0 - 1.0);
-      const fissure = Math.pow(clamp01(ridge), 5.0);
-      const ledgeCrack = Math.pow(clamp01(1.0 - Math.abs(ledgeWave * 2.0 - 1.0)), 6.0);
+      const fissure = Math.pow(clamp01(ridge), 4.6);
+      const ledgeCrack = Math.pow(clamp01(1.0 - Math.abs(ledgeWave * 2.0 - 1.0)), 5.5);
 
-      const hVal = clamp01(0.56 + (colWave - 0.5) * 0.36 + (ledgeWave - 0.5) * 0.24 + (fine - 0.5) * 0.16 - fissure * 0.42 - ledgeCrack * 0.34);
+      const hVal = clamp01(
+        0.58 + (colWave - 0.5) * 0.38 + (ledgeWave - 0.5) * 0.26 + (fine - 0.5) * 0.16 - fissure * 0.44 - ledgeCrack * 0.36
+      );
       heightF[idx] = hVal;
-      aoF[idx] = clamp01(0.30 + hVal * 0.70);
+      aoF[idx] = clamp01(0.28 + hVal * 0.72);
 
       const mossNoise = nMoss(u * 3, v * 3);
-      const mossMask = smoothstep(0.62, 0.86, mossNoise) * smoothstep(0.35, 0.72, hVal);
-      const wetStreak = smoothstep(0.58, 0.85, nStrata(u * 4, v * 1));
+      const mossMask = smoothstep(0.58, 0.84, mossNoise) * smoothstep(0.36, 0.74, hVal);
+      const wetStreak = smoothstep(0.56, 0.84, nStrata(u * 5, v * 1));
 
-      // Dark blue-charcoal coastal volcanic basalt + subtle damp olive cliff lichen
-      let r = lerp(22, 62, hVal) * (0.85 + fine * 0.30);
-      let g = lerp(25, 67, hVal) * (0.85 + fine * 0.30);
-      let b = lerp(33, 82, hVal) * (0.85 + fine * 0.30);
-      r = lerp(r, 34, mossMask * 0.55);
-      g = lerp(g, 52, mossMask * 0.55);
-      b = lerp(b, 40, mossMask * 0.55);
+      let r = lerp(26, 70, hVal) * (0.85 + fine * 0.30);
+      let g = lerp(30, 76, hVal) * (0.85 + fine * 0.30);
+      let b = lerp(39, 92, hVal) * (0.85 + fine * 0.30);
+      r = lerp(r, 34, mossMask * 0.62);
+      g = lerp(g, 58, mossMask * 0.62);
+      b = lerp(b, 42, mossMask * 0.62);
 
       aPix[p4]     = clamp(r, 0, 255) | 0;
       aPix[p4 + 1] = clamp(g, 0, 255) | 0;
       aPix[p4 + 2] = clamp(b, 0, 255) | 0;
       aPix[p4 + 3] = 255;
 
-      // Anti-shimmer matte volcanic basalt (0.74..0.94 — zero white pixel glitter on grazing moonlight!)
-      roughF[idx] = clamp01(lerp(0.92, 0.74, wetStreak * 0.65) + mossMask * 0.06);
+      roughF[idx] = clamp01(lerp(0.92, 0.68, wetStreak * 0.72) + mossMask * 0.06);
     }
   }
   ctx.putImageData(aImg, 0, 0);
   const albedo = trackTex(finalizeCanvasTex(THREE, c, { isColor: true, repeat: true, anisotropy }));
-  const normal = trackTex(buildSobelNormalTex(THREE, heightF, size, size, 1.85, anisotropy, true));
+  const normal = trackTex(buildSobelNormalTex(THREE, heightF, size, size, 1.95, anisotropy, true));
   const orm = trackTex(buildOrmTex(THREE, aoF, roughF, size, size, anisotropy, true));
   return { albedo, normal, orm };
 }
 
-// 3) Corroded Rusty Forged Iron PBR (Outfall Grate, Chains, Braziers)
+// 3) Corroded Rusty Forged Iron PBR (Outfall Grate, Chains, Braziers, Shields)
 function buildRustyIronPbr(THREE, size, anisotropy, trackTex) {
   const c = createCanvas2D(size, size);
   if (!c) {
-    const fbA = trackTex(createFallbackTex(THREE, 68, 52, 46, 255, true));
-    const fbN = trackTex(createFallbackTex(THREE, 128, 128, 255, 255, false));
-    const fbO = trackTex(createFallbackTex(THREE, 210, 175, 175, 255, false));
-    return { albedo: fbA, normal: fbN, orm: fbO };
+    return {
+      albedo: trackTex(createFallbackTex(THREE, 68, 52, 46, 255, true)),
+      normal: trackTex(createFallbackTex(THREE, 128, 128, 255, 255, false)),
+      orm: trackTex(createFallbackTex(THREE, 210, 175, 175, 255, false))
+    };
   }
   const ctx = c.getContext('2d', { willReadFrequently: true });
   const aImg = ctx.createImageData(size, size);
@@ -795,28 +787,80 @@ function buildRustyIronPbr(THREE, size, anisotropy, trackTex) {
       const f1 = n1(u * 2, v * 2);
       const f2 = n2(u * 4, v * 4);
       const f3 = n3(u * 6, v * 6);
-      const rustMask = smoothstep(0.42, 0.78, f1 * 0.62 + f2 * 0.28 + f3 * 0.10);
-      // Cold pitted iron vs deep burnt-oxide river rust
-      const r = lerp(42, 118, rustMask) * (0.85 + f3 * 0.30);
-      const g = lerp(46, 56, rustMask) * (0.85 + f3 * 0.30);
-      const b = lerp(55, 34, rustMask) * (0.85 + f3 * 0.30);
+      const rustMask = smoothstep(0.40, 0.78, f1 * 0.60 + f2 * 0.28 + f3 * 0.12);
+      const r = lerp(44, 128, rustMask) * (0.84 + f3 * 0.32);
+      const g = lerp(48, 58, rustMask) * (0.84 + f3 * 0.32);
+      const b = lerp(58, 34, rustMask) * (0.84 + f3 * 0.32);
       aPix[p4]     = clamp(r, 0, 255) | 0;
       aPix[p4 + 1] = clamp(g, 0, 255) | 0;
       aPix[p4 + 2] = clamp(b, 0, 255) | 0;
       aPix[p4 + 3] = 255;
-      heightF[idx] = clamp01(0.55 - rustMask * 0.24 + (f2 - 0.5) * 0.25 + (f3 - 0.5) * 0.18);
-      aoF[idx] = clamp01(0.65 + heightF[idx] * 0.35);
-      roughF[idx] = clamp01(lerp(0.54, 0.91, rustMask));
+      heightF[idx] = clamp01(0.56 - rustMask * 0.26 + (f2 - 0.5) * 0.24 + (f3 - 0.5) * 0.18);
+      aoF[idx] = clamp01(0.62 + heightF[idx] * 0.38);
+      roughF[idx] = clamp01(lerp(0.50, 0.92, rustMask));
     }
   }
   ctx.putImageData(aImg, 0, 0);
   const albedo = trackTex(finalizeCanvasTex(THREE, c, { isColor: true, repeat: true, anisotropy }));
-  const normal = trackTex(buildSobelNormalTex(THREE, heightF, size, size, 1.25, anisotropy, true));
+  const normal = trackTex(buildSobelNormalTex(THREE, heightF, size, size, 1.35, anisotropy, true));
   const orm = trackTex(buildOrmTex(THREE, aoF, roughF, size, size, anisotropy, true));
   return { albedo, normal, orm };
 }
 
-// 4) Torn Royal Crimson-and-Gold Velvet Carpet Texture (for Chasm Drape)
+// 3b) Weathered Gnarled Bark & Driftwood PBR (Dead Pines, Broken Skiff Hull, Shaft Beams)
+function buildWeatheredWoodPbr(THREE, size, anisotropy, trackTex) {
+  const c = createCanvas2D(size, size);
+  if (!c) {
+    return {
+      albedo: trackTex(createFallbackTex(THREE, 56, 46, 40, 255, true)),
+      normal: trackTex(createFallbackTex(THREE, 128, 128, 255, 255, false)),
+      orm: trackTex(createFallbackTex(THREE, 210, 215, 215, 255, false))
+    };
+  }
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  const aImg = ctx.createImageData(size, size);
+  const aPix = aImg.data;
+  const total = size * size;
+  const heightF = new Float32Array(total);
+  const roughF = new Float32Array(total);
+  const aoF = new Float32Array(total);
+  const n1 = makeNoiseSampler(16, 5111);
+  const n2 = makeNoiseSampler(32, 5112);
+  const n3 = makeNoiseSampler(64, 5113);
+
+  for (let y = 0; y < size; y++) {
+    const v = y / size;
+    const row = y * size;
+    for (let x = 0; x < size; x++) {
+      const u = x / size;
+      const idx = row + x;
+      const p4 = idx * 4;
+      const warp = n1(u * 2, v * 2) * 0.22;
+      const grain = n2(u * 10 + warp * 4.0, v * 1.8);
+      const fiber = n3(u * 22 + warp * 3.0, v * 4.0);
+      const furrow = Math.pow(clamp01(1.0 - Math.abs(grain * 2.0 - 1.0)), 3.2);
+      const hVal = clamp01(0.55 + (grain - 0.5) * 0.36 + (fiber - 0.5) * 0.20 - furrow * 0.36);
+      heightF[idx] = hVal;
+      aoF[idx] = clamp01(0.32 + hVal * 0.68);
+      roughF[idx] = clamp01(0.78 + (1.0 - hVal) * 0.18);
+
+      const r = lerp(24, 68, hVal) * (0.88 + fiber * 0.22);
+      const g = lerp(20, 56, hVal) * (0.88 + fiber * 0.22);
+      const b = lerp(19, 49, hVal) * (0.88 + fiber * 0.22);
+      aPix[p4]     = clamp(r, 0, 255) | 0;
+      aPix[p4 + 1] = clamp(g, 0, 255) | 0;
+      aPix[p4 + 2] = clamp(b, 0, 255) | 0;
+      aPix[p4 + 3] = 255;
+    }
+  }
+  ctx.putImageData(aImg, 0, 0);
+  const albedo = trackTex(finalizeCanvasTex(THREE, c, { isColor: true, repeat: true, anisotropy }));
+  const normal = trackTex(buildSobelNormalTex(THREE, heightF, size, size, 1.55, anisotropy, true));
+  const orm = trackTex(buildOrmTex(THREE, aoF, roughF, size, size, anisotropy, true));
+  return { albedo, normal, orm };
+}
+
+// 4) Torn Royal Crimson-and-Gold Velvet Carpet Texture (for Chasm Drape & Tattered Shore Banners)
 function buildTornCarpetTex(THREE, size, anisotropy, trackTex) {
   const c = createCanvas2D(size, size);
   if (!c) return trackTex(createFallbackTex(THREE, 112, 22, 32, 255, true));
@@ -824,7 +868,6 @@ function buildTornCarpetTex(THREE, size, anisotropy, trackTex) {
   ctx.fillStyle = '#5c121b';
   ctx.fillRect(0, 0, size, size);
 
-  // Subtle gothic damask diamond weave
   ctx.strokeStyle = 'rgba(130, 26, 36, 0.45)';
   ctx.lineWidth = Math.max(1, size / 128);
   const step = size / 8;
@@ -839,7 +882,6 @@ function buildTornCarpetTex(THREE, size, anisotropy, trackTex) {
       ctx.stroke();
     }
   }
-  // Tarnished gold embroidered runner borders along u near 0 and 1
   const bw = size * 0.085;
   ctx.fillStyle = '#8b6a2c';
   ctx.fillRect(size * 0.03, 0, bw * 0.35, size);
@@ -847,7 +889,6 @@ function buildTornCarpetTex(THREE, size, anisotropy, trackTex) {
   ctx.fillRect(size * (1 - 0.03) - bw * 0.35, 0, bw * 0.35, size);
   ctx.fillRect(size * (1 - 0.08) - bw * 0.18, 0, bw * 0.18, size);
 
-  // Charred soot & dust staining near torn edges
   const grad = ctx.createLinearGradient(0, 0, 0, size);
   grad.addColorStop(0.0, 'rgba(8, 6, 8, 0.55)');
   grad.addColorStop(0.25, 'rgba(18, 8, 10, 0.10)');
@@ -1012,34 +1053,133 @@ function tintGeo(THREE, rawGeo, topHex, bottomHex = null, jitter = 0.0, rng = nu
   return g;
 }
 
-// Sculpt an angular faceted basalt boulder / craggy cliff spire (zero smooth eggs!)
-function buildSculptedRockGeo(THREE, radius = 1.0, seed = 1, flattenY = 0.72, detail = 1) {
+// Sculpt an angular faceted basalt boulder (for river/shore boulders & chunks)
+function buildSculptedRockGeo(THREE, radius = 1.0, seed = 1, flattenY = 0.72, detail = 2) {
   const rng = makeRng(seed);
   const geo = new THREE.IcosahedronGeometry(radius, detail);
   const pos = geo.attributes.position;
-  const p1 = rng() * 6.28, p2 = rng() * 6.28, p3 = rng() * 6.28;
-  const isTallCliff = flattenY > 1.05;
+  const p1 = rng() * 6.28, p2 = rng() * 6.28, p3 = rng() * 6.28, p4 = rng() * 6.28;
   for (let i = 0; i < pos.count; i++) {
     let x = pos.getX(i);
     let y = pos.getY(i);
     let z = pos.getZ(i);
     const len = Math.hypot(x, y, z) || 1;
     const nx = x / len, ny = y / len, nz = z / len;
-    const strata = Math.sin(ny * 6.2 + p1) * 0.16;
-    const crag = Math.sin(nx * 4.4 + nz * 4.8 + p2) * Math.cos(nz * 3.9 - ny * 3.2 + p3) * 0.26;
-    const ridge = Math.abs(Math.sin(Math.atan2(nz, nx) * 3.0 + p3)) * 0.14;
-    // Tall coastal cliffs taper into sharp jagged volcanic ridges instead of egg domes!
-    const spireTaper = isTallCliff ? (1.08 - smoothstep(-0.2, 0.95, ny) * 0.42) : 1.0;
-    const k = (0.84 + strata + crag + ridge) * spireTaper;
+    // Multi-octave angular ridge & strata shelf displacement
+    const f1 = Math.sin(nx * 3.1 + p1) * Math.cos(nz * 2.9 - p2) * 0.20;
+    const f2 = (1.0 - Math.abs(Math.sin(nx * 5.7 + ny * 4.3 + p3))) * 0.14;
+    const f3 = Math.sin(ny * 7.8 + nz * 4.1 + p4) * 0.08;
+    const strata = Math.floor((ny + 1.0) * 3.2) * 0.025 + Math.sin(ny * 9.5 + p1) * 0.045;
+    const k = 0.80 + f1 + f2 + f3 + strata;
     x *= k;
     z *= k;
-    y *= (0.86 + strata * 0.6 + crag * 0.5) * flattenY;
-    // Slight flat bottom seating so boulders ground cleanly into terrain
-    if (y < -radius * flattenY * 0.45) y = -radius * flattenY * 0.45 + (y + radius * flattenY * 0.45) * 0.25;
+    y *= (0.84 + f1 * 0.55 + f3 * 0.65) * flattenY;
+    if (y < -radius * flattenY * 0.44) {
+      y = -radius * flattenY * 0.44 + (y + radius * flattenY * 0.44) * 0.22;
+    }
     pos.setXYZ(i, x, y, z);
   }
   geo.computeVertexNormals();
   return geo;
+}
+
+// AAA Multi-Octave Displaced Craggy Cliff Mass / Mountain Outcrop (ZERO smooth cones or origami pyramids!)
+// Produces terraced volcanic basalt cliff ribs, sharp tectonic ridges, rooted broad base & moss-tinted ledges.
+function buildCraggyCliffMassGeo(THREE, rx, ry, rz, seed, detail = 3, opts = null) {
+  const rng = makeRng(seed);
+  const baseGeo = new THREE.IcosahedronGeometry(1.0, detail);
+  const g = baseGeo.index ? baseGeo.toNonIndexed() : baseGeo;
+  if (g !== baseGeo) baseGeo.dispose();
+
+  const pos = g.attributes.position;
+  const p1 = rng() * 6.283;
+  const p2 = rng() * 6.283;
+  const p3 = rng() * 6.283;
+  const p4 = rng() * 6.283;
+  const tiltX = ((rng() - 0.5) * 0.28) + (opts?.tiltX || 0);
+  const tiltZ = ((rng() - 0.5) * 0.28) + (opts?.tiltZ || 0);
+  const flatTop = Boolean(opts?.flatTop);
+
+  for (let i = 0; i < pos.count; i++) {
+    let nx = pos.getX(i);
+    let ny = pos.getY(i);
+    let nz = pos.getZ(i);
+    const len = Math.hypot(nx, ny, nz) || 1;
+    nx /= len; ny /= len; nz /= len;
+
+    // 4-octave ridged multifractal crag displacement (angular volcanic shoulders & vertical basalt columns!)
+    const ang = Math.atan2(nz, nx);
+    const oct1 = Math.sin(nx * 2.6 + nz * 2.1 + p1) * Math.cos(ny * 2.2 - nz * 2.4 + p2);
+    const oct2 = 1.0 - Math.abs(Math.sin(nx * 5.2 - nz * 4.8 + p2) * Math.cos(ny * 4.1 + p3));
+    const oct3 = 1.0 - Math.abs(Math.sin(ang * 5.0 + ny * 3.4 + p3)); // columnar basalt ribs
+    const oct4 = Math.sin(nx * 10.5 + ny * 9.2 + nz * 11.1 + p4) * 0.5;
+
+    // Stepped horizontal rock terraces/ledges
+    const y01 = clamp01(ny * 0.5 + 0.5);
+    const terraceWave = Math.sin(y01 * Math.PI * 5.0 + oct1 * 1.4);
+    const terraceStep = terraceWave > 0 ? Math.pow(terraceWave, 0.55) : -Math.pow(-terraceWave, 0.55);
+
+    // Broad rooted talus base widening smoothly downward, craggy irregular asymmetric ridge crest on top
+    const baseSkirt = lerp(1.38, 0.62, smoothstep(0.05, 0.96, y01));
+    const crestNotch = smoothstep(0.60, 1.0, y01) * (Math.sin(ang * 2.0 + p1) * 0.22 + Math.cos(ang * 3.0 - p2) * 0.16);
+    const radialScale = baseSkirt * (0.76 + oct1 * 0.22 + oct2 * 0.20 + oct3 * 0.14 + oct4 * 0.07 + terraceStep * 0.06);
+
+    let x = nx * radialScale * rx + (y01 - 0.3) * tiltX * rx;
+    let z = nz * radialScale * rz + (y01 - 0.3) * tiltZ * rz;
+    let yNorm = ny * (0.86 + oct1 * 0.14 + oct2 * 0.10 + crestNotch);
+    if (flatTop && yNorm > 0.52) {
+      yNorm = 0.52 + (yNorm - 0.52) * 0.28 + oct4 * 0.04;
+    }
+    // Flatten underside softly so cliffs seat solidly into ground with zero floating gaps
+    if (yNorm < -0.68) {
+      yNorm = -0.68 + (yNorm + 0.68) * 0.20;
+    }
+    const y = (yNorm + 0.68) * 0.58 * ry;
+    pos.setXYZ(i, x, y, z);
+  }
+
+  g.computeVertexNormals();
+  // Rich directional vertex coloring: wet dark base, cold moonlit ridge facets, subtle moss on flat upward shelves!
+  const norm = g.attributes.normal;
+  const cols = new Float32Array(pos.count * 3);
+  const cBase = new THREE.Color(opts?.botHex ?? 0x151923);
+  const cMid  = new THREE.Color(opts?.midHex ?? 0x2c3445);
+  const cRim  = new THREE.Color(opts?.topHex ?? 0x52607a);
+  const cMoss = new THREE.Color(opts?.mossHex ?? 0x2a3b30);
+  const cTmp  = new THREE.Color();
+
+  for (let i = 0; i < pos.count; i++) {
+    const py = pos.getY(i);
+    const ny = norm.getY(i);
+    const nx = norm.getX(i);
+    const nz = norm.getZ(i);
+    const hT = clamp01(py / Math.max(0.5, ry));
+    // Moonlit facet catch toward (-0.25, 0.55, -0.80) and cool front rim
+    const moonCatch = clamp01(ny * 0.55 + Math.max(0, -nx * 0.25 - nz * 0.45) * 0.45);
+    const mossCatch = smoothstep(0.52, 0.85, ny) * smoothstep(0.18, 0.72, hT) * (opts?.noMoss ? 0.0 : 0.48);
+
+    cTmp.copy(cBase).lerp(cMid, smoothstep(0.0, 0.55, hT));
+    cTmp.lerp(cRim, moonCatch * smoothstep(0.25, 0.95, hT) * 0.75);
+    cTmp.lerp(cMoss, mossCatch);
+    cols[i * 3]     = cTmp.r;
+    cols[i * 3 + 1] = cTmp.g;
+    cols[i * 3 + 2] = cTmp.b;
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+  return g;
+}
+
+// Helper: Build a vertical chain made of alternating interlocking iron torus links
+function addHangingChainParts(THREE, parts, x, yTop, z, linkCount, linkLen = 0.24, swayX = 0, swayZ = 0) {
+  for (let i = 0; i < linkCount; i++) {
+    const t = i / Math.max(1, linkCount - 1);
+    const lx = x + swayX * t * t;
+    const ly = yTop - i * linkLen * 0.78;
+    const lz = z + swayZ * t * t;
+    const link = new THREE.TorusGeometry(linkLen * 0.44, linkLen * 0.13, 5, 8);
+    xformGeo(link, lx, ly, lz, 0, (i % 2) * (Math.PI * 0.5), 0, 0.72, 1.18, 1.0);
+    parts.push(link);
+  }
 }
 
 // ============================================================================
@@ -1065,14 +1205,15 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   const trackMat = (m) => { if (m) ownedMats.push(m); return m; };
   const trackTex = (t) => { if (t) ownedTex.push(t); return t; };
 
-  // Procedural PBR texture maps (1024px PC / 512px Mobile for stone & shingle, 512px/256px for iron & carpet)
+  // Procedural PBR texture maps (1024px PC / 512px Mobile for stone & shingle, 512px/256px for iron, wood & carpet)
   const stoneTexRes = isMobile ? 512 : 1024;
-  const ironTexRes = isMobile ? 256 : 512;
+  const propTexRes = isMobile ? 256 : 512;
   const shorePbr = buildShorePebblePbr(THREE, stoneTexRes, anisotropy, trackTex);
   const basaltPbr = buildWetBasaltPbr(THREE, stoneTexRes, anisotropy, trackTex);
   const cliffPbr = buildNaturalCliffPbr(THREE, stoneTexRes, anisotropy, trackTex);
-  const ironPbr = buildRustyIronPbr(THREE, ironTexRes, anisotropy, trackTex);
-  const carpetTex = externalPbr?.carpetAlbedo || buildTornCarpetTex(THREE, ironTexRes, anisotropy, trackTex);
+  const ironPbr = buildRustyIronPbr(THREE, propTexRes, anisotropy, trackTex);
+  const barkPbr = buildWeatheredWoodPbr(THREE, propTexRes, anisotropy, trackTex);
+  const carpetTex = externalPbr?.carpetAlbedo || buildTornCarpetTex(THREE, propTexRes, anisotropy, trackTex);
   const mistSpriteTex = buildSoftMistSpriteTex(THREE, trackTex);
 
   const normalMappedMats = [];
@@ -1106,20 +1247,20 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   let chasmZ = 0.0;
   let chasmCamBelow = false;
   let grateBroken = false;
-  let grateBreakAnim = 0.0; // 0 = intact, 0..1 = breaking explosion, 1 = fully bent open
+  let grateBreakAnim = 0.0; // 0 = intact, 0..1 = explosive shatter, 1 = fully ripped wide open (78-96 deg)
   let swordPickedUp = false;
   let bonfireLit = false;
 
   // ==========================================================================
   // GROUP A: `chasmOverlayGroup` — Act 3: 4.6m WebGL Stencil Chasm in Throne Hall Floor
+  //          Upgraded for dramatic clarity BOTH overhead AND looking UP from abyss (camY < -0.18)!
   // ==========================================================================
   const chasmContent = new THREE.Group();
   chasmContent.visible = false;
   chasmOverlayGroup.add(chasmContent);
 
-  const CHASM_SEGS = isMobile ? 24 : 32;
+  const CHASM_SEGS = isMobile ? 28 : 36;
 
-  // 1. Jagged fractured-stone aperture disc (radius ~2.3m -> ~4.6m wide opening!)
   function buildChasmApertureGeo(segs) {
     const pos = new Float32Array((segs + 1) * 3);
     const idx = [];
@@ -1138,22 +1279,20 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     return g;
   }
 
-  // 2. Deep 27m vertical irregular chasm shaft (inward-facing walls, rings from y=+0.03 down to y=-27.0m
-  //    so Act 3 abyss upward camera plunging to y=-21.2m stays 100% enclosed inside rocky shaft walls!)
   function buildChasmShaftGeo(segs) {
     const profile = [
-      { rScale: 1.07, y:   0.03, jag: 0.00, shade: 0.85 }, // outer seal collar clipped by stencil
-      { rScale: 1.00, y:  -0.02, jag: 0.02, shade: 0.92 }, // broken floor lip
-      { rScale: 0.98, y:  -0.38, jag: 0.04, shade: 0.78 }, // 36cm thick shattered cathedral flagstone slab!
-      { rScale: 0.96, y:  -1.15, jag: 0.07, shade: 0.62 }, // sub-floor rubble masonry
-      { rScale: 1.06, y:  -2.60, jag: 0.08, shade: 0.50 }, // undercut vault cavity
-      { rScale: 1.02, y:  -5.00, jag: 0.10, shade: 0.38 }, // dark stratified basalt shaft
-      { rScale: 1.12, y:  -8.60, jag: 0.11, shade: 0.26 },
-      { rScale: 1.08, y: -13.20, jag: 0.11, shade: 0.16 },
-      { rScale: 1.16, y: -18.50, jag: 0.10, shade: 0.09 },
-      { rScale: 1.14, y: -24.00, jag: 0.09, shade: 0.05 },
-      { rScale: 0.80, y: -26.80, jag: 0.05, shade: 0.02 },
-      { rScale: 0.00, y: -27.50, jag: 0.00, shade: 0.01 }  // pitch-black abyss floor cap well below camY=-21.2
+      { rScale: 1.07, y:   0.03, jag: 0.00, shade: 0.90 },
+      { rScale: 1.00, y:  -0.02, jag: 0.02, shade: 0.96 },
+      { rScale: 0.98, y:  -0.40, jag: 0.05, shade: 0.84 },
+      { rScale: 0.95, y:  -1.25, jag: 0.08, shade: 0.72 },
+      { rScale: 1.08, y:  -2.90, jag: 0.10, shade: 0.62 },
+      { rScale: 1.03, y:  -5.60, jag: 0.12, shade: 0.54 },
+      { rScale: 1.15, y:  -9.20, jag: 0.13, shade: 0.46 },
+      { rScale: 1.09, y: -13.60, jag: 0.12, shade: 0.38 },
+      { rScale: 1.18, y: -18.60, jag: 0.11, shade: 0.32 },
+      { rScale: 1.14, y: -24.20, jag: 0.10, shade: 0.24 },
+      { rScale: 0.80, y: -27.20, jag: 0.05, shade: 0.12 },
+      { rScale: 0.00, y: -28.00, jag: 0.00, shade: 0.05 }
     ];
     const nR = profile.length;
     const rings = [];
@@ -1167,14 +1306,14 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
         const h1 = Math.sin(sw * 3.7 + ri * 2.3) * Math.cos(sw * 2.1 - ri * 1.7);
         const h2 = Math.sin(sw * 7.3 - ri * 3.1);
         const r = Math.max(0.0, baseR * rp.rScale * (1.0 + rp.jag * (0.65 * h1 + 0.35 * h2)));
-        const y = rp.y + rp.jag * 0.45 * h1;
+        const y = rp.y + rp.jag * 0.48 * h1;
         row.push({
           x: Math.cos(th) * r,
           y,
           z: Math.sin(th) * r,
           u: s / segs,
           v: Math.abs(y) / 14.0,
-          shade: rp.shade * (0.82 + 0.34 * (0.5 + 0.5 * h2))
+          shade: rp.shade * (0.80 + 0.38 * (0.5 + 0.5 * h2))
         });
       }
       rings.push(row);
@@ -1211,7 +1350,6 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   const chasmApertureGeo = trackGeo(buildChasmApertureGeo(CHASM_SEGS));
   const chasmShaftGeo = trackGeo(buildChasmShaftGeo(CHASM_SEGS));
 
-  // Pass 1: Stencil portal writer (y = +0.036 clears BOTH stone floor y=0 AND crimson carpet y=0.022!)
   const chasmStencilMaskMat = trackMat(new THREE.MeshBasicMaterial({
     colorWrite: false,
     depthWrite: false,
@@ -1231,7 +1369,6 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   chasmStencilMask.renderOrder = -30;
   chasmStencilMask.frustumCulled = false;
 
-  // Pass 2: Far-depth clear strictly inside the jagged stencil hole
   const chasmDepthClearMat = trackMat(new THREE.ShaderMaterial({
     vertexShader: `
       void main() {
@@ -1261,10 +1398,10 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   chasmDepthClear.renderOrder = -29;
   chasmDepthClear.frustumCulled = false;
 
-  // Pass 3: Deep vertical stone chasm wall shader (crimson glowing upper fractures + rapid abyssal darkening)
   const chasmShaftUniforms = {
     uTime: { value: 0.0 },
-    uHeat: { value: 1.0 }
+    uHeat: { value: 1.0 },
+    uCamBelow: { value: 0.0 }
   };
   const chasmShaftMat = trackMat(new THREE.ShaderMaterial({
     uniforms: chasmShaftUniforms,
@@ -1274,11 +1411,13 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
       varying vec3 vMeta;
       varying vec2 vUv;
       varying vec3 vLocalPos;
+      varying vec3 vWorldPos;
       void main() {
         vMeta = color;
         vUv = uv;
         vLocalPos = position;
         vec4 wp = modelMatrix * vec4(position, 1.0);
+        vWorldPos = wp.xyz;
         vNormalW = normalize(mat3(modelMatrix) * normal);
         gl_Position = projectionMatrix * viewMatrix * wp;
       }
@@ -1286,10 +1425,12 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     fragmentShader: `
       uniform float uTime;
       uniform float uHeat;
+      uniform float uCamBelow;
       varying vec3 vNormalW;
       varying vec3 vMeta;
       varying vec2 vUv;
       varying vec3 vLocalPos;
+      varying vec3 vWorldPos;
 
       float hash21(vec2 p) {
         p = fract(p * vec2(127.1, 311.7));
@@ -1309,49 +1450,62 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
 
       void main() {
         vec3 N = normalize(vNormalW);
+        vec3 V = normalize(cameraPosition - vWorldPos);
         float depthM = max(0.0, -vLocalPos.y);
-        float depth01 = clamp(depthM / 14.0, 0.0, 1.0);
+        float depth01 = clamp(depthM / 22.0, 0.0, 1.0);
 
-        // Organic fractured dark gothic masonry & rough stratified basalt rock (ZERO regular glow grids!)
         float arc = vUv.x * 18.0;
-        float warp = vnoise(vec2(arc * 0.85, depthM * 0.95)) * 1.35;
-        float row = floor(depthM * 1.9 + warp * 0.35);
+        float warp = vnoise(vec2(arc * 0.85, depthM * 0.90)) * 1.35;
+        float row = floor(depthM * 1.75 + warp * 0.35);
         float colIdx = floor(arc + mod(row, 2.0) * 0.5 + warp * 0.25);
         float blkH = hash21(vec2(colIdx, row));
-        float hSeam = 1.0 - smoothstep(0.02, 0.09, abs(fract(depthM * 1.9 + warp * 0.35) - 0.5));
+        float hSeam = 1.0 - smoothstep(0.02, 0.09, abs(fract(depthM * 1.75 + warp * 0.35) - 0.5));
         float vSeam = 1.0 - smoothstep(0.02, 0.08, abs(fract(arc + mod(row, 2.0) * 0.5 + warp * 0.25) - 0.5));
-        float seam = max(hSeam * 0.55, vSeam * 0.42);
+        float seam = max(hSeam * 0.58, vSeam * 0.45);
 
         float rockN = vnoise(vec2(arc * 1.7, depthM * 2.1)) * 0.58 + vnoise(vec2(arc * 4.8, depthM * 5.6)) * 0.42;
         float ridge = 1.0 - abs(vnoise(vec2(arc * 2.4 + warp, depthM * 2.8 - warp * 0.6)) * 2.0 - 1.0);
-        float hairlineCrack = pow(clamp(ridge, 0.0, 1.0), 10.0);
+        float hairlineCrack = pow(clamp(ridge, 0.0, 1.0), 9.0);
+        float wetStreak = smoothstep(0.58, 0.86, vnoise(vec2(arc * 3.8, depthM * 0.35)));
 
-        vec3 cTopSlab = vec3(0.048, 0.052, 0.070);
-        vec3 cMidRock = vec3(0.016, 0.018, 0.028);
-        vec3 cAbyss   = vec3(0.0012, 0.0014, 0.0024);
+        vec3 cTopSlab = vec3(0.055, 0.060, 0.082);
+        vec3 cMidRock = vec3(0.022, 0.027, 0.040);
+        vec3 cAbyss   = mix(vec3(0.002, 0.003, 0.005), vec3(0.011, 0.016, 0.028), uCamBelow);
 
-        vec3 baseCol = mix(cTopSlab, cMidRock, smoothstep(0.02, 0.16, depth01));
-        baseCol = mix(baseCol, cAbyss, smoothstep(0.20, 0.78, depth01));
-        baseCol *= (0.70 + 0.54 * blkH) * (0.72 + 0.50 * rockN) * (0.65 + 0.35 * vMeta.x);
-        baseCol *= (1.0 - seam * 0.68);
+        vec3 baseCol = mix(cTopSlab, cMidRock, smoothstep(0.02, 0.24, depth01));
+        baseCol = mix(baseCol, cAbyss, smoothstep(0.28, 0.85, depth01));
+        baseCol *= (0.68 + 0.56 * blkH) * (0.70 + 0.52 * rockN) * (0.60 + 0.40 * vMeta.x);
+        baseCol *= (1.0 - seam * 0.74);
 
-        // Overhead Throne Hall firelight + cool moon shaft dropoff down the deep abyss
-        vec3 keyL = normalize(vec3(0.35, 0.85, 0.38));
-        vec3 warmL = normalize(vec3(-0.4, 0.72, -0.55));
-        float overhangAo = mix(0.32, 1.0, smoothstep(0.0, 0.18, depthM));
-        float depthFade = exp(-depthM * 0.38);
-        float lightTerm = (0.18 + 0.92 * max(0.0, dot(N, keyL)) + 0.55 * max(0.0, dot(N, warmL))) * depthFade * overhangAo;
+        // Overhead Throne Hall firelight + cool moonlit stone rim down the deep chimney
+        vec3 upDir = normalize(vec3(0.12, 0.96, 0.14));
+        vec3 warmL = normalize(vec3(-0.35, 0.78, -0.52));
+        float overhangAo = mix(0.38, 1.0, smoothstep(0.0, 0.22, depthM));
+        float falloffRate = mix(0.32, 0.12, uCamBelow);
+        float depthFade = exp(-depthM * falloffRate);
+        float rimUp = pow(1.0 - max(dot(N, V), 0.0), 2.4) * (0.30 + 0.70 * max(0.0, N.y + 0.35));
+        float lightTerm = (0.20 + 0.90 * max(0.0, dot(N, upDir)) + 0.45 * max(0.0, dot(N, warmL))) * depthFade * overhangAo;
         vec3 lit = baseCol * lightTerm;
 
-        // Subtle, jagged volcanic hairline crimson fissures ONLY near freshly shattered upper walls (never a grid!)
-        float pulse = 0.82 + 0.18 * sin(uTime * 5.5 + arc * 1.4 + depthM * 1.8);
-        float crackBand = smoothstep(0.0, 0.03, depth01) * (1.0 - smoothstep(0.10, 0.34, depth01));
-        float emberMask = hairlineCrack * crackBand * smoothstep(0.42, 0.82, rockN) * uHeat;
-        vec3 emberCol = mix(vec3(0.75, 0.06, 0.015), vec3(1.85, 0.42, 0.08), smoothstep(0.45, 0.95, rockN));
-        lit += emberCol * emberMask * pulse * 0.95;
+        if (uCamBelow > 0.5) {
+          float abyssGlow = exp(-depthM * 0.16);
+          lit += vec3(0.12, 0.036, 0.018) * (0.22 + 0.78 * max(0.0, N.y * 0.5 + 0.5)) * abyssGlow;
+          lit += vec3(0.035, 0.058, 0.098) * (0.28 + 0.72 * wetStreak) * (0.35 + 0.65 * rimUp) * (1.0 - seam * 0.65);
+          vec3 H = normalize(upDir + V);
+          float spec = pow(max(dot(N, H), 0.0), 32.0) * wetStreak * abyssGlow * 0.28;
+          lit += vec3(0.82, 0.34, 0.12) * spec;
+        }
 
-        // Subtle warm crimson scorch bounce right under the shattered lip
-        lit += vec3(0.10, 0.016, 0.006) * (1.0 - smoothstep(0.0, 0.22, depth01)) * uHeat * 0.45;
+        // Fiery molten fractures concentrated strictly near the freshly shattered upper breach rim (depthM < 5.5m!)
+        float pulse = 0.84 + 0.16 * sin(uTime * 5.6 + arc * 1.4 + depthM * 1.8);
+        float crackBand = smoothstep(0.0, 0.02, depth01) * (1.0 - smoothstep(0.08, 0.26, depth01));
+        float emberMask = hairlineCrack * crackBand * smoothstep(0.42, 0.84, rockN) * uHeat;
+        vec3 emberCol = mix(vec3(0.85, 0.08, 0.015), vec3(2.15, 0.58, 0.12), smoothstep(0.45, 0.95, rockN));
+        lit += emberCol * emberMask * pulse * 1.05;
+
+        // Blazing shattered breach rim lip right at y = 0..-1.1m (dramatically silhouettes Boss on the edge!)
+        float lipRing = exp(-depthM * 2.1) * uHeat;
+        lit += vec3(1.25, 0.30, 0.06) * lipRing * mix(0.24, 0.82, uCamBelow) * pulse;
 
         gl_FragColor = vec4(lit, 1.0);
         #include <tonemapping_fragment>
@@ -1375,7 +1529,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   chasmShaftMesh.renderOrder = -28;
   chasmShaftMesh.frustumCulled = false;
 
-  // Upward-view crimson cathedral smoke backdrop (ONLY visible when camera drops BELOW y = -0.15 looking UP!)
+  // Upward-view crimson backlit Throne Hall vault smoke backdrop (visible when camY < -0.18!)
   const chasmUpwardBackdropMat = trackMat(new THREE.ShaderMaterial({
     uniforms: { uTime: chasmShaftUniforms.uTime },
     vertexShader: `
@@ -1388,12 +1542,35 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     fragmentShader: `
       uniform float uTime;
       varying vec2 vUv;
+      float hash21(vec2 p) {
+        p = fract(p * vec2(127.1, 311.7));
+        p += dot(p, p + 34.53);
+        return fract(p.x * p.y);
+      }
+      float vnoise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        return mix(
+          mix(hash21(i), hash21(i + vec2(1.0, 0.0)), f.x),
+          mix(hash21(i + vec2(0.0, 1.0)), hash21(i + vec2(1.0, 1.0)), f.x),
+          f.y
+        );
+      }
       void main() {
         vec2 p = vUv * 2.0 - 1.0;
         float r = length(p);
-        float glow = exp(-r * r * 2.1);
-        vec3 col = mix(vec3(0.035, 0.025, 0.040), vec3(0.24, 0.065, 0.038), glow);
-        col *= 0.92 + 0.08 * sin(uTime * 3.1 + p.x * 4.0);
+        float smoke = vnoise(p * 3.4 + vec2(uTime * 0.14, -uTime * 0.10)) * 0.6 +
+                      vnoise(p * 7.2 - vec2(uTime * 0.18, uTime * 0.12)) * 0.4;
+        // Gothic cathedral vault rib cross-shadows overhead
+        float ang = atan(p.y, p.x);
+        float rib = smoothstep(0.86, 0.98, abs(cos(ang * 4.0))) * smoothstep(0.18, 0.85, r);
+        float glow = exp(-r * r * 1.45);
+        vec3 outerCol = vec3(0.055, 0.035, 0.060);
+        vec3 fireCol  = mix(vec3(0.45, 0.11, 0.045), vec3(0.95, 0.34, 0.10), smoke);
+        vec3 col = mix(outerCol, fireCol, glow * (0.72 + 0.28 * smoke));
+        col *= (1.0 - rib * 0.42);
+        col *= 0.90 + 0.10 * sin(uTime * 4.2 + p.x * 3.0);
         gl_FragColor = vec4(col, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
@@ -1402,17 +1579,11 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     side: THREE.DoubleSide,
     depthTest: true,
     depthWrite: false,
-    stencilWrite: true,
-    stencilRef: CHASM_STENCIL_ID,
-    stencilFunc: THREE.EqualStencilFunc,
-    stencilFuncMask: 0xFF,
-    stencilWriteMask: 0x00,
-    stencilFail: THREE.KeepStencilOp,
-    stencilZFail: THREE.KeepStencilOp,
-    stencilZPass: THREE.KeepStencilOp
+    stencilWrite: false,
+    fog: false
   }));
   const chasmUpwardBackdrop = new THREE.Mesh(
-    trackGeo(new THREE.CircleGeometry(14.0, 24)),
+    trackGeo(new THREE.CircleGeometry(18.0, 28)),
     chasmUpwardBackdropMat
   );
   chasmUpwardBackdrop.rotation.x = Math.PI * 0.5;
@@ -1421,32 +1592,46 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   chasmUpwardBackdrop.visible = false;
   chasmUpwardBackdrop.frustumCulled = false;
 
-  // Broken sub-floor iron & timber joists jutting out of the chasm walls (stencil-clipped inside hole!)
+  // Broken sub-floor joists + deep stone wall ring ribs down to y = -20m so abyss plunge feels rich & physical!
   const chasmBeamsParts = [];
   const chasmRng = makeRng(30917);
-  for (let i = 0; i < 8; i++) {
-    const ang = (i / 8) * Math.PI * 2 + 0.28 + (chasmRng() - 0.5) * 0.25;
+  for (let i = 0; i < 12; i++) {
+    const ang = (i / 12) * Math.PI * 2 + 0.28 + (chasmRng() - 0.5) * 0.25;
     const edgeR = evalChasmEdgeR(ang);
-    const beamLen = 0.75 + chasmRng() * 0.85;
-    const by = -0.85 - i * 0.82 - chasmRng() * 0.35;
+    const beamLen = 0.72 + chasmRng() * 0.78;
+    const by = -0.85 - i * 1.55 - chasmRng() * 0.35;
     const g = new THREE.BoxGeometry(0.18, 0.22, beamLen);
     xformGeo(
       g,
-      Math.cos(ang) * (edgeR - beamLen * 0.34),
+      Math.cos(ang) * (edgeR - beamLen * 0.30),
       by,
-      Math.sin(ang) * (edgeR - beamLen * 0.34),
+      Math.sin(ang) * (edgeR - beamLen * 0.30),
       (chasmRng() - 0.5) * 0.35,
       -ang + Math.PI * 0.5,
       (chasmRng() - 0.5) * 0.45
     );
-    chasmBeamsParts.push(tintGeo(THREE, g, 0x3b322d, 0x1d1817));
+    chasmBeamsParts.push(tintGeo(THREE, g, 0x524844, 0x262120));
+  }
+  // Protruding rocky strata ledges tucked cleanly against the outer shaft walls (zero camera occlusion!)
+  const chasmLedgeHeights = [-4.2, -8.8, -13.6, -18.4];
+  for (let li = 0; li < chasmLedgeHeights.length; li++) {
+    const ly = chasmLedgeHeights[li];
+    for (let k = 0; k < 6; k++) {
+      const a = (k / 6) * Math.PI * 2 + li * 0.52;
+      const rr = evalChasmEdgeR(a) * 1.24;
+      const lg = buildSculptedRockGeo(THREE, 0.42 + (k % 2) * 0.14, 7300 + li * 10 + k, 0.42, 1);
+      xformGeo(lg, Math.cos(a) * rr, ly, Math.sin(a) * rr, 0, a, 0);
+      chasmBeamsParts.push(tintGeo(THREE, lg, 0x62708a, 0x262c3c));
+    }
   }
   const chasmInnerPropMat = trackMat(new THREE.MeshStandardMaterial({
     map: basaltPbr.albedo,
-    roughness: 0.90,
-    metalness: 0.22,
+    roughness: 0.88,
+    metalness: 0.18,
     vertexColors: true,
-    color: 0x7b7270,
+    color: 0x9aa4bc,
+    emissive: 0x2a1412,
+    emissiveIntensity: 0.55,
     stencilWrite: true,
     stencilRef: CHASM_STENCIL_ID,
     stencilFunc: THREE.EqualStencilFunc,
@@ -1494,7 +1679,6 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
           + 0.09 * sin(th * 13.0 + 1.55)
           + 0.05 * cos(th * 19.0 - 0.4);
       }
-
       float vnoise(vec2 p) {
         vec2 i = floor(p);
         vec2 f = fract(p);
@@ -1516,7 +1700,6 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
         float outerFade = 1.0 - smoothstep(0.25, 2.05, distOut);
         if (outerFade <= 0.005) discard;
 
-        // Jagged angular shattered-stone fracture cracks + soot blast scorch (ZERO smooth wavy rays!)
         float nWarp = vnoise(vLocalXZ * 2.1) * 0.65 + vnoise(vLocalXZ * 5.2) * 0.35;
         float jaggedTh = th + (nWarp - 0.5) * 0.36;
         float crackA = 1.0 - abs(sin(jaggedTh * 7.0 + floor(r * 1.8) * 0.18));
@@ -1587,7 +1770,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     const mesh = new THREE.Mesh(coloredSlab, rimSlabMat);
     mesh.rotation.order = 'YXZ';
     const dist = edgeR + 0.22 + (i % 3) * 0.18;
-    const inwardTip = (i % 3 === 0); // 1/3 slabs sag steeply into the pit, 2/3 buckle upward!
+    const inwardTip = (i % 3 === 0);
     mesh.position.set(Math.cos(ang) * dist, 0.02, Math.sin(ang) * dist);
     const yaw = Math.atan2(Math.cos(ang), Math.sin(ang));
     const targetPitch = inwardTip ? -(0.34 + chasmRng() * 0.22) : (0.18 + chasmRng() * 0.26);
@@ -1599,7 +1782,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     rimSlabEntries.push({ mesh, yaw, targetPitch, targetRoll, targetY });
   }
 
-  // Torn Crimson Royal Velvet Runner Carpet flaps sagging down over the North & South chasm edges!
+  // Torn Crimson Royal Velvet Runner Carpet flaps sagging down over the North & South chasm edges
   const tornCarpetMat = trackMat(new THREE.MeshStandardMaterial({
     map: carpetTex,
     color: 0xffffff,
@@ -1608,7 +1791,6 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     side: THREE.DoubleSide
   }));
   function buildTornCarpetFlapGeo(signZ) {
-    // 10 columns across carpet width (2.36m), 7 rows curving from flat floor lip down into the chasm
     const cols = 10;
     const rows = 7;
     const positions = new Float32Array((cols + 1) * (rows + 1) * 3);
@@ -1616,14 +1798,12 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     const indices = [];
     const width = 2.34;
     for (let r = 0; r <= rows; r++) {
-      const vFrac = r / rows; // 0 = anchored on floor rim, 1 = shredded dangling edge inside pit
+      const vFrac = r / rows;
       for (let c = 0; c <= cols; c++) {
         const uFrac = c / cols;
         const x = (uFrac - 0.5) * width;
-        // Ragged torn cloth tooth length per column
         const tearLen = 0.85 + 0.55 * Math.sin(c * 2.4 + signZ * 1.1) + 0.28 * Math.cos(c * 4.7);
         const hang = vFrac * tearLen;
-        // Curve gently over the stone edge then hang steeply into the pit
         const zOut = signZ * (2.36 - Math.min(hang, 0.45) * 0.92 - Math.max(0, hang - 0.45) * 0.16);
         const yDrop = 0.032 - Math.pow(vFrac, 1.55) * (0.95 * tearLen);
         const vi = r * (cols + 1) + c;
@@ -1655,15 +1835,17 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   tornCarpetNorth.renderOrder = -25;
   tornCarpetSouth.renderOrder = -25;
 
-  // 18 Animated Falling Stone Chunks (1 InstancedMesh = 1 DC!) tumbling down into the 14m chasm
+  // 18 Animated Falling Stone Chunks (1 InstancedMesh = 1 DC!)
   const CHASM_CHUNK_COUNT = 18;
   const chasmChunkGeo = trackGeo(tintGeo(THREE, buildSculptedRockGeo(THREE, 0.34, 4123, 0.65, 1), 0x8d93a8, 0x3b3f4e));
   applyBoxUVs(chasmChunkGeo, 1.2);
   const chasmChunkMat = trackMat(new THREE.MeshStandardMaterial({
     map: basaltPbr.albedo,
-    roughness: 0.90,
-    metalness: 0.06,
+    roughness: 0.88,
+    metalness: 0.08,
     vertexColors: true,
+    emissive: 0x241210,
+    emissiveIntensity: 0.55,
     stencilWrite: true,
     stencilRef: CHASM_STENCIL_ID,
     stencilFunc: THREE.EqualStencilFunc,
@@ -1680,13 +1862,13 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   const chasmChunkData = [];
   for (let i = 0; i < CHASM_CHUNK_COUNT; i++) {
     const ang = (i / CHASM_CHUNK_COUNT) * Math.PI * 2 + chasmRng() * 0.4;
-    const rad = 0.25 + chasmRng() * 1.65;
+    const rad = 1.25 + chasmRng() * 0.85;
     chasmChunkData.push({
       x0: Math.cos(ang) * rad,
       z0: Math.sin(ang) * rad,
       vx: Math.cos(ang) * (0.25 - chasmRng() * 0.65),
       vz: Math.sin(ang) * (0.25 - chasmRng() * 0.65),
-      vy0: 1.2 + chasmRng() * 2.1, // brief upward blast on impact before plunging into abyss
+      vy0: 1.2 + chasmRng() * 2.1,
       delay: (i % 6) * 0.06 + chasmRng() * 0.14,
       rx0: chasmRng() * 6.28,
       ry0: chasmRng() * 6.28,
@@ -1702,14 +1884,14 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   }
 
   // Rising dark crimson-ash abyss haze inside the open chasm
-  const CHASM_MIST_COUNT = isMobile ? 16 : 28;
+  const CHASM_MIST_COUNT = isMobile ? 18 : 32;
   const chasmMistPos = new Float32Array(CHASM_MIST_COUNT * 3);
   const chasmMistSeed = new Float32Array(CHASM_MIST_COUNT * 3);
   for (let i = 0; i < CHASM_MIST_COUNT; i++) {
     const a = chasmRng() * Math.PI * 2;
-    const r = chasmRng() * 1.85;
+    const r = chasmRng() * 1.95;
     chasmMistPos[i * 3]     = Math.cos(a) * r;
-    chasmMistPos[i * 3 + 1] = -chasmRng() * 8.5;
+    chasmMistPos[i * 3 + 1] = -chasmRng() * 16.0;
     chasmMistPos[i * 3 + 2] = Math.sin(a) * r;
     chasmMistSeed[i * 3]     = chasmRng();
     chasmMistSeed[i * 3 + 1] = 0.6 + chasmRng() * 0.9;
@@ -1732,13 +1914,13 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
       void main() {
         float cyc = fract(aSeed.x + uTime * 0.14 * aSeed.y);
         vec3 p = position;
-        p.y = mix(-8.5, 0.45, cyc);
+        p.y = mix(-14.5, 0.55, cyc);
         p.x += sin(uTime * 0.9 + aSeed.x * 12.0) * 0.35;
         p.z += cos(uTime * 0.8 + aSeed.x * 9.0) * 0.35;
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
         gl_Position = projectionMatrix * mv;
         gl_PointSize = clamp((aSeed.z * 260.0) / max(1.2, -mv.z), 12.0, 140.0);
-        vAlpha = sin(cyc * 3.14159) * 0.36;
+        vAlpha = sin(cyc * 3.14159) * 0.38;
         vEmber = aSeed.x;
       }
     `,
@@ -1749,7 +1931,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
       varying float vEmber;
       void main() {
         vec4 t = texture2D(uTex, gl_PointCoord);
-        vec3 col = mix(vec3(0.08, 0.06, 0.09), vec3(0.55, 0.11, 0.04), smoothstep(0.45, 0.95, vEmber));
+        vec3 col = mix(vec3(0.10, 0.08, 0.12), vec3(0.68, 0.16, 0.05), smoothstep(0.42, 0.95, vEmber));
         float a = t.a * vAlpha * uProgress;
         if (a < 0.01) discard;
         gl_FragColor = vec4(col, a);
@@ -1772,9 +1954,13 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   chasmMistPoints.renderOrder = -25;
   chasmMistPoints.frustumCulled = false;
 
-  const chasmGlowLight = new THREE.PointLight(0xff421c, 0.0, 12.0, 1.8);
-  chasmGlowLight.position.set(0, -1.2, 0);
+  const chasmGlowLight = new THREE.PointLight(0xff4a1e, 0.0, 18.0, 1.5);
+  chasmGlowLight.position.set(0, -1.6, 0);
   chasmGlowLight.visible = false;
+
+  const chasmAbyssFillLight = new THREE.PointLight(0x526e98, 0.0, 26.0, 1.4);
+  chasmAbyssFillLight.position.set(0, -12.5, 0);
+  chasmAbyssFillLight.visible = false;
 
   chasmContent.add(
     chasmStencilMask,
@@ -1788,23 +1974,25 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     tornCarpetSouth,
     chasmChunksInst,
     chasmMistPoints,
-    chasmGlowLight
+    chasmGlowLight,
+    chasmAbyssFillLight
   );
 
-  // Seamless dual-mode switch: looking DOWN into chasm vs looking UP from inside chasm!
+  // Seamless dual-mode switch: looking DOWN into chasm vs looking UP from inside chasm (camY < -0.18)!
   function syncChasmCameraSide(camY) {
     const below = Number.isFinite(camY) && camY < -0.18;
     if (below === chasmCamBelow) return;
     chasmCamBelow = below;
+    chasmShaftUniforms.uCamBelow.value = below ? 1.0 : 0.0;
     chasmStencilMaskMat.depthTest = !below;
     chasmShaftMat.stencilWrite = !below;
     chasmInnerPropMat.stencilWrite = !below;
     chasmChunkMat.stencilWrite = !below;
     chasmMistMat.stencilWrite = !below;
     chasmUpwardBackdrop.visible = below;
+    chasmAbyssFillLight.visible = below && stageMode === 'chasm_only' && chasmProgress > 0.01 && !lowSpecMode;
   }
 
-  // Auto-sync before render even if opts.camY is omitted!
   chasmStencilMask.onBeforeRender = (_renderer, _scene, camera) => {
     if (camera && camera.position) {
       syncChasmCameraSide(camera.position.y);
@@ -1812,22 +2000,23 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   };
 
   // ==========================================================================
-  // GROUP B: `shaftAndRiverGroup` — Act 4: Vertical Shaft + Rushing Black River + Rusty Grate
+  // GROUP B: `shaftAndRiverGroup` — Act 4: Full 360° Gothic Shaft + AAA Underground River + Explosive Iron Grate
   // ==========================================================================
   const shaftRng = makeRng(40499);
 
-  // Shared Wet Underground Stone Material
   const tunnelStoneMat = regNormalMat(
     trackMat(new THREE.MeshStandardMaterial({
       map: basaltPbr.albedo,
       normalMap: lowSpecMode ? null : basaltPbr.normal,
-      normalScale: new THREE.Vector2(0.82, 0.82),
+      normalScale: new THREE.Vector2(1.05, 1.05),
       roughnessMap: basaltPbr.orm,
       aoMap: basaltPbr.orm,
-      aoMapIntensity: 0.72,
-      color: 0x626c84,
-      roughness: 0.92,
-      metalness: 0.06,
+      aoMapIntensity: 0.78,
+      color: 0x7a88a4,
+      emissive: 0x0b101b,
+      emissiveIntensity: 0.55,
+      roughness: 0.88,
+      metalness: 0.08,
       vertexColors: true
     })),
     basaltPbr.normal
@@ -1837,28 +2026,42 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     trackMat(new THREE.MeshStandardMaterial({
       map: ironPbr.albedo,
       normalMap: lowSpecMode ? null : ironPbr.normal,
-      normalScale: new THREE.Vector2(0.85, 0.85),
+      normalScale: new THREE.Vector2(0.92, 0.92),
       roughnessMap: ironPbr.orm,
-      color: 0xa6948c,
-      roughness: 0.94,
-      metalness: 0.68
+      color: 0xb09b90,
+      roughness: 0.88,
+      metalness: 0.72
     })),
     ironPbr.normal
   );
 
-  // 1. Vertical Gloomy Stone Shaft (y = -2 .. +22.5m, radius ~7.2m, opening seamlessly into tunnel at +Z)
+  const shaftTimberMat = regNormalMat(
+    trackMat(new THREE.MeshStandardMaterial({
+      map: barkPbr.albedo,
+      normalMap: lowSpecMode ? null : barkPbr.normal,
+      normalScale: new THREE.Vector2(0.85, 0.85),
+      roughnessMap: barkPbr.orm,
+      roughness: 0.92,
+      metalness: 0.04,
+      vertexColors: true,
+      color: 0x907f72
+    })),
+    barkPbr.normal
+  );
+
+  // 1. FULL 360° INWARD-FACING GOTHIC VERTICAL SHAFT (y = -2.2..+26.0m) + POINTED BARREL-VAULTED RIVER TUNNEL!
   function buildShaftAndTunnelGeo() {
     const parts = [];
 
-    // Vertical shaft wall: segmented around 360 deg, skipping the tunnel cutout window on +Z (y in [-1.5..+9.5])
-    const rSegs = isMobile ? 20 : 28;
-    const hSegs = 12;
-    const shaftH = 24.5;
-    const yMin = -2.0;
+    const rSegs = isMobile ? 24 : 36;
+    const hSegs = 16;
+    const shaftH = 28.2; // y = -2.2 .. +26.0m (zero open black gap anywhere!)
+    const yMin = -2.2;
     const pos = [];
     const col = [];
     const uv = [];
-    const pushQuad = (a, b, c, d) => {
+    // CORRECT INWARD WINDING: (b - a) x (c - a) points -r_hat (INTO the shaft center!)
+    const pushInwardQuad = (a, b, c, d) => {
       const verts = [a, b, c, b, d, c];
       for (let i = 0; i < 6; i++) {
         const v = verts[i];
@@ -1872,21 +2075,24 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
       const th = (s / rSegs) * Math.PI * 2;
       const yFrac = hi / hSegs;
       const y = yMin + yFrac * shaftH;
-      // Narrows slightly near top breach (y=+22m) for dramatic chimney perspective!
-      const topPinch = 1.0 - smoothstep(14.0, 22.5, y) * 0.42;
-      const crag = 1.0 + 0.075 * Math.sin(th * 5.0 + y * 0.45) + 0.05 * Math.cos(th * 9.0 - y * 0.7);
-      const rad = 7.1 * topPinch * crag;
-      const shade = lerp(0.58, 0.95, smoothstep(8.0, 22.0, y));
-      const warmTop = smoothstep(15.0, 22.5, y);
+      // Narrows dramatically near the shattered Throne Hall breach (y = +23..+26m)
+      const topPinch = 1.0 - smoothstep(14.5, 25.8, y) * 0.56;
+      const crag = 1.0 + 0.075 * Math.sin(th * 5.0 + y * 0.42) + 0.055 * Math.cos(th * 9.0 - y * 0.68) + 0.025 * Math.sin(th * 15.0 + y * 1.1);
+      const rad = 7.2 * topPinch * crag;
+      // Rich wet seepage darkening + warm crimson Throne Hall top bounce + cool moonlight river bounce!
+      const wetRunoff = 0.72 + 0.28 * Math.sin(th * 7.0 + 1.2) * Math.cos(th * 11.0 - 0.5);
+      const warmTop = smoothstep(13.5, 25.0, y);
+      const coolLow = 1.0 - smoothstep(-1.0, 9.5, y);
+      const base = lerp(0.62, 1.05, warmTop) * wetRunoff;
       return {
         x: Math.cos(th) * rad,
         y,
         z: Math.sin(th) * rad,
-        u: (s / rSegs) * 8.0,
-        v: y / 4.2,
-        cr: shade * lerp(0.88, 1.25, warmTop),
-        cg: shade * lerp(0.94, 0.72, warmTop),
-        cb: shade * lerp(1.08, 0.65, warmTop)
+        u: (s / rSegs) * 9.0,
+        v: y / 3.8,
+        cr: base * lerp(0.84, 1.52, warmTop) * lerp(1.0, 0.82, coolLow),
+        cg: base * lerp(0.92, 0.78, warmTop) * lerp(1.0, 0.96, coolLow),
+        cb: base * lerp(1.10, 0.62, warmTop) * lerp(1.0, 1.22, coolLow)
       };
     };
 
@@ -1895,14 +2101,15 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
       for (let s = 0; s < rSegs; s++) {
         const thMid = ((s + 0.5) / rSegs) * Math.PI * 2;
         const zDir = Math.sin(thMid);
-        // Leave clean arched cutout on +Z side (zDir > 0.58, y < 9.2) for the horizontal vaulted river tunnel!
-        if (zDir > 0.58 && yMid < 9.2 && yMid > -1.8) continue;
-        // Winding so inward normals face the center of the shaft
+        // Clean arched opening on +Z side (y in [-1.8..+9.6]) leading directly into the vaulted river tunnel
+        const xSpan = Math.abs(Math.cos(thMid));
+        const archMaxY = 9.5 - xSpan * xSpan * 5.8;
+        if (zDir > 0.56 && yMid < archMaxY && yMid > -2.0) continue;
         const a = sampleShaftPt(s, hi);
         const b = sampleShaftPt(s + 1, hi);
         const c = sampleShaftPt(s, hi + 1);
         const d = sampleShaftPt(s + 1, hi + 1);
-        pushQuad(a, c, b, d);
+        pushInwardQuad(a, b, c, d);
       }
     }
     const shaftWallGeo = new THREE.BufferGeometry();
@@ -1912,37 +2119,75 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     shaftWallGeo.computeVertexNormals();
     parts.push(shaftWallGeo);
 
-    // Vaulted Gothic Underground River Tunnel (z = +5.0 -> +36.5m, halfWidth = 6.2m, arch crown y = +9.4m)
-    const archSegs = isMobile ? 12 : 16;
-    const zSegs = 12;
-    const zStart = 4.6;
-    const zEnd = 36.5;
+    // Massive Gothic Stone Ring-Arches & Corbel Collars encircling the shaft every 5m (y = 3, 8, 13, 18, 23m)!
+    const ringYs = [3.2, 8.2, 13.2, 18.2, 23.0];
+    for (let ri = 0; ri < ringYs.length; ri++) {
+      const ry = ringYs[ri];
+      const topPinch = 1.0 - smoothstep(14.5, 25.8, ry) * 0.56;
+      const ringR = 6.75 * topPinch;
+      const segCount = isMobile ? 16 : 22;
+      const warmRing = smoothstep(13.0, 23.5, ry);
+      const topHex = warmRing > 0.45 ? 0x8b6a64 : 0x6f7c98;
+      const botHex = warmRing > 0.45 ? 0x453132 : 0x30384b;
+      for (let si = 0; si < segCount; si++) {
+        const a0 = (si / segCount) * Math.PI * 2;
+        const a1 = ((si + 1) / segCount) * Math.PI * 2;
+        const am = (a0 + a1) * 0.5;
+        if (Math.sin(am) > 0.52 && ry < 9.8) continue; // keep tunnel mouth completely clear!
+        const segLen = 2.0 * ringR * Math.sin(Math.PI / segCount) + 0.25;
+        const archBlock = new THREE.BoxGeometry(segLen, 0.72, 0.92);
+        xformGeo(archBlock, Math.cos(am) * ringR, ry, Math.sin(am) * ringR, 0, -am + Math.PI * 0.5, 0);
+        parts.push(tintGeo(THREE, archBlock, topHex, botHex));
+
+        // Carved vertical gothic wall pilasters every 3rd segment
+        if (si % 3 === 0 && ri < ringYs.length - 1) {
+          const pil = new THREE.BoxGeometry(0.65, 4.9, 0.72);
+          xformGeo(pil, Math.cos(am) * (ringR + 0.12), ry + 2.45, Math.sin(am) * (ringR + 0.12), 0, -am + Math.PI * 0.5, 0);
+          parts.push(tintGeo(THREE, pil, topHex, botHex));
+        }
+      }
+    }
+
+    // Jagged 3D Shattered Cathedral Breach Rim Collar at y = +24.2m (REAL dark broken rock silhouette around overhead opening!)
+    const breachSegs = 18;
+    for (let bi = 0; bi < breachSegs; bi++) {
+      const a0 = (bi / breachSegs) * Math.PI * 2;
+      const jagR = 2.65 + 0.45 * Math.sin(a0 * 3.0 + 0.5) + 0.28 * Math.cos(a0 * 7.0 - 0.9);
+      const slab = buildSculptedRockGeo(THREE, 0.92 + (bi % 3) * 0.22, 6600 + bi, 0.42, 1);
+      xformGeo(slab, Math.cos(a0) * jagR, 24.3 + (bi % 2) * 0.28, Math.sin(a0) * jagR, (shaftRng() - 0.5) * 0.35, a0, (shaftRng() - 0.5) * 0.35);
+      parts.push(tintGeo(THREE, slab, 0x9c5a46, 0x2a1c22));
+    }
+
+    // Vaulted Pointed-Gothic Underground River Tunnel (z = +4.4 -> +37.5m, CORRECT INWARD WINDING!)
+    const archSegs = isMobile ? 16 : 22;
+    const zSegs = 16;
+    const zStart = 4.4;
+    const zEnd = 37.5;
     const tPos = [];
     const tCol = [];
     const tUv = [];
     const sampleTunnelPt = (ai, zi) => {
-      const aFrac = ai / archSegs; // 0 = west bank floor, 0.5 = crown apex, 1 = east bank floor
+      const aFrac = ai / archSegs;
       const zFrac = zi / zSegs;
       const z = lerp(zStart, zEnd, zFrac);
       const ang = aFrac * Math.PI;
-      const hw = 6.15 + Math.sin(z * 0.25 + aFrac * 5.0) * 0.28;
+      const hw = 6.20 + Math.sin(z * 0.25 + aFrac * 5.0) * 0.24;
       const x = -Math.cos(ang) * hw;
-      // Pointed gothic barrel vault profile!
       const sinA = Math.sin(ang);
-      const pointedApex = Math.pow(sinA, 0.78);
-      const y = -1.6 + pointedApex * 10.8 + Math.cos(z * 0.37 + ai * 1.4) * 0.16;
-      const moonReach = smoothstep(14.0, 32.0, z);
-      const wetDark = smoothstep(-1.2, 2.2, y);
-      const base = lerp(0.36, 0.86, wetDark) * lerp(0.75, 1.15, moonReach);
+      const pointedApex = Math.pow(sinA, 0.76);
+      const y = -1.8 + pointedApex * 11.2 + Math.cos(z * 0.37 + ai * 1.4) * 0.14;
+      const moonReach = smoothstep(11.0, 32.0, z);
+      const wetDark = smoothstep(-1.4, 2.4, y);
+      const base = lerp(0.42, 0.94, wetDark) * lerp(0.76, 1.24, moonReach);
       return {
         x,
         y,
         z,
-        u: z / 4.2,
-        v: aFrac * 6.0,
-        cr: base * lerp(0.82, 0.90, moonReach),
-        cg: base * lerp(0.90, 1.00, moonReach),
-        cb: base * lerp(1.06, 1.24, moonReach)
+        u: z / 3.8,
+        v: aFrac * 6.5,
+        cr: base * lerp(0.80, 0.92, moonReach),
+        cg: base * lerp(0.90, 1.04, moonReach),
+        cb: base * lerp(1.08, 1.30, moonReach)
       };
     };
     for (let zi = 0; zi < zSegs; zi++) {
@@ -1951,7 +2196,8 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
         const b = sampleTunnelPt(ai + 1, zi);
         const c = sampleTunnelPt(ai, zi + 1);
         const d = sampleTunnelPt(ai + 1, zi + 1);
-        const verts = [a, c, b, b, c, d];
+        // CORRECT INWARD WINDING: (b - a) x (c - a) points DOWN/INWARD into tunnel!
+        const verts = [a, b, c, b, d, c];
         for (let k = 0; k < 6; k++) {
           const v = verts[k];
           tPos.push(v.x, v.y, v.z);
@@ -1967,47 +2213,56 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     tunnelVaultGeo.computeVertexNormals();
     parts.push(tunnelVaultGeo);
 
-    // Massive Gothic Masonry Rib Arches & Wet Stone Bank Ledges every 5.2m along the river tunnel
-    for (let az = 8.5; az <= 34.5; az += 5.2) {
-      const segs = 10;
+    // Heavy Gothic Ribbed Stone Arches, Carved Keystones & Wet Curbs every 5.0m along tunnel
+    for (let az = 6.5; az <= 36.5; az += 5.0) {
+      const segs = 12;
       for (let i = 0; i < segs; i++) {
         const a0 = (i / segs) * Math.PI;
         const a1 = ((i + 1) / segs) * Math.PI;
-        const am = (a0 + a1) * 0.5;
-        const x0 = -Math.cos(a0) * 5.85;
-        const y0 = -1.2 + Math.pow(Math.sin(a0), 0.78) * 10.2;
-        const x1 = -Math.cos(a1) * 5.85;
-        const y1 = -1.2 + Math.pow(Math.sin(a1), 0.78) * 10.2;
-        const len = Math.hypot(x1 - x0, y1 - y0) + 0.16;
+        const x0 = -Math.cos(a0) * 5.88;
+        const y0 = -1.2 + Math.pow(Math.sin(a0), 0.76) * 10.4;
+        const x1 = -Math.cos(a1) * 5.88;
+        const y1 = -1.2 + Math.pow(Math.sin(a1), 0.76) * 10.4;
+        const len = Math.hypot(x1 - x0, y1 - y0) + 0.18;
         const rotZ = Math.atan2(y1 - y0, x1 - x0);
-        const rib = new THREE.BoxGeometry(len, 0.72, 0.88);
+        const rib = new THREE.BoxGeometry(len, 0.76, 0.94);
         xformGeo(rib, (x0 + x1) * 0.5, (y0 + y1) * 0.5, az, 0, 0, rotZ);
-        parts.push(tintGeo(THREE, rib, 0x76829b, 0x3b4254));
+        parts.push(tintGeo(THREE, rib, 0x8290ad, 0x3b4458));
       }
-      // Wet masonry curb ledges along both banks
+      // Crown keystone block
+      parts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(0.95, 1.15, 1.15), 0, 9.15, az), 0x8d9cb8, 0x454f64));
       for (const side of [-1, 1]) {
-        const ledge = new THREE.BoxGeometry(1.4, 1.8, 5.1);
+        const ledge = new THREE.BoxGeometry(1.55, 2.0, 5.1);
         xformGeo(ledge, side * 5.75, -0.35, az);
-        parts.push(tintGeo(THREE, ledge, 0x525c72, 0x262b38));
+        parts.push(tintGeo(THREE, ledge, 0x5c6880, 0x242a38));
       }
     }
 
-    // Protruding rocky ledges inside the vertical shaft
-    for (let i = 0; i < 14; i++) {
-      const ang = (i / 14) * Math.PI * 2 + shaftRng() * 0.5;
-      const y = 2.0 + (i / 14) * 18.5;
-      if (Math.sin(ang) > 0.55 && y < 9.5) continue;
-      const topPinch = 1.0 - smoothstep(14.0, 22.5, y) * 0.42;
-      const r = 6.3 * topPinch;
-      const ledge = buildSculptedRockGeo(THREE, 1.15 + shaftRng() * 0.75, 500 + i, 0.52, 0);
-      xformGeo(ledge, Math.cos(ang) * r, y, Math.sin(ang) * r, 0, ang, (shaftRng() - 0.5) * 0.25);
-      parts.push(tintGeo(THREE, ledge, 0x5d6478, 0x2a2d3a));
+    // Protruding mossy wet rock shelves inside the vertical shaft
+    for (let i = 0; i < 16; i++) {
+      const ang = (i / 16) * Math.PI * 2 + shaftRng() * 0.45;
+      const y = 1.8 + (i / 16) * 19.5;
+      if (Math.sin(ang) > 0.50 && y < 9.8) continue;
+      const topPinch = 1.0 - smoothstep(14.5, 25.8, y) * 0.56;
+      const r = 6.35 * topPinch;
+      const ledge = buildSculptedRockGeo(THREE, 1.05 + shaftRng() * 0.75, 500 + i, 0.48, 1);
+      xformGeo(ledge, Math.cos(ang) * r, y, Math.sin(ang) * r, 0, ang, (shaftRng() - 0.5) * 0.22);
+      parts.push(tintGeo(THREE, ledge, 0x647088, 0x262c3a));
     }
 
-    // Dark rocky underwater riverbed floor enclosing shaft bottom & river tunnel (y = -2.15m -> 0 sky void when underwater!)
-    const riverBed = new THREE.BoxGeometry(15.2, 0.8, 52.0);
-    xformGeo(riverBed, 0, -2.35, 16.0);
-    parts.push(tintGeo(THREE, riverBed, 0x161b26, 0x0a0d14));
+    // Dark rocky underwater riverbed floor enclosing shaft bottom & river tunnel (y = -2.25m -> 0 sky void underwater!)
+    const riverBed = new THREE.BoxGeometry(16.0, 0.8, 56.0);
+    xformGeo(riverBed, 0, -2.35, 17.5);
+    parts.push(tintGeo(THREE, riverBed, 0x182534, 0x090f18));
+
+    // Submerged riverbed boulders visible during underwater tumble
+    for (let bi = 0; bi < 14; bi++) {
+      const bx = (shaftRng() - 0.5) * 9.5;
+      const bz = 2.0 + bi * 2.4 + shaftRng() * 1.2;
+      const rb = buildSculptedRockGeo(THREE, 0.65 + shaftRng() * 0.65, 580 + bi, 0.48, 1);
+      xformGeo(rb, bx, -1.78, bz, 0, shaftRng() * 6.28, 0);
+      parts.push(tintGeo(THREE, rb, 0x24384a, 0x0d1520));
+    }
 
     return mergeNonIndexedGeos(THREE, parts, { boxUvTile: 3.4, withColor: true });
   }
@@ -2016,71 +2271,103 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   shaftTunnelMesh.receiveShadow = true;
   shaftAndRiverGroup.add(shaftTunnelMesh);
 
-  // 2. Broken Cross-Beams & Ancient Twisted Roots jutting across the vertical shaft (keeping center r<3.7m clear for camera & hero!)
+  // 2. Snapped Wall-Embedded Timber Joist Stubs, Twisted Roots & Hanging Rusted Iron Chains inside the Shaft!
+  //    (All timbers stay strictly outside r > 4.65m so upward & downward camera shots are 100% unobstructed!)
   const shaftTimberParts = [];
-  const beamHeights = [18.2, 15.0, 12.2, 9.4, 6.2, 3.6];
+  const shaftChainParts = [];
+  const beamHeights = [20.5, 17.4, 14.2, 11.2, 8.2, 5.2, 2.8];
   for (let i = 0; i < beamHeights.length; i++) {
     const by = beamHeights[i];
-    const ang = i * 1.18 + 0.4;
+    const ang = i * 1.18 + 0.42;
     const side = (i % 2 === 0) ? 1 : -1;
-    // Offset chord safely outside r=3.85m so falling hero (r=0) & camera (r=3.16m) sweep past without clipping!
-    const offsetR = 4.05 + (i % 3) * 0.42;
-    const beamLen = 7.6;
-    const beam = new THREE.BoxGeometry(beamLen, 0.36, 0.40);
+    const topPinch = 1.0 - smoothstep(14.5, 25.8, by) * 0.56;
+    const wallR = 6.7 * topPinch;
+    // Snapped jutting broken timber stub anchored in stone wall (never crossing center camera view!)
+    const stubA = 1.85 + shaftRng() * 0.75;
+    const beam = new THREE.BoxGeometry(stubA, 0.30, 0.34);
     xformGeo(
       beam,
-      Math.cos(ang) * offsetR * side,
+      Math.cos(ang) * (wallR - stubA * 0.38) * side,
       by,
-      Math.sin(ang) * offsetR * side,
-      (shaftRng() - 0.5) * 0.14,
-      ang + Math.PI * 0.5,
-      (shaftRng() - 0.5) * 0.18
+      Math.sin(ang) * (wallR - stubA * 0.38) * side,
+      (shaftRng() - 0.5) * 0.16,
+      -ang,
+      side * (0.18 + shaftRng() * 0.22)
     );
-    shaftTimberParts.push(tintGeo(THREE, beam, 0x453830, 0x241d19));
+    shaftTimberParts.push(tintGeo(THREE, beam, 0x625044, 0x2b221c));
 
-    // Snapped jutting stub on opposite side
-    const stubLen = 2.1 + shaftRng() * 0.9;
-    const stub = new THREE.BoxGeometry(stubLen, 0.30, 0.32);
+    // Opposite snapped splintered stub
+    const stubLen = 1.55 + shaftRng() * 0.75;
+    const stub = new THREE.BoxGeometry(stubLen, 0.26, 0.28);
     xformGeo(
       stub,
-      -Math.cos(ang) * 5.0 * side,
-      by - 0.7,
-      -Math.sin(ang) * 5.0 * side,
-      0.12,
-      ang,
-      side * 0.28
+      -Math.cos(ang) * (wallR - stubLen * 0.36) * side,
+      by - 0.65,
+      -Math.sin(ang) * (wallR - stubLen * 0.36) * side,
+      0.14,
+      -ang,
+      -side * (0.22 + shaftRng() * 0.18)
     );
-    shaftTimberParts.push(tintGeo(THREE, stub, 0x3b3029, 0x1d1714));
+    shaftTimberParts.push(tintGeo(THREE, stub, 0x524339, 0x221b17));
 
-    // Hanging twisted subterranean roots draping down the walls
-    const root = new THREE.CylinderGeometry(0.06, 0.14, 4.2 + shaftRng() * 2.5, 6);
-    xformGeo(
-      root,
-      Math.cos(ang + 0.9) * 5.3,
-      by - 1.4,
-      Math.sin(ang + 0.9) * 5.3,
-      (shaftRng() - 0.5) * 0.28,
-      ang,
-      (shaftRng() - 0.5) * 0.32
-    );
-    shaftTimberParts.push(tintGeo(THREE, root, 0x352e27, 0x1c1815));
+    // Twisting hanging subterranean root clusters draping down shaft masonry
+    for (let rt = 0; rt < 2; rt++) {
+      const ra = ang + 0.85 + rt * 1.45;
+      if (Math.sin(ra) > 0.55 && by < 10.0) continue;
+      const rootLen = 3.8 + shaftRng() * 2.8;
+      const root = new THREE.CylinderGeometry(0.045, 0.13, rootLen, 6);
+      xformGeo(
+        root,
+        Math.cos(ra) * (5.6 * topPinch),
+        by - 1.5,
+        Math.sin(ra) * (5.6 * topPinch),
+        (shaftRng() - 0.5) * 0.26,
+        ra,
+        (shaftRng() - 0.5) * 0.30
+      );
+      shaftTimberParts.push(tintGeo(THREE, root, 0x3f362d, 0x1d1915));
+    }
+
+    // Hanging rusted iron chains dangling from the stone rings!
+    const ca = ang + 2.25;
+    if (!(Math.sin(ca) > 0.50 && by < 11.0)) {
+      const chainR = 5.45 * topPinch;
+      addHangingChainParts(
+        THREE,
+        shaftChainParts,
+        Math.cos(ca) * chainR,
+        by + 0.6,
+        Math.sin(ca) * chainR,
+        isMobile ? 9 : 14,
+        0.25,
+        Math.cos(ca) * -0.18,
+        Math.sin(ca) * -0.18
+      );
+    }
   }
-  const shaftTimberMat = trackMat(new THREE.MeshStandardMaterial({
-    map: basaltPbr.albedo,
-    roughness: 0.94,
-    metalness: 0.04,
-    vertexColors: true,
-    color: 0x807268
-  }));
+  // Extra hanging chains along tunnel vault piers approaching the grate
+  for (let cz = 11.5; cz <= 21.5; cz += 5.0) {
+    for (const sx of [-4.8, 4.8]) {
+      addHangingChainParts(THREE, shaftChainParts, sx, 6.2, cz, isMobile ? 7 : 10, 0.24, 0, 0.14);
+    }
+  }
+
   const shaftTimbersMesh = new THREE.Mesh(
-    trackGeo(mergeNonIndexedGeos(THREE, shaftTimberParts, { boxUvTile: 2.0, withColor: true })),
+    trackGeo(mergeNonIndexedGeos(THREE, shaftTimberParts, { boxUvTile: 1.8, withColor: true })),
     shaftTimberMat
   );
   shaftAndRiverGroup.add(shaftTimbersMesh);
 
-  // 3. Distant Glowing Crimson Breach High Overhead at y = +22.2m (looking back up to the Throne Hall!)
+  const shaftChainsMesh = new THREE.Mesh(
+    trackGeo(mergeNonIndexedGeos(THREE, shaftChainParts, { boxUvTile: 0.8 })),
+    rustedGrateMat
+  );
+  shaftAndRiverGroup.add(shaftChainsMesh);
+
+  // 3. REAL Jagged Throne Hall Overhead Breach (y = +25.4m) + Dark Cathedral Vault Glimpse + 3 Volumetric Crimson-Gold God-Ray Cones!
+  //    (Replaces the old flat orange star with real architectural depth & volumetric light!)
   const shaftTopGlowUniforms = { uTime: { value: 0.0 } };
-  const shaftTopGlowMat = trackMat(new THREE.ShaderMaterial({
+  const shaftBreachSkyMat = trackMat(new THREE.ShaderMaterial({
     uniforms: shaftTopGlowUniforms,
     vertexShader: `
       varying vec2 vUv;
@@ -2092,35 +2379,52 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     fragmentShader: `
       uniform float uTime;
       varying vec2 vUv;
+      float hash21(vec2 p) {
+        p = fract(p * vec2(127.1, 311.7));
+        p += dot(p, p + 34.53);
+        return fract(p.x * p.y);
+      }
+      float vnoise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        return mix(
+          mix(hash21(i), hash21(i + vec2(1.0, 0.0)), f.x),
+          mix(hash21(i + vec2(0.0, 1.0)), hash21(i + vec2(1.0, 1.0)), f.x),
+          f.y
+        );
+      }
       void main() {
         vec2 p = vUv * 2.0 - 1.0;
         float r = length(p);
-        float ang = atan(p.y, p.x);
-        float jag = 0.58 + 0.12 * sin(ang * 5.0 + 0.3) + 0.08 * cos(ang * 9.0 - 0.7);
-        float hole = 1.0 - smoothstep(jag * 0.65, jag, r);
-        float halo = exp(-r * r * 2.6) * 0.65;
+        // Dark smoky vaulted Throne Hall ceiling + silhouetted cathedral arches glimpsed high above the breach!
+        float smoke1 = vnoise(p * 4.5 + vec2(uTime * 0.18, -uTime * 0.14));
+        float smoke2 = vnoise(p * 9.5 - vec2(uTime * 0.25, uTime * 0.16));
+        float smoke = smoke1 * 0.58 + smoke2 * 0.42;
+        // Bold dark gothic cathedral vaulting ribs & crossed ceiling beams framing the fiery Throne Hall smoke!
+        float ribA = smoothstep(0.055, 0.13, abs(p.x + p.y * 0.42));
+        float ribB = smoothstep(0.055, 0.13, abs(p.y - p.x * 0.42));
+        float ribRing = smoothstep(0.035, 0.085, abs(r - 0.26));
+        float ribs = 0.22 + 0.78 * min(min(ribA, ribB), ribRing);
+        float core = exp(-r * r * 2.8);
         float flick = 0.86 + 0.14 * sin(uTime * 5.4) + 0.06 * sin(uTime * 11.7);
-        vec3 coreCol = mix(vec3(1.15, 0.18, 0.05), vec3(2.2, 0.72, 0.25), smoothstep(0.45, 0.0, r));
-        vec3 col = coreCol * (hole * 1.15 + halo * 0.55) * flick;
-        float alpha = clamp(hole + halo, 0.0, 1.0);
-        if (alpha < 0.01) discard;
-        gl_FragColor = vec4(col, alpha);
+        vec3 hallDark = vec3(0.035, 0.018, 0.032);
+        vec3 fireMist = mix(vec3(0.55, 0.09, 0.025), vec3(1.35, 0.42, 0.10), smoothstep(0.22, 0.86, smoke * 0.75 + core * 0.42));
+        vec3 col = mix(hallDark, fireMist, clamp(core * 0.82 + smoke * 0.34, 0.0, 1.0)) * ribs * flick;
+        gl_FragColor = vec4(col, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }
     `,
-    transparent: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
     fog: false
   }));
-  const shaftTopPortal = new THREE.Mesh(trackGeo(new THREE.PlaneGeometry(9.5, 9.5)), shaftTopGlowMat);
+  const shaftTopPortal = new THREE.Mesh(trackGeo(new THREE.CircleGeometry(7.5, 24)), shaftBreachSkyMat);
   shaftTopPortal.rotation.x = Math.PI * 0.5;
-  shaftTopPortal.position.set(0, 22.1, 0);
+  shaftTopPortal.position.set(0, 25.8, 0);
   shaftAndRiverGroup.add(shaftTopPortal);
 
-  // Subtle crimson shaft dust-cone descending from the Throne Hall breach
+  // 3 Layered Volumetric Crimson-Gold God-Ray Cones descending from the jagged breach!
   const shaftRayMat = trackMat(new THREE.ShaderMaterial({
     uniforms: { uTime: shaftTopGlowUniforms.uTime },
     vertexShader: `
@@ -2141,11 +2445,14 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
       varying vec3 vNorm;
       varying vec3 vView;
       void main() {
-        float fres = pow(abs(dot(normalize(vNorm), normalize(vView))), 1.45);
-        float topFade = smoothstep(0.0, 0.85, vUv.y) * (1.0 - smoothstep(0.92, 1.0, vUv.y));
-        float wisp = 0.75 + 0.25 * sin(vUv.x * 18.84 + uTime * 1.1 + vUv.y * 5.0);
-        float a = fres * topFade * wisp * 0.16;
-        gl_FragColor = vec4(vec3(0.95, 0.22, 0.08), a);
+        float fres = pow(abs(dot(normalize(vNorm), normalize(vView))), 1.75);
+        float topFade = smoothstep(0.0, 0.72, vUv.y) * (1.0 - smoothstep(0.92, 1.0, vUv.y));
+        float streak1 = 0.55 + 0.45 * sin(vUv.x * 25.13 + uTime * 0.65 + vUv.y * 2.5);
+        float streak2 = 0.65 + 0.35 * cos(vUv.x * 43.98 - uTime * 0.45 - vUv.y * 4.0);
+        float a = fres * topFade * streak1 * streak2 * 0.18;
+        if (a < 0.004) discard;
+        vec3 col = mix(vec3(0.92, 0.24, 0.07), vec3(1.45, 0.72, 0.24), smoothstep(0.35, 0.95, vUv.y));
+        gl_FragColor = vec4(col, a);
       }
     `,
     transparent: true,
@@ -2154,19 +2461,28 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     side: THREE.DoubleSide,
     fog: false
   }));
-  const shaftRedBeam = new THREE.Mesh(trackGeo(new THREE.CylinderGeometry(2.6, 5.4, 21.0, 16, 1, true)), shaftRayMat);
-  shaftRedBeam.position.set(0, 11.4, 0);
-  shaftAndRiverGroup.add(shaftRedBeam);
+  const raySpecs = [
+    { rt: 1.85, rb: 4.85, h: 23.0, x: 0.0,  y: 13.0, z: 0.0,  rx:  0.00, rz:  0.00 },
+    { rt: 1.25, rb: 3.40, h: 21.5, x: -0.4, y: 13.6, z: -0.3, rx:  0.05, rz:  0.07 },
+    { rt: 1.15, rb: 3.20, h: 20.5, x:  0.5, y: 14.0, z:  0.2, rx: -0.04, rz: -0.06 }
+  ];
+  for (let i = 0; i < raySpecs.length; i++) {
+    const rs = raySpecs[i];
+    const ray = new THREE.Mesh(trackGeo(new THREE.CylinderGeometry(rs.rt, rs.rb, rs.h, 18, 1, true)), shaftRayMat);
+    ray.position.set(rs.x, rs.y, rs.z);
+    ray.rotation.set(rs.rx, i * 1.1, rs.rz);
+    shaftAndRiverGroup.add(ray);
+  }
 
-  // 4. Rushing Black Underground River (y = 0, z = -7 .. +40m, custom animated GLSL shader!)
+  // 4. AAA Rushing Dark-Slate Underground River (ZERO plastic mercury blobs! Fine FBM rapids, rich foam & teal underwater!)
   const tunnelRiverUniforms = {
     uTime: { value: 0.0 },
     uLowSpec: { value: lowSpecMode ? 1.0 : 0.0 },
     uGrateBroken: { value: 0.0 }
   };
-  const tunnelRiverGeo = trackGeo(new THREE.PlaneGeometry(14.0, 48.0, isMobile ? 20 : 34, isMobile ? 36 : 64));
+  const tunnelRiverGeo = trackGeo(new THREE.PlaneGeometry(14.0, 50.0, isMobile ? 24 : 40, isMobile ? 42 : 76));
   tunnelRiverGeo.rotateX(-Math.PI * 0.5);
-  tunnelRiverGeo.translate(0, 0.0, 16.5);
+  tunnelRiverGeo.translate(0, 0.0, 17.5);
 
   const tunnelRiverMat = trackMat(new THREE.ShaderMaterial({
     uniforms: tunnelRiverUniforms,
@@ -2178,14 +2494,14 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
       void main() {
         vUv = uv;
         vec3 p = position;
-        float t = uTime * 3.8;
-        // Fast surging subterranean rapids racing along +Z toward the outfall grate!
-        float w1 = sin(p.z * 0.65 - t * 2.1 + sin(p.x * 0.8) * 1.2) * 0.14;
-        float w2 = cos(p.x * 1.35 + p.z * 1.05 - t * 2.8) * 0.07;
-        // Extra churning turbulence at the shaft plunge splash (z~0) and grate impact (z~26)!
-        float splashZone = exp(-dot(p.xz, p.xz) * 0.065) * 0.22;
-        float grateChurn = exp(-pow(p.z - 25.5, 2.0) * 0.14) * 0.18;
-        float disp = w1 + w2 + (splashZone + grateChurn) * sin(t * 3.6 + p.x * 2.5);
+        float t = uTime * 3.6;
+        // Restrained physical chop (ZERO thick bulbous mercury waves!)
+        float w1 = sin(p.z * 0.85 - t * 2.2 + sin(p.x * 1.15) * 0.9) * 0.048;
+        float w2 = cos(p.x * 1.85 + p.z * 1.45 - t * 3.1) * 0.026;
+        float w3 = sin(p.x * 3.2 - p.z * 2.1 - t * 4.0) * 0.014;
+        float splashZone = exp(-dot(p.xz, p.xz) * 0.085) * 0.11;
+        float grateChurn = exp(-pow(p.z - 25.8, 2.0) * 0.18) * 0.09;
+        float disp = w1 + w2 + w3 + (splashZone + grateChurn) * sin(t * 4.2 + p.x * 3.2);
         p.y += disp;
         vWaveH = disp;
         vec4 wp = modelMatrix * vec4(p, 1.0);
@@ -2216,66 +2532,86 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
           f.y
         );
       }
-      float fbm(vec2 p) {
+      float fbm4(vec2 p) {
         float v = 0.0;
-        float a = 0.55;
-        for (int i = 0; i < 3; i++) {
+        float a = 0.50;
+        for (int i = 0; i < 4; i++) {
           v += a * vnoise(p);
-          p = p * 2.08 + vec2(13.1, 7.7);
+          p = p * 2.12 + vec2(11.3, 7.1);
           a *= 0.48;
         }
         return v;
       }
+      float fbm2(vec2 p) {
+        return vnoise(p) * 0.65 + vnoise(p * 2.2 + vec2(9.1, 5.7)) * 0.35;
+      }
 
       void main() {
-        float flowT = uTime * 3.4;
-        vec2 flowUv = vec2(vWorldPos.x * 0.85, vWorldPos.z * 0.42 - flowT);
-        float n1 = fbm(flowUv);
-        float n2 = uLowSpec < 0.5 ? fbm(flowUv * 2.4 + vec2(n1 * 1.5, -flowT * 0.6)) : n1;
-        float nX = fbm(flowUv + vec2(0.14, 0.0));
-        float nZ = fbm(flowUv + vec2(0.0, 0.14));
-        float ripple = n1 * 0.52 + n2 * 0.48;
+        float flowT = uTime * 3.2;
+        // High-frequency elongated current ripples racing down +Z
+        vec2 flowA = vec2(vWorldPos.x * 1.45, vWorldPos.z * 0.58 - flowT * 1.15);
+        vec2 flowB = vec2(vWorldPos.x * 2.65 + 4.2, vWorldPos.z * 1.12 - flowT * 1.72);
+        float nA = uLowSpec < 0.5 ? fbm4(flowA) : fbm2(flowA);
+        float nB = uLowSpec < 0.5 ? fbm4(flowB + vec2(nA * 0.85, -flowT * 0.35)) : fbm2(flowB);
+        float h0 = nA * 0.55 + nB * 0.45;
 
-        // Crisp finite-difference turbulent water normal (glinting dark obsidian rapids!)
-        vec3 N = normalize(vec3((n1 - nX) * 4.2, 1.0, (n1 - nZ) * 4.6));
+        // Crisp fine-scale micro-ripple normal (subtle slope -> matte slate water, ZERO oily plastic sheen!)
+        float eps = 0.09;
+        float hX = (fbm2(flowA + vec2(eps, 0.0)) * 0.55 + fbm2(flowB + vec2(eps * 1.6, 0.0)) * 0.45);
+        float hZ = (fbm2(flowA + vec2(0.0, eps)) * 0.55 + fbm2(flowB + vec2(0.0, eps * 1.6)) * 0.45);
+        vec3 N = normalize(vec3((h0 - hX) * 2.1, 1.0, (h0 - hZ) * 2.4));
         vec3 V = normalize(cameraPosition - vWorldPos);
-        float fres = pow(1.0 - max(dot(N, V), 0.0), 4.0);
+        float ndotv = max(dot(N, V), 0.0);
+        float fres = pow(1.0 - ndotv, 4.5);
 
-        // Deep obsidian-black subterranean river water (glossy dark rapids w/ crisp moonlight glints!)
-        vec3 deepCol    = vec3(0.002, 0.005, 0.011);
-        vec3 shallowCol = vec3(0.010, 0.022, 0.042);
-        vec3 col = mix(deepCol, shallowCol, clamp(ripple * 0.42 + fres * 0.48, 0.0, 1.0));
+        // Deep matte dark-slate subterranean river water with spatially varying roughness
+        float moonReach = smoothstep(5.0, 29.0, vWorldPos.z);
+        vec3 deepSlate  = vec3(0.007, 0.014, 0.022);
+        vec3 turbidTeal = vec3(0.018, 0.036, 0.048);
+        vec3 skyTint    = vec3(0.095, 0.145, 0.225);
+        vec3 col = mix(deepSlate, turbidTeal, clamp(h0 * 0.52 + moonReach * 0.25, 0.0, 1.0));
+        col = mix(col, skyTint, fres * (0.20 + 0.36 * moonReach));
 
-        // Razor-sharp silver moonlight reflections dancing on black wave crests from the grate exit!
-        vec3 moonPos = vec3(0.0, 5.4, 34.0);
+        // Soft restrained silver moonlight path from the outfall exit + fine broken ripple glints
+        vec3 moonPos = vec3(0.0, 5.2, 37.0);
         vec3 Lm = normalize(moonPos - vWorldPos);
         vec3 Hm = normalize(Lm + V);
-        float moonReach = smoothstep(6.0, 27.5, vWorldPos.z);
-        float moonSpec = pow(max(dot(N, Hm), 0.0), 115.0) * (0.45 + 2.15 * moonReach);
-        float broadSheen = pow(max(dot(N, Hm), 0.0), 22.0) * 0.075 * moonReach;
-        col += vec3(0.52, 0.72, 1.02) * (moonSpec + broadSheen + fres * 0.14 * moonReach);
+        float roughVar = mix(42.0, 140.0, smoothstep(0.35, 0.80, nB));
+        float moonGlint = pow(max(dot(N, Hm), 0.0), roughVar) * (0.25 + 1.15 * moonReach);
+        float softMoonPath = pow(max(dot(N, Hm), 0.0), 14.0) * 0.08 * moonReach * smoothstep(5.5, 0.0, abs(vWorldPos.x));
+        col += vec3(0.56, 0.74, 0.96) * (moonGlint * 0.75 + softMoonPath);
 
-        // Eerie warm crimson reflection near the vertical shaft drop (z ~ 0)
-        float shaftProx = exp(-dot(vWorldPos.xz, vWorldPos.xz) * 0.025);
-        vec3 Lr = normalize(vec3(0.0, 18.0, 0.0) - vWorldPos);
+        // Warm crimson-amber reflections near the vertical shaft drop (z ~ 0)
+        float shaftProx = exp(-dot(vWorldPos.xz, vWorldPos.xz) * 0.028);
+        vec3 Lr = normalize(vec3(0.0, 20.0, 0.0) - vWorldPos);
         vec3 Hr = normalize(Lr + V);
-        float redSpec = pow(max(dot(N, Hr), 0.0), 40.0) * shaftProx;
-        col += vec3(0.95, 0.22, 0.08) * (redSpec * 0.90 + shaftProx * 0.04);
+        float redSpec = pow(max(dot(N, Hr), 0.0), 48.0) * shaftProx;
+        col += vec3(0.95, 0.26, 0.08) * (redSpec * 0.65 + shaftProx * 0.055);
 
-        // Lacy whitewater foam ribbons ONLY on banks, sharp wave crests & grate impact (keeps river unmistakably BLACK!)
-        float lacy = smoothstep(0.62, 0.88, n2);
-        float bankFoam = smoothstep(4.55, 5.75, abs(vWorldPos.x)) * lacy * 0.62;
-        float crestFoam = smoothstep(0.80, 0.94, ripple + vWaveH * 0.45) * 0.42;
-        float splashFoam = exp(-dot(vWorldPos.xz, vWorldPos.xz) * 0.11) * smoothstep(0.52, 0.84, n2) * 0.65;
-        float grateFoam = exp(-pow(vWorldPos.z - 25.8, 2.0) * 0.25) * (0.42 + 0.42 * uGrateBroken) * smoothstep(0.48, 0.84, n2);
-        float foam = clamp(bankFoam + crestFoam + splashFoam + grateFoam, 0.0, 0.82);
-        vec3 foamCol = mix(vec3(0.18, 0.28, 0.42), vec3(0.62, 0.76, 0.94), moonReach * 0.68 + 0.22);
-        col = mix(col, foamCol, foam * 0.72);
+        // CRISP LACY WHITEWATER FOAM: fine filament current streaks + wet stone bank foam + plunge & grate boil!
+        float streakUv = vnoise(vec2(vWorldPos.x * 3.8 + nA * 1.4, vWorldPos.z * 0.34 - flowT * 0.92));
+        float fineLace = smoothstep(0.56, 0.88, nB);
+        float rapidsStreaks = smoothstep(0.70, 0.92, streakUv * 0.62 + nB * 0.48) * smoothstep(0.50, 0.84, h0) * 0.56;
+        float bankMask = smoothstep(4.25, 5.65, abs(vWorldPos.x));
+        float edgeFoam = bankMask * smoothstep(0.42, 0.82, nB * 0.68 + nA * 0.38) * 0.82;
+        float splashFoam = exp(-dot(vWorldPos.xz, vWorldPos.xz) * 0.11) * smoothstep(0.42, 0.82, nB) * 0.78;
+        float grateBand = exp(-pow(vWorldPos.z - 25.9, 2.0) * 0.24);
+        float grateFoam = grateBand * (0.46 + 0.52 * uGrateBroken) * smoothstep(0.38, 0.80, nB * 0.65 + streakUv * 0.35);
+        float foam = clamp(rapidsStreaks + edgeFoam + splashFoam + grateFoam + fineLace * max(0.0, vWaveH * 2.8), 0.0, 0.86);
 
-        // When camera submerges underwater (py < 0), render backlit refracted aquatic ceiling ripples!
+        vec3 foamDark = vec3(0.24, 0.34, 0.46);
+        vec3 foamLit  = vec3(0.72, 0.82, 0.94);
+        vec3 foamCol  = mix(foamDark, foamLit, clamp(moonReach * 0.72 + 0.18 + grateBand * 0.22, 0.0, 1.0));
+        col = mix(col, foamCol, foam * 0.78);
+
+        // Deep turquoise-teal backlit underwater view when camera submerges (camY < 0)!
         if (!gl_FrontFacing) {
-          vec3 underCol = mix(vec3(0.015, 0.048, 0.075), vec3(0.36, 0.58, 0.78), smoothstep(0.38, 0.88, ripple) * (0.45 + 0.55 * moonReach));
-          underCol += vec3(0.45, 0.12, 0.05) * shaftProx * 0.65;
+          float caustic = pow(clamp(nB * 0.65 + nA * 0.45, 0.0, 1.0), 2.4);
+          vec3 deepTeal = vec3(0.012, 0.052, 0.072);
+          vec3 brightAqua = vec3(0.18, 0.48, 0.62);
+          vec3 underCol = mix(deepTeal, brightAqua, caustic * (0.45 + 0.55 * moonReach));
+          underCol += vec3(0.42, 0.14, 0.06) * shaftProx * 0.55;
+          underCol += vec3(0.45, 0.72, 0.88) * smoothstep(0.72, 0.95, h0) * moonReach * 0.45;
           col = underCol;
         }
 
@@ -2289,91 +2625,192 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   const tunnelRiverMesh = new THREE.Mesh(tunnelRiverGeo, tunnelRiverMat);
   shaftAndRiverGroup.add(tunnelRiverMesh);
 
-  // 5. Massive Rusty Iron Outfall Grate at z = +26.0m (with hinged/snapping central bars for `triggerGrateBreak()`!)
+  // 5. Heavy Forged Rusty Iron Outfall Grate at z = +26.0m with EXPLOSIVE 5-Bar Break & 6 Flying Debris Shards!
   const grateGroup = new THREE.Group();
   grateGroup.position.set(0, 0, 26.0);
   shaftAndRiverGroup.add(grateGroup);
 
-  // Heavy fixed stone-mounted outer iron frame & side portcullis bars
   const grateFrameParts = [];
-  // Top heavy iron lintel & bottom submerged sill beam
-  grateFrameParts.push(xformGeo(new THREE.BoxGeometry(11.6, 0.48, 0.48), 0, 7.6, 0));
-  grateFrameParts.push(xformGeo(new THREE.BoxGeometry(11.6, 0.36, 0.38), 0, 4.9, 0));
-  grateFrameParts.push(xformGeo(new THREE.BoxGeometry(11.6, 0.32, 0.36), 0, 0.4, 0));
-  // Fixed outer flank vertical bars (|x| >= 2.8)
-  const outerBarXs = [-4.9, -4.1, -3.3, 3.3, 4.1, 4.9];
+  // Top riveted iron lintel, upper transom, submerged sill & heavy stone-bolted side jambs
+  grateFrameParts.push(xformGeo(new THREE.BoxGeometry(11.8, 0.54, 0.52), 0, 7.65, 0));
+  grateFrameParts.push(xformGeo(new THREE.BoxGeometry(11.8, 0.36, 0.40), 0, 5.55, 0));
+  grateFrameParts.push(xformGeo(new THREE.BoxGeometry(11.8, 0.34, 0.38), 0, 0.15, 0));
+  // Heavy forged side jamb brackets & rivet studs
+  for (const sx of [-5.35, 5.35]) {
+    grateFrameParts.push(xformGeo(new THREE.BoxGeometry(0.72, 8.8, 0.72), sx, 3.7, 0));
+    for (let ry = 1.0; ry <= 7.0; ry += 1.5) {
+      grateFrameParts.push(xformGeo(new THREE.BoxGeometry(0.18, 0.18, 0.86), sx, ry, 0));
+    }
+  }
+  // Fixed outer flank forged vertical bars (|x| >= 2.45 -> leaves massive 3.9m central breach when center 5 bars shatter!)
+  const outerBarXs = [-4.85, -4.05, -3.25, -2.45, 2.45, 3.25, 4.05, 4.85];
   for (let i = 0; i < outerBarXs.length; i++) {
-    grateFrameParts.push(xformGeo(new THREE.CylinderGeometry(0.11, 0.12, 8.6, 8), outerBarXs[i], 3.7, 0));
+    const bx = outerBarXs[i];
+    grateFrameParts.push(xformGeo(new THREE.CylinderGeometry(0.115, 0.125, 8.6, 8), bx, 3.7, 0));
+    // Forged collar clasps & rivets at cross-bar intersections
+    for (const cy of [0.22, 2.75, 5.55]) {
+      grateFrameParts.push(xformGeo(new THREE.BoxGeometry(0.32, 0.28, 0.44), bx, cy, 0));
+    }
   }
-  // Riveted gusset brackets
-  for (const sx of [-5.3, 5.3]) {
-    grateFrameParts.push(xformGeo(new THREE.BoxGeometry(0.65, 8.6, 0.65), sx, 3.7, 0));
-  }
+  // Outer fixed side cross-bar stubs flanking the central breach
+  grateFrameParts.push(xformGeo(new THREE.BoxGeometry(3.2, 0.30, 0.34), -3.85, 2.75, 0.04));
+  grateFrameParts.push(xformGeo(new THREE.BoxGeometry(3.2, 0.30, 0.34),  3.85, 2.75, 0.04));
+  // Hanging rusted chains bolted to the upper grate lintel
+  addHangingChainParts(THREE, grateFrameParts, -2.85, 7.3, 0.25, 8, 0.22, -0.08, 0.12);
+  addHangingChainParts(THREE, grateFrameParts,  2.85, 7.3, 0.25, 8, 0.22,  0.08, 0.12);
+
   const grateFrameMesh = new THREE.Mesh(
-    trackGeo(mergeNonIndexedGeos(THREE, grateFrameParts, { boxUvTile: 1.6 })),
+    trackGeo(mergeNonIndexedGeos(THREE, grateFrameParts, { boxUvTile: 1.5 })),
     rustedGrateMat
   );
   grateGroup.add(grateFrameMesh);
 
-  // 7 Breakable Central Iron Bars (upper & lower halves that violently snap & blast outward into +Z!)
-  const breakableBars = [];
-  const centralBarGeo = trackGeo(new THREE.CylinderGeometry(0.105, 0.115, 4.1, 8));
-  const centralCrossGeo = trackGeo(new THREE.BoxGeometry(5.6, 0.28, 0.30));
+  // Damp mossy clumps clinging to lower grate frame corners
+  const grateMossParts = [];
+  for (const sx of [-4.7, -3.6, 3.6, 4.7]) {
+    const mp = buildSculptedRockGeo(THREE, 0.42, 6900 + Math.abs(sx * 10), 0.52, 1);
+    xformGeo(mp, sx, 0.55, 0.22);
+    grateMossParts.push(tintGeo(THREE, mp, 0x2a4534, 0x132219));
+  }
+  const grateMossMat = trackMat(new THREE.MeshStandardMaterial({
+    roughness: 0.94,
+    metalness: 0.02,
+    vertexColors: true
+  }));
+  grateGroup.add(new THREE.Mesh(trackGeo(mergeNonIndexedGeos(THREE, grateMossParts, { withColor: true })), grateMossMat));
 
-  for (let i = -3; i <= 3; i++) {
+  // CENTRAL 5 BREAKABLE FORGED IRON BARS (x = -1.6, -0.8, 0.0, +0.8, +1.6 -> 3.8m+ CLEAN OPEN BREACH!)
+  // Each bar splits cleanly at mid-height and rips violently OUTWARD +Z by 78–96 degrees!
+  const breakableBars = [];
+  const centralUpperBarGeo = trackGeo((() => {
+    const parts = [];
+    parts.push(xformGeo(new THREE.CylinderGeometry(0.11, 0.12, 3.85, 8), 0, -1.92, 0));
+    // Forged iron collar band + jagged snapped tip cone
+    parts.push(xformGeo(new THREE.BoxGeometry(0.32, 0.26, 0.38), 0, -1.85, 0));
+    parts.push(xformGeo(new THREE.ConeGeometry(0.11, 0.36, 5), 0, -3.96, 0, Math.PI, 0, 0));
+    return mergeNonIndexedGeos(THREE, parts, { boxUvTile: 1.2 });
+  })());
+  const centralLowerBarGeo = trackGeo((() => {
+    const parts = [];
+    parts.push(xformGeo(new THREE.CylinderGeometry(0.11, 0.125, 3.75, 8), 0, 1.88, 0));
+    parts.push(xformGeo(new THREE.BoxGeometry(0.32, 0.26, 0.38), 0, 0.52, 0));
+    parts.push(xformGeo(new THREE.ConeGeometry(0.105, 0.34, 5), 0, 3.86, 0));
+    return mergeNonIndexedGeos(THREE, parts, { boxUvTile: 1.2 });
+  })());
+
+  for (let i = -2; i <= 2; i++) {
     const bx = i * 0.80;
-    // Top half pivots from y = 7.4 downward/outward into +Z
     const topPivot = new THREE.Group();
-    topPivot.position.set(bx, 7.4, 0);
-    const topBar = new THREE.Mesh(centralBarGeo, rustedGrateMat);
-    topBar.position.y = -2.05;
+    topPivot.position.set(bx, 7.45, 0);
+    const topBar = new THREE.Mesh(centralUpperBarGeo, rustedGrateMat);
     topPivot.add(topBar);
     grateGroup.add(topPivot);
 
-    // Bottom half pivots from y = 0.0 outward into +Z
     const botPivot = new THREE.Group();
-    botPivot.position.set(bx, -0.3, 0);
-    const botBar = new THREE.Mesh(centralBarGeo, rustedGrateMat);
-    botBar.position.y = 2.05;
+    botPivot.position.set(bx, -0.35, 0);
+    const botBar = new THREE.Mesh(centralLowerBarGeo, rustedGrateMat);
     botPivot.add(botBar);
     grateGroup.add(botPivot);
 
-    const spread = (i / 3.0) * 0.52;
-    const isCenter = Math.abs(i) <= 1;
+    // ALL 5 central bars bend violently outward 78..96 deg (1.36..1.68 rad) & splay sideways for a HUGE clean breach!
+    const absI = Math.abs(i);
+    const splaySign = i === 0 ? 0.18 : Math.sign(i);
     breakableBars.push({
       topPivot,
       botPivot,
-      targetTopRx: -(isCenter ? 1.28 : 0.72 + Math.abs(i) * 0.12),
-      targetBotRx:  (isCenter ? 1.18 : 0.65 + Math.abs(i) * 0.10),
-      targetRz: spread * (isCenter ? 0.65 : 0.95),
-      delay: Math.abs(i) * 0.035
+      targetTopRx: -(absI === 0 ? 1.66 : absI === 1 ? 1.54 : 1.40), // -80 to -95 deg outward (+Z)
+      targetBotRx:  (absI === 0 ? 1.58 : absI === 1 ? 1.48 : 1.36), // +78 to +91 deg outward (+Z)
+      targetRz: splaySign * (absI === 0 ? 0.14 : absI === 1 ? 0.38 : 0.62),
+      delay: absI * 0.028
     });
   }
-  // Central horizontal bar that snaps & flies forward
-  const brokenMidCross = new THREE.Mesh(centralCrossGeo, rustedGrateMat);
-  brokenMidCross.position.set(0, 2.75, 0.06);
-  grateGroup.add(brokenMidCross);
 
-  // 6. Cold Moonlight Sky Portal & Volumetric Moonbeams Streaming In Through the Grate (z = +26..+54m!)
+  // Central riveted horizontal locking crossbar splits into left & right hinged halves swinging wide open!
+  const crossHalfGeo = trackGeo(new THREE.BoxGeometry(2.35, 0.30, 0.34));
+  const crossLeftPivot = new THREE.Group();
+  crossLeftPivot.position.set(-2.25, 2.75, 0.06);
+  const crossLeftMesh = new THREE.Mesh(crossHalfGeo, rustedGrateMat);
+  crossLeftMesh.position.x = 1.15;
+  crossLeftPivot.add(crossLeftMesh);
+  grateGroup.add(crossLeftPivot);
+
+  const crossRightPivot = new THREE.Group();
+  crossRightPivot.position.set(2.25, 2.75, 0.06);
+  const crossRightMesh = new THREE.Mesh(crossHalfGeo, rustedGrateMat);
+  crossRightMesh.position.x = -1.15;
+  crossRightPivot.add(crossRightMesh);
+  grateGroup.add(crossRightPivot);
+
+  // 6 Flying 3D Broken Iron Bar Debris Shards blasting outward (+Z) on grate break!
+  const debrisShardGeo = trackGeo(new THREE.CylinderGeometry(0.085, 0.105, 1.35, 7));
+  const grateDebris = [];
+  const debrisSpecs = [
+    { x: -1.1, y: 3.1, vx: -2.8, vy: 4.2, vz: 14.5, rx: 5.8, ry: 3.2, rz: 4.4 },
+    { x: -0.4, y: 2.3, vx: -1.4, vy: 5.5, vz: 17.0, rx: -6.4, ry: 4.1, rz: -3.5 },
+    { x:  0.1, y: 3.8, vx:  0.8, vy: 6.2, vz: 18.2, rx: 7.2, ry: -3.8, rz: 5.1 },
+    { x:  0.7, y: 2.6, vx:  2.2, vy: 4.8, vz: 15.8, rx: -5.2, ry: -4.6, rz: -6.0 },
+    { x:  1.3, y: 3.4, vx:  3.4, vy: 3.9, vz: 13.6, rx: 4.8, ry: 5.2, rz: 3.8 },
+    { x: -0.2, y: 1.7, vx: -0.6, vy: 3.1, vz: 16.4, rx: -7.0, ry: 2.4, rz: 4.9 }
+  ];
+  for (let i = 0; i < debrisSpecs.length; i++) {
+    const ds = debrisSpecs[i];
+    const m = new THREE.Mesh(debrisShardGeo, rustedGrateMat);
+    m.visible = false;
+    grateGroup.add(m);
+    grateDebris.push({ mesh: m, ...ds });
+  }
+
+  // 6. Atmospheric Moonlit Night Gorge Exit Portal & Slanting Moonlight Shafts (z = +26..+44m!)
   const tunnelMoonBackdropMat = trackMat(new THREE.ShaderMaterial({
     uniforms: { uTime: tunnelRiverUniforms.uTime },
     vertexShader: `
       varying vec2 vUv;
+      varying vec3 vWorldPos;
       void main() {
         vUv = uv;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vWorldPos = wp.xyz;
+        gl_Position = projectionMatrix * viewMatrix * wp;
       }
     `,
     fragmentShader: `
       uniform float uTime;
       varying vec2 vUv;
+      varying vec3 vWorldPos;
+      float hash21(vec2 p) {
+        p = fract(p * vec2(127.1, 311.7));
+        p += dot(p, p + 34.53);
+        return fract(p.x * p.y);
+      }
+      float vnoise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        return mix(
+          mix(hash21(i), hash21(i + vec2(1.0, 0.0)), f.x),
+          mix(hash21(i + vec2(0.0, 1.0)), hash21(i + vec2(1.0, 1.0)), f.x),
+          f.y
+        );
+      }
       void main() {
         vec2 p = vUv * 2.0 - 1.0;
-        float glow = exp(-dot(p - vec2(0.0, 0.16), p - vec2(0.0, 0.16)) * 2.8);
-        float mist = 0.5 + 0.5 * sin(p.x * 4.5 + uTime * 0.6) * cos(p.y * 3.2 - uTime * 0.4);
-        vec3 nightCol = vec3(0.035, 0.062, 0.125);
-        vec3 moonCol = vec3(0.46, 0.64, 0.90);
-        vec3 col = mix(nightCol, moonCol, clamp(glow * 0.95 + mist * 0.08, 0.0, 1.0));
+        // Underwater sub-surface band (y < 0.05): murky deep teal-black abyss so underwater camera sees ZERO bright cyan strip!
+        if (vWorldPos.y < 0.08) {
+          float uwFade = smoothstep(-1.4, 0.08, vWorldPos.y);
+          vec3 uwCol = mix(vec3(0.008, 0.024, 0.036), vec3(0.022, 0.064, 0.088), uwFade);
+          gl_FragColor = vec4(uwCol, 1.0);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+          return;
+        }
+        // Moody nocturnal moonlit gorge mist outside tunnel exit (never harsh overexposed white!)
+        float mist = vnoise(p * 3.4 + vec2(uTime * 0.08, -uTime * 0.05)) * 0.62 +
+                     vnoise(p * 7.2 - vec2(uTime * 0.12, uTime * 0.04)) * 0.38;
+        float glow = exp(-dot(p - vec2(0.0, 0.08), p - vec2(0.0, 0.08)) * 2.6);
+        float mistBand = exp(-pow(p.y + 0.16, 2.0) * 5.2) * (0.65 + 0.35 * mist);
+        vec3 nightCol = vec3(0.016, 0.028, 0.062);
+        vec3 moonMist = vec3(0.20, 0.34, 0.56);
+        vec3 col = mix(nightCol, moonMist, clamp(glow * 0.72 + mistBand * 0.42 + mist * 0.10, 0.0, 1.0));
         gl_FragColor = vec4(col, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
@@ -2382,8 +2819,8 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     side: THREE.DoubleSide,
     fog: false
   }));
-  const tunnelMoonBackdrop = new THREE.Mesh(trackGeo(new THREE.PlaneGeometry(34, 24)), tunnelMoonBackdropMat);
-  tunnelMoonBackdrop.position.set(0, 5.2, 42.0);
+  const tunnelMoonBackdrop = new THREE.Mesh(trackGeo(new THREE.PlaneGeometry(36, 26)), tunnelMoonBackdropMat);
+  tunnelMoonBackdrop.position.set(0, 5.2, 43.0);
   tunnelMoonBackdrop.rotation.y = Math.PI;
   shaftAndRiverGroup.add(tunnelMoonBackdrop);
 
@@ -2402,12 +2839,12 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
       varying vec2 vUv;
       void main() {
         float sideFade = sin(vUv.x * 3.14159);
-        float lenFade = smoothstep(0.0, 0.25, vUv.y) * (1.0 - smoothstep(0.45, 1.0, vUv.y));
-        float bars = 0.68 + 0.32 * sin(vUv.x * 22.0 + 0.4);
-        float drift = 0.85 + 0.15 * sin(uTime * 1.2 + vUv.y * 6.0);
-        float a = sideFade * lenFade * bars * drift * 0.24;
+        float lenFade = smoothstep(0.0, 0.22, vUv.y) * (1.0 - smoothstep(0.45, 1.0, vUv.y));
+        float bars = 0.70 + 0.30 * sin(vUv.x * 20.0 + 0.4);
+        float drift = 0.85 + 0.15 * sin(uTime * 1.1 + vUv.y * 6.0);
+        float a = sideFade * lenFade * bars * drift * 0.20;
         if (a < 0.005) discard;
-        gl_FragColor = vec4(vec3(0.58, 0.78, 1.05), a);
+        gl_FragColor = vec4(vec3(0.54, 0.74, 1.02), a);
       }
     `,
     transparent: true,
@@ -2423,19 +2860,19 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     shaftAndRiverGroup.add(beam);
   }
 
-  // 7. Falling Shaft Dust + Grate-Break Sparks & Water Spray Burst (GPU Points!)
-  const SHAFT_DUST_COUNT = isMobile ? 70 : 140;
+  // 7. Falling Shaft Dust & Embers + Grate-Break Sparks & Whitewater Spray Burst!
+  const SHAFT_DUST_COUNT = isMobile ? 85 : 180;
   const shaftDustPos = new Float32Array(SHAFT_DUST_COUNT * 3);
   const shaftDustSeed = new Float32Array(SHAFT_DUST_COUNT * 3);
   for (let i = 0; i < SHAFT_DUST_COUNT; i++) {
     const a = shaftRng() * Math.PI * 2;
-    const r = 0.8 + shaftRng() * 5.2;
+    const r = 0.6 + shaftRng() * 5.1;
     shaftDustPos[i * 3]     = Math.cos(a) * r;
-    shaftDustPos[i * 3 + 1] = shaftRng() * 22.0;
+    shaftDustPos[i * 3 + 1] = shaftRng() * 24.0;
     shaftDustPos[i * 3 + 2] = Math.sin(a) * r;
     shaftDustSeed[i * 3]     = shaftRng();
-    shaftDustSeed[i * 3 + 1] = 0.65 + shaftRng() * 0.85;
-    shaftDustSeed[i * 3 + 2] = 0.7 + shaftRng() * 1.3;
+    shaftDustSeed[i * 3 + 1] = 0.65 + shaftRng() * 0.90;
+    shaftDustSeed[i * 3 + 2] = 0.7 + shaftRng() * 1.4;
   }
   const shaftDustGeo = trackGeo(new THREE.BufferGeometry());
   shaftDustGeo.setAttribute('position', new THREE.BufferAttribute(shaftDustPos, 3));
@@ -2448,15 +2885,15 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
       varying float vAlpha;
       varying float vWarm;
       void main() {
-        float cyc = fract(aSeed.x - uTime * 0.28 * aSeed.y);
+        float cyc = fract(aSeed.x - uTime * 0.26 * aSeed.y);
         vec3 p = position;
-        p.y = cyc * 22.0;
-        p.x += sin(uTime * 1.4 + aSeed.x * 16.0) * 0.28;
+        p.y = cyc * 24.0;
+        p.x += sin(uTime * 1.3 + aSeed.x * 16.0) * 0.32;
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
         gl_Position = projectionMatrix * mv;
-        gl_PointSize = clamp((aSeed.z * 75.0) / max(1.0, -mv.z), 2.5, 22.0);
-        vAlpha = sin(cyc * 3.14159) * 0.55;
-        vWarm = smoothstep(11.0, 21.0, p.y);
+        gl_PointSize = clamp((aSeed.z * 78.0) / max(1.0, -mv.z), 2.5, 22.0);
+        vAlpha = sin(cyc * 3.14159) * 0.62;
+        vWarm = smoothstep(10.0, 22.5, p.y);
       }
     `,
     fragmentShader: `
@@ -2465,7 +2902,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
       varying float vWarm;
       void main() {
         vec4 t = texture2D(uTex, gl_PointCoord);
-        vec3 col = mix(vec3(0.52, 0.66, 0.82), vec3(0.95, 0.36, 0.16), vWarm);
+        vec3 col = mix(vec3(0.55, 0.70, 0.88), vec3(1.25, 0.48, 0.18), vWarm);
         float a = t.a * vAlpha;
         if (a < 0.01) discard;
         gl_FragColor = vec4(col, a);
@@ -2478,19 +2915,19 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   const shaftDustPoints = new THREE.Points(shaftDustGeo, shaftDustMat);
   shaftAndRiverGroup.add(shaftDustPoints);
 
-  // Grate Break Burst (Sparks + Exploding Water Spray at z = +26m!)
-  const GRATE_BURST_COUNT = isMobile ? 48 : 88;
+  // Grate Break Burst (110 Sparks + Exploding Whitewater Spray at z = +26m!)
+  const GRATE_BURST_COUNT = isMobile ? 60 : 112;
   const grateBurstPos = new Float32Array(GRATE_BURST_COUNT * 3);
   const grateBurstVel = new Float32Array(GRATE_BURST_COUNT * 3);
-  const grateBurstKind = new Float32Array(GRATE_BURST_COUNT); // 0 = whitewater spray, 1 = golden iron spark
+  const grateBurstKind = new Float32Array(GRATE_BURST_COUNT);
   for (let i = 0; i < GRATE_BURST_COUNT; i++) {
-    const isSpark = i < Math.floor(GRATE_BURST_COUNT * 0.46);
-    grateBurstPos[i * 3]     = (shaftRng() - 0.5) * 4.8;
-    grateBurstPos[i * 3 + 1] = 0.6 + shaftRng() * 5.2;
-    grateBurstPos[i * 3 + 2] = 25.9;
-    grateBurstVel[i * 3]     = (shaftRng() - 0.5) * (isSpark ? 9.5 : 7.0);
-    grateBurstVel[i * 3 + 1] = (isSpark ? 2.5 : 4.2) + shaftRng() * 5.8;
-    grateBurstVel[i * 3 + 2] = (isSpark ? 6.5 : 8.5) + shaftRng() * 9.5;
+    const isSpark = i < Math.floor(GRATE_BURST_COUNT * 0.48);
+    grateBurstPos[i * 3]     = (shaftRng() - 0.5) * 4.4;
+    grateBurstPos[i * 3 + 1] = 0.5 + shaftRng() * 5.0;
+    grateBurstPos[i * 3 + 2] = 26.0;
+    grateBurstVel[i * 3]     = (shaftRng() - 0.5) * (isSpark ? 10.5 : 8.2);
+    grateBurstVel[i * 3 + 1] = (isSpark ? 2.8 : 4.5) + shaftRng() * 6.2;
+    grateBurstVel[i * 3 + 2] = (isSpark ? 7.5 : 9.5) + shaftRng() * 10.5;
     grateBurstKind[i]        = isSpark ? 1.0 : 0.0;
   }
   const grateBurstGeo = trackGeo(new THREE.BufferGeometry());
@@ -2514,9 +2951,9 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
         vec3 p = position + aVel * t + vec3(0.0, -9.8 * 0.5 * t * t, 0.0);
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
         gl_Position = projectionMatrix * mv;
-        float sz = mix(175.0, 62.0, aKind);
-        gl_PointSize = clamp(sz / max(1.0, -mv.z), 3.0, 56.0);
-        vAlpha = smoothstep(0.0, 0.06, t) * (1.0 - smoothstep(0.45, 1.25, t));
+        float sz = mix(195.0, 72.0, aKind);
+        gl_PointSize = clamp(sz / max(1.0, -mv.z), 3.0, 62.0);
+        vAlpha = smoothstep(0.0, 0.04, t) * (1.0 - smoothstep(0.55, 1.38, t));
         vKind = aKind;
       }
     `,
@@ -2526,10 +2963,10 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
       varying float vKind;
       void main() {
         vec4 t = texture2D(uTex, gl_PointCoord);
-        vec3 sprayCol = vec3(0.76, 0.88, 1.0);
-        vec3 sparkCol = vec3(1.85, 0.96, 0.35);
+        vec3 sprayCol = vec3(0.82, 0.92, 1.0);
+        vec3 sparkCol = vec3(2.15, 1.05, 0.32);
         vec3 col = mix(sprayCol, sparkCol, vKind);
-        float a = t.a * vAlpha * mix(0.68, 1.0, vKind);
+        float a = t.a * vAlpha * mix(0.75, 1.0, vKind);
         if (a < 0.01) discard;
         gl_FragColor = vec4(col, a);
       }
@@ -2543,22 +2980,29 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   grateBurstPoints.frustumCulled = false;
   shaftAndRiverGroup.add(grateBurstPoints);
 
-  // Local lights inside shaftAndRiverGroup (toggled strictly with stageMode === 'shaft_river'!)
-  const shaftCrimsonLight = new THREE.PointLight(0xff4a24, 0.0, 32.0, 1.4);
-  shaftCrimsonLight.position.set(0, 18.0, 0);
-  const tunnelMoonLight = new THREE.PointLight(0x8cbaff, 0.0, 34.0, 1.3);
-  tunnelMoonLight.position.set(0, 5.2, 29.0);
-  const tunnelFillLight = new THREE.PointLight(0x46668c, 0.0, 26.0, 1.4);
-  tunnelFillLight.position.set(0, 3.8, 12.0);
-  shaftAndRiverGroup.add(shaftCrimsonLight, tunnelMoonLight, tunnelFillLight);
+  // Local lights inside shaftAndRiverGroup (warm upper crimson breach + mid shaft bounce + cold moonlight exit!)
+  const shaftCrimsonLight = new THREE.PointLight(0xff5226, 0.0, 36.0, 1.3);
+  shaftCrimsonLight.position.set(0, 20.5, 0);
+  const shaftMidLight = new THREE.PointLight(0x526b92, 0.0, 26.0, 1.3);
+  shaftMidLight.position.set(0, 8.8, 0.5);
+  const tunnelMoonLight = new THREE.PointLight(0x94c2ff, 0.0, 36.0, 1.25);
+  tunnelMoonLight.position.set(0, 5.4, 29.5);
+  const tunnelFillLight = new THREE.PointLight(0x4b6e98, 0.0, 28.0, 1.35);
+  tunnelFillLight.position.set(0, 4.0, 13.5);
+  shaftAndRiverGroup.add(shaftCrimsonLight, shaftMidLight, tunnelMoonLight, tunnelFillLight);
 
   // ==========================================================================
   // GROUP C: `exteriorGroup` — Act 5 & Free-Roam Gameplay: «Берег Пепельного Стока»
   // ==========================================================================
   const extRng = makeRng(90926);
 
+  // Shared canonical Moon direction (frames huge cratered moon upper-left behind Castle of Ash spires!)
+  const MOON_DIR_X = -0.27;
+  const MOON_DIR_Y =  0.43;
+  const MOON_DIR_Z = -0.861;
+
   // --------------------------------------------------------------------------
-  // C1. Nocturnal Exterior Sky Dome + Huge Pale Moon + Drifting Clouds + Stars (1 DC, fog: false)
+  // C1. Nocturnal Gothic Sky Dome + Giant Cratered Moon + 3-Layer Halo + Stars + Night Clouds
   // --------------------------------------------------------------------------
   const extSkyUniforms = {
     uTime: { value: 0.0 },
@@ -2597,67 +3041,139 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
           f.y
         );
       }
+      float fbm3(vec2 p) {
+        return vnoise(p) * 0.56 + vnoise(p * 2.13 + vec2(7.4, 3.9)) * 0.29 + vnoise(p * 4.35 - vec2(5.1, 8.2)) * 0.15;
+      }
+
+      // Procedural impact crater shading: dark shadowed inner bowl + crisp moonlit rim ridge
+      float lunarCrater(vec2 p, vec2 center, float rad, vec2 lightDir2) {
+        vec2 q = (p - center) / rad;
+        float d = length(q);
+        if (d > 1.35) return 0.0;
+        float bowl = -smoothstep(0.95, 0.20, d) * 0.34;
+        float rim = exp(-pow((d - 0.94) * 5.2, 2.0)) * 0.28;
+        float sideLight = dot(normalize(q + vec2(1e-4)), lightDir2);
+        float relief = sideLight * smoothstep(1.15, 0.55, d) * smoothstep(0.15, 0.72, d) * 0.24;
+        return bowl + rim + relief;
+      }
 
       void main() {
         vec3 d = normalize(vDir);
         float elev = clamp(d.y, -0.35, 1.0);
 
-        // Deep nocturnal coastal gothic palette: rich midnight-indigo zenith -> brooding misty horizon
-        vec3 abyssCol   = vec3(0.010, 0.015, 0.028);
-        vec3 horizonCol = vec3(0.044, 0.064, 0.112);
-        vec3 zenithCol  = vec3(0.008, 0.014, 0.032);
+        // Rich brooding Bloodborne / Irithyll nocturnal indigo gradient
+        vec3 abyssCol   = vec3(0.008, 0.013, 0.024);
+        vec3 horizonCol = vec3(0.046, 0.068, 0.118);
+        vec3 midSkyCol  = vec3(0.018, 0.030, 0.062);
+        vec3 zenithCol  = vec3(0.006, 0.011, 0.026);
         vec3 col = elev < 0.0
           ? mix(horizonCol, abyssCol, clamp(-elev * 4.2, 0.0, 1.0))
-          : mix(horizonCol, zenithCol, pow(elev, 0.52));
+          : mix(mix(horizonCol, midSkyCol, smoothstep(0.0, 0.28, elev)), zenithCol, pow(smoothstep(0.15, 1.0, elev), 0.75));
 
-        // HUGE PALE ASHEN MOON framed dramatically in the open night sky right above-left of the Castle of Ash spires!
-        vec3 moonDir = normalize(vec3(-0.26, 0.48, -0.838));
+        // Subtle high-altitude pale indigo nebula band across night sky
+        if (elev > 0.04) {
+          float neb = fbm3(d.xz / (elev + 0.45) * 1.45 + vec2(2.1, -1.7));
+          col += vec3(0.022, 0.036, 0.068) * smoothstep(0.45, 0.85, neb) * smoothstep(0.04, 0.35, elev);
+        }
+
+        // HUGE DETAILED PROCEDURAL CRATERED MOON framed upper-left behind Castle of Ash spires!
+        vec3 moonDir = normalize(vec3(-0.27, 0.43, -0.861));
+        vec3 mRight = normalize(cross(vec3(0.0, 1.0, 0.0), moonDir));
+        vec3 mUp = cross(moonDir, mRight);
         float mDot = dot(d, moonDir);
-        float moonHalo = pow(max(mDot, 0.0), 7.0) * 0.18
-                       + pow(max(mDot, 0.0), 28.0) * 0.30
-                       + pow(max(mDot, 0.0), 110.0) * 0.48;
-        col += vec3(0.36, 0.48, 0.74) * moonHalo;
 
-        // Crisp large full moon disc (~2.2x Souls arena moon!) with lunar maria craters
-        float disc = smoothstep(0.9888, 0.9908, mDot);
+        // 3-Layer Cold Silver-Blue Atmospheric Lunar Halo (tight corona + mid aureole + wide Rayleigh glow!)
+        float haloWide  = pow(max(mDot, 0.0), 5.5) * 0.16;
+        float haloMid   = pow(max(mDot, 0.0), 22.0) * 0.28;
+        float haloTight = pow(max(mDot, 0.0), 95.0) * 0.56;
+        col += vec3(0.28, 0.42, 0.68) * haloWide
+             + vec3(0.44, 0.60, 0.86) * haloMid
+             + vec3(0.68, 0.80, 0.98) * haloTight;
+
+        // Crisp Giant Full Moon Disc (~10 deg angular diameter) w/ lunar maria seas + 6 procedural impact craters!
+        float discEdge0 = 0.9866;
+        float discEdge1 = 0.9886;
+        float disc = smoothstep(discEdge0, discEdge1, mDot);
         if (disc > 0.001) {
-          vec2 mUv = (d.xy - moonDir.xy) * 11.4;
-          float maria = vnoise(mUv * 1.9 + vec2(1.3, 2.7)) * 0.58
-                      + vnoise(mUv * 4.6 - vec2(0.8, 1.4)) * 0.42;
-          float limb = smoothstep(0.9888, 0.9960, mDot);
-          vec3 moonCol = mix(vec3(0.68, 0.76, 0.90), vec3(0.98, 0.99, 1.05), maria) * (0.84 + 0.24 * limb);
+          float angularR = sqrt(max(1e-5, 1.0 - discEdge0 * discEdge0));
+          vec2 mUv = vec2(dot(d, mRight), dot(d, mUp)) / angularR;
+          float mr = length(mUv);
+
+          // Dark basaltic lunar maria (seas) + bright highland regolith
+          float mariaBroad = fbm3(mUv * 1.75 + vec2(1.4, 2.3));
+          float mariaFine  = fbm3(mUv * 4.80 - vec2(0.9, 1.6));
+          float seaMask = smoothstep(0.40, 0.72, mariaBroad * 0.72 + mariaFine * 0.28);
+
+          // 6 Distinct Impact Craters (Tycho-like southern bright crater + Mare Imbrium & Crisium basins!)
+          vec2 sun2 = normalize(vec2(-0.62, 0.78));
+          float craters = 0.0;
+          craters += lunarCrater(mUv, vec2(-0.24,  0.22), 0.34, sun2);
+          craters += lunarCrater(mUv, vec2( 0.32,  0.14), 0.26, sun2);
+          craters += lunarCrater(mUv, vec2(-0.08, -0.34), 0.22, sun2);
+          craters += lunarCrater(mUv, vec2( 0.18, -0.46), 0.14, sun2);
+          craters += lunarCrater(mUv, vec2(-0.46, -0.08), 0.19, sun2);
+          craters += lunarCrater(mUv, vec2( 0.06,  0.48), 0.15, sun2);
+          // Subtle ejecta rays radiating from lower-right bright crater
+          vec2 rayV = mUv - vec2(0.18, -0.46);
+          float rayA = atan(rayV.y, rayV.x);
+          float ejecta = pow(0.5 + 0.5 * sin(rayA * 7.0 + 0.4), 4.0) * exp(-length(rayV) * 2.6) * 0.14;
+
+          // Spherical limb shading & subtle warm-silver lunar tint
+          float sphereZ = sqrt(max(0.0, 1.0 - min(mr * mr, 0.999)));
+          float limbShade = 0.62 + 0.38 * pow(sphereZ, 0.45);
+          vec3 mareCol = vec3(0.40, 0.47, 0.60);
+          vec3 highlandCol = vec3(0.96, 0.98, 1.06);
+          float surfaceTone = clamp(seaMask + craters + ejecta + (mariaFine - 0.5) * 0.18, 0.0, 1.15);
+          vec3 moonCol = mix(mareCol, highlandCol, clamp(surfaceTone, 0.0, 1.0)) * limbShade;
+          // Subtle luminous silver-blue lunar corona bleeding onto the outer limb
+          moonCol += vec3(0.16, 0.24, 0.38) * pow(1.0 - sphereZ, 2.2);
           col = mix(col, moonCol, disc);
         }
 
-        // Subtle crisp starfield in upper sky (smooth radial pinpoints, dimmed near moon halo)
-        if (elev > 0.08) {
-          vec2 starGrid = d.xz / (elev + 0.35) * 34.0;
-          vec2 cell = floor(starGrid);
-          vec2 f = fract(starGrid) - 0.5;
-          float h = hash21(cell);
-          if (h > 0.968) {
-            vec2 off = vec2(hash21(cell + 17.3) - 0.5, hash21(cell + 41.9) - 0.5) * 0.55;
-            float sd = length(f - off);
-            float star = smoothstep(0.14, 0.02, sd) * (0.55 + 0.45 * sin(uTime * (1.8 + h * 4.0) + h * 60.0));
-            col += vec3(0.75, 0.85, 1.0) * star * smoothstep(0.08, 0.35, elev) * (1.0 - disc) * (1.0 - moonHalo * 0.65);
+        // Two-tier crisp twinkling starfield across the open nocturnal sky
+        if (elev > 0.06) {
+          float starFade = smoothstep(0.06, 0.32, elev) * (1.0 - disc) * clamp(1.0 - haloMid * 1.4, 0.15, 1.0);
+          vec2 starGrid1 = d.xz / (elev + 0.36) * 32.0;
+          vec2 c1 = floor(starGrid1);
+          vec2 f1 = fract(starGrid1) - 0.5;
+          float h1 = hash21(c1);
+          if (h1 > 0.962) {
+            vec2 off1 = vec2(hash21(c1 + 17.3) - 0.5, hash21(c1 + 41.9) - 0.5) * 0.56;
+            float sd1 = length(f1 - off1);
+            float tw1 = 0.58 + 0.42 * sin(uTime * (1.5 + h1 * 4.2) + h1 * 62.0);
+            float st1 = smoothstep(0.14, 0.015, sd1) * tw1;
+            vec3 stCol = mix(vec3(0.74, 0.84, 1.0), vec3(1.0, 0.92, 0.78), step(0.988, h1));
+            col += stCol * st1 * starFade * 1.15;
+          }
+          if (uLowSpec < 0.5) {
+            vec2 starGrid2 = d.xz / (elev + 0.42) * 58.0;
+            vec2 c2 = floor(starGrid2);
+            vec2 f2 = fract(starGrid2) - 0.5;
+            float h2 = hash21(c2 + 91.7);
+            if (h2 > 0.972) {
+              vec2 off2 = vec2(hash21(c2 + 23.1) - 0.5, hash21(c2 + 67.4) - 0.5) * 0.54;
+              float st2 = smoothstep(0.16, 0.03, length(f2 - off2)) * 0.55;
+              col += vec3(0.62, 0.75, 0.96) * st2 * starFade;
+            }
           }
         }
 
-        // Layered silver-rimmed nocturnal storm clouds drifting slowly behind the Castle of Ash
-        if (uLowSpec < 0.5 && elev > 0.01) {
-          vec2 cUv = d.xz / (elev + 0.22);
-          float c1 = vnoise(cUv * 0.55 + vec2(uTime * 0.010, -uTime * 0.006));
-          float c2 = vnoise(cUv * 1.35 - vec2(uTime * 0.016, uTime * 0.008));
-          float c3 = vnoise(cUv * 2.80 + vec2(uTime * 0.022, uTime * 0.011));
-          float cloudRaw = c1 * 0.56 + c2 * 0.30 + c3 * 0.14;
-          float cloud = smoothstep(0.45, 0.80, cloudRaw)
-                      * smoothstep(0.01, 0.16, elev)
-                      * (1.0 - smoothstep(0.62, 0.95, elev));
-          float silverRim = pow(max(mDot, 0.0), 4.0) * smoothstep(0.42, 0.65, cloudRaw);
-          vec3 cloudDark = vec3(0.055, 0.072, 0.112);
-          vec3 cloudLit  = vec3(0.38, 0.48, 0.68);
-          vec3 cloudCol  = mix(cloudDark, cloudLit, clamp(silverRim * 1.25 + 0.14, 0.0, 1.0));
-          col = mix(col, cloudCol, cloud * 0.64 * (1.0 - disc * 0.65));
+        // High drifting silver-rimmed nocturnal storm clouds passing gently across the moonlit sky
+        if (uLowSpec < 0.5 && elev > 0.005) {
+          vec2 cUv = d.xz / (elev + 0.24);
+          float c1 = vnoise(cUv * 0.52 + vec2(uTime * 0.009, -uTime * 0.005));
+          float c2 = vnoise(cUv * 1.32 - vec2(uTime * 0.014, uTime * 0.007));
+          float c3 = vnoise(cUv * 2.75 + vec2(uTime * 0.020, uTime * 0.009));
+          float cloudRaw = c1 * 0.54 + c2 * 0.30 + c3 * 0.16;
+          float cloud = smoothstep(0.46, 0.80, cloudRaw)
+                      * smoothstep(0.005, 0.14, elev)
+                      * (1.0 - smoothstep(0.62, 0.94, elev));
+          float silverRim = pow(max(mDot, 0.0), 4.5) * smoothstep(0.40, 0.68, cloudRaw);
+          vec3 cloudDark = vec3(0.042, 0.058, 0.098);
+          vec3 cloudLit  = vec3(0.44, 0.56, 0.78);
+          vec3 cloudCol  = mix(cloudDark, cloudLit, clamp(silverRim * 1.45 + 0.12, 0.0, 1.0));
+          // Keep lunar craters clearly readable even as thin cloud wisps drift across the moon!
+          col = mix(col, cloudCol, cloud * mix(0.66, 0.24, disc));
         }
 
         gl_FragColor = vec4(col, 1.0);
@@ -2666,130 +3182,340 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
       }
     `
   }));
-  const extSkyDome = new THREE.Mesh(trackGeo(new THREE.SphereGeometry(195, 28, 16)), extSkyMat);
+  const extSkyDome = new THREE.Mesh(trackGeo(new THREE.SphereGeometry(195, 32, 20)), extSkyMat);
   extSkyDome.position.set(0, -6, 0);
   extSkyDome.renderOrder = -20;
   exteriorGroup.add(extSkyDome);
 
   // --------------------------------------------------------------------------
-  // C2. MONUMENTAL SILHOUETTE OF THE CASTLE OF ASH on High Precipice (z = -56m, y = +18..+48m!)
-  //     Custom moonlight-rimmed shader (`fog: false`) so it NEVER fades away in scene.fog!
+  // C2. MONUMENTAL GOTHIC CATHEDRAL-CITADEL: CASTLE OF ASH on Sheer Basalt Precipice (z = -56m)
+  //     - Multi-tiered sculpted basalt cliff promontory w/ 3D rock ribs & cliff buttresses
+  //     - Wide crenellated curtain wall w/ recessed arcades, machicolations, corner bastions & 2 flanking towers
+  //     - Central Gothic Throne Cathedral: stepped nave/aisles, PIERCED FLYING BUTTRESSES, twin needle spires,
+  //       soaring central crossing spire w/ gothic iron weathervane, REAL 3D POINTED ARCH WINDOWS w/ stone
+  //       mullion tracery & spoked ROSE WINDOW, pulsing crimson-gold glass + AdditiveBlending volumetric glow halo!
+  //     - 3 depth-layered drifting nocturnal cloud veils at the foot of the cliff so the Castle FLOATS in clouds!
   // --------------------------------------------------------------------------
   function buildCastleOfAshVista() {
     const castleParts = [];
     const windowParts = [];
+    const haloSpecs = [];
 
-    const addCastleBox = (w, h, d, x, y, z, rx = 0, ry = 0, rz = 0, topC = 0x454e66, botC = 0x1a1e2b) => {
+    const addBox = (w, h, d, x, y, z, rx = 0, ry = 0, rz = 0, topC = 0x4c5874, botC = 0x191e2c) => {
       castleParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(w, h, d), x, y, z, rx, ry, rz), topC, botC));
     };
-    const addCastleSpire = (r, h, segs, x, y, z, ry = Math.PI / 4, topC = 0x4f5b78, botC = 0x222838) => {
+    const addCyl = (rt, rb, h, segs, x, y, z, rx = 0, ry = 0, rz = 0, topC = 0x4e5b78, botC = 0x1b2030) => {
+      castleParts.push(tintGeo(THREE, xformGeo(new THREE.CylinderGeometry(rt, rb, h, segs), x, y, z, rx, ry, rz), topC, botC));
+    };
+    const addSpire = (r, h, segs, x, y, z, ry = Math.PI / 4, topC = 0x5c6c90, botC = 0x242c40) => {
       castleParts.push(tintGeo(THREE, xformGeo(new THREE.ConeGeometry(r, h, segs), x, y, z, 0, ry, 0), topC, botC));
     };
-    const addWindow = (w, h, x, y, z, ry = 0) => {
-      // Pointed gothic lancet window plane + sharp top triangle
-      windowParts.push(xformGeo(new THREE.PlaneGeometry(w, h), x, y, z, 0, ry, 0));
-      windowParts.push(xformGeo(new THREE.ConeGeometry(w * 0.56, w * 0.95, 3), x, y + h * 0.5 + w * 0.36, z, 0, ry, 0));
+    // Gothic Spire + Slender Finial Cross / Weathervane
+    const addGothicFinial = (x, yBase, z, height = 3.2, withVane = true) => {
+      addCyl(0.06, 0.14, height, 6, x, yBase + height * 0.5, z, 0, 0, 0, 0x7284ab, 0x3b465e);
+      addBox(height * 0.34, 0.12, 0.12, x, yBase + height * 0.72, z, 0, 0, 0, 0x7a8db5, 0x424e68);
+      if (withVane) {
+        addBox(height * 0.42, 0.32, 0.08, x + height * 0.18, yBase + height * 0.84, z, 0, 0, 0, 0x7e92bc, 0x485672);
+      }
+    };
+
+    // Real 3D Pointed Gothic Arched Window with recessed stone hood, vertical stone mullion & pointed tracery bars!
+    const addGothicLancetWindow = (w, h, x, y, z, { hasMullion = true, addHalo = true, haloScale = 1.0 } = {}) => {
+      const archH = w * 0.72;
+      const bodyH = Math.max(0.8, h - archH);
+      const yBot = y - h * 0.5;
+      const ySpring = yBot + bodyH;
+      // Glowing glass shape behind stone tracery: lower rectangle + sharp gothic pointed arch triangle
+      const glassShape = new THREE.Shape();
+      glassShape.moveTo(-w * 0.5, -h * 0.5);
+      glassShape.lineTo( w * 0.5, -h * 0.5);
+      glassShape.lineTo( w * 0.5, -h * 0.5 + bodyH);
+      glassShape.quadraticCurveTo(w * 0.42, -h * 0.5 + bodyH + archH * 0.62, 0.0, h * 0.5);
+      glassShape.quadraticCurveTo(-w * 0.42, -h * 0.5 + bodyH + archH * 0.62, -w * 0.5, -h * 0.5 + bodyH);
+      glassShape.closePath();
+      const glassGeo = new THREE.ShapeGeometry(glassShape, 8);
+      // Normalize glass UV so v = 0 at sill, v = 1 at pointed apex (for rich stained-glass vertical gradient!)
+      const gPos = glassGeo.attributes.position;
+      const gUv = new Float32Array(gPos.count * 2);
+      for (let i = 0; i < gPos.count; i++) {
+        gUv[i * 2]     = clamp01((gPos.getX(i) / Math.max(0.1, w)) + 0.5);
+        gUv[i * 2 + 1] = clamp01((gPos.getY(i) / Math.max(0.1, h)) + 0.5);
+      }
+      glassGeo.setAttribute('uv', new THREE.BufferAttribute(gUv, 2));
+      xformGeo(glassGeo, x, y, z);
+      windowParts.push(glassGeo);
+
+      // Deep 3D stone surround jambs, sloped sill & pointed gothic hood molding protruding in front of glass!
+      const frameZ = z + 0.24;
+      const jw = Math.max(0.18, w * 0.14);
+      addBox(jw, bodyH + 0.2, 0.56, x - w * 0.52, yBot + bodyH * 0.5, frameZ, 0, 0, 0, 0x5c6a8a, 0x262d3f);
+      addBox(jw, bodyH + 0.2, 0.56, x + w * 0.52, yBot + bodyH * 0.5, frameZ, 0, 0, 0, 0x5c6a8a, 0x262d3f);
+      addBox(w + jw * 2.4, 0.26, 0.68, x, yBot - 0.12, frameZ + 0.06, 0, 0, 0, 0x677698, 0x2d3549);
+      // Pointed arch hood stone legs converging at apex
+      const legLen = Math.hypot(w * 0.55, archH) + 0.18;
+      const legAng = Math.atan2(archH, w * 0.55);
+      addBox(legLen, jw * 1.15, 0.58, x - w * 0.26, ySpring + archH * 0.52, frameZ + 0.04, 0, 0,  legAng, 0x68789a, 0x2d364a);
+      addBox(legLen, jw * 1.15, 0.58, x + w * 0.26, ySpring + archH * 0.52, frameZ + 0.04, 0, 0, -legAng, 0x68789a, 0x2d364a);
+
+      // Authentic Gothic Stone Tracery Mullions IN FRONT of the warm glowing glass (breaks up flat rectangles!)
+      if (hasMullion) {
+        const mw = Math.max(0.11, w * 0.075);
+        // Central vertical stone mullion + 2 horizontal transoms + upper Y-tracery fork!
+        addBox(mw, h * 0.88, 0.28, x, y - h * 0.04, z + 0.16, 0, 0, 0, 0x3b4459, 0x1b202e);
+        addBox(w * 0.96, mw * 1.05, 0.26, x, yBot + bodyH * 0.48, z + 0.16, 0, 0, 0, 0x3b4459, 0x1b202e);
+        addBox(w * 0.96, mw * 1.05, 0.26, x, ySpring - 0.08, z + 0.16, 0, 0, 0, 0x424d66, 0x1e2433);
+        // Upper tracery diagonal Y-bars & small lancet oculus ring
+        const forkLen = w * 0.48;
+        addBox(forkLen, mw * 0.95, 0.24, x - w * 0.18, ySpring + archH * 0.28, z + 0.16, 0, 0, -0.78, 0x424d66, 0x1e2433);
+        addBox(forkLen, mw * 0.95, 0.24, x + w * 0.18, ySpring + archH * 0.28, z + 0.16, 0, 0,  0.78, 0x424d66, 0x1e2433);
+      }
+
+      if (addHalo) {
+        haloSpecs.push({ x, y: y + 0.1, z: z + 0.55, sx: w * 2.9 * haloScale, sy: h * 1.75 * haloScale });
+      }
+    };
+
+    // Real 3D Spoked Gothic Rose Window (stone outer ring + 8 radial tracery spokes + center wheel IN FRONT of glass!)
+    const addGothicRoseWindow = (radius, x, y, z) => {
+      const glassGeo = new THREE.CircleGeometry(radius, 20);
+      const gp = glassGeo.attributes.position;
+      const guv = new Float32Array(gp.count * 2);
+      for (let i = 0; i < gp.count; i++) {
+        guv[i * 2]     = clamp01(gp.getX(i) / (radius * 2) + 0.5);
+        guv[i * 2 + 1] = clamp01(gp.getY(i) / (radius * 2) + 0.5);
+      }
+      glassGeo.setAttribute('uv', new THREE.BufferAttribute(guv, 2));
+      xformGeo(glassGeo, x, y, z);
+      windowParts.push(glassGeo);
+
+      // Deep carved stone rose wheel surround + inner wheel + 8 stone radial mullions!
+      castleParts.push(tintGeo(THREE, xformGeo(new THREE.TorusGeometry(radius * 1.04, radius * 0.16, 7, 20), x, y, z + 0.22), 0x677799, 0x283042));
+      castleParts.push(tintGeo(THREE, xformGeo(new THREE.TorusGeometry(radius * 0.52, radius * 0.08, 6, 16), x, y, z + 0.20), 0x4e5b78, 0x222838));
+      addCyl(radius * 0.18, radius * 0.18, 0.30, 8, x, y, z + 0.20, Math.PI * 0.5, 0, 0, 0x5c6a8a, 0x262d3f);
+      for (let s = 0; s < 8; s++) {
+        const a = (s / 8) * Math.PI * 2;
+        addBox(radius * 2.02, radius * 0.09, 0.26, x, y, z + 0.18, 0, 0, a, 0x45516a, 0x1e2433);
+      }
+      haloSpecs.push({ x, y, z: z + 0.65, sx: radius * 5.6, sy: radius * 5.6 });
     };
 
     const cz = -56.0;
-    const baseY = 18.0;
+    const baseY = 16.2; // Elevated cleanly above swirling cliff-base cloud belt while soaring 45m spire fits inside vista!
 
-    // 1. Colossal Sheer Jagged Basalt Promontory Cliff supporting the Castle (y = -8 .. +22m)
+    // 1. MULTI-TIERED SHEER BASALT PROMONTORY CLIFF (y = -8 .. +18m) w/ Craggy 3D Displaced Rock Ribs & Stone Buttresses!
+    const cliffDetail = isMobile ? 2 : 3;
     const cragSpecs = [
-      { x:   0.0, y:  6.5, z: cz + 4.0, r: 16.5, sy: 1.05, seed: 701 },
-      { x: -16.5, y:  5.5, z: cz + 7.0, r: 13.5, sy: 1.00, seed: 702 },
-      { x:  17.0, y:  6.0, z: cz + 6.5, r: 14.0, sy: 1.02, seed: 703 },
-      { x: -31.0, y:  3.0, z: cz + 14.0, r: 15.0, sy: 0.90, seed: 704 },
-      { x:  32.0, y:  3.5, z: cz + 13.0, r: 15.5, sy: 0.92, seed: 705 },
-      { x:  -9.0, y: 12.2, z: cz + 1.5, r:  9.8, sy: 0.95, seed: 706 },
-      { x:   9.5, y: 12.4, z: cz + 2.0, r: 10.2, sy: 0.96, seed: 707 },
-      { x:   0.0, y: 13.5, z: cz + 2.5, r: 11.2, sy: 0.82, seed: 708 }
+      { x:   0.0, y:  0.0, z: cz + 3.2, rx: 16.5, ry: 22.0, rz: 12.0, seed: 701, flatTop: true },
+      { x: -15.5, y: -1.5, z: cz + 5.8, rx: 14.5, ry: 20.5, rz: 11.5, seed: 702, flatTop: true },
+      { x:  16.0, y: -1.2, z: cz + 5.5, rx: 14.8, ry: 21.0, rz: 11.5, seed: 703, flatTop: true },
+      { x: -29.0, y: -3.0, z: cz + 10.5, rx: 16.0, ry: 18.5, rz: 12.5, seed: 704, flatTop: false },
+      { x:  30.0, y: -2.5, z: cz + 10.0, rx: 16.5, ry: 19.0, rz: 12.5, seed: 705, flatTop: false },
+      { x:  -8.2, y:  5.5, z: cz + 5.2, rx:  8.4, ry: 13.5, rz:  7.8, seed: 706, flatTop: true },
+      { x:   8.6, y:  5.8, z: cz + 5.0, rx:  8.6, ry: 13.8, rz:  7.8, seed: 707, flatTop: true },
+      { x:   0.0, y:  6.2, z: cz + 5.6, rx:  9.5, ry: 12.8, rz:  7.2, seed: 708, flatTop: true }
     ];
     for (let i = 0; i < cragSpecs.length; i++) {
       const cs = cragSpecs[i];
-      const g = buildSculptedRockGeo(THREE, cs.r, cs.seed, cs.sy, 1);
+      const g = buildCraggyCliffMassGeo(THREE, cs.rx, cs.ry, cs.rz, cs.seed, cliffDetail, {
+        flatTop: cs.flatTop,
+        topHex: 0x3b465e,
+        midHex: 0x202736,
+        botHex: 0x0b0e16,
+        noMoss: true
+      });
       xformGeo(g, cs.x, cs.y, cs.z);
-      castleParts.push(tintGeo(THREE, g, 0x2e3546, 0x0d1018));
+      castleParts.push(g);
     }
 
-    // 2. Massive Tiered Citadel Curtain Walls & Crenellated Battlements (y = 16 .. 26m)
-    addCastleBox(36.0, 10.5, 6.2, 0, baseY + 3.0, cz + 3.8, 0, 0, 0, 0x3b4459, 0x161a26);
-    // Battlement merlons along the front curtain wall
-    for (let mx = -16.5; mx <= 16.5; mx += 2.75) {
-      addCastleBox(1.5, 1.8, 1.4, mx, baseY + 8.9, cz + 6.4, 0, 0, 0, 0x4b5670, 0x262d3d);
-    }
-    // Lower buttressed bastion piers plunging down the precipice face
-    for (const bx of [-14.0, -7.2, 0.0, 7.2, 14.0]) {
-      addCastleBox(2.6, 15.0, 4.4, bx, baseY - 1.5, cz + 6.4, 0.10, 0, 0, 0x363f54, 0x121620);
+    // Deep battered stone retaining cliff-buttresses gripping the precipice face below the fortress
+    for (const bx of [-18.5, -12.4, -6.2, 0.0, 6.2, 12.4, 18.5]) {
+      addBox(2.2, 15.5, 4.2, bx, baseY - 2.6, cz + 6.4, 0.14, 0, 0, 0x3e4860, 0x131722);
+      addBox(2.6, 1.1, 4.8, bx, baseY + 4.8, cz + 6.0, 0, 0, 0, 0x52607d, 0x252c3e);
     }
 
-    // 3. GRAND CENTRAL THRONE CATHEDRAL KEEP (rises proudly to y = +48.5m!)
-    addCastleBox(14.5, 18.5, 11.0, 0, baseY + 13.5, cz - 0.5, 0, 0, 0, 0x444e66, 0x1e2331);
-    // Steep gothic cathedral pitched roof & crowning central bell-spire
-    addCastleBox(15.2, 1.2, 11.8, 0, baseY + 23.0, cz - 0.5, 0, 0, 0, 0x525f7c, 0x2a3142);
-    addCastleSpire(7.6, 12.5, 4, 0, baseY + 29.4, cz - 0.5, Math.PI / 4, 0x566482, 0x252c3d);
-    // Twin slender needle-spires flanking the Throne Hall facade
-    for (const sx of [-6.8, 6.8]) {
-      addCastleBox(3.4, 21.0, 3.6, sx, baseY + 15.0, cz + 3.6, 0, 0, 0, 0x48536e, 0x1d2230);
-      addCastleSpire(2.55, 11.2, 4, sx, baseY + 30.8, cz + 3.6, Math.PI / 4, 0x5a6888, 0x283042);
-      // Pointed stone finials
-      addCastleSpire(0.45, 3.2, 4, sx, baseY + 37.2, cz + 3.6, Math.PI / 4, 0x6b7ba0, 0x3c465c);
+    // 2. WIDE FORTIFIED CURTAIN WALL, MACHICOLATED BATTLEMENTS, CORNER BASTIONS & FLANKING TOWERS (y = 14..38m)
+    addBox(42.0, 8.2, 6.2, 0, baseY + 3.6, cz + 3.4, 0, 0, 0, 0x424d66, 0x181d2b);
+    // Projecting stone cornice & machicolation corbel belt along the entire curtain wall
+    addBox(43.2, 0.78, 6.9, 0, baseY + 7.75, cz + 3.6, 0, 0, 0, 0x576686, 0x293145);
+    for (let mx = -20.0; mx <= 20.0; mx += 2.2) {
+      // Crenellated merlons + corbel brackets underneath
+      addBox(1.25, 1.65, 1.35, mx, baseY + 8.85, cz + 6.45, 0, 0, 0, 0x586788, 0x2a3246);
+      addBox(0.55, 0.85, 0.85, mx, baseY + 7.15, cz + 6.75, 0, 0, 0, 0x4e5c7a, 0x222838);
     }
+    // Recessed curtain-wall blind gothic arcade pilasters
+    for (let px = -14.0; px <= 14.0; px += 3.5) {
+      addBox(0.95, 6.8, 0.85, px, baseY + 3.6, cz + 6.55, 0, 0, 0, 0x4c5875, 0x1e2434);
+    }
+    // Central Lower Barbican Gatehouse & Crimson Gate Slit
+    addBox(6.8, 9.6, 4.6, 0, baseY + 4.2, cz + 5.6, 0, 0, 0, 0x4a5672, 0x1c2231);
+    for (const sx of [-2.8, 2.8]) {
+      addCyl(1.05, 1.25, 11.4, 8, sx, baseY + 5.2, cz + 7.4, 0, 0, 0, 0x556484, 0x212737);
+      addSpire(1.25, 3.8, 8, sx, baseY + 12.6, cz + 7.4, 0, 0x627396, 0x2a3348);
+    }
+    addGothicLancetWindow(1.15, 2.8, 0.0, baseY + 4.4, cz + 7.95, { hasMullion: true, addHalo: true, haloScale: 0.75 });
 
-    // 4. Flying Buttresses & Flanking Gothic Watchtowers (asymmetric iconic FromSoftware silhouette!)
-    const towerSpecs = [
-      { x: -16.8, z: cz + 2.8, w: 5.4, h: 20.5, spireH: 11.5, broken: false },
-      { x:  17.4, z: cz + 2.4, w: 5.8, h: 22.0, spireH: 12.8, broken: false },
-      { x: -24.5, z: cz + 6.5, w: 4.8, h: 15.0, spireH:  7.8, broken: true  },
-      { x:  25.2, z: cz + 6.0, w: 4.6, h: 16.5, spireH:  8.5, broken: false },
-      { x:  -9.8, z: cz - 6.5, w: 4.5, h: 24.0, spireH: 10.5, broken: false },
-      { x:  10.4, z: cz - 7.0, w: 4.8, h: 26.0, spireH: 12.2, broken: false }
+    // 2 Tall Polygonal Flanking Citadel Bastion Towers (x = ±15.8m) + 2 Outer Rampart Watchtowers (x = ±24.2m)!
+    const citadelTowers = [
+      { x: -15.8, z: cz + 3.0, r: 3.1, h: 16.5, spireH: 10.2, broken: false, vane: true,  winY: 12.5 },
+      { x:  16.2, z: cz + 2.8, r: 3.2, h: 17.6, spireH: 11.0, broken: false, vane: true,  winY: 13.4 },
+      { x: -24.2, z: cz + 5.8, r: 2.6, h: 12.2, spireH:  6.4, broken: true,  vane: false, winY:  9.0 },
+      { x:  24.6, z: cz + 5.5, r: 2.7, h: 13.4, spireH:  7.8, broken: false, vane: true,  winY:  9.8 },
+      { x: -10.8, z: cz - 6.8, r: 2.5, h: 20.5, spireH:  9.5, broken: false, vane: false, winY:  0.0 },
+      { x:  11.2, z: cz - 7.0, r: 2.6, h: 21.8, spireH: 10.6, broken: false, vane: false, winY:  0.0 }
     ];
-    for (let i = 0; i < towerSpecs.length; i++) {
-      const tw = towerSpecs[i];
-      addCastleBox(tw.w, tw.h, tw.w, tw.x, baseY + tw.h * 0.5 + 1.5, tw.z, 0, 0, 0, 0x424d66, 0x1a1f2d);
-      // Tower cornice collar
-      addCastleBox(tw.w + 0.9, 1.0, tw.w + 0.9, tw.x, baseY + tw.h + 1.6, tw.z, 0, 0, 0, 0x526080, 0x2b3244);
+    for (let i = 0; i < citadelTowers.length; i++) {
+      const tw = citadelTowers[i];
+      // Octagonal gothic stone tower drum + stepped plinth + corbelled gallery collar
+      addCyl(tw.r * 0.94, tw.r * 1.12, tw.h, 8, tw.x, baseY + tw.h * 0.5 + 1.0, tw.z, 0, Math.PI / 8, 0, 0x4b5875, 0x1a1f2e);
+      addCyl(tw.r * 1.16, tw.r * 0.96, 1.35, 8, tw.x, baseY + tw.h + 1.1, tw.z, 0, Math.PI / 8, 0, 0x5c6c8e, 0x2b3348);
+      // Corner turret pinnacle ring
+      for (let k = 0; k < 4; k++) {
+        const pa = (k / 4) * Math.PI * 2 + Math.PI / 4;
+        const px = tw.x + Math.cos(pa) * tw.r * 0.98;
+        const pz = tw.z + Math.sin(pa) * tw.r * 0.98;
+        addBox(0.68, 2.2, 0.68, px, baseY + tw.h + 2.5, pz, 0, 0, 0, 0x5e6e92, 0x2e374d);
+        addSpire(0.46, 2.4, 4, px, baseY + tw.h + 4.7, pz, Math.PI / 4, 0x6c7ea6, 0x353f58);
+      }
       if (!tw.broken) {
-        addCastleSpire(tw.w * 0.72, tw.spireH, 4, tw.x, baseY + tw.h + 2.0 + tw.spireH * 0.5, tw.z);
+        const spireBaseY = baseY + tw.h + 1.75;
+        addSpire(tw.r * 1.06, tw.spireH, 8, tw.x, spireBaseY + tw.spireH * 0.5, tw.z, Math.PI / 8, 0x607094, 0x262e42);
+        if (tw.vane) {
+          addGothicFinial(tw.x, spireBaseY + tw.spireH - 0.2, tw.z, 3.0, true);
+        }
       } else {
-        // Shattered ruined watchtower crown
-        addCastleBox(1.8, 3.2, 1.8, tw.x - 1.2, baseY + tw.h + 3.2, tw.z, 0, 0, 0.12);
-        addCastleBox(1.6, 2.1, 1.8, tw.x + 1.4, baseY + tw.h + 2.6, tw.z + 0.6, 0, 0, -0.08);
+        // Battle-shattered jagged tower crown
+        addBox(1.5, 3.0, 1.6, tw.x - 1.1, baseY + tw.h + 2.8, tw.z, 0, 0, 0.14, 0x586684, 0x262d3e);
+        addBox(1.3, 1.9, 1.5, tw.x + 1.2, baseY + tw.h + 2.3, tw.z + 0.5, 0, 0, -0.10, 0x52607c, 0x232939);
+      }
+      if (tw.winY > 0) {
+        addGothicLancetWindow(0.86, 3.1, tw.x, baseY + tw.winY, tw.z + tw.r * 1.04, {
+          hasMullion: true,
+          addHalo: true,
+          haloScale: 0.72
+        });
       }
     }
 
-    // Sweeping Flying Buttress Ribs bridging Central Keep to Flanking Towers
-    for (const side of [-1, 1]) {
-      addCastleBox(8.8, 1.7, 1.8, side * 11.4, baseY + 16.5, cz + 2.4, 0, 0, -side * 0.44, 0x4d5976, 0x242b3c);
-      addCastleBox(8.8, 1.5, 1.8, side * 11.4, baseY + 11.2, cz + 2.4, 0, 0, -side * 0.36, 0x45506a, 0x202636);
-      // Outer viaduct arch connecting main curtain wall to outer watchtower
-      addCastleBox(7.2, 2.2, 2.0, side * 20.8, baseY + 11.0, cz + 4.5, 0, 0, -side * 0.14, 0x3e4860, 0x1b202e);
+    // 3. GRAND CENTRAL GOTHIC CATHEDRAL OF THE THRONE HALL (y = 18 .. 44.5m — Monumental Sculpted Facade!)
+    // Lower wider side-aisles + taller stepped central nave clerestory (true Gothic Cathedral silhouette!)
+    addBox(16.8, 10.5, 11.5, 0, baseY + 10.8, cz - 0.6, 0, 0, 0, 0x45516b, 0x1c2231);
+    addBox(11.6, 15.8, 12.2, 0, baseY + 14.5, cz - 0.8, 0, 0, 0, 0x4d5a78, 0x202636);
+
+    // Steep Gothic Triangular Cathedral West-Facade Gable & Pitched Roof above the Nave!
+    const gableShape = new THREE.Shape();
+    gableShape.moveTo(-6.2, 0);
+    gableShape.lineTo( 6.2, 0);
+    gableShape.lineTo( 0.0, 6.8);
+    gableShape.closePath();
+    const gableGeo = new THREE.ExtrudeGeometry(gableShape, { depth: 12.6, bevelEnabled: false });
+    xformGeo(gableGeo, 0, baseY + 22.3, cz - 7.1);
+    castleParts.push(tintGeo(THREE, gableGeo, 0x5f7094, 0x2b3348));
+    // Sculpted stepped stone gable coping & peak cross
+    for (let step = 0; step < 5; step++) {
+      const f = step / 4;
+      const gx = lerp(5.6, 0.7, f);
+      const gy = baseY + 22.6 + f * 5.8;
+      addBox(0.75, 1.35, 1.1, -gx, gy, cz + 5.2, 0, 0, 0, 0x6a7ca4, 0x333c54);
+      addBox(0.75, 1.35, 1.1,  gx, gy, cz + 5.2, 0, 0, 0, 0x6a7ca4, 0x333c54);
     }
 
-    // 5. GLOWING CRIMSON THRONE HALL LANCET WINDOWS & ROSE WINDOW (recognizable firelit sanctuary!)
-    // Three tall glowing lancet windows across the Throne Cathedral front facade
-    addWindow(1.25, 5.4, -3.2, baseY + 14.8, cz + 5.15);
-    addWindow(1.55, 6.6,  0.0, baseY + 15.4, cz + 5.15);
-    addWindow(1.25, 5.4,  3.2, baseY + 14.8, cz + 5.15);
-    // High crimson rose-window glow above central lancet
-    windowParts.push(xformGeo(new THREE.CircleGeometry(1.55, 12), 0.0, baseY + 20.8, cz + 5.18));
-    // Flanking tower crimson slit windows
-    addWindow(0.72, 3.0, -16.8, baseY + 16.2, cz + 5.62);
-    addWindow(0.72, 3.0,  17.4, baseY + 17.4, cz + 5.42);
-    addWindow(0.65, 2.4,  -6.8, baseY + 18.8, cz + 5.48);
-    addWindow(0.65, 2.4,   6.8, baseY + 18.8, cz + 5.48);
-    // Faint warm bastion gate slit lower on the curtain wall
-    addWindow(0.85, 2.2,   0.0, baseY + 4.8,  cz + 7.05);
+    // Soaring Central Crossing Bell-Tower & Needle Spire crowning the Cathedral at y = 44.5m!
+    addCyl(2.55, 3.05, 7.2, 8, 0, baseY + 25.8, cz - 1.5, 0, Math.PI / 8, 0, 0x566586, 0x242c3f);
+    addCyl(3.15, 2.65, 0.95, 8, 0, baseY + 29.4, cz - 1.5, 0, Math.PI / 8, 0, 0x6779a0, 0x303a52);
+    // Crossing tower turret pinnacle finials
+    for (let k = 0; k < 4; k++) {
+      const a = (k / 4) * Math.PI * 2 + Math.PI / 4;
+      addSpire(0.55, 3.8, 4, Math.cos(a) * 2.75, baseY + 31.6, cz - 1.5 + Math.sin(a) * 2.75, Math.PI / 4, 0x6e81aa, 0x36415a);
+    }
+    addSpire(2.85, 11.4, 8, 0, baseY + 35.3, cz - 1.5, Math.PI / 8, 0x6a7ca4, 0x2b344a);
+    addGothicFinial(0, baseY + 40.8, cz - 1.5, 3.8, true);
 
-    const castleGeo = trackGeo(mergeNonIndexedGeos(THREE, castleParts, { boxUvTile: 6.0, withColor: true }));
+    // Twin Slender Gothic Bell-Spires flanking the Cathedral Front Facade (x = ±6.1m) w/ belfry arches & finials!
+    for (const side of [-1, 1]) {
+      const tx = side * 6.1;
+      const tz = cz + 3.7;
+      addBox(2.9, 18.2, 3.2, tx, baseY + 13.8, tz, 0, 0, 0, 0x505e7c, 0x1e2434);
+      // Vertical gothic buttress ribs running up each tower corner
+      addBox(0.55, 18.8, 0.72, tx - 1.35, baseY + 14.0, tz + 1.55, 0, 0, 0, 0x5c6c8e, 0x252c3e);
+      addBox(0.55, 18.8, 0.72, tx + 1.35, baseY + 14.0, tz + 1.55, 0, 0, 0, 0x5c6c8e, 0x252c3e);
+      // Open belfry lantern stage (4 corner stone piers creating real openwork silhouette!)
+      const belfryY = baseY + 23.0;
+      addBox(3.35, 0.72, 3.65, tx, belfryY, tz, 0, 0, 0, 0x627398, 0x2c354a);
+      for (const ox of [-1.05, 1.05]) {
+        for (const oz of [-1.05, 1.05]) {
+          addBox(0.58, 3.2, 0.58, tx + ox, belfryY + 1.9, tz + oz, 0, 0, 0, 0x617296, 0x2d364c);
+        }
+      }
+      addBox(3.15, 0.65, 3.35, tx, belfryY + 3.6, tz, 0, 0, 0, 0x687aa0, 0x313a52);
+      addSpire(2.05, 9.4, 4, tx, belfryY + 8.5, tz, Math.PI / 4, 0x687aa2, 0x2b3348);
+      addGothicFinial(tx, belfryY + 13.0, tz, 2.8, true);
+      // Tall slender lancet slit on twin cathedral facade towers
+      addGothicLancetWindow(0.76, 3.2, tx, baseY + 16.4, tz + 1.66, { hasMullion: true, addHalo: true, haloScale: 0.75 });
+    }
+
+    // 4. REAL 3D PIERCED FLYING BUTTRESSES (АРКБУТАНЫ) bridging the Cathedral Nave to Outer Pinnacle Piers!
+    for (const side of [-1, 1]) {
+      // Outer stepped buttress pier standing independently outside the aisle (x = ±11.2m) w/ gothic pinnacle!
+      const pierX = side * 11.2;
+      addBox(2.2, 14.8, 2.6, pierX, baseY + 11.8, cz + 1.6, 0, 0, 0, 0x4f5d7c, 0x1d2332);
+      addBox(2.55, 0.65, 2.95, pierX, baseY + 19.3, cz + 1.6, 0, 0, 0, 0x617296, 0x2e374c);
+      addSpire(1.15, 5.2, 4, pierX, baseY + 22.1, cz + 1.6, Math.PI / 4, 0x6b7ea6, 0x333d56);
+      addGothicFinial(pierX, baseY + 24.5, cz + 1.6, 1.8, false);
+
+      // Upper & Lower Pierced Diagonal Flying Buttress Arches (open night sky shines right THROUGH them!)
+      for (let tier = 0; tier < 2; tier++) {
+        const yOuter = baseY + (tier === 0 ? 13.4 : 18.0);
+        const yInner = baseY + (tier === 0 ? 16.4 : 21.4);
+        const midX = side * 8.65;
+        const midY = (yOuter + yInner) * 0.5;
+        const dx = 4.9;
+        const dy = yInner - yOuter;
+        const flyerLen = Math.hypot(dx, dy) + 0.5;
+        const flyerAng = -side * Math.atan2(dy, dx);
+        addBox(flyerLen, 1.05, 1.15, midX, midY, cz + 1.6, 0, 0, flyerAng, 0x5c6c8e, 0x272f42);
+        // Sculpted curved under-rib support strut beneath each flying arch
+        addBox(flyerLen * 0.86, 0.48, 0.82, midX, midY - 0.72, cz + 1.6, 0, 0, flyerAng * 1.15, 0x4c5976, 0x202738);
+      }
+
+      // Outer Viaduct Archway linking Curtain Wall Bastion to Outer Watchtower (x = ±20.0m)
+      addBox(5.6, 1.45, 1.65, side * 20.0, baseY + 10.6, cz + 4.4, 0, 0, -side * 0.14, 0x495672, 0x1e2434);
+      addBox(1.1, 4.4, 1.5, side * 20.0, baseY + 8.0, cz + 4.4, 0, 0, 0, 0x434f69, 0x1a1f2e);
+    }
+
+    // 5. CATHEDRAL THRONE HALL FRONT FACADE: 3 POINTED TRACERY LANCETS + SPOKED GOTHIC ROSE WINDOW!
+    const facadeZ = cz + 5.38;
+    // Vertical stone nave buttress shafts dividing the 3 great Throne Hall windows
+    for (const bx of [-4.65, -1.75, 1.75, 4.65]) {
+      addBox(0.68, 12.8, 0.92, bx, baseY + 15.2, facadeZ + 0.18, 0, 0, 0, 0x58688a, 0x22293a);
+      addSpire(0.42, 2.2, 4, bx, baseY + 22.6, facadeZ + 0.18, Math.PI / 4, 0x6779a0, 0x303950);
+    }
+    // Three Tall Pointed Gothic Windows with real 3D Stone Mullions & Y-Tracery!
+    addGothicLancetWindow(1.75, 5.4, -3.20, baseY + 14.3, facadeZ, { hasMullion: true, addHalo: true, haloScale: 1.05 });
+    addGothicLancetWindow(2.15, 6.8,  0.00, baseY + 14.8, facadeZ, { hasMullion: true, addHalo: true, haloScale: 1.25 });
+    addGothicLancetWindow(1.75, 5.4,  3.20, baseY + 14.3, facadeZ, { hasMullion: true, addHalo: true, haloScale: 1.05 });
+    // Great Spoked Gothic Rose Window crowning the Throne Hall facade!
+    addGothicRoseWindow(1.72, 0.0, baseY + 20.5, facadeZ + 0.04);
+
+    // Build merged AdditiveBlending volumetric halo planes behind/over the Cathedral glowing windows!
+    const haloParts = [];
+    for (let i = 0; i < haloSpecs.length; i++) {
+      const hs = haloSpecs[i];
+      const p = new THREE.PlaneGeometry(hs.sx, hs.sy);
+      xformGeo(p, hs.x, hs.y, hs.z);
+      haloParts.push(p);
+    }
+    // Broad master Throne Hall atmospheric crimson-amber radiance halo
+    haloParts.push(xformGeo(new THREE.PlaneGeometry(18.5, 15.5), 0.0, baseY + 16.8, facadeZ + 1.1));
+
+    const castleGeo = trackGeo(mergeNonIndexedGeos(THREE, castleParts, { boxUvTile: 5.5, withColor: true }));
     const windowsGeo = trackGeo(mergeNonIndexedGeos(THREE, windowParts, { boxUvTile: 0, withColor: false }));
-    return { castleGeo, windowsGeo };
+    const halosGeo = trackGeo(mergeNonIndexedGeos(THREE, haloParts, { boxUvTile: 0, withColor: false }));
+    return { castleGeo, windowsGeo, halosGeo };
   }
 
   const castleVista = buildCastleOfAshVista();
 
-  // Custom Nocturnal Moon-Rimmed Gothic Castle Silhouette Shader (`fog: false` -> ALWAYS majestically readable!)
+  // Custom Nocturnal Moon-Rimmed Gothic Cathedral Silhouette Shader (`fog: false` -> ALWAYS razor-crisp!)
   const castleSilhouetteMat = trackMat(new THREE.ShaderMaterial({
     uniforms: {
       uTime: extSkyUniforms.uTime
@@ -2822,29 +3548,35 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
       void main() {
         vec3 N = normalize(vNormalW);
         vec3 V = normalize(cameraPosition - vWorldPos);
-        vec3 moonL = normalize(vec3(-0.22, 0.52, -0.82));
-        vec3 frontFill = normalize(vec3(-0.35, 0.60, 0.72));
+        vec3 moonL = normalize(vec3(-0.27, 0.43, -0.861));
+        vec3 frontKey = normalize(vec3(-0.34, 0.56, 0.76));
 
-        // Subtle stone block grit so silhouette towers feel monumental, never flat plastic
-        float masonry = 0.86 + 0.26 * hash21(floor(vec2((vWorldPos.x + vWorldPos.z) * 0.45, vWorldPos.y * 0.55)));
-        vec3 base = vCol * masonry * 0.48;
+        // Brooding dark obsidian-charcoal Gothic ashlar masonry (authentic Castle of Ash — ZERO pastel pink!)
+        float row = floor(vWorldPos.y * 0.78);
+        float colCell = floor((vWorldPos.x + vWorldPos.z * 0.5) * 0.58 + mod(row, 2.0) * 0.5);
+        float blkShade = 0.74 + 0.42 * hash21(vec2(colCell, row));
+        float hMortar = 1.0 - smoothstep(0.03, 0.11, abs(fract(vWorldPos.y * 0.78) - 0.5));
+        float streak = 0.84 + 0.16 * sin(vWorldPos.x * 1.9 + vWorldPos.z * 0.7);
+        vec3 base = vCol * blkShade * (1.0 - hMortar * 0.30) * streak * 0.22;
 
-        // Cold silver moonlight rim tracing every spire, gable & flying buttress!
-        float fres = pow(1.0 - max(dot(N, V), 0.0), 2.4);
-        float topCatch = max(0.0, N.y) * 0.45 + max(0.0, dot(N, frontFill)) * 0.55;
-        float rimCatch = fres * (0.45 + 0.55 * max(0.0, dot(N, -moonL) * 0.5 + 0.5));
+        // Razor-sharp cold silvery-blue moonlight rim tracing every spire, flying buttress, pinnacle & battlement!
+        float fres = pow(1.0 - max(dot(N, V), 0.0), 2.1);
+        float moonSide = max(0.0, dot(N, moonL) * 0.5 + 0.5);
+        float topCatch = max(0.0, N.y) * 0.38 + max(0.0, dot(N, frontKey)) * 0.44;
+        vec3 lit = base * (0.40 + topCatch * 0.88);
+        lit += vec3(0.16, 0.25, 0.42) * fres * (0.40 + 0.85 * moonSide) * smoothstep(10.0, 38.0, vWorldPos.y);
+        float leftMoonEdge = max(0.0, dot(N, normalize(vec3(-0.84, 0.42, 0.34)))) * smoothstep(15.0, 42.0, vWorldPos.y);
+        lit += vec3(0.13, 0.21, 0.36) * leftMoonEdge * 0.72;
 
-        vec3 lit = base * (0.45 + topCatch * 0.85);
-        lit += vec3(0.14, 0.20, 0.32) * rimCatch * smoothstep(10.0, 38.0, vWorldPos.y);
+        // Tight localized deep blood-crimson & amber firelight bounce ONLY directly around the Throne Hall windows!
+        float throneDist = length(vWorldPos - vec3(0.0, 31.8, -50.4));
+        float flick = 0.86 + 0.14 * sin(uTime * 4.8) + 0.05 * sin(uTime * 11.2);
+        float throneGlow = exp(-throneDist * 0.23) * flick;
+        lit += vec3(0.46, 0.10, 0.022) * throneGlow * (0.50 + 0.50 * max(0.0, N.z + 0.20));
 
-        // Warm crimson bounce from the burning Throne Hall windows onto surrounding stone spires
-        float throneDist = length(vWorldPos - vec3(0.0, 34.0, -50.8));
-        float throneGlow = exp(-throneDist * 0.105) * (0.88 + 0.12 * sin(uTime * 4.8));
-        lit += vec3(0.32, 0.055, 0.018) * throneGlow;
-
-        // Gentle atmospheric valley mist hugging ONLY the cliff base (y < 22m), leaving spires razor-crisp!
-        float baseMist = (1.0 - smoothstep(2.0, 26.0, vWorldPos.y)) * 0.48;
-        vec3 mistCol = vec3(0.065, 0.085, 0.135);
+        // Swirling nocturnal cloud-valley mist hugging ONLY the lower cliff base (y < 20m) so Castle floats in clouds!
+        float baseMist = (1.0 - smoothstep(6.0, 23.0, vWorldPos.y)) * 0.64;
+        vec3 mistCol = vec3(0.068, 0.098, 0.162);
         lit = mix(lit, mistCol, baseMist);
 
         gl_FragColor = vec4(lit, 1.0);
@@ -2859,12 +3591,14 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   castleVistaMesh.frustumCulled = false;
   exteriorGroup.add(castleVistaMesh);
 
-  // Glowing Crimson Throne Hall Windows (pulsing firelight high atop the cliff!)
+  // Glowing Stained-Glass Crimson-Gold Throne Hall Windows (rich gradient hearth fire behind 3D stone tracery!)
   const castleWindowsMat = trackMat(new THREE.ShaderMaterial({
     uniforms: { uTime: extSkyUniforms.uTime },
     vertexShader: `
+      varying vec2 vUv;
       varying vec3 vWorldPos;
       void main() {
+        vUv = uv;
         vec4 wp = modelMatrix * vec4(position, 1.0);
         vWorldPos = wp.xyz;
         gl_Position = projectionMatrix * viewMatrix * wp;
@@ -2872,11 +3606,22 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     `,
     fragmentShader: `
       uniform float uTime;
+      varying vec2 vUv;
       varying vec3 vWorldPos;
       void main() {
-        float fl = 0.82 + 0.18 * sin(uTime * 5.2 + vWorldPos.x * 0.9) + 0.09 * sin(uTime * 11.4 + vWorldPos.y);
-        vec3 col = mix(vec3(1.15, 0.14, 0.04), vec3(2.25, 0.62, 0.14), clamp(fl * 0.65, 0.0, 1.0));
-        gl_FragColor = vec4(col * fl, 1.0);
+        float fl = 0.84 + 0.16 * sin(uTime * 5.0 + vWorldPos.x * 0.85) + 0.08 * sin(uTime * 11.3 + vWorldPos.y * 0.6);
+        // Subtle leaded stained-glass diamond grid + warm golden-ember hearth gradient (hotter near base/center!)
+        float leadX = abs(fract(vUv.x * 6.0) - 0.5);
+        float leadY = abs(fract(vUv.y * 10.0) - 0.5);
+        float lead = smoothstep(0.03, 0.09, min(leadX, leadY));
+        float centerHot = 1.0 - clamp(length((vUv - vec2(0.5, 0.36)) * vec2(1.4, 1.15)), 0.0, 1.0);
+        vec3 deepCrimson = vec3(0.95, 0.10, 0.025);
+        vec3 moltenAmber = vec3(2.05, 0.62, 0.12);
+        vec3 hearthGold  = vec3(2.55, 1.45, 0.42);
+        vec3 col = mix(deepCrimson, moltenAmber, smoothstep(0.05, 0.65, centerHot));
+        col = mix(col, hearthGold, smoothstep(0.58, 0.96, centerHot) * fl);
+        col *= (0.72 + 0.28 * lead) * fl;
+        gl_FragColor = vec4(col, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }
@@ -2888,17 +3633,129 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   castleWindowsMesh.frustumCulled = false;
   exteriorGroup.add(castleWindowsMesh);
 
-  // Rising Column of Ash & Dark Smoke billowing up from the Castle of Ash Keep (1 DC, fog: false)
-  const CASTLE_PLUME_COUNT = isMobile ? 22 : 42;
+  // Soft Volumetric AdditiveBlending Crimson-Gold Glow Halo around the Cathedral Windows!
+  const castleGlowHaloMat = trackMat(new THREE.ShaderMaterial({
+    uniforms: { uTime: extSkyUniforms.uTime },
+    vertexShader: `
+      varying vec2 vUv;
+      varying vec3 vWorldPos;
+      void main() {
+        vUv = uv;
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vWorldPos = wp.xyz;
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      varying vec2 vUv;
+      varying vec3 vWorldPos;
+      void main() {
+        vec2 p = vUv * 2.0 - 1.0;
+        float r2 = dot(p, p);
+        if (r2 > 1.0) discard;
+        float g = exp(-r2 * 4.2) * (1.0 - smoothstep(0.55, 1.0, r2));
+        float fl = 0.86 + 0.14 * sin(uTime * 4.6 + vWorldPos.x * 0.5);
+        vec3 col = mix(vec3(0.95, 0.14, 0.03), vec3(1.55, 0.68, 0.16), smoothstep(0.55, 0.0, r2));
+        float a = g * 0.22 * fl;
+        if (a < 0.004) discard;
+        gl_FragColor = vec4(col, a);
+      }
+    `,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
+    fog: false
+  }));
+  const castleGlowHaloMesh = new THREE.Mesh(castleVista.halosGeo, castleGlowHaloMat);
+  castleGlowHaloMesh.renderOrder = 2;
+  castleGlowHaloMesh.frustumCulled = false;
+  exteriorGroup.add(castleGlowHaloMesh);
+
+  // 3 Depth-Staggered Drifting Night Cloud Veil Banks at the Foot of the Castle Cliff (Castle FLOATS above clouds!)
+  const cliffCloudMat = trackMat(new THREE.ShaderMaterial({
+    uniforms: { uTime: extSkyUniforms.uTime },
+    vertexShader: `
+      varying vec2 vUv;
+      varying vec3 vWorldPos;
+      void main() {
+        vUv = uv;
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vWorldPos = wp.xyz;
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      varying vec2 vUv;
+      varying vec3 vWorldPos;
+      float hash21(vec2 p) {
+        p = fract(p * vec2(127.1, 311.7));
+        p += dot(p, p + 34.53);
+        return fract(p.x * p.y);
+      }
+      float vnoise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        return mix(
+          mix(hash21(i), hash21(i + vec2(1.0, 0.0)), f.x),
+          mix(hash21(i + vec2(0.0, 1.0)), hash21(i + vec2(1.0, 1.0)), f.x),
+          f.y
+        );
+      }
+      void main() {
+        float drift = uTime * (0.018 + abs(vWorldPos.z + 40.0) * 0.0005);
+        vec2 uv1 = vec2(vUv.x * 4.2 + drift, vUv.y * 2.2);
+        vec2 uv2 = vec2(vUv.x * 8.6 - drift * 0.65, vUv.y * 4.4 + 1.3);
+        float n = vnoise(uv1) * 0.62 + vnoise(uv2) * 0.38;
+        float edgeX = smoothstep(0.0, 0.16, vUv.x) * smoothstep(0.0, 0.16, 1.0 - vUv.x);
+        float edgeY = smoothstep(0.0, 0.24, vUv.y) * (1.0 - smoothstep(0.50, 1.0, vUv.y));
+        float density = smoothstep(0.28, 0.74, n) * edgeX * edgeY;
+        if (density < 0.01) discard;
+        // Moonlit silvery cloud crests on top + brooding indigo valley shadow underneath!
+        float moonSide = smoothstep(0.95, 0.10, vUv.x);
+        vec3 shadowCol = vec3(0.055, 0.078, 0.132);
+        vec3 silverRim = vec3(0.42, 0.56, 0.80);
+        vec3 col = mix(shadowCol, silverRim, clamp(vUv.y * 0.88 + moonSide * 0.38 * n, 0.0, 1.0));
+        gl_FragColor = vec4(col, density * 0.68);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }
+    `,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    fog: false
+  }));
+  const cliffCloudSpecs = [
+    { x:  0.0, y: 12.6, z: -29.0, w: 68, h:  9.5 },
+    { x: -4.0, y: 15.8, z: -39.0, w: 84, h: 12.0 },
+    { x:  5.0, y: 18.6, z: -48.5, w: 96, h: 13.5 }
+  ];
+  const cliffCloudMeshes = [];
+  for (let i = 0; i < cliffCloudSpecs.length; i++) {
+    const cs = cliffCloudSpecs[i];
+    const cm = new THREE.Mesh(trackGeo(new THREE.PlaneGeometry(cs.w, cs.h)), cliffCloudMat);
+    cm.position.set(cs.x, cs.y, cs.z);
+    cm.renderOrder = 1;
+    cm.frustumCulled = false;
+    exteriorGroup.add(cm);
+    cliffCloudMeshes.push(cm);
+  }
+
+  // Rising Column of Volcanic Ash, Dark Smoke & Faint Embers billowing from the Castle of Ash Spires!
+  const CASTLE_PLUME_COUNT = isMobile ? 28 : 54;
   const plumePos = new Float32Array(CASTLE_PLUME_COUNT * 3);
   const plumeSeed = new Float32Array(CASTLE_PLUME_COUNT * 3);
   for (let i = 0; i < CASTLE_PLUME_COUNT; i++) {
-    plumePos[i * 3]     = (extRng() - 0.5) * 9.0;
-    plumePos[i * 3 + 1] = 36.0 + extRng() * 26.0;
-    plumePos[i * 3 + 2] = -55.0 + (extRng() - 0.5) * 6.0;
+    plumePos[i * 3]     = (extRng() - 0.5) * 14.0;
+    plumePos[i * 3 + 1] = 30.0 + extRng() * 24.0;
+    plumePos[i * 3 + 2] = -55.5 + (extRng() - 0.5) * 6.0;
     plumeSeed[i * 3]     = extRng();
-    plumeSeed[i * 3 + 1] = 0.6 + extRng() * 0.7;
-    plumeSeed[i * 3 + 2] = 0.8 + extRng() * 1.4;
+    plumeSeed[i * 3 + 1] = 0.55 + extRng() * 0.75;
+    plumeSeed[i * 3 + 2] = 0.75 + extRng() * 1.45;
   }
   const castlePlumeGeo = trackGeo(new THREE.BufferGeometry());
   castlePlumeGeo.setAttribute('position', new THREE.BufferAttribute(plumePos, 3));
@@ -2910,25 +3767,32 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
       uniform float uTime;
       varying float vAlpha;
       varying float vHeight;
+      varying float vEmber;
       void main() {
-        float cyc = fract(aSeed.x + uTime * 0.032 * aSeed.y);
+        float cyc = fract(aSeed.x + uTime * 0.036 * aSeed.y);
         vec3 p = position;
-        p.y = 35.0 + cyc * 32.0;
-        p.x += cyc * 14.0 + sin(uTime * 0.35 + aSeed.x * 12.0) * 2.4;
+        p.y = 29.0 + cyc * 28.0;
+        p.x += cyc * 14.5 + sin(uTime * 0.35 + aSeed.x * 12.0) * 2.6;
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
         gl_Position = projectionMatrix * mv;
-        gl_PointSize = clamp(((1.2 + cyc * 2.2) * aSeed.z * 780.0) / max(8.0, -mv.z), 18.0, 170.0);
-        vAlpha = sin(cyc * 3.14159) * 0.34;
+        float isEmber = step(0.84, aSeed.x);
+        float baseSz = mix((1.2 + cyc * 2.1) * aSeed.z * 740.0, 145.0, isEmber);
+        gl_PointSize = clamp(baseSz / max(8.0, -mv.z), mix(16.0, 2.5, isEmber), mix(165.0, 9.0, isEmber));
+        vAlpha = sin(cyc * 3.14159) * mix(0.32, 0.90, isEmber);
         vHeight = cyc;
+        vEmber = isEmber;
       }
     `,
     fragmentShader: `
       uniform sampler2D uTex;
       varying float vAlpha;
       varying float vHeight;
+      varying float vEmber;
       void main() {
         vec4 t = texture2D(uTex, gl_PointCoord);
-        vec3 col = mix(vec3(0.28, 0.10, 0.07), vec3(0.14, 0.18, 0.26), smoothstep(0.0, 0.55, vHeight));
+        vec3 smokeCol = mix(vec3(0.32, 0.11, 0.07), vec3(0.14, 0.19, 0.29), smoothstep(0.0, 0.55, vHeight));
+        vec3 emberCol = vec3(1.85, 0.65, 0.18);
+        vec3 col = mix(smokeCol, emberCol, vEmber);
         float a = t.a * vAlpha;
         if (a < 0.008) discard;
         gl_FragColor = vec4(col, a);
@@ -2949,23 +3813,23 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     trackMat(new THREE.MeshStandardMaterial({
       map: shorePbr.albedo,
       normalMap: lowSpecMode ? null : shorePbr.normal,
-      normalScale: new THREE.Vector2(0.88, 0.88),
+      normalScale: new THREE.Vector2(0.92, 0.92),
       roughnessMap: shorePbr.orm,
       aoMap: shorePbr.orm,
-      aoMapIntensity: 0.65,
+      aoMapIntensity: 0.68,
       vertexColors: true,
       color: 0xffffff,
-      roughness: 0.92,
+      roughness: 0.90,
       metalness: 0.05
     })),
     shorePbr.normal
   );
 
   function buildShoreTerrainGeo() {
-    const segX = isMobile ? 42 : 68;
-    const segZ = isMobile ? 48 : 78;
+    const segX = isMobile ? 46 : 74;
+    const segZ = isMobile ? 52 : 84;
     const minX = -26.0, maxX = 32.0;
-    const minZ = -18.0, maxZ = 44.0;
+    const minZ = -18.0, maxZ = 46.0;
     const geo = new THREE.PlaneGeometry(maxX - minX, maxZ - minZ, segX, segZ);
     geo.rotateX(-Math.PI * 0.5);
     geo.translate((minX + maxX) * 0.5, 0, (minZ + maxZ) * 0.5);
@@ -2973,11 +3837,11 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     const pos = geo.attributes.position;
     const uv = geo.attributes.uv;
     const cols = new Float32Array(pos.count * 3);
-    const cDry = new THREE.Color(0x6d7486);
-    const cWet = new THREE.Color(0x3a4152);
-    const cPath = new THREE.Color(0x7c8294);
-    const cMoss = new THREE.Color(0x4a594d);
-    const cCliff = new THREE.Color(0x2f3545);
+    const cDry = new THREE.Color(0x6d7588);
+    const cWet = new THREE.Color(0x343c4d);
+    const cPath = new THREE.Color(0x7e8598);
+    const cMoss = new THREE.Color(0x46584a);
+    const cCliff = new THREE.Color(0x2b3242);
     const cTmp = new THREE.Color();
 
     for (let i = 0; i < pos.count; i++) {
@@ -2985,20 +3849,20 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
       const z = pos.getZ(i);
       const y = evalExteriorGroundY(x, z);
       pos.setY(i, y);
-      uv.setXY(i, x * 0.24, z * 0.24);
+      uv.setXY(i, x * 0.25, z * 0.25);
 
       const rDist = getRiverSignedDist(x, z);
-      const wetT = 1.0 - smoothstep(-0.3, 2.6, rDist);
+      const wetT = 1.0 - smoothstep(-0.3, 2.7, rDist);
       const pathT = (z >= 4.0 && z <= 33.5) ? (1.0 - smoothstep(1.2, 2.8, Math.abs(x - getPathCenterX(z)))) : 0.0;
       const cliffT = smoothstep(0.85, 3.2, y);
       const mossNoise = clamp01(0.5 + 0.5 * Math.sin(x * 0.55 + z * 0.37) * Math.cos(z * 0.41 - x * 0.28));
-      const mossT = smoothstep(0.55, 0.88, mossNoise) * (1.0 - pathT) * (1.0 - wetT) * smoothstep(0.15, 0.9, y);
+      const mossT = smoothstep(0.52, 0.86, mossNoise) * (1.0 - pathT) * (1.0 - wetT) * smoothstep(0.14, 0.9, y);
 
       cTmp.copy(cDry);
       cTmp.lerp(cPath, pathT * 0.65);
-      cTmp.lerp(cMoss, mossT * 0.52);
-      cTmp.lerp(cWet, wetT * 0.85);
-      cTmp.lerp(cCliff, cliffT * 0.85);
+      cTmp.lerp(cMoss, mossT * 0.55);
+      cTmp.lerp(cWet, wetT * 0.86);
+      cTmp.lerp(cCliff, cliffT * 0.86);
       cols[i * 3]     = cTmp.r;
       cols[i * 3 + 1] = cTmp.g;
       cols[i * 3 + 2] = cTmp.b;
@@ -3012,29 +3876,29 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   shoreTerrainMesh.receiveShadow = true;
   exteriorGroup.add(shoreTerrainMesh);
 
-  // Ancient Half-Buried Flagstone Stepping Slabs along the Coastal Path (wakePos -> bonfire -> gate)
+  // Ancient Half-Buried Weathered Flagstone Stepping Slabs along the Coastal Trail (wakePos -> bonfire -> gate)
   const pathSlabParts = [];
-  for (let pz = 5.6; pz <= 30.2; pz += 1.85) {
-    const cx = getPathCenterX(pz) + (extRng() - 0.5) * 0.55;
+  for (let pz = 5.4; pz <= 30.2; pz += 1.65) {
+    const cx = getPathCenterX(pz) + (extRng() - 0.5) * 0.52;
     const gy = evalExteriorGroundY(cx, pz);
-    const sw = 1.25 + extRng() * 0.75;
-    const sd = 0.95 + extRng() * 0.55;
+    const sw = 1.25 + extRng() * 0.72;
+    const sd = 0.88 + extRng() * 0.52;
     const slab = new THREE.BoxGeometry(sw, 0.14, sd);
     xformGeo(slab, cx, gy - 0.025, pz, (extRng() - 0.5) * 0.04, (extRng() - 0.5) * 0.35, (extRng() - 0.5) * 0.04);
-    pathSlabParts.push(tintGeo(THREE, slab, 0x858ca0, 0x454a5a));
+    pathSlabParts.push(tintGeo(THREE, slab, 0x8a92a8, 0x454c5e));
   }
   const extAshlarMat = regNormalMat(
     trackMat(new THREE.MeshStandardMaterial({
       map: basaltPbr.albedo,
       normalMap: lowSpecMode ? null : basaltPbr.normal,
-      normalScale: new THREE.Vector2(0.84, 0.84),
+      normalScale: new THREE.Vector2(0.92, 0.92),
       roughnessMap: basaltPbr.orm,
       aoMap: basaltPbr.orm,
-      aoMapIntensity: 0.70,
+      aoMapIntensity: 0.74,
       vertexColors: true,
-      color: 0xb6bfd4,
-      roughness: 0.92,
-      metalness: 0.05
+      color: 0xc2cce2,
+      roughness: 0.90,
+      metalness: 0.06
     })),
     basaltPbr.normal
   );
@@ -3046,13 +3910,13 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   exteriorGroup.add(pathSlabsMesh);
 
   // --------------------------------------------------------------------------
-  // C4. Curving Black Gorge River Surface + Roaring Outfall Waterfall Cascade + Mist
+  // C4. AAA Curving Gorge River (Moonlight Path + Crisp Shoreline Foam) + Multi-Layered 3D Waterfall!
   // --------------------------------------------------------------------------
   function buildExteriorRiverRibbonGeo() {
-    const zSteps = isMobile ? 42 : 68;
-    const xSteps = isMobile ? 14 : 20;
+    const zSteps = isMobile ? 48 : 76;
+    const xSteps = isMobile ? 16 : 24;
     const zMin = -14.8;
-    const zMax = 44.0;
+    const zMax = 46.0;
     const pos = new Float32Array((zSteps + 1) * (xSteps + 1) * 3);
     const uv = new Float32Array((zSteps + 1) * (xSteps + 1) * 2);
     const indices = [];
@@ -3061,7 +3925,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
       const v = iz / zSteps;
       const z = lerp(zMin, zMax, v);
       const rcx = getRiverCenterX(z);
-      const rhw = getRiverHalfWidth(z) + 2.4; // generous feather skirt under pebble bank (zero polygon seam!)
+      const rhw = getRiverHalfWidth(z) + 2.4;
       for (let ix = 0; ix <= xSteps; ix++) {
         const u = ix / xSteps;
         const x = rcx + (u * 2.0 - 1.0) * rhw;
@@ -3070,7 +3934,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
         pos[vi * 3 + 1] = WATER_LEVEL;
         pos[vi * 3 + 2] = z;
         uv[vi * 2]     = u;
-        uv[vi * 2 + 1] = v * 12.0;
+        uv[vi * 2 + 1] = v * 13.0;
       }
     }
     for (let iz = 0; iz < zSteps; iz++) {
@@ -3107,11 +3971,10 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
         vec3 p = position;
         float t = uTime * 2.4;
         float edge = sin(clamp(uv.x, 0.0, 1.0) * 3.14159);
-        float w = (sin(uv.y * 5.2 - t * 2.3 + uv.x * 4.0) * 0.045
-                +  cos(uv.y * 8.4 - t * 3.1 - uv.x * 7.0) * 0.024) * edge;
-        // Extra churning swell in the outfall plunge pool around (0.3, -10.5)
+        float w = (sin(uv.y * 5.6 - t * 2.3 + uv.x * 4.5) * 0.028
+                +  cos(uv.y * 9.2 - t * 3.2 - uv.x * 7.5) * 0.015) * edge;
         float poolD = length(p.xz - vec2(0.3, -10.5));
-        float poolSurge = exp(-poolD * poolD * 0.045) * sin(t * 4.2 - poolD * 2.4) * 0.085;
+        float poolSurge = exp(-poolD * poolD * 0.055) * sin(t * 4.6 - poolD * 2.6) * 0.062;
         p.y += w + poolSurge;
         vWave = w + poolSurge;
         vec4 wp = modelMatrix * vec4(p, 1.0);
@@ -3142,65 +4005,74 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
           f.y
         );
       }
-      float fbm(vec2 p) {
-        float v = 0.0;
-        float a = 0.55;
-        for (int i = 0; i < 3; i++) {
-          v += a * vnoise(p);
-          p = p * 2.1 + vec2(9.3, 14.7);
-          a *= 0.48;
-        }
-        return v;
+      float fbm3(vec2 p) {
+        return vnoise(p) * 0.54 + vnoise(p * 2.15 + vec2(9.3, 14.7)) * 0.30 + vnoise(p * 4.4 - vec2(6.2, 11.4)) * 0.16;
+      }
+      float fbm2(vec2 p) {
+        return vnoise(p) * 0.65 + vnoise(p * 2.2 + vec2(9.3, 14.7)) * 0.35;
       }
 
       void main() {
-        float t = uTime * 1.85;
-        vec2 fUv = vec2(vUv.x * 5.2, vUv.y * 2.1 - t);
-        float n1 = fbm(fUv);
-        float n2 = uLowSpec < 0.5 ? fbm(fUv * 2.4 + vec2(n1 * 1.35, -t * 0.65)) : n1;
-        float nX = fbm(fUv + vec2(0.14, 0.0));
-        float nZ = fbm(fUv + vec2(0.0, 0.14));
-        float rpl = n1 * 0.52 + n2 * 0.48;
+        float t = uTime * 1.95;
+        vec2 fUvA = vec2(vUv.x * 7.8, vUv.y * 2.5 - t);
+        vec2 fUvB = vec2(vUv.x * 13.5 + 3.4, vUv.y * 4.6 - t * 1.55);
+        float n1 = uLowSpec < 0.5 ? fbm3(fUvA) : fbm2(fUvA);
+        float n2 = uLowSpec < 0.5 ? fbm3(fUvB + vec2(n1 * 0.9, -t * 0.35)) : fbm2(fUvB);
+        float rpl = n1 * 0.54 + n2 * 0.46;
 
-        // Sharp turbulent water-wave normal for dark obsidian gorge torrent!
-        vec3 N = normalize(vec3((n1 - nX) * 3.8, 1.0, (n1 - nZ) * 4.2));
+        // Crisp fine-scale river ripple normal (zero thick grey clay sausages!)
+        float eps = 0.09;
+        float hX = fbm2(fUvA + vec2(eps, 0.0)) * 0.54 + fbm2(fUvB + vec2(eps * 1.5, 0.0)) * 0.46;
+        float hZ = fbm2(fUvA + vec2(0.0, eps)) * 0.54 + fbm2(fUvB + vec2(0.0, eps * 1.5)) * 0.46;
+        vec3 N = normalize(vec3((rpl - hX) * 2.25, 1.0, (rpl - hZ) * 2.55));
         vec3 V = normalize(cameraPosition - vWorldPos);
         float fres = pow(1.0 - max(dot(N, V), 0.0), 4.2);
 
-        // Deep glossy ink-black mountain river water (never flat pale ice!)
-        vec3 deepCol = vec3(0.003, 0.006, 0.013);
-        vec3 skyRefl = vec3(0.075, 0.125, 0.225);
-        vec3 col = mix(deepCol, skyRefl, fres * 0.58 + rpl * 0.06);
+        // Deep matte nocturnal slate-obsidian mountain river reflecting moonlit indigo sky
+        vec3 deepCol = vec3(0.005, 0.010, 0.019);
+        vec3 midCol  = vec3(0.014, 0.025, 0.042);
+        vec3 skyRefl = vec3(0.11, 0.17, 0.28);
+        vec3 col = mix(deepCol, midCol, rpl * 0.55);
+        col = mix(col, skyRefl, fres * 0.48);
 
-        // Crisp silver moonlight glints dancing across moving black ripples
-        vec3 moonL = normalize(vec3(-0.26, 0.48, -0.838));
+        // Shimmering Silver Moonlight Path (лунная дорожка) dancing down the dark water!
+        vec3 moonL = normalize(vec3(-0.27, 0.43, -0.861));
         vec3 Hm = normalize(moonL + V);
-        float moonSpec = pow(max(dot(N, Hm), 0.0), 96.0);
-        float moonSheen = pow(max(dot(N, Hm), 0.0), 20.0) * 0.10;
-        col += vec3(0.72, 0.86, 1.08) * (moonSpec * 1.55 + moonSheen);
+        float moonSharp = pow(max(dot(N, Hm), 0.0), 120.0);
+        float moonPath  = pow(max(dot(N, Hm), 0.0), 22.0) * (0.14 + 0.16 * smoothstep(0.45, 0.85, n2));
+        col += vec3(0.76, 0.88, 1.08) * (moonSharp * 1.45 + moonPath);
 
-        // Warm amber reflection glint when the Shore Bonfire is lit!
+        // Warm amber reflection glint when Shore Bonfire is lit + subtle gate brazier reflection near z=29!
         if (uBonfireLit > 0.01) {
           vec3 bPos = vec3(-2.2, 1.8, 15.0);
           vec3 Lb = bPos - vWorldPos;
           float bd = length(Lb);
           vec3 Hb = normalize(normalize(Lb) + V);
-          float bSpec = pow(max(dot(N, Hb), 0.0), 24.0) * exp(-bd * 0.11) * uBonfireLit;
-          col += vec3(1.25, 0.50, 0.12) * bSpec * 1.05;
+          float bSpec = pow(max(dot(N, Hb), 0.0), 28.0) * exp(-bd * 0.105) * uBonfireLit;
+          col += vec3(1.30, 0.52, 0.12) * bSpec * 1.15;
         }
+        vec3 gPos = vec3(3.55, 2.4, 29.3);
+        vec3 Lg = gPos - vWorldPos;
+        float gd = length(Lg);
+        vec3 Hg = normalize(normalize(Lg) + V);
+        float gSpec = pow(max(dot(N, Hg), 0.0), 30.0) * exp(-gd * 0.12);
+        col += vec3(1.05, 0.42, 0.10) * gSpec * 0.68;
 
-        // Plunge-pool churning whitewater + lacy shoreline lap foam + crisp rapids streaks
+        // Crisp churning plunge-pool whitewater + lacy dynamic shoreline lap foam + longitudinal current streaks!
         float poolD = length(vWorldPos.xz - vec2(0.3, -10.8));
-        float poolFoam = exp(-poolD * poolD * 0.065) * smoothstep(0.32, 0.74, n2) * 1.05;
-        float bankMask = 1.0 - smoothstep(0.05, 0.18, min(vUv.x, 1.0 - vUv.x));
-        float bankFoam = bankMask * smoothstep(0.46, 0.82, n2 + sin(uTime * 2.2 + vUv.y * 3.0) * 0.10);
-        float rapidsFoam = smoothstep(0.76, 0.92, rpl + vWave * 2.2) * 0.45;
-        float foam = clamp(poolFoam + bankFoam * 0.72 + rapidsFoam, 0.0, 0.88);
-        col = mix(col, vec3(0.56, 0.68, 0.85), foam * 0.75);
+        float poolFoam = exp(-poolD * poolD * 0.058) * smoothstep(0.28, 0.72, n2 * 0.65 + n1 * 0.35) * 1.12;
+        float shoreEdge = min(vUv.x, 1.0 - vUv.x);
+        float lapWave = sin(uTime * 2.3 + vUv.y * 2.8) * 0.025;
+        float bankBand = 1.0 - smoothstep(0.05, 0.17 + lapWave, shoreEdge);
+        float bankFoam = bankBand * smoothstep(0.36, 0.76, n2 * 0.7 + n1 * 0.3) * 0.88;
+        float streamUv = vnoise(vec2(vUv.x * 11.0 + n1 * 0.9, vUv.y * 0.95 - t * 0.72));
+        float rapidsFoam = smoothstep(0.68, 0.90, streamUv * 0.62 + n2 * 0.45) * 0.48;
+        float foam = clamp(poolFoam + bankFoam + rapidsFoam, 0.0, 0.92);
+        col = mix(col, vec3(0.68, 0.80, 0.94), foam * 0.82);
 
-        // Smooth feathered shoreline edge alpha
-        float edgeAlpha = smoothstep(0.0, 0.12, vUv.x) * smoothstep(0.0, 0.12, 1.0 - vUv.x);
-        float alpha = clamp(edgeAlpha * (0.92 + foam * 0.08), 0.0, 0.96);
+        // Smooth natural water shoreline alpha (blends seamlessly onto wet glossy shingle!)
+        float edgeAlpha = smoothstep(0.015, 0.11, shoreEdge);
+        float alpha = clamp(edgeAlpha * (0.90 + foam * 0.10), 0.0, 0.96);
         if (alpha < 0.01) discard;
 
         gl_FragColor = vec4(col, alpha);
@@ -3216,26 +4088,28 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   extRiverMesh.renderOrder = 1;
   exteriorGroup.add(extRiverMesh);
 
-  // Roaring Waterfall Cascade Sheet pouring out of the Outfall Arch at (0, +1.5 -> -0.15, z = -14.5 -> -10.8)
-  function buildWaterfallSheetGeo() {
-    const cols = 16;
-    const rows = 14;
+  // Multi-Layered 3D Roaring Outfall Waterfall Cascade (Core Torrent + Outer Frothy Spray Curtain!)
+  function buildWaterfallSheetGeo(zStart, yTop, dropZ, dropY, wStart, wEnd, bulge) {
+    const cols = 18;
+    const rows = 16;
     const pos = new Float32Array((cols + 1) * (rows + 1) * 3);
     const uv = new Float32Array((cols + 1) * (rows + 1) * 2);
     const idx = [];
     for (let r = 0; r <= rows; r++) {
-      const v = r / rows; // 0 = outfall lip inside arch, 1 = plunge pool splash
-      const z = -14.4 + v * 3.55;
-      const y = 1.55 - v * v * 1.75; // parabolic waterfall drop!
-      const halfW = 2.65 + v * 0.85;
+      const v = r / rows;
+      const z = zStart + v * dropZ;
+      const y = yTop - Math.pow(v, 1.85) * dropY;
+      const halfW = lerp(wStart, wEnd, v);
       for (let c = 0; c <= cols; c++) {
         const u = c / cols;
-        const x = (u * 2.0 - 1.0) * halfW;
-        const archDip = (1.0 - Math.pow(u * 2.0 - 1.0, 2.0)) * 0.22;
+        const nx = u * 2.0 - 1.0;
+        const x = nx * halfW;
+        const archDip = (1.0 - nx * nx) * bulge;
+        const rib = Math.sin(u * Math.PI * 5.0) * 0.08 * v;
         const vi = r * (cols + 1) + c;
         pos[vi * 3]     = x;
-        pos[vi * 3 + 1] = y + archDip * (1.0 - v);
-        pos[vi * 3 + 2] = z + archDip * 0.55;
+        pos[vi * 3 + 1] = y + archDip * (1.0 - v * 0.65) + rib;
+        pos[vi * 3 + 2] = z + archDip * 0.65 + Math.abs(rib) * 0.6;
         uv[vi * 2]     = u;
         uv[vi * 2 + 1] = v;
       }
@@ -3257,73 +4131,94 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     return g;
   }
 
-  const waterfallMat = trackMat(new THREE.ShaderMaterial({
-    uniforms: { uTime: extSkyUniforms.uTime },
-    vertexShader: `
-      uniform float uTime;
-      varying vec2 vUv;
-      void main() {
-        vUv = uv;
-        vec3 p = position;
-        p.y += sin(uv.x * 16.0 + uv.y * 8.0 - uTime * 9.0) * 0.06 * uv.y;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
-      }
-    `,
-    fragmentShader: `
-      uniform float uTime;
-      varying vec2 vUv;
-      float hash21(vec2 p) {
-        p = fract(p * vec2(127.1, 311.7));
-        p += dot(p, p + 34.53);
-        return fract(p.x * p.y);
-      }
-      float vnoise(vec2 p) {
-        vec2 i = floor(p);
-        vec2 f = fract(p);
-        f = f * f * (3.0 - 2.0 * f);
-        return mix(
-          mix(hash21(i), hash21(i + vec2(1.0, 0.0)), f.x),
-          mix(hash21(i + vec2(0.0, 1.0)), hash21(i + vec2(1.0, 1.0)), f.x),
-          f.y
-        );
-      }
-      void main() {
-        float s1 = vnoise(vec2(vUv.x * 11.0, vUv.y * 5.0 - uTime * 4.8));
-        float s2 = vnoise(vec2(vUv.x * 22.0 + 3.1, vUv.y * 9.0 - uTime * 7.6));
-        float streak = smoothstep(0.28, 0.82, s1 * 0.6 + s2 * 0.4 + vUv.y * 0.25);
-        float sideFade = smoothstep(0.0, 0.14, vUv.x) * smoothstep(0.0, 0.14, 1.0 - vUv.x);
-        vec3 waterCol = mix(vec3(0.14, 0.22, 0.34), vec3(0.76, 0.86, 0.98), streak);
-        float a = clamp((0.55 + streak * 0.45) * sideFade, 0.0, 0.94);
-        if (a < 0.01) discard;
-        gl_FragColor = vec4(waterCol, a);
-        #include <tonemapping_fragment>
-        #include <colorspace_fragment>
-      }
-    `,
-    transparent: true,
-    depthWrite: false,
-    side: THREE.DoubleSide
-  }));
-  const waterfallMesh = new THREE.Mesh(trackGeo(buildWaterfallSheetGeo()), waterfallMat);
-  waterfallMesh.renderOrder = 2;
-  exteriorGroup.add(waterfallMesh);
+  function makeWaterfallMat(speedMul, opacityMul, foamBias) {
+    return trackMat(new THREE.ShaderMaterial({
+      uniforms: { uTime: extSkyUniforms.uTime },
+      vertexShader: `
+        uniform float uTime;
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          vec3 p = position;
+          p.y += sin(uv.x * 18.0 + uv.y * 9.0 - uTime * ${(8.5 * speedMul).toFixed(2)}) * 0.065 * uv.y;
+          p.z += cos(uv.x * 12.0 - uTime * ${(6.8 * speedMul).toFixed(2)}) * 0.045 * uv.y;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float uTime;
+        varying vec2 vUv;
+        float hash21(vec2 p) {
+          p = fract(p * vec2(127.1, 311.7));
+          p += dot(p, p + 34.53);
+          return fract(p.x * p.y);
+        }
+        float vnoise(vec2 p) {
+          vec2 i = floor(p);
+          vec2 f = fract(p);
+          f = f * f * (3.0 - 2.0 * f);
+          return mix(
+            mix(hash21(i), hash21(i + vec2(1.0, 0.0)), f.x),
+            mix(hash21(i + vec2(0.0, 1.0)), hash21(i + vec2(1.0, 1.0)), f.x),
+            f.y
+          );
+        }
+        void main() {
+          float t = uTime * ${(4.8 * speedMul).toFixed(2)};
+          float s1 = vnoise(vec2(vUv.x * 13.0, vUv.y * 4.5 - t));
+          float s2 = vnoise(vec2(vUv.x * 26.0 + 3.1, vUv.y * 8.5 - t * 1.55));
+          float s3 = vnoise(vec2(vUv.x * 6.0 - 1.4, vUv.y * 2.8 - t * 0.75));
+          float streak = smoothstep(0.24, 0.80, s1 * 0.50 + s2 * 0.32 + s3 * 0.18 + vUv.y * 0.30 + ${foamBias.toFixed(2)});
+          float sideFade = smoothstep(0.0, 0.15, vUv.x) * smoothstep(0.0, 0.15, 1.0 - vUv.x);
+          float topFade = smoothstep(0.0, 0.08, vUv.y);
+          vec3 slateWater = vec3(0.10, 0.18, 0.30);
+          vec3 moonFoam   = vec3(0.80, 0.90, 1.02);
+          vec3 waterCol = mix(slateWater, moonFoam, streak);
+          float a = clamp((0.46 + streak * 0.54) * sideFade * topFade * ${opacityMul.toFixed(2)}, 0.0, 0.95);
+          if (a < 0.01) discard;
+          gl_FragColor = vec4(waterCol, a);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide
+    }));
+  }
+
+  // Layer 1: Dense Core Roaring Outfall Cascade (y = +2.1 -> -0.25m, z = -14.6 -> -10.5m)
+  const waterfallCoreMesh = new THREE.Mesh(
+    trackGeo(buildWaterfallSheetGeo(-14.6, 2.05, 4.05, 2.30, 2.75, 3.65, 0.28)),
+    makeWaterfallMat(1.0, 0.94, 0.0)
+  );
+  waterfallCoreMesh.renderOrder = 2;
+  exteriorGroup.add(waterfallCoreMesh);
+
+  // Layer 2: Outer Frothy Spray & Turbulent Cascade Veil slightly ahead & wider!
+  const waterfallVeilMesh = new THREE.Mesh(
+    trackGeo(buildWaterfallSheetGeo(-14.25, 2.25, 4.35, 2.45, 2.95, 4.10, 0.42)),
+    makeWaterfallMat(1.24, 0.58, 0.12)
+  );
+  waterfallVeilMesh.renderOrder = 3;
+  exteriorGroup.add(waterfallVeilMesh);
 
   // --------------------------------------------------------------------------
-  // C5. Sheer Black Basalt Outfall Cliff, Massive Gothic Outfall Arch, Broken Iron Grate,
-  //     Coastal Boulders & Ruined Gate of the Ash Gorge (Merged into tight PBR batches!)
+  // C5. Multi-Octave Displaced Basalt Cliffs & Gorge Mountains (ZERO smooth cones!),
+  //     Monumental Gothic Outfall Arch w/ Ripped Grate, Coastal Boulders &
+  //     MONUMENTAL GOTHIC GATE OF THE ASH GORGE w/ Swirling Golden-Silver Boss Fog & Twin Braziers!
   // --------------------------------------------------------------------------
-  // Natural Jagged Volcanic Cliff & Boulder Material (uses cliffPbr — anti-shimmer matte volcanic basalt!)
   const extBasaltMat = regNormalMat(
     trackMat(new THREE.MeshStandardMaterial({
       map: cliffPbr.albedo,
       normalMap: lowSpecMode ? null : cliffPbr.normal,
-      normalScale: new THREE.Vector2(0.76, 0.76),
+      normalScale: new THREE.Vector2(0.86, 0.86),
       roughnessMap: cliffPbr.orm,
       aoMap: cliffPbr.orm,
-      aoMapIntensity: 0.76,
+      aoMapIntensity: 0.78,
       vertexColors: true,
-      color: 0xb4bfd6,
-      roughness: 0.96,
+      color: 0xc4d0e8,
+      roughness: 0.94,
       metalness: 0.04
     })),
     cliffPbr.normal
@@ -3333,54 +4228,66 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   const ashlarParts = [];
   const extIronParts = [];
 
-  // 1. Massive Sheer Basalt Outfall Cliff Face behind the hero (z = -14..-18m, V-gorge crest so Castle of Ash towers completely unobstructed above!)
-  const cliffBlockSpecs = [
-    // Left & Right sheer basalt cliff pillars framing the subterranean outfall arch (V-gorge framing!)
-    { x: -10.5, y: 5.4, z: -15.4, r: 5.8, sy: 1.12, seed: 801 },
-    { x:  10.5, y: 5.6, z: -15.2, r: 6.0, sy: 1.15, seed: 802 },
-    { x: -18.5, y: 8.6, z: -14.2, r: 7.4, sy: 1.48, seed: 803 },
-    { x:  18.8, y: 8.8, z: -14.0, r: 7.5, sy: 1.48, seed: 804 },
-    // Crisp low basalt cliff crown directly above the outfall arch (crest ~y=9.8m -> reveals entire Castle of Ash behind!)
-    { x:   0.0, y: 7.9, z: -16.6, r: 5.4, sy: 0.42, seed: 805 },
-    { x:  -6.6, y: 8.6, z: -17.2, r: 5.2, sy: 0.56, seed: 806 },
-    { x:   6.8, y: 8.8, z: -17.0, r: 5.4, sy: 0.56, seed: 807 },
-    // Left coastal gorge cliff wall curving down the west flank (x = -15..-23, z = -10..+36)
-    { x: -16.5, y: 4.5, z:  -5.0, r: 5.8, sy: 1.25, seed: 808 },
-    { x: -17.5, y: 5.2, z:   4.5, r: 6.2, sy: 1.28, seed: 809 },
-    { x: -18.2, y: 5.8, z:  14.5, r: 6.6, sy: 1.32, seed: 810 },
-    { x: -16.8, y: 5.5, z:  24.5, r: 6.4, sy: 1.30, seed: 811 },
-    { x: -13.2, y: 5.2, z:  33.0, r: 6.2, sy: 1.32, seed: 812 },
-    // Right gorge cliff wall across the black river (x = +20..+28, z = -6..+36)
-    { x:  21.5, y: 5.4, z:  -4.0, r: 6.4, sy: 1.32, seed: 813 },
-    { x:  23.5, y: 6.0, z:   7.0, r: 6.8, sy: 1.35, seed: 814 },
-    { x:  25.2, y: 6.2, z:  18.5, r: 7.0, sy: 1.35, seed: 815 },
-    { x:  24.5, y: 5.8, z:  29.5, r: 6.8, sy: 1.32, seed: 816 },
-    { x:  16.0, y: 4.8, z:  35.5, r: 6.0, sy: 1.24, seed: 817 }
+  // 1. CRAGGY MULTI-OCTAVE DISPLACED BASALT CLIFFS & GORGE MOUNTAINS
+  //    - Carefully sculpted low V-canyon framing around z = -14m so Castle of Ash & Giant Moon are 100% UNOBSTRUCTED!
+  //    - Rugged stepped coastal cliff ridges enclosing west shore, east riverbank & curving behind Ash Gorge Gate!
+  const rockDetail = isMobile ? 2 : 3;
+  const cliffMassSpecs = [
+    // Foreground V-gorge outfall cliff shoulders (grounded solidly into terrain, framing outfall arch w/o blocking Moon/Castle!)
+    { x: -11.4, y: -1.4, z: -15.6, rx: 6.4, ry:  9.2, rz: 5.8, seed: 801, flatTop: true },
+    { x:  11.6, y: -1.4, z: -15.4, rx: 6.6, ry:  9.4, rz: 5.8, seed: 802, flatTop: true },
+    { x: -20.5, y: -1.2, z: -13.6, rx: 8.6, ry: 13.8, rz: 7.4, seed: 803, flatTop: false },
+    { x:  21.0, y: -1.2, z: -13.4, rx: 8.8, ry: 14.2, rz: 7.5, seed: 804, flatTop: false },
+    // Low craggy basalt ridge crest directly above outfall headwall (y top ~ 9.6m -> Castle towers soar freely behind!)
+    { x:   0.0, y:  6.4, z: -17.4, rx: 6.2, ry:  3.4, rz: 4.2, seed: 805, flatTop: true },
+    { x:  -7.2, y:  6.2, z: -17.8, rx: 5.8, ry:  4.2, rz: 4.6, seed: 806, flatTop: true },
+    { x:   7.4, y:  6.3, z: -17.6, rx: 6.0, ry:  4.3, rz: 4.6, seed: 807, flatTop: true },
+    // West coastal craggy mountain ridge (x = -16..-25, z = -5..+36) — broad terraced basalt mesas & stepped shelves!
+    { x: -18.8, y: -1.4, z:  -4.8, rx: 9.2, ry:  9.8, rz: 8.6, seed: 808, flatTop: true },
+    { x: -20.2, y: -1.4, z:   5.2, rx: 9.6, ry: 10.6, rz: 9.4, seed: 809, flatTop: true },
+    { x: -21.2, y: -1.4, z:  15.6, rx: 10.4, ry: 11.4, rz: 10.0, seed: 810, flatTop: true },
+    { x: -19.6, y: -1.4, z:  25.8, rx: 9.8, ry: 10.8, rz: 9.4, seed: 811, flatTop: true },
+    { x: -15.4, y: -1.4, z:  34.8, rx: 9.2, ry: 10.2, rz: 8.6, seed: 812, flatTop: true },
+    // East gorge mountain wall across the black river (x = +21..+29, z = -4..+42)
+    { x:  23.4, y: -1.4, z:  -3.5, rx: 9.8, ry: 10.5, rz: 9.0, seed: 813, flatTop: true },
+    { x:  25.4, y: -1.4, z:   7.5, rx: 10.6, ry: 11.6, rz: 9.8, seed: 814, flatTop: true },
+    { x:  26.8, y: -1.4, z:  19.2, rx: 11.2, ry: 12.2, rz: 10.2, seed: 815, flatTop: true },
+    { x:  25.8, y: -1.4, z:  30.6, rx: 10.6, ry: 11.2, rz: 9.8, seed: 816, flatTop: true },
+    // Far-south rocky gorge headlands behind & beside the Ash Gorge Gate (broad craggy mesas enclosing horizon cleanly!)
+    { x:  17.6, y: -1.4, z:  38.8, rx: 10.4, ry: 10.4, rz: 8.8, seed: 817, flatTop: true },
+    { x:  28.2, y: -1.6, z:  44.0, rx: 13.5, ry: 13.0, rz: 10.8, seed: 818, flatTop: true },
+    { x: -25.2, y: -1.6, z:  42.0, rx: 13.0, ry: 12.6, rz: 10.4, seed: 819, flatTop: true },
+    { x:   8.2, y: -1.4, z:  46.0, rx: 11.2, ry:  9.2, rz: 8.2, seed: 820, flatTop: true },
+    { x:  -9.2, y: -1.4, z:  46.2, rx: 11.2, ry:  9.4, rz: 8.2, seed: 821, flatTop: true }
   ];
-  for (let i = 0; i < cliffBlockSpecs.length; i++) {
-    const c = cliffBlockSpecs[i];
-    const g = buildSculptedRockGeo(THREE, c.r, c.seed, c.sy, 1);
+  for (let i = 0; i < cliffMassSpecs.length; i++) {
+    const c = cliffMassSpecs[i];
+    const g = buildCraggyCliffMassGeo(THREE, c.rx, c.ry, c.rz, c.seed, rockDetail, {
+      flatTop: c.flatTop,
+      topHex: 0x586680,
+      midHex: 0x2c3446,
+      botHex: 0x131722,
+      mossHex: 0x2d4335
+    });
     xformGeo(g, c.x, c.y, c.z, 0, extRng() * 6.28, 0);
-    basaltParts.push(tintGeo(THREE, g, 0x454e62, 0x161a24));
+    basaltParts.push(g);
   }
 
-  // Sculpted Shore & River Boulders (including those matching EXTERIOR_STATIC_COLLIDERS!)
+  // Sculpted Shore & River Boulders (matching EXTERIOR_STATIC_COLLIDERS 1:1!)
   const boulderSpecs = [
-    // Collider-matched shore boulders
     { x: -8.6, z:  0.8, r: 1.60, sy: 0.72 },
     { x: -9.4, z:  8.5, r: 1.72, sy: 0.78 },
     { x: -9.8, z: 18.8, r: 1.76, sy: 0.80 },
     { x: -8.8, z: 26.4, r: 1.70, sy: 0.76 },
     { x: -5.4, z: -2.6, r: 1.48, sy: 0.68 },
     { x:  6.4, z: 23.2, r: 1.38, sy: 0.66 },
-    // Plunge pool & river rapids rocks (dramatic foam-splashed wet basalt!)
+    // Churning plunge-pool & river rapids boulders
     { x:  4.6, z: -8.2, r: 1.45, sy: 0.62 },
     { x: -4.4, z: -9.5, r: 1.65, sy: 0.72 },
     { x:  9.2, z:  0.4, r: 1.22, sy: 0.56 },
     { x: 13.8, z: 11.2, r: 1.40, sy: 0.60 },
     { x: 11.2, z: 21.8, r: 1.28, sy: 0.58 },
     { x: 15.8, z: 28.0, r: 1.65, sy: 0.70 },
-    // Small decorative coastal rocks outside center walklines
     { x: -11.5, z: 13.2, r: 1.35, sy: 0.70 },
     { x:  -7.2, z: 12.2, r: 0.72, sy: 0.55 },
     { x:   4.2, z: 10.6, r: 0.64, sy: 0.48 },
@@ -3389,116 +4296,209 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   for (let i = 0; i < boulderSpecs.length; i++) {
     const b = boulderSpecs[i];
     const gy = evalExteriorGroundY(b.x, b.z);
-    const g = buildSculptedRockGeo(THREE, b.r, 850 + i, b.sy, 1);
-    xformGeo(g, b.x, gy + b.r * b.sy * 0.32, b.z, 0, extRng() * 6.28, 0);
-    // Subtle moss tint on drier boulders, darker wet basalt in the river
+    const g = buildSculptedRockGeo(THREE, b.r, 850 + i, b.sy, isMobile ? 1 : 2);
+    xformGeo(g, b.x, gy + b.r * b.sy * 0.30, b.z, 0, extRng() * 6.28, 0);
     const inWater = gy < WATER_LEVEL + 0.1;
-    basaltParts.push(tintGeo(THREE, g, inWater ? 0x3b4456 : 0x525d68, 0x1a1e28));
+    basaltParts.push(tintGeo(THREE, g, inWater ? 0x424d64 : 0x5c6978, 0x1a1f2b));
   }
 
-  // 2. Massive Subterranean Outfall Gothic Stone Archway at (0, 0, -14.0) + Broken Bent Rusty Grate!
+  // 2. MONUMENTAL GOTHIC SUBTERRANEAN OUTFALL ARCHWAY at (0, 0, -14.0) + VIOLENTLY RIPPED IRON GRATE!
   const archZ = -14.0;
-  // Flanking massive outfall retaining piers
   for (const side of [-1, 1]) {
-    ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(2.6, 7.6, 3.8), side * 4.4, 3.3, archZ), 0x626c84, 0x262b38));
-    ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(3.0, 0.65, 4.2), side * 4.4, 6.8, archZ), 0x727e99, 0x343a4c));
+    // Stepped gothic sluice retaining piers w/ battered plinths, buttress pilasters & weathered capstones
+    ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(3.2, 1.3, 4.5), side * 4.55, 0.35, archZ + 0.25), 0x626e88, 0x242938));
+    ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(2.7, 7.8, 4.0), side * 4.55, 3.6, archZ), 0x6c7996, 0x282e3f));
+    ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(1.15, 7.2, 1.25), side * 5.65, 3.4, archZ + 1.85), 0x7685a4, 0x2f364a));
+    ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(3.2, 0.65, 4.5), side * 4.55, 7.2, archZ + 0.12), 0x7c8bac, 0x353d52));
   }
-  // Pointed gothic stone arch voussoirs spanning the outfall opening (x in [-3.4..+3.4], y = 4.6 -> 7.8m)
-  const outArchSegs = 12;
-  for (let i = 0; i < outArchSegs; i++) {
-    const a0 = (i / outArchSegs) * Math.PI;
-    const a1 = ((i + 1) / outArchSegs) * Math.PI;
-    const x0 = -Math.cos(a0) * 3.65;
-    const y0 = 3.9 + Math.pow(Math.sin(a0), 0.82) * 3.85;
-    const x1 = -Math.cos(a1) * 3.65;
-    const y1 = 3.9 + Math.pow(Math.sin(a1), 0.82) * 3.85;
-    const len = Math.hypot(x1 - x0, y1 - y0) + 0.18;
-    const ang = Math.atan2(y1 - y0, x1 - x0);
-    ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(len, 0.95, 3.4), (x0 + x1) * 0.5, (y0 + y1) * 0.5, archZ, 0, 0, ang), 0x707b96, 0x303648));
-  }
-  // Carved keystone & upper headwall masonry
-  ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(1.15, 1.55, 3.8), 0, 7.85, archZ), 0x7c88a4, 0x3a4256));
-  ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(11.6, 2.2, 2.8), 0, 8.8, archZ - 0.5), 0x525a70, 0x222634));
-
-  // Pitch-black recessed subterranean tunnel mouth backing inside the outfall arch
-  const outfallVoidMat = trackMat(new THREE.MeshBasicMaterial({ color: 0x03050a }));
-  const outfallVoid = new THREE.Mesh(trackGeo(new THREE.PlaneGeometry(7.2, 7.4)), outfallVoidMat);
-  outfallVoid.position.set(0, 3.4, archZ - 1.35);
-  exteriorGroup.add(outfallVoid);
-
-  // Shattered & Violently Bent-Outward Rusty Iron Grate Bars hanging from the Outfall Arch!
-  extIronParts.push(xformGeo(new THREE.BoxGeometry(7.4, 0.34, 0.34), 0, 6.2, archZ + 1.25));
-  for (let i = -4; i <= 4; i++) {
-    const bx = i * 0.76;
-    const isBrokenCenter = Math.abs(i) <= 2;
-    if (isBrokenCenter) {
-      // Bent & snapped upper stub jutting violently OUTWARD (+Z) from hero breaking through!
-      const topStub = new THREE.CylinderGeometry(0.085, 0.095, 2.55, 7);
-      xformGeo(topStub, bx, 5.15, archZ + 1.85, -0.78 - (2 - Math.abs(i)) * 0.22, 0, i * 0.14);
-      extIronParts.push(topStub);
-      // Twisted lower shard sticking out of the waterfall lip
-      const botStub = new THREE.CylinderGeometry(0.08, 0.09, 1.55, 7);
-      xformGeo(botStub, bx, 1.45, archZ + 1.72, 0.92, 0, -i * 0.18);
-      extIronParts.push(botStub);
-    } else {
-      // Intact outer rusted bars
-      const bar = new THREE.CylinderGeometry(0.09, 0.10, 5.4, 7);
-      xformGeo(bar, bx, 3.55, archZ + 1.25);
-      extIronParts.push(bar);
+  // Double-ring recessed pointed gothic stone archivolts spanning the outfall opening (x in [-3.5..+3.5])
+  const outArchSegs = 14;
+  for (let ring = 0; ring < 2; ring++) {
+    const rad = ring === 0 ? 3.55 : 4.18;
+    const zOff = ring === 0 ? archZ + 0.0 : archZ + 0.55;
+    const depth = ring === 0 ? 3.4 : 1.15;
+    const thick = ring === 0 ? 0.85 : 0.68;
+    for (let i = 0; i < outArchSegs; i++) {
+      const a0 = (i / outArchSegs) * Math.PI;
+      const a1 = ((i + 1) / outArchSegs) * Math.PI;
+      const x0 = -Math.cos(a0) * rad;
+      const y0 = 3.85 + Math.pow(Math.sin(a0), 0.78) * (rad + 0.35);
+      const x1 = -Math.cos(a1) * rad;
+      const y1 = 3.85 + Math.pow(Math.sin(a1), 0.78) * (rad + 0.35);
+      const len = Math.hypot(x1 - x0, y1 - y0) + 0.18;
+      const ang = Math.atan2(y1 - y0, x1 - x0);
+      ashlarParts.push(tintGeo(
+        THREE,
+        xformGeo(new THREE.BoxGeometry(len, thick, depth), (x0 + x1) * 0.5, (y0 + y1) * 0.5, zOff, 0, 0, ang),
+        ring === 1 ? 0x8291b2 : 0x6c7894,
+        0x2e3548
+      ));
     }
   }
+  // Sculpted keystone, molded headwall cornice & crumbling stone parapet
+  ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(1.25, 1.75, 4.1), 0, 8.15, archZ + 0.25), 0x8897b8, 0x3b445b));
+  ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(12.2, 2.0, 3.2), 0, 8.85, archZ - 0.35), 0x5d6882, 0x242a38));
+  ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(12.6, 0.48, 3.6), 0, 9.75, archZ - 0.15), 0x7482a0, 0x31384c));
 
-  // 3. Ancient Ruined GATE OF THE ASH GORGE at (0, y, z = +31.0) + Twin Gate Braziers!
+  const outfallVoidMat = trackMat(new THREE.MeshBasicMaterial({ color: 0x03050a }));
+  const outfallVoid = new THREE.Mesh(trackGeo(new THREE.PlaneGeometry(7.2, 7.6)), outfallVoidMat);
+  outfallVoid.position.set(0, 3.5, archZ - 1.35);
+  exteriorGroup.add(outfallVoid);
+
+  // VIOLENTLY RIPPED & BENT-OUTWARD RUSTY IRON OUTFALL GRATE (organic asymmetric breaks, consistent w/ Act 4!)
+  extIronParts.push(xformGeo(new THREE.BoxGeometry(7.6, 0.38, 0.38), 0, 6.45, archZ + 1.35));
+  for (let i = -4; i <= 4; i++) {
+    const bx = i * 0.78;
+    const isBrokenCenter = Math.abs(i) <= 2;
+    if (isBrokenCenter) {
+      // Torn upper iron bars violently blasted OUTWARD (+Z) at irregular jagged angles!
+      const lenVar = 2.0 + Math.abs(i) * 0.45 + (i % 2 === 0 ? 0.35 : -0.15);
+      const bendPitch = -0.96 - (2 - Math.abs(i)) * 0.24;
+      const splayZ = i * 0.28 + (i === 0 ? 0.14 : 0);
+      const topStub = new THREE.CylinderGeometry(0.085, 0.095, lenVar, 7);
+      xformGeo(topStub, bx, 6.35 - lenVar * 0.26, archZ + 1.95 + (2 - Math.abs(i)) * 0.32, bendPitch, 0, splayZ);
+      extIronParts.push(topStub);
+      // Only outer 2 broken lower shards jut asymmetrically near the waterfall edges (clean wide roaring breach in center!)
+      if (Math.abs(i) >= 1) {
+        const botLen = Math.abs(i) === 2 ? 1.55 : 0.95;
+        const botStub = new THREE.CylinderGeometry(0.08, 0.09, botLen, 7);
+        xformGeo(botStub, bx + Math.sign(i) * 0.18, 1.85 + (Math.abs(i) - 1) * 0.25, archZ + 1.92, 1.05 + Math.abs(i) * 0.14, 0, -i * 0.34);
+        extIronParts.push(botStub);
+      }
+    } else {
+      const bar = new THREE.CylinderGeometry(0.095, 0.105, 5.6, 7);
+      xformGeo(bar, bx, 3.7, archZ + 1.35);
+      extIronParts.push(bar);
+      extIronParts.push(xformGeo(new THREE.BoxGeometry(0.28, 0.24, 0.36), bx, 3.6, archZ + 1.35));
+    }
+  }
+  // Dangling broken iron chains hanging off the ripped grate frame
+  addHangingChainParts(THREE, extIronParts, -2.4, 6.2, archZ + 1.55, 7, 0.24, -0.15, 0.25);
+  addHangingChainParts(THREE, extIronParts,  2.4, 6.2, archZ + 1.55, 7, 0.24,  0.15, 0.22);
+
+  // 3. MONUMENTAL GOTHIC GATE OF THE ASH GORGE at (0, y, z = +31.0) + ORNATE TWIN BRAZIERS!
   const gateZ = 31.0;
   const gateGroundY = evalExteriorGroundY(0.0, gateZ);
   for (const side of [-1, 1]) {
-    // Massive battered gothic gatehouse pylon + plinth + buttress + broken battlements
-    ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(2.7, 0.85, 2.9), side * 3.85, gateGroundY + 0.35, gateZ), 0x737f9a, 0x303648));
-    ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(2.2, 7.6, 2.3), side * 3.85, gateGroundY + 4.2, gateZ), 0x6b7792, 0x2b3142));
-    ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(2.55, 0.48, 2.65), side * 3.85, gateGroundY + 5.8, gateZ), 0x7d8aa6, 0x3b4358));
-    // Stepped ruined pylon turret cap (asymmetric weathered break!)
-    const capH = side < 0 ? 1.8 : 1.1;
-    ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(1.75, capH, 1.85), side * 3.95, gateGroundY + 8.0 + capH * 0.5, gateZ), 0x7986a2, 0x3a4256));
-    // Wing walls linking gate piers to the flanking gorge cliffs
-    ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(5.6, 4.6, 1.5), side * 7.4, gateGroundY + 2.1, gateZ + 0.5, 0, -side * 0.16, 0), 0x5d677e, 0x252a38));
-    // Flanking Brazier stone pedestals at (±3.55, 29.3)
-    const bgy = evalExteriorGroundY(side * 3.55, 29.3);
-    ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.CylinderGeometry(0.42, 0.56, 1.15, 8), side * 3.55, bgy + 0.55, 29.3), 0x6f7b94, 0x2d3344));
-    // Wrought-iron brazier bowl & 6-bar fire cage
-    extIronParts.push(xformGeo(new THREE.CylinderGeometry(0.56, 0.36, 0.42, 8), side * 3.55, bgy + 1.32, 29.3));
-    for (let bi = 0; bi < 6; bi++) {
-      const ba = (bi / 6) * Math.PI * 2;
-      extIronParts.push(xformGeo(
-        new THREE.CylinderGeometry(0.032, 0.036, 0.62, 6),
-        side * 3.55 + Math.cos(ba) * 0.48,
-        bgy + 1.66,
-        29.3 + Math.sin(ba) * 0.48,
-        0, 0, 0
+    const px = side * 3.85;
+    // Multi-stepped battered plinth base & molded footing
+    ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(3.25, 0.62, 3.55), px, gateGroundY + 0.24, gateZ), 0x7784a2, 0x2f3548));
+    ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(2.85, 0.65, 3.15), px, gateGroundY + 0.85, gateZ), 0x7c8aa8, 0x333a4e));
+    // Core massive carved Gothic gatehouse pylon shaft
+    ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(2.35, 7.8, 2.55), px, gateGroundY + 4.85, gateZ), 0x717e9c, 0x2d3447));
+    // 4 Clustered Gothic Corner Colonnettes / Buttress Ribs running vertically up each pylon!
+    for (const cx of [-1.08, 1.08]) {
+      for (const czOff of [-1.18, 1.18]) {
+        ashlarParts.push(tintGeo(
+          THREE,
+          xformGeo(new THREE.BoxGeometry(0.46, 7.6, 0.46), px + cx, gateGroundY + 4.8, gateZ + czOff),
+          0x8391b2,
+          0x363e54
+        ));
+      }
+    }
+    // Carved horizontal gothic string-courses & overhanging capital cornice moldings
+    ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(2.82, 0.36, 3.02), px, gateGroundY + 3.45, gateZ), 0x8796b8, 0x3b445b));
+    ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(2.96, 0.52, 3.18), px, gateGroundY + 6.35, gateZ), 0x8b9abc, 0x3f4860));
+    ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(2.88, 0.46, 3.10), px, gateGroundY + 8.75, gateZ), 0x8d9cbf, 0x424c66));
+
+    // Recessed Gothic Blind-Arch Niche Detail carved onto the front face of each pylon!
+    ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(1.12, 2.35, 0.24), px, gateGroundY + 4.95, gateZ - 1.24), 0x464f64, 0x1d222e));
+    ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(0.86, 0.28, 0.48), px, gateGroundY + 3.72, gateZ - 1.36), 0x8392b2, 0x384056));
+
+    // Asymmetric weathered Gothic Turret Crowns (Left: tall stepped gothic pinnacle spirelet; Right: dramatic ruined break!)
+    if (side < 0) {
+      ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(1.88, 1.75, 2.02), px, gateGroundY + 9.85, gateZ), 0x8392b2, 0x3a435a));
+      ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.ConeGeometry(1.22, 3.2, 4), px, gateGroundY + 12.25, gateZ, 0, Math.PI / 4, 0), 0x8e9ec2, 0x434d68));
+      // Corner merlon blocks around left turret
+      for (const mx of [-0.95, 0.95]) {
+        ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(0.55, 1.1, 0.55), px + mx, gateGroundY + 9.45, gateZ - 0.95), 0x8a99bc, 0x404962));
+      }
+    } else {
+      // Half-crumbled jagged masonry crown on right pylon (authentic FromSoftware ancient ruin silhouette!)
+      ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(1.32, 1.45, 1.65), px + 0.35, gateGroundY + 9.65, gateZ + 0.12, 0, 0, -0.05), 0x808faf, 0x3a4258));
+      ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(0.75, 0.85, 0.92), px - 0.58, gateGroundY + 9.25, gateZ - 0.42, 0.06, 0.12, 0.08), 0x7c8aa8, 0x363e52));
+    }
+
+    // Stepped Battlemented Wing Walls curving gracefully into the gorge cliffs + Buttress Piers!
+    ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(6.8, 4.9, 1.65), side * 7.8, gateGroundY + 2.25, gateZ + 0.65, 0, -side * 0.18, 0), 0x677490, 0x272d3d));
+    ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(7.0, 0.42, 1.95), side * 7.8, gateGroundY + 4.78, gateZ + 0.65, 0, -side * 0.18, 0), 0x7e8dae, 0x374056));
+    // Wing-wall buttress pilasters & weathered crenellation merlons
+    for (let wi = 0; wi < 3; wi++) {
+      const wx = side * (6.2 + wi * 2.15);
+      const wz = gateZ + 0.25 + wi * 0.38;
+      ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(0.92, 4.8, 0.88), wx, gateGroundY + 2.2, wz - 0.72, 0, -side * 0.18, 0), 0x7583a2, 0x2e3548));
+      if (!(side > 0 && wi === 1)) {
+        ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(1.05, 1.05, 1.15), wx, gateGroundY + 5.45, wz, 0, -side * 0.18, 0), 0x8291b2, 0x3b445b));
+      }
+    }
+
+    // Fallen tumbled masonry blocks & ruined rubble scattered naturally beside each gate pylon base!
+    for (let rb = 0; rb < 4; rb++) {
+      const rx = px + side * (1.2 + rb * 0.55) + (extRng() - 0.5) * 0.7;
+      const rz = gateZ - 1.35 - (rb % 2) * 0.85 + (extRng() - 0.5) * 0.5;
+      const rgy = evalExteriorGroundY(rx, rz);
+      const blk = new THREE.BoxGeometry(0.62 + extRng() * 0.42, 0.42 + extRng() * 0.26, 0.52 + extRng() * 0.34);
+      xformGeo(blk, rx, rgy + 0.16, rz, (extRng() - 0.5) * 0.35, extRng() * 3.14, (extRng() - 0.5) * 0.32);
+      ashlarParts.push(tintGeo(THREE, blk, 0x7684a2, 0x2e3548));
+    }
+
+    // ORNATE GOTHIC FORGED-IRON GATE BRAZIERS at (±3.55, 29.3) matching collider!
+    const bxP = side * 3.55;
+    const bzP = 29.3;
+    const bgy = evalExteriorGroundY(bxP, bzP);
+    // Stepped octagonal carved stone pedestal
+    ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.CylinderGeometry(0.58, 0.68, 0.28, 8), bxP, bgy + 0.14, bzP), 0x7c8aa8, 0x333a4e));
+    ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.CylinderGeometry(0.40, 0.52, 0.96, 8), bxP, bgy + 0.72, bzP), 0x7482a0, 0x2f3648));
+    ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.CylinderGeometry(0.54, 0.44, 0.20, 8), bxP, bgy + 1.26, bzP), 0x8594b4, 0x3a435a));
+    // Wrought-iron splayed bowl, lower forged ring, 8 curved iron fire-basket ribs & crown spikes!
+    extIronParts.push(xformGeo(new THREE.CylinderGeometry(0.62, 0.34, 0.46, 8), bxP, bgy + 1.54, bzP));
+    extIronParts.push(xformGeo(new THREE.TorusGeometry(0.58, 0.042, 6, 14), bxP, bgy + 1.76, bzP, Math.PI * 0.5, 0, 0));
+    extIronParts.push(xformGeo(new THREE.TorusGeometry(0.66, 0.040, 6, 14), bxP, bgy + 2.24, bzP, Math.PI * 0.5, 0, 0));
+    for (let bi = 0; bi < 8; bi++) {
+      const ba = (bi / 8) * Math.PI * 2;
+      const rx = bxP + Math.cos(ba) * 0.59;
+      const rz = bzP + Math.sin(ba) * 0.59;
+      extIronParts.push(xformGeo(new THREE.CylinderGeometry(0.032, 0.038, 0.78, 6), rx, bgy + 2.02, rz, Math.sin(ba) * 0.16, 0, -Math.cos(ba) * 0.16));
+      extIronParts.push(xformGeo(new THREE.ConeGeometry(0.042, 0.18, 4), bxP + Math.cos(ba) * 0.66, bgy + 2.44, bzP + Math.sin(ba) * 0.66));
+    }
+  }
+
+  // DOUBLE-RING POINTED GOTHIC RUINED GATE ARCHWAY (molded outer hood + inner recessed archivolts + dramatic keystone!)
+  const gateArchSegs = 12;
+  for (let ring = 0; ring < 2; ring++) {
+    const rad = ring === 0 ? 3.12 : 3.68;
+    const thick = ring === 0 ? 0.72 : 0.52;
+    const depth = ring === 0 ? 1.85 : 2.30;
+    for (let i = 0; i < gateArchSegs; i++) {
+      // Dramatic weathered breach on upper-right arch segment (ring 1 broken wider than ring 0 for stepped authenticity!)
+      if (i === 7 && ring === 1) continue;
+      if (i === 6 && ring === 0) continue;
+      const a0 = (i / gateArchSegs) * Math.PI;
+      const a1 = ((i + 1) / gateArchSegs) * Math.PI;
+      const x0 = -Math.cos(a0) * rad;
+      const y0 = gateGroundY + 6.05 + Math.pow(Math.sin(a0), 0.74) * (rad + 0.55);
+      const x1 = -Math.cos(a1) * rad;
+      const y1 = gateGroundY + 6.05 + Math.pow(Math.sin(a1), 0.74) * (rad + 0.55);
+      const len = Math.hypot(x1 - x0, y1 - y0) + 0.18;
+      const ang = Math.atan2(y1 - y0, x1 - x0);
+      ashlarParts.push(tintGeo(
+        THREE,
+        xformGeo(new THREE.BoxGeometry(len, thick, depth), (x0 + x1) * 0.5, (y0 + y1) * 0.5, gateZ, 0, 0, ang),
+        ring === 1 ? 0x8998ba : 0x7887a6,
+        0x343c50
       ));
     }
-    extIronParts.push(xformGeo(new THREE.TorusGeometry(0.52, 0.038, 6, 12), side * 3.55, bgy + 1.94, 29.3, Math.PI * 0.5, 0, 0));
   }
-  // Broken Pointed Gothic Gate Archway (dramatically fractured gap near the crown!)
-  const gateArchSegs = 10;
-  for (let i = 0; i < gateArchSegs; i++) {
-    if (i === 5) continue; // iconic crumbled gap in the ruined gate arch!
-    const a0 = (i / gateArchSegs) * Math.PI;
-    const a1 = ((i + 1) / gateArchSegs) * Math.PI;
-    const x0 = -Math.cos(a0) * 3.15;
-    const y0 = gateGroundY + 5.75 + Math.pow(Math.sin(a0), 0.78) * 3.35;
-    const x1 = -Math.cos(a1) * 3.15;
-    const y1 = gateGroundY + 5.75 + Math.pow(Math.sin(a1), 0.78) * 3.35;
-    const len = Math.hypot(x1 - x0, y1 - y0) + 0.16;
-    const ang = Math.atan2(y1 - y0, x1 - x0);
-    ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(len, 0.76, 1.75), (x0 + x1) * 0.5, (y0 + y1) * 0.5, gateZ, 0, 0, ang), 0x77839f, 0x353c50));
-  }
+  // Massive carved gothic Keystone wedged slightly askew at the arch apex!
+  ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(0.95, 1.48, 2.55), -0.18, gateGroundY + 9.85, gateZ, 0, 0, 0.08), 0x91a0c4, 0x414a64));
 
-  // Carved ancient stone threshold sill across the Gate of the Ash Gorge floor (anchors fog wall seamlessly!)
-  ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(6.6, 0.34, 2.2), 0, gateGroundY + 0.04, gateZ + 0.25), 0x646e84, 0x252a38));
-  // Dark shadowed continuation rocks behind the fog gate so horizon sky never peeks under the threshold
-  basaltParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(14.0, 2.4, 14.0), 0, gateGroundY - 0.85, gateZ + 8.0), 0x161b26, 0x0a0d14));
+  // Carved multi-stepped threshold sill across the Gate of the Ash Gorge floor (anchors fog wall seamlessly!)
+  ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(7.2, 0.36, 2.8), 0, gateGroundY + 0.04, gateZ + 0.15), 0x6f7b96, 0x262c3c));
+  ashlarParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(6.4, 0.18, 3.6), 0, gateGroundY - 0.04, gateZ - 0.35), 0x646f88, 0x232836));
+  // Dark shadowed rocky canyon floor continuing behind the fog gate
+  basaltParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(24.0, 2.8, 18.0), 0, gateGroundY - 1.15, gateZ + 10.5), 0x161b26, 0x090c14));
 
-  // Merge basalt cliffs/boulders (1 DC), ashlar outfall+gate stonework (1 DC), and exterior ironwork (1 DC)!
   const extBasaltMesh = new THREE.Mesh(
     trackGeo(mergeNonIndexedGeos(THREE, basaltParts, { boxUvTile: 4.5, withColor: true })),
     extBasaltMat
@@ -3507,7 +4507,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   exteriorGroup.add(extBasaltMesh);
 
   const extAshlarMesh = new THREE.Mesh(
-    trackGeo(mergeNonIndexedGeos(THREE, ashlarParts, { boxUvTile: 2.8, withColor: true })),
+    trackGeo(mergeNonIndexedGeos(THREE, ashlarParts, { boxUvTile: 2.6, withColor: true })),
     extAshlarMat
   );
   extAshlarMesh.receiveShadow = true;
@@ -3519,60 +4519,105 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   );
   exteriorGroup.add(extIronMesh);
 
-  // Swirling Moonlit Fog Gate Wall inside the Ruined Gate of the Ash Gorge (Chapter II threshold!)
-  const gateFogMat = trackMat(new THREE.ShaderMaterial({
-    uniforms: { uTime: extSkyUniforms.uTime },
-    vertexShader: `
-      varying vec2 vUv;
-      void main() {
-        vUv = uv;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      uniform float uTime;
-      varying vec2 vUv;
-      float hash21(vec2 p) {
-        p = fract(p * vec2(127.1, 311.7));
-        p += dot(p, p + 34.53);
-        return fract(p.x * p.y);
-      }
-      float vnoise(vec2 p) {
-        vec2 i = floor(p);
-        vec2 f = fract(p);
-        f = f * f * (3.0 - 2.0 * f);
-        return mix(
-          mix(hash21(i), hash21(i + vec2(1.0, 0.0)), f.x),
-          mix(hash21(i + vec2(0.0, 1.0)), hash21(i + vec2(1.0, 1.0)), f.x),
-          f.y
-        );
-      }
-      void main() {
-        float edgeX = smoothstep(0.0, 0.14, vUv.x) * smoothstep(0.0, 0.14, 1.0 - vUv.x);
-        float edgeBottom = smoothstep(0.0, 0.05, vUv.y);
-        float archTop = 1.0 - smoothstep(0.68, 0.98, vUv.y + pow(abs(vUv.x - 0.5) * 1.65, 2.0) * 0.45);
-        float n1 = vnoise(vec2(vUv.x * 3.5 + uTime * 0.16, vUv.y * 2.8 - uTime * 0.24));
-        float n2 = vnoise(vec2(vUv.x * 7.2 - uTime * 0.22, vUv.y * 5.6 - uTime * 0.35));
-        float swirl = n1 * 0.62 + n2 * 0.38;
-        vec3 col = mix(vec3(0.18, 0.26, 0.42), vec3(0.68, 0.78, 0.94), swirl);
-        float a = edgeX * edgeBottom * archTop * (0.34 + swirl * 0.46);
-        if (a < 0.01) discard;
-        gl_FragColor = vec4(col, a);
-        #include <tonemapping_fragment>
-        #include <colorspace_fragment>
-      }
-    `,
-    transparent: true,
-    depthWrite: false,
-    side: THREE.DoubleSide
-  }));
-  const gateFogWall = new THREE.Mesh(trackGeo(new THREE.PlaneGeometry(5.8, 8.6)), gateFogMat);
-  gateFogWall.position.set(0, gateGroundY + 3.95, gateZ + 0.35);
-  gateFogWall.renderOrder = 3;
-  exteriorGroup.add(gateFogWall);
+  // SHIMMERING GOLDEN-SILVERY SWIRLING BOSS FOG GATE VEIL (2 Parallax Layers, GLSL Domain-Warped Swirl!)
+  // Shaped strictly to the pointed gothic arch opening & grounded seamlessly into the stone sill!
+  function makeBossFogVeilMat(layerOffset, speedScale, alphaScale) {
+    return trackMat(new THREE.ShaderMaterial({
+      uniforms: { uTime: extSkyUniforms.uTime },
+      vertexShader: `
+        varying vec2 vUv;
+        varying vec3 vWorldPos;
+        void main() {
+          vUv = uv;
+          vec4 wp = modelMatrix * vec4(position, 1.0);
+          vWorldPos = wp.xyz;
+          gl_Position = projectionMatrix * viewMatrix * wp;
+        }
+      `,
+      fragmentShader: `
+        uniform float uTime;
+        varying vec2 vUv;
+        varying vec3 vWorldPos;
+
+        float hash21(vec2 p) {
+          p = fract(p * vec2(127.1, 311.7));
+          p += dot(p, p + 34.53);
+          return fract(p.x * p.y);
+        }
+        float vnoise(vec2 p) {
+          vec2 i = floor(p);
+          vec2 f = fract(p);
+          f = f * f * (3.0 - 2.0 * f);
+          return mix(
+            mix(hash21(i), hash21(i + vec2(1.0, 0.0)), f.x),
+            mix(hash21(i + vec2(0.0, 1.0)), hash21(i + vec2(1.0, 1.0)), f.x),
+            f.y
+          );
+        }
+        float fbm3(vec2 p) {
+          return vnoise(p) * 0.54 + vnoise(p * 2.1 + vec2(7.3, 4.1)) * 0.30 + vnoise(p * 4.3 - vec2(3.7, 9.2)) * 0.16;
+        }
+
+        void main() {
+          // Exact Gothic Pointed Arch Aperture Mask matching stone inner archivolt 1:1 (ZERO gaps, ZERO center seam!)
+          float nx = clamp(abs(vUv.x - 0.5) * 2.0, 0.0, 1.0); // 0 at center, 1 at pylon walls
+          float sinA = sqrt(max(0.0, 1.0 - nx * nx));
+          float archCrown = 0.625 + 0.375 * pow(sinA, 0.74);
+          float archMask = 1.0 - smoothstep(archCrown - 0.055, archCrown + 0.015, vUv.y);
+          float sideMask = 1.0 - smoothstep(0.92, 1.0, nx);
+          float sillFade = smoothstep(0.0, 0.05, vUv.y);
+          float shape = archMask * sideMask * sillFade;
+          if (shape < 0.01) discard;
+
+          float t = uTime * ${speedScale.toFixed(2)} + ${layerOffset.toFixed(2)};
+          // Pure Cartesian domain-warped FBM billowing Souls Boss Fog (ZERO atan() branch-cut crease!)
+          vec2 pUv = vUv * vec2(2.8, 3.8);
+          float wx = fbm3(pUv + vec2(t * 0.14, -t * 0.22));
+          float wy = fbm3(pUv + vec2(-t * 0.11 + 5.2, -t * 0.28 + 1.7));
+          vec2 warped = pUv + vec2(wx - 0.5, wy - 0.5) * 1.45;
+          float f1 = fbm3(warped + vec2(t * 0.10, -t * 0.32));
+          float f2 = fbm3(warped * 1.85 - vec2(f1 * 1.15, t * 0.44));
+          float wisps = smoothstep(0.22, 0.86, f1 * 0.54 + f2 * 0.46);
+          float silk = pow(0.5 + 0.5 * sin((vUv.y * 5.2 + f1 * 3.2 + f2 * 1.8 - t * 0.85) * 3.14159), 2.1);
+
+          // Rich Elden Ring / Dark Souls III Golden-Silvery Swirling Boss Fog (luminous sacred gold veins over silvery-indigo depth!)
+          float rad = length((vUv - vec2(0.5, 0.46)) * vec2(1.0, 1.35));
+          float goldShift = clamp(silk * 0.72 + (1.0 - rad) * 0.36 + f2 * 0.28, 0.0, 1.0);
+          vec3 deepVeil   = vec3(0.11, 0.14, 0.22);
+          vec3 silverMist = vec3(0.68, 0.75, 0.88);
+          vec3 sacredGold = vec3(1.22, 0.88, 0.42);
+          vec3 col = mix(deepVeil, silverMist, wisps);
+          col = mix(col, sacredGold, smoothstep(0.32, 0.88, goldShift) * 0.82);
+          float pulse = 0.90 + 0.10 * sin(uTime * 2.0 + f1 * 4.0);
+          // Soft warm golden radiance pooling along the stone threshold & inner arch rim
+          col += vec3(0.34, 0.22, 0.08) * exp(-vUv.y * 5.0) * 0.55;
+          col *= pulse;
+
+          float a = shape * (0.48 + wisps * 0.40 + silk * 0.16) * ${alphaScale.toFixed(2)};
+          if (a < 0.01) discard;
+          gl_FragColor = vec4(col, clamp(a, 0.0, 0.94));
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide
+    }));
+  }
+  const gateFogWallFront = new THREE.Mesh(trackGeo(new THREE.PlaneGeometry(5.9, 9.2)), makeBossFogVeilMat(0.0, 1.0, 0.92));
+  gateFogWallFront.position.set(0, gateGroundY + 4.45, gateZ + 0.05);
+  gateFogWallFront.renderOrder = 3;
+  exteriorGroup.add(gateFogWallFront);
+
+  const gateFogWallBack = new THREE.Mesh(trackGeo(new THREE.PlaneGeometry(6.0, 9.3)), makeBossFogVeilMat(3.7, -0.78, 0.62));
+  gateFogWallBack.position.set(0, gateGroundY + 4.45, gateZ + 0.55);
+  gateFogWallBack.renderOrder = 2;
+  exteriorGroup.add(gateFogWallBack);
 
   // --------------------------------------------------------------------------
-  // C6. Planted Oath Sword («Меч Клятвы») at swordPos (2.8, y, 5.2) + Golden Beacon!
+  // C6. Planted Oath Sword («Меч Клятвы») at swordPos (2.8, y, 5.2)
+  //     + Full Support for Real 3D `sword_tripo` via `attachRealSwordModel(swordMesh)`!
   // --------------------------------------------------------------------------
   const swordGroup = new THREE.Group();
   const sx = EXTERIOR_SHORE_ANCHORS.swordPos.x;
@@ -3581,60 +4626,81 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   swordGroup.position.set(sx, sy, sz);
   exteriorGroup.add(swordGroup);
 
-  // Small pebbled impact mound where the Oath Sword plunged into the shore
+  // Sculpted wet pebble impact mound & scattered cobbles where the Oath Sword plunged into the shore
   const swordMoundMesh = new THREE.Mesh(
-    trackGeo(tintGeo(THREE, buildSculptedRockGeo(THREE, 0.48, 910, 0.34, 1), 0x5c6476, 0x262b36)),
+    trackGeo(tintGeo(THREE, buildSculptedRockGeo(THREE, 0.46, 910, 0.30, 2), 0x5c6476, 0x242934)),
     shoreTerrainMat
   );
-  swordMoundMesh.position.y = 0.04;
+  swordMoundMesh.position.y = 0.03;
   swordGroup.add(swordMoundMesh);
 
-  // Sculpted 3D Oath Sword (forged steel blade + fuller + gothic crossguard + wrapped hilt + pommel)
+  // Tilted 12-degree pivot (0.21 rad) holding EITHER the real `sword_tripo` clone OR the refined fallback broadsword!
   const swordVisualPivot = new THREE.Group();
-  swordVisualPivot.rotation.set(0.24, 0.58, -0.22); // jammed dramatically at an angle in the pebbles!
+  swordVisualPivot.rotation.set(0.18, 0.52, -0.11); // ~12.1 deg heroic angle planted in coastal pebbles!
   swordGroup.add(swordVisualPivot);
 
+  // Dedicated mount for externally attached real 3D `sword_tripo` model
+  const swordRealMount = new THREE.Group();
+  swordRealMount.name = 'RealOathSwordMount';
+  swordVisualPivot.add(swordRealMount);
+  let attachedRealSword = null;
+  let attachedRealSwordWrapper = null;
+
+  // Fallback procedural Gothic Oath Broadsword (sleek forged steel + aged antique gold crossguard — hidden when real model attached!)
+  const swordFallbackGroup = new THREE.Group();
+  swordVisualPivot.add(swordFallbackGroup);
+
   const oathSteelMat = trackMat(new THREE.MeshStandardMaterial({
-    color: 0xd0daec,
-    roughness: 0.28,
-    metalness: 0.88,
-    emissive: 0x3b2a10,
-    emissiveIntensity: 0.35
+    color: 0xc8d4e8,
+    roughness: 0.26,
+    metalness: 0.90,
+    emissive: 0x221a0c,
+    emissiveIntensity: 0.25
   }));
   const oathGoldMat = trackMat(new THREE.MeshStandardMaterial({
-    color: 0xd4a84e,
-    roughness: 0.34,
-    metalness: 0.82,
-    emissive: 0x5a3a08,
-    emissiveIntensity: 0.45
+    color: 0xb89248,
+    roughness: 0.36,
+    metalness: 0.84,
+    emissive: 0x3b2608,
+    emissiveIntensity: 0.30
+  }));
+  const oathGripMat = trackMat(new THREE.MeshStandardMaterial({
+    color: 0x3a241d,
+    roughness: 0.85,
+    metalness: 0.10
   }));
 
-  const swordBladeParts = [];
-  // Tapered diamond-section blade rising from pebbles (blade tip buried at y=-0.12, guard at y=+0.88)
-  const bladeMain = new THREE.CylinderGeometry(0.056, 0.022, 1.04, 4);
-  xformGeo(bladeMain, 0, 0.36, 0, 0, Math.PI / 4, 0, 1.0, 1.0, 0.34);
-  swordBladeParts.push(bladeMain);
-  const swordBladeMesh = new THREE.Mesh(
-    trackGeo(mergeNonIndexedGeos(THREE, swordBladeParts)),
-    oathSteelMat
-  );
-  swordVisualPivot.add(swordBladeMesh);
+  const swordBladeGeo = trackGeo((() => {
+    const parts = [];
+    const main = new THREE.CylinderGeometry(0.052, 0.016, 1.06, 4);
+    xformGeo(main, 0, 0.34, 0, 0, Math.PI / 4, 0, 1.0, 1.0, 0.26);
+    parts.push(main);
+    const fuller = new THREE.BoxGeometry(0.018, 0.72, 0.022);
+    xformGeo(fuller, 0, 0.44, 0);
+    parts.push(fuller);
+    return mergeNonIndexedGeos(THREE, parts);
+  })());
+  const swordBladeMesh = new THREE.Mesh(swordBladeGeo, oathSteelMat);
+  swordFallbackGroup.add(swordBladeMesh);
 
-  const swordHiltParts = [];
-  // Ornate gothic winged crossguard
-  swordHiltParts.push(xformGeo(new THREE.BoxGeometry(0.42, 0.068, 0.072), 0, 0.89, 0));
-  swordHiltParts.push(xformGeo(new THREE.ConeGeometry(0.046, 0.14, 4), -0.24, 0.86, 0, 0, 0, 1.18));
-  swordHiltParts.push(xformGeo(new THREE.ConeGeometry(0.046, 0.14, 4),  0.24, 0.86, 0, 0, 0, -1.18));
-  // Leather-ribbed grip & faceted pommel jewel
-  swordHiltParts.push(xformGeo(new THREE.CylinderGeometry(0.032, 0.036, 0.28, 8), 0, 1.06, 0));
-  swordHiltParts.push(xformGeo(new THREE.OctahedronGeometry(0.064, 0), 0, 1.24, 0));
-  const swordHiltMesh = new THREE.Mesh(
-    trackGeo(mergeNonIndexedGeos(THREE, swordHiltParts)),
-    oathGoldMat
-  );
-  swordVisualPivot.add(swordHiltMesh);
+  const swordHiltGeo = trackGeo((() => {
+    const parts = [];
+    parts.push(xformGeo(new THREE.BoxGeometry(0.38, 0.052, 0.058), 0, 0.88, 0));
+    parts.push(xformGeo(new THREE.ConeGeometry(0.036, 0.13, 4), -0.22, 0.85, 0, 0, 0, 1.15));
+    parts.push(xformGeo(new THREE.ConeGeometry(0.036, 0.13, 4),  0.22, 0.85, 0, 0, 0, -1.15));
+    parts.push(xformGeo(new THREE.OctahedronGeometry(0.056, 0), 0, 1.22, 0));
+    return mergeNonIndexedGeos(THREE, parts);
+  })());
+  const swordHiltMesh = new THREE.Mesh(swordHiltGeo, oathGoldMat);
+  swordFallbackGroup.add(swordHiltMesh);
 
-  // Vertical Golden-Amber Beacon Light Pillar (guides the player's eye right to the dropped sword!)
+  const swordGripMesh = new THREE.Mesh(
+    trackGeo(xformGeo(new THREE.CylinderGeometry(0.026, 0.030, 0.27, 8), 0, 1.04, 0)),
+    oathGripMat
+  );
+  swordFallbackGroup.add(swordGripMesh);
+
+  // Refined Ethereal Slender Golden Light-Shaft + Soft Ground Glint Halo (replaces chunky yellow cylinder!)
   const swordBeaconMat = trackMat(new THREE.ShaderMaterial({
     uniforms: { uTime: extSkyUniforms.uTime },
     vertexShader: `
@@ -3655,12 +4721,12 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
       varying vec3 vNorm;
       varying vec3 vView;
       void main() {
-        float fres = pow(abs(dot(normalize(vNorm), normalize(vView))), 1.55);
-        float yFade = smoothstep(0.0, 0.15, vUv.y) * pow(1.0 - vUv.y, 1.65);
-        float shimmer = 0.78 + 0.22 * sin(uTime * 3.4 - vUv.y * 8.0);
-        vec3 col = mix(vec3(1.15, 0.72, 0.18), vec3(1.85, 1.48, 0.72), smoothstep(0.6, 0.05, vUv.y));
-        float a = fres * yFade * shimmer * 0.56;
-        if (a < 0.008) discard;
+        float fres = pow(abs(dot(normalize(vNorm), normalize(vView))), 2.2);
+        float yFade = smoothstep(0.0, 0.16, vUv.y) * pow(1.0 - vUv.y, 2.0);
+        float wisp = 0.72 + 0.28 * sin(uTime * 2.8 - vUv.y * 7.0 + vUv.x * 6.283);
+        vec3 col = mix(vec3(1.15, 0.74, 0.22), vec3(1.95, 1.62, 0.92), smoothstep(0.55, 0.05, vUv.y));
+        float a = fres * yFade * wisp * 0.42;
+        if (a < 0.006) discard;
         gl_FragColor = vec4(col, a);
       }
     `,
@@ -3670,24 +4736,54 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     side: THREE.DoubleSide
   }));
   const swordBeaconMesh = new THREE.Mesh(
-    trackGeo(new THREE.CylinderGeometry(0.09, 0.34, 3.2, 12, 1, true)),
+    trackGeo(new THREE.CylinderGeometry(0.05, 0.22, 2.85, 14, 1, true)),
     swordBeaconMat
   );
-  swordBeaconMesh.position.y = 1.62;
+  swordBeaconMesh.position.y = 1.44;
   swordBeaconMesh.renderOrder = 4;
   swordGroup.add(swordBeaconMesh);
 
-  // Orbiting Golden Sparks around the Oath Sword
-  const SWORD_SPARK_COUNT = isMobile ? 16 : 28;
+  // Soft warm golden shimmer disc pooling around the planted sword blade on the wet pebbles
+  const swordGroundHaloMat = trackMat(new THREE.ShaderMaterial({
+    uniforms: { uTime: extSkyUniforms.uTime },
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      varying vec2 vUv;
+      void main() {
+        vec2 p = vUv * 2.0 - 1.0;
+        float r = length(p);
+        if (r > 1.0) discard;
+        float g = exp(-r * r * 4.5) * (0.85 + 0.15 * sin(uTime * 3.1));
+        vec3 col = mix(vec3(1.0, 0.62, 0.15), vec3(1.85, 1.45, 0.75), smoothstep(0.6, 0.0, r));
+        gl_FragColor = vec4(col, g * 0.40);
+      }
+    `,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  }));
+  const swordGroundHalo = new THREE.Mesh(trackGeo(new THREE.PlaneGeometry(1.45, 1.45)), swordGroundHaloMat);
+  swordGroundHalo.rotation.x = -Math.PI * 0.5;
+  swordGroundHalo.position.y = 0.06;
+  swordGroundHalo.renderOrder = 3;
+  swordGroup.add(swordGroundHalo);
+
+  // Orbiting Delicate Golden Dust Motes rising around the Oath Sword
+  const SWORD_SPARK_COUNT = isMobile ? 18 : 34;
   const swSpPos = new Float32Array(SWORD_SPARK_COUNT * 3);
   const swSpSeed = new Float32Array(SWORD_SPARK_COUNT * 3);
   for (let i = 0; i < SWORD_SPARK_COUNT; i++) {
-    swSpPos[i * 3]     = 0;
-    swSpPos[i * 3 + 1] = 0.4;
-    swSpPos[i * 3 + 2] = 0;
+    swSpPos[i * 3] = 0; swSpPos[i * 3 + 1] = 0.35; swSpPos[i * 3 + 2] = 0;
     swSpSeed[i * 3]     = extRng();
-    swSpSeed[i * 3 + 1] = 0.5 + extRng() * 0.9;
-    swSpSeed[i * 3 + 2] = 0.22 + extRng() * 0.45;
+    swSpSeed[i * 3 + 1] = 0.45 + extRng() * 0.85;
+    swSpSeed[i * 3 + 2] = 0.14 + extRng() * 0.36;
   }
   const swordSparkGeo = trackGeo(new THREE.BufferGeometry());
   swordSparkGeo.setAttribute('position', new THREE.BufferAttribute(swSpPos, 3));
@@ -3699,14 +4795,14 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
       uniform float uTime;
       varying float vAlpha;
       void main() {
-        float cyc = fract(aSeed.x + uTime * 0.32 * aSeed.y);
-        float ang = aSeed.x * 6.283 + uTime * (1.2 + aSeed.y * 1.1);
-        float rad = aSeed.z * (1.0 - cyc * 0.45);
-        vec3 p = vec3(cos(ang) * rad, 0.25 + cyc * 2.4, sin(ang) * rad);
+        float cyc = fract(aSeed.x + uTime * 0.28 * aSeed.y);
+        float ang = aSeed.x * 6.283 + uTime * (1.0 + aSeed.y * 0.9);
+        float rad = aSeed.z * (1.0 - cyc * 0.48);
+        vec3 p = vec3(cos(ang) * rad, 0.18 + cyc * 2.35, sin(ang) * rad);
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
         gl_Position = projectionMatrix * mv;
-        gl_PointSize = clamp(68.0 / max(1.0, -mv.z), 3.0, 22.0);
-        vAlpha = sin(cyc * 3.14159) * 0.95;
+        gl_PointSize = clamp(52.0 / max(1.0, -mv.z), 2.5, 16.0);
+        vAlpha = sin(cyc * 3.14159) * 0.92;
       }
     `,
     fragmentShader: `
@@ -3716,7 +4812,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
         vec4 t = texture2D(uTex, gl_PointCoord);
         float a = t.a * vAlpha;
         if (a < 0.01) discard;
-        gl_FragColor = vec4(vec3(1.9, 1.38, 0.52), a);
+        gl_FragColor = vec4(vec3(1.95, 1.48, 0.62), a);
       }
     `,
     transparent: true,
@@ -3727,12 +4823,13 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   swordSparks.renderOrder = 5;
   swordGroup.add(swordSparks);
 
-  const swordBeaconLight = new THREE.PointLight(0xffcb66, 0.0, 8.5, 1.7);
+  const swordBeaconLight = new THREE.PointLight(0xffcb66, 0.0, 9.0, 1.6);
   swordBeaconLight.position.set(0, 1.15, 0);
   swordGroup.add(swordBeaconLight);
 
   // --------------------------------------------------------------------------
-  // C7. SHORE BONFIRE («Костёр Берега») at bonfirePos (-2.2, y, 15.0) + Gate Brazier Flames!
+  // C7. DETAILED SHORE BONFIRE («Костёр Берега») at bonfirePos (-2.2, y, 15.0)
+  //     + Twin Ornate Gate Brazier Multi-Layer FBM Flames & Rising Sparks!
   // --------------------------------------------------------------------------
   const bonfireGroup = new THREE.Group();
   const bx = EXTERIOR_SHORE_ANCHORS.bonfirePos.x;
@@ -3743,32 +4840,33 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
 
   function buildShoreBonfireHearthGeo() {
     const parts = [];
-    // Ash & charred earth mound
-    const mound = new THREE.CylinderGeometry(0.55, 1.18, 0.34, 14, 2);
-    xformGeo(mound, 0, 0.14, 0);
-    parts.push(tintGeo(THREE, mound, 0x3b3838, 0x1e1d20));
-    // 14-stone hearth ring matching Castle of Ash bonfire silhouette
-    for (let i = 0; i < 14; i++) {
-      const a = (i / 14) * Math.PI * 2 + (extRng() - 0.5) * 0.14;
-      const rr = 0.96 + (i % 2) * 0.08;
-      const st = buildSculptedRockGeo(THREE, 0.24 + (i % 3) * 0.04, 930 + i, 0.72, 0);
-      xformGeo(st, Math.cos(a) * rr, 0.12, Math.sin(a) * rr, 0, a, 0);
-      parts.push(tintGeo(THREE, st, 0x5c6272, 0x242630));
+    // Sculpted pale-grey volcanic ash & charred soil mound
+    const mound = new THREE.CylinderGeometry(0.58, 1.24, 0.36, 16, 2);
+    xformGeo(mound, 0, 0.15, 0);
+    parts.push(tintGeo(THREE, mound, 0x4b484a, 0x1d1c22));
+    // 16 mossy & soot-stained hearth border stones encircling the ash bed
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2 + (extRng() - 0.5) * 0.12;
+      const rr = 0.98 + (i % 2) * 0.08;
+      const st = buildSculptedRockGeo(THREE, 0.25 + (i % 3) * 0.04, 930 + i, 0.72, 1);
+      xformGeo(st, Math.cos(a) * rr, 0.13, Math.sin(a) * rr, 0, a, 0);
+      parts.push(tintGeo(THREE, st, 0x677084, 0x242834));
     }
-    // 6 Charred logs & crossed weathered bones in the ash bed
-    for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * Math.PI * 2 + 0.25;
-      const log = new THREE.CylinderGeometry(0.055, 0.072, 0.88, 6);
-      xformGeo(log, Math.cos(a) * 0.34, 0.22, Math.sin(a) * 0.34, Math.PI * 0.44, a, 0.28);
-      parts.push(tintGeo(THREE, log, 0x2c221d, 0x16110e));
+    // 8 Charred logs & weathered ancient warrior bones embedded in the ash mound
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2 + 0.25;
+      const isBone = i % 3 === 0;
+      const log = new THREE.CylinderGeometry(isBone ? 0.032 : 0.055, isBone ? 0.042 : 0.075, isBone ? 0.72 : 0.92, 6);
+      xformGeo(log, Math.cos(a) * 0.36, 0.23, Math.sin(a) * 0.36, Math.PI * 0.44, a, 0.28);
+      parts.push(tintGeo(THREE, log, isBone ? 0x86827a : 0x342822, isBone ? 0x484440 : 0x16110e));
     }
     return mergeNonIndexedGeos(THREE, parts, { boxUvTile: 1.5, withColor: true });
   }
 
   function buildShoreCoiledSwordGeo() {
     const parts = [];
-    const segs = isMobile ? 16 : 26;
-    const bladeH = 1.62;
+    const segs = isMobile ? 18 : 28;
+    const bladeH = 1.68;
     const blade = new THREE.CylinderGeometry(0.055, 0.068, bladeH, 4, segs);
     blade.rotateY(Math.PI / 4);
     const bp = blade.attributes.position;
@@ -3777,19 +4875,18 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
       const ly = bp.getY(i) + bladeH * 0.5;
       const vz = bp.getZ(i) * 0.45;
       const t = clamp01(ly / bladeH);
-      const twist = t * Math.PI * 2.3;
-      const waveX = Math.sin(t * Math.PI * 3.2) * 0.042;
+      const twist = t * Math.PI * 2.4;
+      const waveX = Math.sin(t * Math.PI * 3.4) * 0.044;
       const c = Math.cos(twist);
       const s = Math.sin(twist);
-      bp.setXYZ(i, vx * c - vz * s + waveX, 0.16 + ly, vx * s + vz * c);
+      bp.setXYZ(i, vx * c - vz * s + waveX, 0.18 + ly, vx * s + vz * c);
     }
     blade.computeVertexNormals();
-    parts.push(tintGeo(THREE, blade, 0x626a7f, 0x7c3f26));
-    // Ornate twisted bonfire crossguard + pommel
-    parts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(0.56, 0.068, 0.075), 0, 1.74, 0, 0, 0, 0.08), 0x5c6478, 0x353b4a));
-    parts.push(tintGeo(THREE, xformGeo(new THREE.TorusGeometry(0.085, 0.018, 5, 10), 0, 1.76, 0.065), 0x646d84, 0x3a4052));
-    parts.push(tintGeo(THREE, xformGeo(new THREE.CylinderGeometry(0.036, 0.042, 0.34, 8), 0, 1.96, 0), 0x302928, 0x1e1919));
-    parts.push(tintGeo(THREE, xformGeo(new THREE.OctahedronGeometry(0.095, 0), 0, 2.18, 0), 0x69728a, 0x3c4252));
+    parts.push(tintGeo(THREE, blade, 0x6b748c, 0x8e482b));
+    parts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(0.60, 0.070, 0.078), 0, 1.80, 0, 0, 0, 0.08), 0x677088, 0x353b4a));
+    parts.push(tintGeo(THREE, xformGeo(new THREE.TorusGeometry(0.095, 0.020, 5, 12), 0, 1.82, 0.068), 0x6f7892, 0x3a4052));
+    parts.push(tintGeo(THREE, xformGeo(new THREE.CylinderGeometry(0.036, 0.042, 0.34, 8), 0, 2.02, 0), 0x342c2a, 0x1e1919));
+    parts.push(tintGeo(THREE, xformGeo(new THREE.OctahedronGeometry(0.098, 0), 0, 2.24, 0), 0x737e98, 0x3c4252));
     return mergeNonIndexedGeos(THREE, parts, { boxUvTile: 1.2, withColor: true });
   }
 
@@ -3801,15 +4898,15 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     map: ironPbr.albedo,
     roughnessMap: ironPbr.orm,
     vertexColors: true,
-    color: 0xaab2c4,
-    roughness: 0.72,
-    metalness: 0.78
+    color: 0xb4bcd0,
+    roughness: 0.68,
+    metalness: 0.80
   }));
   const coiledSwordMesh = new THREE.Mesh(trackGeo(buildShoreCoiledSwordGeo()), coiledSwordMat);
   coiledSwordMesh.rotation.set(0.08, 0.45, -0.10);
   bonfireGroup.add(coiledSwordMesh);
 
-  // Glowing Molten Ember Coal Bed inside the bonfire ring (smolders dimly unlit, blazes when lit!)
+  // Glowing Molten Ember Coal Bed inside the bonfire ring (dimly smoldering unlit, blazing molten gold-orange when lit!)
   const bonfireCoalsUniforms = {
     uTime: extSkyUniforms.uTime,
     uLit: { value: 0.0 }
@@ -3839,9 +4936,9 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
         float n = hash21(floor(vUv * 18.0));
         float pulse = 0.78 + 0.22 * sin(uTime * 6.5 + n * 12.0);
         float radial = 1.0 - smoothstep(0.18, 0.98, r);
-        float glow = radial * (0.14 + uLit * 0.96) * (0.65 + 0.35 * n) * pulse;
-        vec3 col = mix(vec3(0.08, 0.03, 0.02), vec3(2.2, 0.62, 0.08), clamp(glow * 1.1, 0.0, 1.0));
-        gl_FragColor = vec4(col, radial * (0.65 + uLit * 0.35));
+        float glow = radial * (0.24 + uLit * 0.92) * (0.65 + 0.35 * n) * pulse;
+        vec3 col = mix(vec3(0.14, 0.04, 0.02), vec3(2.3, 0.72, 0.12), clamp(glow * 1.1, 0.0, 1.0));
+        gl_FragColor = vec4(col, radial * (0.72 + uLit * 0.28));
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }
@@ -3849,19 +4946,18 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     transparent: true,
     depthWrite: false
   }));
-  const bonfireCoals = new THREE.Mesh(trackGeo(new THREE.CircleGeometry(0.76, 18)), bonfireCoalsMat);
+  const bonfireCoals = new THREE.Mesh(trackGeo(new THREE.CircleGeometry(0.80, 18)), bonfireCoalsMat);
   bonfireCoals.rotation.x = -Math.PI * 0.5;
-  bonfireCoals.position.y = 0.32;
+  bonfireCoals.position.y = 0.33;
   bonfireGroup.add(bonfireCoals);
 
-  // Reusable 3D Volumetric FBM Flame Shader (used for Shore Bonfire & Twin Ash Gorge Gate Braziers!)
+  // Reusable Volumetric 3D FBM Fire Assembly (4 intersecting sculpted licking sheets for rich 360° flames!)
   function createFlameAssemblyMesh(scaleW, scaleH, litUniformRef) {
     const flameParts = [];
-    // 3 intersecting sculpted teardrop flame-sheets + inner swirling core cone (full 360-deg volume!)
-    for (let k = 0; k < 3; k++) {
-      const plane = new THREE.PlaneGeometry(scaleW, scaleH, 6, 10);
+    for (let k = 0; k < 4; k++) {
+      const plane = new THREE.PlaneGeometry(scaleW, scaleH, 6, 12);
       plane.translate(0, scaleH * 0.5, 0);
-      plane.rotateY((k / 3) * Math.PI);
+      plane.rotateY((k / 4) * Math.PI);
       flameParts.push(plane);
     }
     const geo = trackGeo(mergeNonIndexedGeos(THREE, flameParts));
@@ -3878,11 +4974,10 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
           vUv = uv;
           vec3 p = position;
           float h = clamp(uv.y, 0.0, 1.0);
-          // Organic upward dancing sway & gentle taper into licking flame tongues
-          float sway = sin(uTime * 7.4 - h * 5.2 + p.x * 3.0) * 0.16 * h * h;
-          float swayZ = cos(uTime * 6.2 - h * 4.5 + p.z * 3.0) * 0.12 * h * h;
-          p.x = p.x * (1.0 - h * 0.52) + sway;
-          p.z = p.z * (1.0 - h * 0.52) + swayZ;
+          float sway = sin(uTime * 7.6 - h * 5.4 + p.x * 3.2) * 0.18 * h * h;
+          float swayZ = cos(uTime * 6.4 - h * 4.6 + p.z * 3.2) * 0.14 * h * h;
+          p.x = p.x * (1.0 - h * 0.50) + sway;
+          p.z = p.z * (1.0 - h * 0.50) + swayZ;
           p.y *= (0.20 + 0.80 * uLit);
           gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
         }
@@ -3909,17 +5004,17 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
         void main() {
           if (uLit < 0.02) discard;
           float cx = abs(vUv.x - 0.5) * 2.0;
-          float n1 = vnoise(vec2(vUv.x * 4.2, vUv.y * 3.6 - uTime * 3.8));
-          float n2 = vnoise(vec2(vUv.x * 8.5 + 2.1, vUv.y * 7.2 - uTime * 6.2));
-          float turb = n1 * 0.65 + n2 * 0.35;
-          float shape = (1.0 - cx * cx * (1.1 + vUv.y * 0.85)) * (1.0 - smoothstep(0.35, 1.0, vUv.y + (turb - 0.5) * 0.42));
-          float mask = smoothstep(0.14, 0.62, shape + (turb - 0.45) * 0.32) * smoothstep(0.0, 0.14, vUv.y);
+          float n1 = vnoise(vec2(vUv.x * 5.0, vUv.y * 4.2 - uTime * 4.2));
+          float n2 = vnoise(vec2(vUv.x * 10.5 + 2.1, vUv.y * 8.6 - uTime * 7.2));
+          float turb = n1 * 0.58 + n2 * 0.42;
+          float shape = (1.0 - cx * cx * (1.28 + vUv.y * 1.15)) * (1.0 - smoothstep(0.24, 0.98, vUv.y + (turb - 0.48) * 0.55));
+          float mask = smoothstep(0.18, 0.64, shape + (turb - 0.46) * 0.42) * smoothstep(0.0, 0.12, vUv.y);
           if (mask < 0.02) discard;
-          // Blackbody fire ramp: white-gold core -> vivid amber -> deep crimson tips
-          float temp = clamp(mask * (1.15 - vUv.y * 0.72), 0.0, 1.0);
-          vec3 col = mix(vec3(0.95, 0.14, 0.02), vec3(1.85, 0.68, 0.10), smoothstep(0.15, 0.55, temp));
-          col = mix(col, vec3(2.4, 2.05, 1.15), smoothstep(0.62, 0.96, temp));
-          gl_FragColor = vec4(col, mask * 0.92 * uLit);
+          // Rich Dark-Fantasy Amber-Crimson-Gold Fire Tongues (keeps vivid orange-red edges, compact bright core!)
+          float temp = clamp(mask * (1.02 - vUv.y * 0.82), 0.0, 1.0);
+          vec3 col = mix(vec3(0.95, 0.12, 0.015), vec3(1.85, 0.58, 0.07), smoothstep(0.12, 0.52, temp));
+          col = mix(col, vec3(2.35, 1.75, 0.78), smoothstep(0.68, 0.98, temp));
+          gl_FragColor = vec4(col, mask * 0.88 * uLit);
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
         }
@@ -3934,20 +5029,20 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     return m;
   }
 
-  const bonfireFlameMesh = createFlameAssemblyMesh(1.05, 1.55, bonfireCoalsUniforms.uLit);
-  bonfireFlameMesh.position.y = 0.26;
+  const bonfireFlameMesh = createFlameAssemblyMesh(1.18, 1.72, bonfireCoalsUniforms.uLit);
+  bonfireFlameMesh.position.y = 0.28;
   bonfireFlameMesh.visible = false;
   bonfireGroup.add(bonfireFlameMesh);
 
   // Rising Bonfire Ember Sparks (visible when lit)
-  const BF_EMBER_COUNT = isMobile ? 20 : 38;
+  const BF_EMBER_COUNT = isMobile ? 22 : 44;
   const bfEmPos = new Float32Array(BF_EMBER_COUNT * 3);
   const bfEmSeed = new Float32Array(BF_EMBER_COUNT * 3);
   for (let i = 0; i < BF_EMBER_COUNT; i++) {
     bfEmPos[i * 3] = 0; bfEmPos[i * 3 + 1] = 0.3; bfEmPos[i * 3 + 2] = 0;
     bfEmSeed[i * 3]     = extRng();
     bfEmSeed[i * 3 + 1] = 0.6 + extRng() * 0.9;
-    bfEmSeed[i * 3 + 2] = 0.12 + extRng() * 0.42;
+    bfEmSeed[i * 3 + 2] = 0.12 + extRng() * 0.44;
   }
   const bfEmberGeo = trackGeo(new THREE.BufferGeometry());
   bfEmberGeo.setAttribute('position', new THREE.BufferAttribute(bfEmPos, 3));
@@ -3961,8 +5056,8 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
       void main() {
         float cyc = fract(aSeed.x + uTime * 0.42 * aSeed.y);
         float ang = aSeed.x * 6.283 + uTime * 1.9 + cyc * 4.0;
-        float rad = aSeed.z * (0.4 + cyc * 1.3);
-        vec3 p = vec3(cos(ang) * rad, 0.30 + cyc * 3.2, sin(ang) * rad);
+        float rad = aSeed.z * (0.4 + cyc * 1.35);
+        vec3 p = vec3(cos(ang) * rad, 0.30 + cyc * 3.4, sin(ang) * rad);
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
         gl_Position = projectionMatrix * mv;
         gl_PointSize = clamp(56.0 / max(1.0, -mv.z), 2.5, 16.0);
@@ -3977,7 +5072,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
         vec4 t = texture2D(uTex, gl_PointCoord);
         float a = t.a * vAlpha * uLit;
         if (a < 0.01) discard;
-        gl_FragColor = vec4(vec3(2.2, 0.85, 0.20), a);
+        gl_FragColor = vec4(vec3(2.25, 0.88, 0.22), a);
       }
     `,
     transparent: true,
@@ -3989,33 +5084,94 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   bonfireEmbers.renderOrder = 5;
   bonfireGroup.add(bonfireEmbers);
 
-  const bonfireLight = new THREE.PointLight(0xff8a30, 0.0, 22.0, 1.5);
-  bonfireLight.position.set(0, 1.55, 0);
+  const bonfireLight = new THREE.PointLight(0xff8a30, 0.0, 24.0, 1.45);
+  bonfireLight.position.set(0, 1.65, 0);
   bonfireGroup.add(bonfireLight);
 
-  // Always-lit Twin Gate Brazier Flames (guiding landmarks at z = 29.3!)
+  // Always-Lit Twin Gate Brazier Flames + Glowing Coals + Rising Sparks + Twin Warm PointLights!
   const gateAlwaysLit = { value: 1.0 };
+  const gateBrazierLights = [];
+  const brazierSparkPos = [];
+  const brazierSparkSeed = [];
+  const sparksPerBrazier = isMobile ? 12 : 24;
   for (const side of [-1, 1]) {
-    const bgy = evalExteriorGroundY(side * 3.55, 29.3);
-    const bf = createFlameAssemblyMesh(0.86, 1.25, gateAlwaysLit);
-    bf.position.set(side * 3.55, bgy + 1.48, 29.3);
+    const bxP = side * 3.55;
+    const bzP = 29.3;
+    const bgy = evalExteriorGroundY(bxP, bzP);
+    const bf = createFlameAssemblyMesh(1.05, 1.62, gateAlwaysLit);
+    bf.position.set(bxP, bgy + 1.68, bzP);
     exteriorGroup.add(bf);
+
+    // Molten glowing brazier coal bed
+    const coalDisc = new THREE.Mesh(
+      trackGeo(new THREE.CircleGeometry(0.52, 12)),
+      trackMat(new THREE.MeshBasicMaterial({ color: 0xff6e18 }))
+    );
+    coalDisc.rotation.x = -Math.PI * 0.5;
+    coalDisc.position.set(bxP, bgy + 1.78, bzP);
+    exteriorGroup.add(coalDisc);
+
+    // Dedicated warm brazier PointLight casting dramatic firelight onto gate reliefs & fog veil!
+    const bl = new THREE.PointLight(0xff7e26, 0.0, 17.5, 1.5);
+    bl.position.set(bxP, bgy + 2.85, bzP - 0.35);
+    exteriorGroup.add(bl);
+    gateBrazierLights.push(bl);
+
+    for (let si = 0; si < sparksPerBrazier; si++) {
+      brazierSparkPos.push(bxP, bgy + 1.85, bzP);
+      brazierSparkSeed.push(extRng(), 0.55 + extRng() * 0.85, 0.14 + extRng() * 0.38);
+    }
   }
-  const gateBrazierLight = new THREE.PointLight(0xff7824, 0.0, 19.0, 1.5);
-  gateBrazierLight.position.set(0, gateGroundY + 3.4, 29.2);
-  exteriorGroup.add(gateBrazierLight);
+  const brazierSparksGeo = trackGeo(new THREE.BufferGeometry());
+  brazierSparksGeo.setAttribute('position', new THREE.Float32BufferAttribute(brazierSparkPos, 3));
+  brazierSparksGeo.setAttribute('aSeed', new THREE.Float32BufferAttribute(brazierSparkSeed, 3));
+  const brazierSparksMat = trackMat(new THREE.ShaderMaterial({
+    uniforms: { uTime: extSkyUniforms.uTime, uTex: { value: mistSpriteTex } },
+    vertexShader: `
+      attribute vec3 aSeed;
+      uniform float uTime;
+      varying float vAlpha;
+      void main() {
+        float cyc = fract(aSeed.x + uTime * 0.38 * aSeed.y);
+        float ang = aSeed.x * 6.283 + uTime * 2.1 + cyc * 3.5;
+        float rad = aSeed.z * (0.35 + cyc * 1.45);
+        vec3 p = position + vec3(cos(ang) * rad, cyc * 3.6, sin(ang) * rad);
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        gl_Position = projectionMatrix * mv;
+        gl_PointSize = clamp(54.0 / max(1.0, -mv.z), 2.5, 15.0);
+        vAlpha = sin(cyc * 3.14159);
+      }
+    `,
+    fragmentShader: `
+      uniform sampler2D uTex;
+      varying float vAlpha;
+      void main() {
+        vec4 t = texture2D(uTex, gl_PointCoord);
+        float a = t.a * vAlpha;
+        if (a < 0.01) discard;
+        gl_FragColor = vec4(vec3(2.3, 0.92, 0.24), a);
+      }
+    `,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  }));
+  const brazierSparks = new THREE.Points(brazierSparksGeo, brazierSparksMat);
+  brazierSparks.renderOrder = 5;
+  exteriorGroup.add(brazierSparks);
 
   // --------------------------------------------------------------------------
-  // C8. Atmospheric Props: Dead Twisted Coastal Pines, Swaying Reeds & Washed-Up Wreckage!
+  // C8. Living Foreground Details: Gnarled Dead Pines w/ Bark PBR, Curved Arching Bog Reeds,
+  //     Broken Skiff Hull, Tattered Banners, Abandoned Shields & Rusted Spear!
   // --------------------------------------------------------------------------
-  // 1) Twisted Dead Coastal Pines (gnarled dark silhouettes clinging to the basalt gorge flanks, 1 DC!)
+  // 1) Gnarled Twisted Dead Coastal Pines (multi-tier crooked limbs + exposed roots + bark PBR!)
   const deadTreeParts = [];
   const pinePlacements = [
     { x: -11.4, z:  -4.2, h: 6.4, leanX:  0.26, leanZ:  0.14, ry: 0.4 },
     { x: -12.6, z:   6.8, h: 7.4, leanX:  0.28, leanZ: -0.08, ry: 1.5 },
-    { x: -12.8, z:  16.8, h: 7.0, leanX:  0.26, leanZ:  0.12, ry: 2.8 },
-    { x: -10.6, z:  24.8, h: 6.2, leanX:  0.22, leanZ: -0.15, ry: 4.1 },
-    { x:  -9.6, z:  31.0, h: 6.6, leanX:  0.18, leanZ: -0.18, ry: 5.2 },
+    { x: -12.8, z:  16.8, h: 7.2, leanX:  0.26, leanZ:  0.12, ry: 2.8 },
+    { x: -10.6, z:  24.8, h: 6.4, leanX:  0.22, leanZ: -0.15, ry: 4.1 },
+    { x:  -9.6, z:  31.0, h: 6.8, leanX:  0.18, leanZ: -0.18, ry: 5.2 },
     { x:  15.6, z:   1.8, h: 7.2, leanX: -0.26, leanZ:  0.10, ry: 0.9 },
     { x:  18.2, z:  14.8, h: 7.8, leanX: -0.28, leanZ: -0.08, ry: 2.3 },
     { x:  16.4, z:  26.5, h: 6.8, leanX: -0.24, leanZ:  0.12, ry: 3.7 }
@@ -4023,11 +5179,18 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   for (let i = 0; i < pinePlacements.length; i++) {
     const tr = pinePlacements[i];
     const gy = evalExteriorGroundY(tr.x, tr.z) - 0.25;
-    // Lower trunk
+    // Exposed clutching root spurs gripping the rocky slope
+    for (let rt = 0; rt < 3; rt++) {
+      const ra = tr.ry + (rt / 3) * Math.PI * 2;
+      const rootSpur = new THREE.CylinderGeometry(0.08, 0.20, 1.35, 5);
+      xformGeo(rootSpur, tr.x + Math.cos(ra) * 0.42, gy + 0.35, tr.z + Math.sin(ra) * 0.42, Math.sin(ra) * 0.72, ra, -Math.cos(ra) * 0.72);
+      deadTreeParts.push(tintGeo(THREE, rootSpur, 0x3b3332, 0x181517));
+    }
+    // Lower gnarled trunk
     deadTreeParts.push(tintGeo(
       THREE,
-      xformGeo(new THREE.CylinderGeometry(0.18, 0.36, tr.h * 0.56, 7), tr.x, gy + tr.h * 0.26, tr.z, tr.leanZ, tr.ry, -tr.leanX),
-      0x343138, 0x16141a
+      xformGeo(new THREE.CylinderGeometry(0.18, 0.38, tr.h * 0.56, 7), tr.x, gy + tr.h * 0.26, tr.z, tr.leanZ, tr.ry, -tr.leanX),
+      0x403838, 0x18151a
     ));
     // Upper crooked trunk
     const midX = tr.x + Math.sin(tr.leanX) * tr.h * 0.45;
@@ -4035,52 +5198,106 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     const midZ = tr.z + Math.sin(tr.leanZ) * tr.h * 0.45;
     deadTreeParts.push(tintGeo(
       THREE,
-      xformGeo(new THREE.CylinderGeometry(0.06, 0.19, tr.h * 0.52, 6), midX, midY + tr.h * 0.22, midZ, tr.leanZ * 1.4, tr.ry + 0.5, -tr.leanX * 1.3),
-      0x3a3742, 0x1e1c24
+      xformGeo(new THREE.CylinderGeometry(0.055, 0.19, tr.h * 0.52, 6), midX, midY + tr.h * 0.22, midZ, tr.leanZ * 1.4, tr.ry + 0.5, -tr.leanX * 1.3),
+      0x48424a, 0x201d24
     ));
-    // 4 gnarled wind-bent skeletal dead pine branches
-    for (let b = 0; b < 4; b++) {
-      const ba = tr.ry + b * 1.62 + 0.35;
-      const bh = midY + (b - 0.6) * tr.h * 0.14;
-      const blen = 1.6 + (b % 2) * 0.95;
-      const br = new THREE.CylinderGeometry(0.025, 0.085, blen, 5);
+    // 5 Primary wind-bent branches + secondary skeletal twigs!
+    for (let b = 0; b < 5; b++) {
+      const ba = tr.ry + b * 1.32 + 0.35;
+      const bh = midY + (b - 1.2) * tr.h * 0.13;
+      const blen = 1.65 + (b % 2) * 1.05;
+      const tipX = midX + Math.cos(ba) * blen * 0.85;
+      const tipY = bh + 0.32;
+      const tipZ = midZ + Math.sin(ba) * blen * 0.85;
+      const br = new THREE.CylinderGeometry(0.024, 0.085, blen, 5);
       xformGeo(br, midX + Math.cos(ba) * blen * 0.42, bh, midZ + Math.sin(ba) * blen * 0.42, Math.sin(ba) * 1.15, ba, Math.cos(ba) * 1.15);
-      deadTreeParts.push(tintGeo(THREE, br, 0x3b3945, 0x1c1b22));
+      deadTreeParts.push(tintGeo(THREE, br, 0x48444e, 0x1f1d24));
+      // Secondary forked twig
+      const twig = new THREE.CylinderGeometry(0.012, 0.036, blen * 0.55, 4);
+      xformGeo(twig, tipX, tipY, tipZ, Math.sin(ba + 0.6) * 0.85, ba + 0.6, Math.cos(ba + 0.6) * 0.85);
+      deadTreeParts.push(tintGeo(THREE, twig, 0x4d4a56, 0x222028));
     }
   }
-  const deadTreeMat = trackMat(new THREE.MeshStandardMaterial({
-    map: basaltPbr.albedo,
-    roughness: 0.94,
-    metalness: 0.04,
-    vertexColors: true,
-    color: 0x767a8a
-  }));
+  const deadTreeMat = regNormalMat(
+    trackMat(new THREE.MeshStandardMaterial({
+      map: barkPbr.albedo,
+      normalMap: lowSpecMode ? null : barkPbr.normal,
+      normalScale: new THREE.Vector2(0.85, 0.85),
+      roughnessMap: barkPbr.orm,
+      roughness: 0.94,
+      metalness: 0.03,
+      vertexColors: true,
+      color: 0x868a9a
+    })),
+    barkPbr.normal
+  );
   const deadTreesMesh = new THREE.Mesh(
-    trackGeo(mergeNonIndexedGeos(THREE, deadTreeParts, { boxUvTile: 2.0, withColor: true })),
+    trackGeo(mergeNonIndexedGeos(THREE, deadTreeParts, { boxUvTile: 1.8, withColor: true })),
     deadTreeMat
   );
   exteriorGroup.add(deadTreesMesh);
 
-  // 2) Swaying Shore Reeds & Wind-Bent Coastal Grass (1 DC merged w/ GPU wind-sway vertex shader!)
+  // 2) CURVED ARCHING MARSH SEDGE & BOG REED TUSSOCKS (Gracefully curved 3D blades in organic clumps — ZERO straight white toothpicks!)
+  function buildCurvedReedBladeGeo(bw, bh, droopAmount, yaw) {
+    const segs = 4;
+    const pos = [];
+    const uv = [];
+    const idx = [];
+    const cosY = Math.cos(yaw);
+    const sinY = Math.sin(yaw);
+    for (let s = 0; s <= segs; s++) {
+      const t = s / segs; // 0 = root, 1 = curved tapered tip
+      const halfW = bw * 0.5 * (1.0 - Math.pow(t, 1.35) * 0.92);
+      // Graceful outward parabolic arch & natural gravity bend!
+      const archOut = droopAmount * t * t * bh;
+      const y = bh * (t - 0.22 * droopAmount * t * t * t);
+      for (let side = -1; side <= 1; side += 2) {
+        const lx = side * halfW;
+        const lz = archOut;
+        const wx = lx * cosY + lz * sinY;
+        const wz = -lx * sinY + lz * cosY;
+        pos.push(wx, y, wz);
+        uv.push(side < 0 ? 0.0 : 1.0, t);
+      }
+    }
+    for (let s = 0; s < segs; s++) {
+      const a = s * 2;
+      const b = s * 2 + 1;
+      const c = (s + 1) * 2;
+      const d = (s + 1) * 2 + 1;
+      idx.push(a, b, d, a, d, c);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    return g;
+  }
+
   const reedParts = [];
   const reedClusters = [
-    [ 3.8,  1.2], [ 4.5,  3.8], [ 5.1,  7.6], [ 6.2, 11.4], [ 7.0, 15.6],
-    [ 7.4, 20.2], [ 7.8, 25.0], [ 6.8, 28.4], [-4.8,  0.2], [-6.8,  4.2],
-    [-7.6, 10.6], [-7.8, 16.5], [-7.4, 22.8], [-5.2, 27.6], [ 2.2, -2.5],
-    [-2.8, -3.2], [ 4.8, 17.5], [-4.6, 12.2]
+    [ 3.8,  1.2], [ 4.6,  3.9], [ 5.2,  7.8], [ 6.2, 11.4], [ 7.0, 15.6],
+    [ 7.4, 20.2], [ 7.8, 25.0], [ 6.6, 28.4], [-4.8,  0.2], [-6.8,  4.2],
+    [-7.6, 10.6], [-7.8, 16.5], [-7.4, 22.8], [-5.4, 27.6], [ 2.4, -2.6],
+    [-2.9, -3.2], [ 4.8, 17.5], [-4.8, 12.2], [ 5.8,  5.6], [-6.2,  8.2]
   ];
-  const bladesPerCluster = isMobile ? 5 : 9;
+  const bladesPerCluster = isMobile ? 7 : 12;
   for (let ci = 0; ci < reedClusters.length; ci++) {
     const [cx, cz] = reedClusters[ci];
+    const baseGy = evalExteriorGroundY(cx, cz);
     for (let bi = 0; bi < bladesPerCluster; bi++) {
-      const ox = cx + (extRng() - 0.5) * 1.4;
-      const oz = cz + (extRng() - 0.5) * 1.4;
+      const radialAng = (bi / bladesPerCluster) * Math.PI * 2 + (extRng() - 0.5) * 0.55;
+      const rOff = 0.08 + extRng() * 0.58;
+      const ox = cx + Math.cos(radialAng) * rOff;
+      const oz = cz + Math.sin(radialAng) * rOff;
       const gy = evalExteriorGroundY(ox, oz);
-      const bh = 0.65 + extRng() * 0.85;
-      const bw = 0.055 + extRng() * 0.04;
-      const blade = new THREE.PlaneGeometry(bw, bh, 1, 3);
-      blade.translate(0, bh * 0.5, 0);
-      xformGeo(blade, ox, gy - 0.04, oz, (extRng() - 0.5) * 0.18, extRng() * Math.PI, (extRng() - 0.5) * 0.22);
+      if (gy < WATER_LEVEL - 0.25) continue;
+      const bh = 0.42 + extRng() * 0.68;
+      const bw = 0.052 + extRng() * 0.038;
+      const droop = 0.28 + extRng() * 0.48; // strong graceful outward curve in tussock bouquet!
+      const blade = buildCurvedReedBladeGeo(bw, bh, droop, radialAng);
+      xformGeo(blade, ox, Math.min(gy, baseGy + 0.15) - 0.05, oz);
       reedParts.push(blade);
     }
   }
@@ -4092,11 +5309,12 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
       varying vec3 vWorldPos;
       void main() {
         vUv = uv;
-        vec3 p = position;
-        vec4 wp = modelMatrix * vec4(p, 1.0);
-        float sway = sin(uTime * 2.1 + wp.x * 0.65 + wp.z * 0.45) * 0.16 * uv.y * uv.y;
-        wp.x += sway;
-        wp.z += sway * 0.45;
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        float windPhase = uTime * 2.2 + wp.x * 0.55 + wp.z * 0.38;
+        float gust = (sin(windPhase) * 0.12 + sin(windPhase * 2.3 + 1.1) * 0.045) * uv.y * uv.y;
+        wp.x += gust;
+        wp.z += gust * 0.52;
+        wp.y -= abs(gust) * 0.18 * uv.y;
         vWorldPos = wp.xyz;
         gl_Position = projectionMatrix * viewMatrix * wp;
       }
@@ -4105,13 +5323,15 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
       varying vec2 vUv;
       varying vec3 vWorldPos;
       void main() {
-        // Taper blade tip cleanly
-        float halfW = 1.0 - smoothstep(0.15, 1.0, vUv.y);
-        if (abs(vUv.x - 0.5) * 2.0 > halfW + 0.12) discard;
-        vec3 botCol = vec3(0.032, 0.044, 0.048);
-        vec3 tipCol = vec3(0.12, 0.16, 0.18);
-        vec3 col = mix(botCol, tipCol, vUv.y);
-        gl_FragColor = vec4(col, 1.0);
+        // Dark nocturnal marsh-sedge palette (rich dark olive roots -> subtle muted moonlit reed tips, ZERO glowing white spikes!)
+        vec3 rootCol = vec3(0.010, 0.015, 0.014);
+        vec3 midCol  = vec3(0.026, 0.042, 0.036);
+        vec3 tipCol  = vec3(0.068, 0.088, 0.086);
+        vec3 col = mix(rootCol, midCol, smoothstep(0.0, 0.55, vUv.y));
+        col = mix(col, tipCol, smoothstep(0.55, 1.0, vUv.y));
+        // Subtle central blade rib shading
+        float rib = 0.84 + 0.16 * (1.0 - abs(vUv.x - 0.5) * 2.0);
+        gl_FragColor = vec4(col * rib, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }
@@ -4124,17 +5344,38 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   );
   exteriorGroup.add(reedsMesh);
 
-  // 3) Environmental Storytelling: Washed-Up Broken Hull/Planks, Tarnished Shields & Rusted Spear!
+  // 3) Environmental Storytelling Wreckage: Broken Wooden Skiff Hull, Tattered Banners, Knight Shields & Rusted Spear!
   const wreckWoodParts = [];
   const wreckMetalParts = [];
-  // Broken timber boat/wagon hull half-buried at (-6.2, 5.8) matching collider!
+  const bannerClothParts = [];
+
+  // Half-buried Shattered Wooden Boat/Skiff Hull at (-6.2, 5.8) matching collider!
   const wgy = evalExteriorGroundY(-6.2, 5.8);
-  for (let p = 0; p < 7; p++) {
-    const plank = new THREE.BoxGeometry(0.24, 0.08, 1.75 + (p % 3) * 0.42);
-    xformGeo(plank, -6.2 + (p - 3) * 0.26, wgy + 0.24 + Math.abs(p - 3) * 0.08, 5.8 + (p % 2) * 0.18, 0.22 + (p % 3) * 0.06, 0.52 + (p - 3) * 0.08, (p - 3) * 0.16);
-    wreckWoodParts.push(tintGeo(THREE, plank, 0x4b3d33, 0x221b17));
+  // Curved central timber keel beam
+  wreckWoodParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(0.18, 0.16, 2.85), -6.2, wgy + 0.16, 5.8, 0.12, 0.55, 0.35), 0x48392e, 0x1d1612));
+  // Exposed curved wooden boat ribs arching up out of the gravel
+  for (let rib = -2; rib <= 2; rib++) {
+    const rzOff = rib * 0.46;
+    const wRib = 0.92 - Math.abs(rib) * 0.14;
+    for (const sSide of [-1, 1]) {
+      const plank = new THREE.BoxGeometry(0.11, 0.72, 0.16);
+      xformGeo(
+        plank,
+        -6.2 + Math.cos(0.55) * (sSide * wRib * 0.45) + Math.sin(0.55) * rzOff,
+        wgy + 0.34 + (sSide > 0 ? 0.14 : -0.02),
+        5.8 - Math.sin(0.55) * (sSide * wRib * 0.45) + Math.cos(0.55) * rzOff,
+        0.10, 0.55, sSide * -0.58 + 0.25
+      );
+      wreckWoodParts.push(tintGeo(THREE, plank, 0x544437, 0x221b16));
+    }
   }
-  // Scattered splintered Castle beams washed onto the shoal
+  // Splintered hull strake planks & broken oar resting beside the skiff
+  for (let p = 0; p < 5; p++) {
+    const plank = new THREE.BoxGeometry(0.22, 0.06, 1.55 + (p % 3) * 0.42);
+    xformGeo(plank, -6.45 + (p - 2) * 0.26, wgy + 0.18 + Math.abs(p - 2) * 0.06, 5.95 + (p % 2) * 0.22, 0.22, 0.52 + (p - 2) * 0.10, (p - 2) * 0.18);
+    wreckWoodParts.push(tintGeo(THREE, plank, 0x4e3f33, 0x201915));
+  }
+  // Scattered splintered castle beams washed onto the shoal
   const beamSpots = [
     [-3.4, -1.6, 1.6, 0.85],
     [ 4.2,  2.1, 1.4, -0.55],
@@ -4144,9 +5385,26 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   for (let i = 0; i < beamSpots.length; i++) {
     const [bxp, bzp, blen, bry] = beamSpots[i];
     const gy = evalExteriorGroundY(bxp, bzp);
-    wreckWoodParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(0.18, 0.14, blen), bxp, gy + 0.05, bzp, 0.05, bry, 0.06), 0x473a30, 0x201a16));
+    wreckWoodParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(0.18, 0.14, blen), bxp, gy + 0.05, bzp, 0.05, bry, 0.06), 0x4c3d32, 0x201a16));
   }
-  // Dented abandoned knight shields & rusted spear half-submerged along the bank (previous "guests"!)
+
+  // Two Leaning Snapped War-Banner Poles w/ Tattered Crimson Castle Pennants fluttering near path & wreckage!
+  const bannerSpots = [
+    { x: -6.8, z:  7.2, ry: 0.45, lean: 0.22 },
+    { x:  5.4, z: 22.2, ry: -0.65, lean: -0.18 }
+  ];
+  for (let bi = 0; bi < bannerSpots.length; bi++) {
+    const bs = bannerSpots[bi];
+    const gy = evalExteriorGroundY(bs.x, bs.z);
+    wreckWoodParts.push(tintGeo(THREE, xformGeo(new THREE.CylinderGeometry(0.036, 0.048, 2.95, 6), bs.x, gy + 1.35, bs.z, 0.10, bs.ry, bs.lean), 0x4a3c32, 0x1d1713));
+    wreckMetalParts.push(xformGeo(new THREE.ConeGeometry(0.065, 0.24, 4), bs.x - Math.sin(bs.lean) * 1.45, gy + 2.82, bs.z + 0.14, 0.10, bs.ry, bs.lean));
+    const cloth = new THREE.PlaneGeometry(0.68, 1.35, 3, 6);
+    cloth.translate(0.36, -0.62, 0);
+    xformGeo(cloth, bs.x - Math.sin(bs.lean) * 1.15, gy + 2.55, bs.z + 0.10, 0, bs.ry, bs.lean * 0.4);
+    bannerClothParts.push(cloth);
+  }
+
+  // Dented abandoned knight kite shields & rusted broken spear half-submerged along the bank
   const shieldSpots = [
     [-4.1, 3.6, 0.45],
     [ 4.6, 8.8, -0.82],
@@ -4155,11 +5413,9 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   for (let i = 0; i < shieldSpots.length; i++) {
     const [shx, shz, shry] = shieldSpots[i];
     const gy = evalExteriorGroundY(shx, shz);
-    // Curved kite/heater shield slab + rim boss
     wreckMetalParts.push(xformGeo(new THREE.CylinderGeometry(0.38, 0.34, 0.06, 7), shx, gy + 0.06, shz, 0.28, shry, 0.22));
     wreckMetalParts.push(xformGeo(new THREE.SphereGeometry(0.10, 6, 5), shx, gy + 0.11, shz));
   }
-  // Rusted broken spear jammed near the washed-up wreckage
   const spGy = evalExteriorGroundY(-5.4, 6.5);
   wreckWoodParts.push(tintGeo(THREE, xformGeo(new THREE.CylinderGeometry(0.028, 0.032, 1.85, 6), -5.4, spGy + 0.72, 6.5, 0.35, 0.4, -0.45), 0x45372d, 0x1e1814));
   wreckMetalParts.push(xformGeo(new THREE.ConeGeometry(0.055, 0.32, 4), -5.06, spGy + 1.54, 6.76, 0.35, 0.4, -0.45));
@@ -4175,19 +5431,125 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   );
   exteriorGroup.add(wreckMetalMesh);
 
+  // Tattered Crimson Banners fluttering gently in coastal wind
+  const bannerClothMat = trackMat(new THREE.ShaderMaterial({
+    uniforms: { uTime: extSkyUniforms.uTime, uMap: { value: carpetTex } },
+    vertexShader: `
+      uniform float uTime;
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        vec3 p = position;
+        float flap = sin(uTime * 3.4 + uv.x * 5.0 - uv.y * 4.0) * 0.11 * uv.x;
+        p.z += flap;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform sampler2D uMap;
+      varying vec2 vUv;
+      void main() {
+        // Ragged torn pennant bottom fringe
+        float tear = 0.18 * sin(vUv.x * 19.0) + 0.10 * cos(vUv.x * 31.0);
+        if (vUv.y < 0.16 + tear) discard;
+        vec3 c = texture2D(uMap, vUv).rgb * 0.62;
+        gl_FragColor = vec4(c, 1.0);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }
+    `,
+    side: THREE.DoubleSide
+  }));
+  const bannerClothMesh = new THREE.Mesh(
+    trackGeo(mergeNonIndexedGeos(THREE, bannerClothParts)),
+    bannerClothMat
+  );
+  exteriorGroup.add(bannerClothMesh);
+
   // --------------------------------------------------------------------------
-  // C9. Drifting Pale Ash Flakes + Moonlit River Mist & Waterfall Spray Clouds (2 DCs!)
+  // C9. Rolling Volumetric Coastal Ground Mist Sheets + Waterfall Spray + Falling Ash Flakes!
   // --------------------------------------------------------------------------
-  const SHORE_ASH_COUNT = isMobile ? 90 : 180;
+  // 1) Rolling Low-Lying Volumetric Mist Ribbons creeping over the black river & damp coastal pebbles!
+  const rollingMistMat = trackMat(new THREE.ShaderMaterial({
+    uniforms: { uTime: extSkyUniforms.uTime },
+    vertexShader: `
+      varying vec2 vUv;
+      varying vec3 vWorldPos;
+      void main() {
+        vUv = uv;
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vWorldPos = wp.xyz;
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      varying vec2 vUv;
+      varying vec3 vWorldPos;
+      float hash21(vec2 p) {
+        p = fract(p * vec2(127.1, 311.7));
+        p += dot(p, p + 34.53);
+        return fract(p.x * p.y);
+      }
+      float vnoise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        return mix(
+          mix(hash21(i), hash21(i + vec2(1.0, 0.0)), f.x),
+          mix(hash21(i + vec2(0.0, 1.0)), hash21(i + vec2(1.0, 1.0)), f.x),
+          f.y
+        );
+      }
+      void main() {
+        vec2 d = vUv * 2.0 - 1.0;
+        float oval = 1.0 - smoothstep(0.35, 1.0, length(d));
+        if (oval < 0.01) discard;
+        float n1 = vnoise(vUv * 4.2 + vec2(uTime * 0.08, -uTime * 0.06));
+        float n2 = vnoise(vUv * 8.4 - vec2(uTime * 0.11, uTime * 0.05));
+        float wisp = smoothstep(0.30, 0.80, n1 * 0.62 + n2 * 0.38);
+        float a = oval * wisp * 0.22;
+        if (a < 0.005) discard;
+        vec3 col = mix(vec3(0.24, 0.34, 0.50), vec3(0.46, 0.58, 0.78), wisp);
+        gl_FragColor = vec4(col, a);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }
+    `,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide
+  }));
+  const rollingMistParts = [];
+  const mistSheetSpecs = [
+    { x:  0.4, y: 0.55, z: -10.2, w: 12.5, h:  9.5, rx: -Math.PI * 0.5, ry: 0.0 },
+    { x:  5.8, y: 0.42, z:  -1.5, w: 15.0, h: 12.0, rx: -Math.PI * 0.5, ry: 0.2 },
+    { x:  9.8, y: 0.48, z:  10.5, w: 15.5, h: 14.0, rx: -Math.PI * 0.5, ry: -0.15 },
+    { x:  9.5, y: 0.52, z:  22.5, w: 16.0, h: 14.0, rx: -Math.PI * 0.5, ry: 0.12 },
+    { x: -3.2, y: 0.68, z:  18.5, w: 14.0, h: 11.0, rx: -Math.PI * 0.5, ry: -0.22 }
+  ];
+  for (let i = 0; i < mistSheetSpecs.length; i++) {
+    const ms = mistSheetSpecs[i];
+    rollingMistParts.push(xformGeo(new THREE.PlaneGeometry(ms.w, ms.h), ms.x, ms.y, ms.z, ms.rx, ms.ry, 0));
+  }
+  const rollingMistMesh = new THREE.Mesh(
+    trackGeo(mergeNonIndexedGeos(THREE, rollingMistParts)),
+    rollingMistMat
+  );
+  rollingMistMesh.renderOrder = 2;
+  exteriorGroup.add(rollingMistMesh);
+
+  // 2) Gently Falling Pale Ash Flakes & Faint Embers drifting across the Shore!
+  const SHORE_ASH_COUNT = isMobile ? 100 : 210;
   const ashPos = new Float32Array(SHORE_ASH_COUNT * 3);
   const ashSeed = new Float32Array(SHORE_ASH_COUNT * 3);
   for (let i = 0; i < SHORE_ASH_COUNT; i++) {
     ashPos[i * 3]     = (extRng() - 0.5) * 34.0;
-    ashPos[i * 3 + 1] = extRng() * 14.0;
+    ashPos[i * 3 + 1] = extRng() * 14.5;
     ashPos[i * 3 + 2] = -12.0 + extRng() * 48.0;
     ashSeed[i * 3]     = extRng();
-    ashSeed[i * 3 + 1] = 0.55 + extRng() * 0.9;
-    ashSeed[i * 3 + 2] = 0.65 + extRng() * 1.1;
+    ashSeed[i * 3 + 1] = 0.50 + extRng() * 0.85;
+    ashSeed[i * 3 + 2] = 0.65 + extRng() * 1.15;
   }
   const shoreAshGeo = trackGeo(new THREE.BufferGeometry());
   shoreAshGeo.setAttribute('position', new THREE.BufferAttribute(ashPos, 3));
@@ -4200,16 +5562,16 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
       varying float vAlpha;
       varying float vWarm;
       void main() {
-        float cyc = fract(aSeed.x - uTime * 0.045 * aSeed.y);
+        float cyc = fract(aSeed.x - uTime * 0.042 * aSeed.y);
         vec3 p = position;
-        p.y = 0.4 + cyc * 14.5;
-        p.x += sin(uTime * 0.55 + aSeed.x * 18.0) * 1.35 + uTime * 0.25 * (aSeed.y - 0.5);
+        p.y = 0.35 + cyc * 14.5;
+        p.x += sin(uTime * 0.55 + aSeed.x * 18.0) * 1.45 + uTime * 0.22 * (aSeed.y - 0.5);
         p.x = mod(p.x + 17.0, 34.0) - 17.0;
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
         gl_Position = projectionMatrix * mv;
         gl_PointSize = clamp((aSeed.z * 58.0) / max(1.2, -mv.z), 2.0, 14.0);
-        vAlpha = sin(cyc * 3.14159) * 0.62;
-        vWarm = step(0.84, aSeed.x);
+        vAlpha = sin(cyc * 3.14159) * 0.65;
+        vWarm = step(0.86, aSeed.x);
       }
     `,
     fragmentShader: `
@@ -4218,7 +5580,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
       varying float vWarm;
       void main() {
         vec4 t = texture2D(uTex, gl_PointCoord);
-        vec3 col = mix(vec3(0.68, 0.76, 0.88), vec3(1.6, 0.65, 0.22), vWarm);
+        vec3 col = mix(vec3(0.72, 0.80, 0.92), vec3(1.65, 0.68, 0.22), vWarm);
         float a = t.a * vAlpha;
         if (a < 0.01) discard;
         gl_FragColor = vec4(col, a);
@@ -4232,23 +5594,23 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   shoreAshPoints.frustumCulled = false;
   exteriorGroup.add(shoreAshPoints);
 
-  // Waterfall Plunge-Pool Spray + Low Moonlit River Mist Clouds drifting along the black water!
-  const SHORE_MIST_COUNT = isMobile ? 24 : 44;
+  // 3) Boiling Waterfall Plunge-Pool Spray Plumes + Low River Mist Puffs!
+  const SHORE_MIST_COUNT = isMobile ? 30 : 56;
   const smPos = new Float32Array(SHORE_MIST_COUNT * 3);
   const smSeed = new Float32Array(SHORE_MIST_COUNT * 3);
   for (let i = 0; i < SHORE_MIST_COUNT; i++) {
-    const isWaterfallSpray = i < Math.floor(SHORE_MIST_COUNT * 0.45);
+    const isWaterfallSpray = i < Math.floor(SHORE_MIST_COUNT * 0.52);
     if (isWaterfallSpray) {
-      smPos[i * 3]     = (extRng() - 0.5) * 6.8;
-      smPos[i * 3 + 1] = 0.4 + extRng() * 2.2;
-      smPos[i * 3 + 2] = -12.2 + extRng() * 4.2;
+      smPos[i * 3]     = (extRng() - 0.5) * 7.4;
+      smPos[i * 3 + 1] = 0.25 + extRng() * 2.4;
+      smPos[i * 3 + 2] = -12.6 + extRng() * 4.4;
       smSeed[i * 3]     = extRng();
-      smSeed[i * 3 + 1] = 0.28 + extRng() * 0.35; // faster turbulent spray drift
-      smSeed[i * 3 + 2] = 2.6 + extRng() * 2.4;
+      smSeed[i * 3 + 1] = 0.26 + extRng() * 0.36;
+      smSeed[i * 3 + 2] = 2.8 + extRng() * 2.6;
     } else {
       const mz = -8.0 + extRng() * 44.0;
       smPos[i * 3]     = getRiverCenterX(mz) + (extRng() - 0.5) * 8.5;
-      smPos[i * 3 + 1] = 0.55 + extRng() * 1.4;
+      smPos[i * 3 + 1] = 0.45 + extRng() * 1.45;
       smPos[i * 3 + 2] = mz;
       smSeed[i * 3]     = extRng();
       smSeed[i * 3 + 1] = 0.06 + extRng() * 0.08;
@@ -4267,13 +5629,13 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
       void main() {
         float cyc = fract(aSeed.x + uTime * aSeed.y);
         vec3 p = position;
-        p.y += cyc * 1.65;
-        p.x += sin(uTime * 0.45 + aSeed.x * 10.0) * 1.25;
-        p.z += cyc * 2.1;
+        p.y += cyc * 1.85;
+        p.x += sin(uTime * 0.48 + aSeed.x * 10.0) * 1.25;
+        p.z += cyc * 2.25;
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
         gl_Position = projectionMatrix * mv;
-        gl_PointSize = clamp((aSeed.z * 320.0) / max(1.8, -mv.z), 18.0, 185.0);
-        vAlpha = sin(cyc * 3.14159) * 0.26;
+        gl_PointSize = clamp((aSeed.z * 330.0) / max(1.8, -mv.z), 18.0, 195.0);
+        vAlpha = sin(cyc * 3.14159) * 0.28;
       }
     `,
     fragmentShader: `
@@ -4283,7 +5645,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
         vec4 t = texture2D(uTex, gl_PointCoord);
         float a = t.a * vAlpha;
         if (a < 0.008) discard;
-        gl_FragColor = vec4(vec3(0.42, 0.54, 0.72), a);
+        gl_FragColor = vec4(vec3(0.46, 0.58, 0.78), a);
       }
     `,
     transparent: true,
@@ -4295,15 +5657,15 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   exteriorGroup.add(shoreMistPoints);
 
   // --------------------------------------------------------------------------
-  // C10. Dedicated Nocturnal Moonlight Directional Light + Cold Gorge Rim Fill
+  // C10. Dedicated Nocturnal Moonlight Directional Light + Cold Waterfall Mist Light
   // --------------------------------------------------------------------------
-  const moonDirLight = new THREE.DirectionalLight(0xa4c4f4, 0.0);
-  moonDirLight.position.set(-14.0, 28.0, -44.0);
+  const moonDirLight = new THREE.DirectionalLight(0xaacaf8, 0.0);
+  moonDirLight.position.set(MOON_DIR_X * 52.0, MOON_DIR_Y * 52.0, MOON_DIR_Z * 52.0);
   moonDirLight.target.position.set(0.0, 0.0, 10.0);
   exteriorGroup.add(moonDirLight, moonDirLight.target);
 
-  const waterfallMistLight = new THREE.PointLight(0x6c92c8, 0.0, 22.0, 1.5);
-  waterfallMistLight.position.set(0.0, 4.2, -9.5);
+  const waterfallMistLight = new THREE.PointLight(0x88b8f5, 0.0, 24.0, 1.45);
+  waterfallMistLight.position.set(0.0, 4.9, -10.2);
   exteriorGroup.add(waterfallMistLight);
 
   // ==========================================================================
@@ -4320,26 +5682,32 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     const isExt = stageMode === 'exterior_shore';
 
     chasmGlowLight.visible = isChasm && !lowSpecMode;
+    chasmAbyssFillLight.visible = isChasm && chasmCamBelow && !lowSpecMode;
     if (!chasmGlowLight.visible) chasmGlowLight.intensity = 0;
+    if (!chasmAbyssFillLight.visible) chasmAbyssFillLight.intensity = 0;
 
     shaftCrimsonLight.visible = isShaft;
+    shaftMidLight.visible = isShaft && !lowSpecMode;
     tunnelMoonLight.visible = isShaft;
     tunnelFillLight.visible = isShaft && !lowSpecMode;
     if (!isShaft) {
       shaftCrimsonLight.intensity = 0;
+      shaftMidLight.intensity = 0;
       tunnelMoonLight.intensity = 0;
       tunnelFillLight.intensity = 0;
     }
 
     moonDirLight.visible = isExt;
     waterfallMistLight.visible = isExt && !lowSpecMode;
-    gateBrazierLight.visible = isExt && !lowSpecMode;
+    for (let i = 0; i < gateBrazierLights.length; i++) {
+      gateBrazierLights[i].visible = isExt && !lowSpecMode;
+      if (!gateBrazierLights[i].visible) gateBrazierLights[i].intensity = 0;
+    }
     swordBeaconLight.visible = isExt && !swordPickedUp && !lowSpecMode;
     bonfireLight.visible = isExt && bonfireLit;
     if (!isExt) {
       moonDirLight.intensity = 0;
       waterfallMistLight.intensity = 0;
-      gateBrazierLight.intensity = 0;
       swordBeaconLight.intensity = 0;
       bonfireLight.intensity = 0;
     }
@@ -4351,10 +5719,10 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     chasmContent.visible = active;
     if (!active) {
       chasmGlowLight.intensity = 0;
+      chasmAbyssFillLight.intensity = 0;
       return;
     }
 
-    // Punchy crack-burst ease on opening aperture & buckled slabs
     const openScale = 0.12 + 0.88 * smoothstep(0.0, 0.55, p);
     chasmStencilMask.scale.set(openScale, 1.0, openScale);
     chasmDepthClear.scale.set(openScale, 1.0, openScale);
@@ -4362,9 +5730,8 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     chasmInnerBeams.scale.set(openScale, 1.0, openScale);
     chasmRimCrackMesh.scale.set(openScale, 1.0, openScale);
     chasmRimCrackUniforms.uProgress.value = smoothstep(0.0, 0.40, p);
-    chasmShaftUniforms.uHeat.value = 0.45 + 0.55 * (1.0 - smoothstep(0.6, 1.0, p) * 0.35);
+    chasmShaftUniforms.uHeat.value = 0.50 + 0.50 * (1.0 - smoothstep(0.6, 1.0, p) * 0.25);
 
-    // Buckled broken rim slabs pop up & tilt outward as the floor collapses
     const slabT = smoothstep(0.04, 0.62, p);
     for (let i = 0; i < rimSlabEntries.length; i++) {
       const s = rimSlabEntries[i];
@@ -4373,31 +5740,28 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
       s.mesh.scale.setScalar(0.35 + 0.65 * slabT);
     }
 
-    // Torn crimson velvet carpet flaps sag down over the rim into the pit
     const drapeT = smoothstep(0.08, 0.72, p);
     tornCarpetNorth.scale.set(1.0, Math.max(0.05, drapeT), openScale);
     tornCarpetSouth.scale.set(1.0, Math.max(0.05, drapeT), openScale);
 
-    // 18 animated falling stone chunks plunging down the 14m chasm!
     for (let i = 0; i < CHASM_CHUNK_COUNT; i++) {
       const c = chasmChunkData[i];
-      // Primary blast fall tied to progress01 + continuous crumbling cascade while hole stays open
       const rawT = Math.max(0.0, (p * 1.95 - c.delay) + (p >= 0.99 ? ((elapsedSec + i * 0.37) % c.loopPeriod) : 0.0));
       const tFall = (p >= 0.99) ? ((elapsedSec * 0.95 + c.delay * 4.5 + i * 0.29) % c.loopPeriod) : rawT;
       const y = c.vy0 * Math.min(tFall, 0.45) - 0.5 * 11.8 * tFall * tFall;
-      const inBounds = y > -14.8;
+      const inBounds = y > -22.5;
       if (!inBounds || tFall <= 0.001) {
-        _dummy.position.set(0, -30, 0);
+        _dummy.position.set(0, -34, 0);
         _dummy.scale.setScalar(0.001);
       } else {
-        const radialTighten = Math.max(0.45, 1.0 - Math.max(0, -y) * 0.025);
+        const radialTighten = Math.max(0.45, 1.0 - Math.max(0, -y) * 0.020);
         _dummy.position.set(
           (c.x0 + c.vx * tFall) * openScale * radialTighten,
           y,
           (c.z0 + c.vz * tFall) * openScale * radialTighten
         );
         _dummy.rotation.set(c.rx0 + c.vrx * tFall, c.ry0 + c.vry * tFall, c.rz0 + c.vrz * tFall);
-        const fadeOut = smoothstep(-14.6, -11.5, y);
+        const fadeOut = smoothstep(-22.0, -17.5, y);
         _dummy.scale.set(c.sx * fadeOut, c.sy * fadeOut, c.sz * fadeOut);
       }
       _dummy.updateMatrix();
@@ -4407,43 +5771,59 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
 
     if (chasmGlowLight.visible) {
       const fl = 0.86 + 0.14 * Math.sin(elapsedSec * 7.5);
-      chasmGlowLight.intensity = 4.2 * smoothstep(0.0, 0.45, p) * fl;
+      chasmGlowLight.intensity = (chasmCamBelow ? 6.8 : 4.4) * smoothstep(0.0, 0.45, p) * fl;
+    }
+    if (chasmAbyssFillLight.visible) {
+      chasmAbyssFillLight.intensity = 4.6 * smoothstep(0.0, 0.45, p);
     }
   }
 
   function applyGrateVisuals() {
     const a = clamp01(grateBreakAnim);
     tunnelRiverUniforms.uGrateBroken.value = grateBroken ? 1.0 : 0.0;
+
     for (let i = 0; i < breakableBars.length; i++) {
       const b = breakableBars[i];
-      const localT = clamp01((a - b.delay) / Math.max(0.05, 0.45));
-      // Punchy overshoot bounce as iron bars snap violently outward (+Z)!
+      const localT = clamp01((a - b.delay) / 0.36);
+      // Fast explosive cubic whip outward (78..96 deg) w/ metallic spring recoil bounce!
       const bounce = localT > 0
-        ? Math.min(1.18, 1.0 - Math.pow(1.0 - localT, 3.0) + Math.sin(localT * Math.PI * 2.5) * 0.12 * (1.0 - localT))
+        ? Math.min(1.12, 1.0 - Math.pow(1.0 - localT, 3.0) + Math.sin(localT * Math.PI * 2.6) * 0.09 * (1.0 - localT))
         : 0.0;
       b.topPivot.rotation.set(b.targetTopRx * bounce, 0, b.targetRz * bounce);
       b.botPivot.rotation.set(b.targetBotRx * bounce, 0, -b.targetRz * bounce);
     }
-    if (a <= 0.001) {
-      brokenMidCross.visible = true;
-      brokenMidCross.position.set(0, 2.75, 0.06);
-      brokenMidCross.rotation.set(0, 0, 0);
-    } else if (a < 0.92) {
-      brokenMidCross.visible = true;
-      const ft = a * 1.15;
-      brokenMidCross.position.set(ft * 1.2, 2.75 + ft * 1.8 - 4.9 * ft * ft, 0.06 + ft * 13.5);
-      brokenMidCross.rotation.set(ft * 3.8, ft * 2.1, ft * 4.4);
-    } else {
-      brokenMidCross.visible = false;
+
+    // Central horizontal crossbar splits & whips violently open (+Z) out of the 3.8m breach!
+    const crossT = clamp01(a / 0.32);
+    const crossSwing = 1.0 - Math.pow(1.0 - crossT, 3.0);
+    crossLeftPivot.rotation.set(crossSwing * 0.22, -crossSwing * 1.48, -crossSwing * 0.16);
+    crossRightPivot.rotation.set(crossSwing * 0.18, crossSwing * 1.48, crossSwing * 0.18);
+
+    // 6 Flying 3D broken iron debris shards blasting outward (+Z) into the moonlit tunnel exit!
+    const debrisActive = grateBroken && grateBreakAnim > 0.005 && grateBreakAnim < 1.38;
+    for (let i = 0; i < grateDebris.length; i++) {
+      const d = grateDebris[i];
+      if (!debrisActive) {
+        d.mesh.visible = false;
+      } else {
+        const ft = grateBreakAnim * 0.88;
+        d.mesh.visible = true;
+        d.mesh.position.set(
+          d.x + d.vx * ft,
+          d.y + d.vy * ft - 0.5 * 9.8 * ft * ft,
+          0.15 + d.vz * ft
+        );
+        d.mesh.rotation.set(d.rx * ft, d.ry * ft, d.rz * ft);
+      }
     }
 
-    const burstActive = grateBroken && grateBreakAnim > 0.001 && grateBreakAnim < 1.35;
+    const burstActive = grateBroken && grateBreakAnim > 0.005 && grateBreakAnim < 1.45;
     grateBurstPoints.visible = burstActive;
-    grateBurstUniforms.uAge.value = grateBreakAnim * 1.15;
+    grateBurstUniforms.uAge.value = grateBreakAnim * 1.05;
   }
 
   // ==========================================================================
-  // Public API Implementation (Exact Contract)
+  // Public API Implementation (100% Backwards-Compatible + attachRealSwordModel)
   // ==========================================================================
   function setStageMode(mode) {
     const valid =
@@ -4476,22 +5856,28 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     applyChasmVisuals(chasmShaftUniforms.uTime.value);
   }
 
+  // Explosive grate-shatter animation: starts at explosive crack impulse (0.24 -> bars already flying apart
+  // with debris/sparks visible even on single-frame seeks, then whips smoothly to full 95° wide open in ~0.35s!)
   function triggerGrateBreak() {
-    if (!grateBroken) {
-      grateBroken = true;
-      grateBreakAnim = 0.002;
-    } else if (grateBreakAnim >= 1.35) {
-      grateBreakAnim = 0.002;
-    }
+    grateBroken = true;
+    grateBreakAnim = 0.24;
     applyGrateVisuals();
   }
 
-  function setGrateBroken(broken) {
+  // Idempotent state setter (works identically on any seek() AND never clobbers an active triggerGrateBreak() burst!)
+  function setGrateBroken(broken, animProgress) {
     const b = Boolean(broken);
-    if (b && !grateBroken) {
-      grateBroken = true;
-      grateBreakAnim = 0.002; // animate explosive burst naturally on transition to true!
-    } else if (!b) {
+    if (b) {
+      if (Number.isFinite(animProgress)) {
+        grateBroken = true;
+        grateBreakAnim = Math.max(0.0, Math.min(1.5, animProgress));
+      } else if (!grateBroken) {
+        // Idempotent transition false -> true: IMMEDIATELY wide open 78-96 deg (3.8m clean breach)!
+        grateBroken = true;
+        grateBreakAnim = 1.0;
+      }
+      // If already grateBroken === true (e.g. during active triggerGrateBreak() burst), preserve current grateBreakAnim!
+    } else {
       grateBroken = false;
       grateBreakAnim = 0.0;
     }
@@ -4502,6 +5888,107 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     swordPickedUp = Boolean(picked);
     swordGroup.visible = !swordPickedUp;
     syncActiveLights();
+  }
+
+  // Attach a real 3D `sword_tripo` clone (or `createDroppedSwordMesh().obj`) cleanly planted tip-down at 12°!
+  function attachRealSwordModel(swordMesh) {
+    // Detach previous custom sword without disposing externally owned assets
+    if (attachedRealSwordWrapper && attachedRealSwordWrapper.parent === swordRealMount) {
+      swordRealMount.remove(attachedRealSwordWrapper);
+    }
+    if (attachedRealSword && attachedRealSword.parent) {
+      attachedRealSword.parent.remove(attachedRealSword);
+    }
+    attachedRealSword = null;
+    attachedRealSwordWrapper = null;
+
+    if (!swordMesh || typeof swordMesh !== 'object' || !swordMesh.isObject3D) {
+      swordFallbackGroup.visible = true;
+      return false;
+    }
+
+    const wrapper = new THREE.Group();
+    wrapper.name = 'RealOathSwordAlignedWrapper';
+    swordMesh.visible = true;
+    wrapper.add(swordMesh);
+
+    // Measure intrinsic orientation & span of the passed sword object
+    wrapper.updateMatrixWorld(true);
+    const box0 = new THREE.Box3().setFromObject(wrapper);
+    const size0 = new THREE.Vector3();
+    box0.getSize(size0);
+    const maxDim = Math.max(size0.x, size0.y, size0.z);
+    if (!Number.isFinite(maxDim) || maxDim < 1e-4) {
+      wrapper.remove(swordMesh);
+      swordFallbackGroup.visible = true;
+      return false;
+    }
+
+    // Align longest axis vertically along Y
+    if (size0.x >= size0.y && size0.x >= size0.z) {
+      swordMesh.rotation.z += Math.PI * 0.5;
+    } else if (size0.z >= size0.y && size0.z >= size0.x) {
+      swordMesh.rotation.x += Math.PI * 0.5;
+    }
+    wrapper.updateMatrixWorld(true);
+
+    // Auto-detect which end is the wide crossguard/hilt vs narrow blade tip so TIP is ALWAYS planted DOWN!
+    const box1 = new THREE.Box3().setFromObject(wrapper);
+    const size1 = new THREE.Vector3();
+    const center1 = new THREE.Vector3();
+    box1.getSize(size1);
+    box1.getCenter(center1);
+    const ySpan = Math.max(1e-4, size1.y);
+    let lowerSpanMax = 0;
+    let upperSpanMax = 0;
+    const tmpV = new THREE.Vector3();
+    const invWrapper = new THREE.Matrix4().copy(wrapper.matrixWorld).invert();
+    const toWrapper = new THREE.Matrix4();
+
+    swordMesh.traverse((n) => {
+      if (!n.isMesh || !n.geometry?.attributes?.position) return;
+      n.frustumCulled = false;
+      n.castShadow = true;
+      n.receiveShadow = true;
+      const posAttr = n.geometry.attributes.position;
+      toWrapper.multiplyMatrices(invWrapper, n.matrixWorld);
+      const step = Math.max(1, Math.floor(posAttr.count / 240));
+      for (let i = 0; i < posAttr.count; i += step) {
+        tmpV.fromBufferAttribute(posAttr, i).applyMatrix4(toWrapper);
+        const yFrac = (tmpV.y - box1.min.y) / ySpan;
+        const radial = Math.hypot(tmpV.x - center1.x, tmpV.z - center1.z);
+        if (yFrac < 0.36 && radial > lowerSpanMax) lowerSpanMax = radial;
+        if (yFrac > 0.64 && radial > upperSpanMax) upperSpanMax = radial;
+      }
+    });
+
+    // If the wide crossguard is currently near the bottom (lowerSpanMax > upperSpanMax), flip upside-down so blade tip plunges down!
+    if (lowerSpanMax > upperSpanMax * 1.12) {
+      wrapper.rotation.z = Math.PI;
+      wrapper.updateMatrixWorld(true);
+    }
+
+    // Normalize to 1.36m exact hero Oath Broadsword height & seat blade tip ~0.22m deep in coastal pebbles!
+    const box2 = new THREE.Box3().setFromObject(wrapper);
+    const size2 = new THREE.Vector3();
+    const center2 = new THREE.Vector3();
+    box2.getSize(size2);
+    box2.getCenter(center2);
+    const targetLen = 1.36;
+    const sc = targetLen / Math.max(1e-4, size2.y);
+
+    const finalMount = new THREE.Group();
+    finalMount.name = 'RealOathSwordScaledMount';
+    wrapper.scale.multiplyScalar(sc);
+    wrapper.position.set(-center2.x * sc, -box2.min.y * sc - 0.14, -center2.z * sc);
+    finalMount.add(wrapper);
+
+    swordRealMount.add(finalMount);
+    attachedRealSword = swordMesh;
+    attachedRealSwordWrapper = finalMount;
+    swordFallbackGroup.visible = false;
+    swordGroup.visible = !swordPickedUp;
+    return true;
   }
 
   function setBonfireLit(lit) {
@@ -4551,6 +6038,10 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     shoreMistGeo.setDrawRange(0, lowSpecMode ? Math.floor(SHORE_MIST_COUNT * 0.45) : SHORE_MIST_COUNT);
     shaftDustGeo.setDrawRange(0, lowSpecMode ? Math.floor(SHAFT_DUST_COUNT * 0.45) : SHAFT_DUST_COUNT);
     castlePlumePoints.visible = !lowSpecMode;
+    rollingMistMesh.visible = !lowSpecMode;
+    for (let i = 0; i < cliffCloudMeshes.length; i++) {
+      cliffCloudMeshes[i].visible = !lowSpecMode || i === 1;
+    }
     syncActiveLights();
   }
 
@@ -4581,16 +6072,19 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
       shaftTopGlowUniforms.uTime.value = t;
       tunnelRiverUniforms.uTime.value = t;
 
-      if (grateBroken && grateBreakAnim < 1.35) {
-        grateBreakAnim = Math.min(1.35, grateBreakAnim + safeDt * 1.45);
+      if (grateBroken && grateBreakAnim < 1.48) {
+        grateBreakAnim = Math.min(1.48, grateBreakAnim + safeDt * 1.95);
         applyGrateVisuals();
       }
 
-      const redFlick = 0.85 + 0.15 * Math.sin(t * 6.8) + 0.06 * Math.sin(t * 14.3);
-      shaftCrimsonLight.intensity = 10.5 * redFlick;
-      tunnelMoonLight.intensity = 11.0 + (grateBroken ? 3.5 : 0.0);
+      const redFlick = 0.86 + 0.14 * Math.sin(t * 6.8) + 0.06 * Math.sin(t * 14.3);
+      shaftCrimsonLight.intensity = 14.5 * redFlick;
+      if (shaftMidLight.visible) {
+        shaftMidLight.intensity = 5.4;
+      }
+      tunnelMoonLight.intensity = 12.5 + (grateBroken ? 4.2 : 0.0);
       if (tunnelFillLight.visible) {
-        tunnelFillLight.intensity = 3.8;
+        tunnelFillLight.intensity = 4.6;
       }
       return;
     }
@@ -4599,35 +6093,36 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     if (stageMode === 'exterior_shore') {
       extSkyUniforms.uTime.value = t;
 
-      // Subtle breathing golden aura on the planted Oath Sword
       if (!swordPickedUp) {
         const pulse = 0.84 + 0.16 * Math.sin(t * 3.1);
         swordBeaconMesh.scale.set(0.92 + 0.08 * pulse, 0.96 + 0.06 * pulse, 0.92 + 0.08 * pulse);
         if (swordBeaconLight.visible) {
-          swordBeaconLight.intensity = 2.4 * pulse;
+          swordBeaconLight.intensity = 2.8 * pulse;
         }
       }
 
-      // Warm flickering Shore Bonfire light
       if (bonfireLit && bonfireLight.visible) {
         const fl = 0.84 + 0.10 * Math.sin(t * 9.4) + 0.06 * Math.sin(t * 18.7);
-        bonfireLight.intensity = 7.4 * fl;
+        bonfireLight.intensity = 8.2 * fl;
       }
 
-      // Steady nocturnal silver moonlight + subtle gate brazier & waterfall bounce
-      moonDirLight.intensity = 1.65;
+      moonDirLight.intensity = 1.95;
       if (waterfallMistLight.visible) {
-        waterfallMistLight.intensity = 3.2 + 0.35 * Math.sin(t * 3.4);
+        waterfallMistLight.intensity = 34.0 + 2.5 * Math.sin(t * 3.4);
       }
-      if (gateBrazierLight.visible) {
-        const gfl = 0.88 + 0.12 * Math.sin(t * 8.2 + 1.3);
-        gateBrazierLight.intensity = 5.4 * gfl;
+      for (let i = 0; i < gateBrazierLights.length; i++) {
+        const bl = gateBrazierLights[i];
+        if (bl.visible) {
+          const gfl = 0.86 + 0.14 * Math.sin(t * 8.4 + i * 2.1);
+          bl.intensity = 5.2 * gfl;
+        }
       }
     }
   }
 
   function dispose() {
     setStageMode('none');
+    attachRealSwordModel(null);
     for (let i = 0; i < ownedGeos.length; i++) ownedGeos[i]?.dispose?.();
     for (let i = 0; i < ownedMats.length; i++) ownedMats[i]?.dispose?.();
     for (let i = 0; i < ownedTex.length; i++) ownedTex[i]?.dispose?.();
@@ -4656,6 +6151,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     setGrateBroken,
     setSwordPickedUp,
     setBonfireLit,
+    attachRealSwordModel,
     getAnchors,
     clampPosition,
     getGroundY,
@@ -4663,7 +6159,6 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     update,
     setLowSpecMode,
     dispose,
-    // Helpful read-only telemetry getters for QA
     getStageMode: () => stageMode,
     isSwordPickedUp: () => swordPickedUp,
     isBonfireLit: () => bonfireLit,
@@ -4672,6 +6167,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
       stageMode,
       isMobile,
       lowSpecMode,
+      hasRealSwordAttached: Boolean(attachedRealSword),
       ownedGeos: ownedGeos.length,
       ownedMats: ownedMats.length,
       ownedTex: ownedTex.length

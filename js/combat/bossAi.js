@@ -7,8 +7,8 @@ import {
   clamp,
   normalizeAngle,
   lerpAngle
-} from './bridge.js?v=20261124z91';
-import { SOULS_CASTLE_CONSTANTS } from '../souls/soulsCastleLayout.js?v=20261124z91';
+} from './bridge.js?v=20261124z92';
+import { SOULS_CASTLE_CONSTANTS } from '../souls/soulsCastleLayout.js?v=20261124z92';
 
 export function updateBossAI(boss, dt, elapsedTime, ctx) {
   const {

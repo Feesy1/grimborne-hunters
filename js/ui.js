@@ -6,12 +6,12 @@
 // - Mobile Landscape Touch Controls (Floating Left Joystick + Right Camera Swipe + 6 Obsidian+Gold SVG Buttons)
 // - Cinematic Boss Cutscene Letterbox, Subtitles, Title Card, Interact/Riposte Prompts & Victory/Defeat Overlays
 
-import { WEAPONS } from './config.js?v=20261124z91';
-import { el } from './ui/resolvers.js?v=20261124z91';
-import { makeSvgNode, createWeaponSvg } from './ui/svgIcons.js?v=20261124z91';
-import { createModalsController } from './ui/modals.js?v=20261124z91';
+import { WEAPONS } from './config.js?v=20261124z92';
+import { el } from './ui/resolvers.js?v=20261124z92';
+import { makeSvgNode, createWeaponSvg } from './ui/svgIcons.js?v=20261124z92';
+import { createModalsController } from './ui/modals.js?v=20261124z92';
 
-export { createWeaponSvg } from './ui/svgIcons.js?v=20261124z91';
+export { createWeaponSvg } from './ui/svgIcons.js?v=20261124z92';
 
 const DIFFICULTY_OPTIONS = [
   { id: 'easy', labelRu: 'Странник', noteRu: 'Мягкий режим (в разработке)' },
@@ -1459,6 +1459,9 @@ export function createUIManager(initialCallbacks = {}) {
   const soulsAtmosphereVignette = el('div', 'souls-atmosphere-vignette hidden');
   hudScreen.insertBefore(soulsAtmosphereVignette, hudScreen.firstChild);
 
+  const soulsCutsceneVignette = el('div', 'souls-cutscene-vignette');
+  const soulsSlowMoOverlay = el('div', 'souls-slowmo-overlay');
+  const soulsImpactFlashOverlay = el('div', 'souls-impact-flash-overlay');
   const soulsUnderwaterOverlay = el('div', 'souls-underwater-overlay');
   const soulsFadeOverlay = el('div', 'souls-fade-overlay');
   const soulsLetterboxTop = el('div', 'souls-letterbox-bar souls-letterbox-top');
@@ -1478,10 +1481,10 @@ export function createUIManager(initialCallbacks = {}) {
       </defs>
       <line x1="12" y1="9" x2="164" y2="9" stroke="url(#sbOrnGrad)" stroke-width="1.25"/>
       <line x1="196" y1="9" x2="348" y2="9" stroke="url(#sbOrnGrad)" stroke-width="1.25"/>
-      <polygon points="180,2.5 188,9 180,15.5 172,9" fill="rgba(253,224,147,0.22)" stroke="#fde093" stroke-width="1.35"/>
-      <circle cx="180" cy="9" r="2" fill="#fffbeb"/>
-      <circle cx="152" cy="9" r="1.4" fill="#fde093" opacity="0.75"/>
-      <circle cx="208" cy="9" r="1.4" fill="#fde093" opacity="0.75"/>
+      <polygon class="souls-titlecard-diamond" points="180,2.5 188,9 180,15.5 172,9" fill="rgba(253,224,147,0.22)" stroke="#fde093" stroke-width="1.35"/>
+      <circle class="souls-titlecard-diamond" cx="180" cy="9" r="2" fill="#fffbeb"/>
+      <circle class="souls-titlecard-diamond" cx="152" cy="9" r="1.4" fill="#fde093" opacity="0.75"/>
+      <circle class="souls-titlecard-diamond" cx="208" cy="9" r="1.4" fill="#fde093" opacity="0.75"/>
     </svg>`
   );
   const soulsTitleCardMain = el('div', 'souls-titlecard-title', 'РЫЦАРЬ ПЕПЛА');
@@ -1499,6 +1502,9 @@ export function createUIManager(initialCallbacks = {}) {
   soulsCutsceneSkipBtn.setAttribute('aria-label', 'Пропустить кат-сцену');
 
   root.append(
+    soulsCutsceneVignette,
+    soulsSlowMoOverlay,
+    soulsImpactFlashOverlay,
     soulsUnderwaterOverlay,
     soulsFadeOverlay,
     soulsLetterboxTop,
@@ -1518,8 +1524,12 @@ export function createUIManager(initialCallbacks = {}) {
   let soulsCutsceneCanSkip = false;
   let soulsTitleCardTextCache = 'РЫЦАРЬ ПЕПЛА';
   let soulsTitleCardSubCache = 'СУДИЯ РУИН';
+  let soulsVignetteAlphaCache = 0;
+  let soulsSlowMoAlphaCache = 0;
+  let soulsImpactFlashAlphaCache = 0;
   let soulsFadeAlphaCache = 0;
   let soulsUnderwaterAlphaCache = 0;
+  let soulsPointerHintWanted = false;
   let lastCutsceneSkipDispatchMs = 0;
 
   function triggerSkipBossDoorCutscene() {
@@ -1552,6 +1562,10 @@ export function createUIManager(initialCallbacks = {}) {
 
   function setSoulsLetterbox(active, meta = null) {
     const next = Boolean(active);
+    const instant = Boolean(meta?.instant);
+    if (typeof document !== 'undefined' && document.body) {
+      document.body.classList.toggle('is-souls-cutscene-instant', next && instant);
+    }
     if (next !== soulsLetterboxActive) {
       soulsLetterboxActive = next;
       soulsLetterboxTop.classList.toggle('is-active', next);
@@ -1560,6 +1574,33 @@ export function createUIManager(initialCallbacks = {}) {
       if (typeof document !== 'undefined' && document.body) {
         document.body.classList.toggle('is-souls-cutscene', next);
       }
+      if (next) {
+        soulsPointerHint.classList.add('hidden');
+        soulsInteractPrompt.classList.add('hidden');
+        soulsRipostePrompt.classList.add('hidden');
+        soulsCombatCue.classList.add('hidden');
+        closeSoundPopover?.();
+      } else {
+        soulsPointerHint.classList.toggle('hidden', !soulsPointerHintWanted);
+      }
+    }
+    const nextVig = next ? Math.max(0, Math.min(1, meta?.letterbox01 !== undefined ? Number(meta.letterbox01) : 1)) : 0;
+    if (Math.abs(nextVig - soulsVignetteAlphaCache) > 0.004 || (nextVig === 0 && soulsVignetteAlphaCache !== 0)) {
+      soulsVignetteAlphaCache = nextVig;
+      soulsCutsceneVignette.style.opacity = nextVig > 0.002 ? nextVig.toFixed(3) : '0';
+    }
+    const rawSlowMo = Number(meta?.slowMoFactor);
+    const nextSlowMo = next && Number.isFinite(rawSlowMo) && rawSlowMo < 0.70
+      ? Math.max(0, Math.min(1, (0.70 - rawSlowMo) / 0.42))
+      : 0;
+    if (Math.abs(nextSlowMo - soulsSlowMoAlphaCache) > 0.004 || (nextSlowMo === 0 && soulsSlowMoAlphaCache !== 0)) {
+      soulsSlowMoAlphaCache = nextSlowMo;
+      soulsSlowMoOverlay.style.opacity = nextSlowMo > 0.002 ? nextSlowMo.toFixed(3) : '0';
+    }
+    const nextFlash = next ? Math.max(0, Math.min(1, Number(meta?.impactFlash01) || 0)) : 0;
+    if (Math.abs(nextFlash - soulsImpactFlashAlphaCache) > 0.004 || (nextFlash === 0 && soulsImpactFlashAlphaCache !== 0)) {
+      soulsImpactFlashAlphaCache = nextFlash;
+      soulsImpactFlashOverlay.style.opacity = nextFlash > 0.002 ? (nextFlash * 0.78).toFixed(3) : '0';
     }
     const nextFade = next ? Math.max(0, Math.min(1, Number(meta?.fadeToBlack01) || 0)) : 0;
     if (Math.abs(nextFade - soulsFadeAlphaCache) > 0.004 || (nextFade === 0 && soulsFadeAlphaCache !== 0)) {
@@ -1615,9 +1656,20 @@ export function createUIManager(initialCallbacks = {}) {
         soulsSubtitleSpeaker.textContent = nextSpeaker;
         soulsSubtitleSpeaker.classList.toggle('hidden', !nextSpeaker);
       }
-      if (nextSubText !== soulsSubtitleTextCache) {
+      if (instant) {
+        if (soulsSubtitleSwapTimer) {
+          clearTimeout(soulsSubtitleSwapTimer);
+          soulsSubtitleSwapTimer = null;
+        }
         soulsSubtitleTextCache = nextSubText;
-        if (soulsSubtitleSwapTimer) clearTimeout(soulsSubtitleSwapTimer);
+        soulsSubtitleText.textContent = nextSubText;
+        soulsSubtitleText.classList.remove('is-swapping');
+      } else if (nextSubText !== soulsSubtitleTextCache) {
+        soulsSubtitleTextCache = nextSubText;
+        if (soulsSubtitleSwapTimer) {
+          clearTimeout(soulsSubtitleSwapTimer);
+          soulsSubtitleSwapTimer = null;
+        }
         if (soulsSubtitleVisible) {
           soulsSubtitleText.classList.add('is-swapping');
           soulsSubtitleSwapTimer = setTimeout(() => {
@@ -1730,7 +1782,7 @@ export function createUIManager(initialCallbacks = {}) {
   }
 
   function applySoulsInteractPromptState(visible, label = 'Открыть врата') {
-    const show = Boolean(visible);
+    const show = Boolean(visible) && !soulsLetterboxActive;
     const cleaned = stripLeadingEmoji(label) || 'Открыть врата';
     if (show !== soulsInteractVisible) {
       soulsInteractVisible = show;
@@ -1856,7 +1908,8 @@ export function createUIManager(initialCallbacks = {}) {
   }
 
   function setSoulsPointerLockHintVisible(visible) {
-    soulsPointerHint.classList.toggle('hidden', !visible);
+    soulsPointerHintWanted = Boolean(visible);
+    soulsPointerHint.classList.toggle('hidden', soulsLetterboxActive || !soulsPointerHintWanted);
   }
 
   function hideSoulsOverlays() {
@@ -1865,6 +1918,7 @@ export function createUIManager(initialCallbacks = {}) {
     soulsBanner.classList.add('hidden');
     soulsBanner.classList.remove('is-fading');
     soulsClearedHint.classList.add('hidden');
+    soulsPointerHintWanted = false;
     soulsPointerHint.classList.add('hidden');
     soulsCombatCue.classList.add('hidden');
     soulsInteractVisible = false;
@@ -2123,7 +2177,10 @@ export function createUIManager(initialCallbacks = {}) {
           subtitleText: sData.subtitleText,
           letterbox01: sData.letterbox01,
           fadeToBlack01: sData.fadeToBlack01,
-          underwater01: sData.underwater01
+          underwater01: sData.underwater01,
+          impactFlash01: sData.impactFlash01,
+          slowMoFactor: sData.slowMoFactor,
+          instant: Boolean(sData.cutsceneInstantSync)
         });
       }
 

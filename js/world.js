@@ -4,14 +4,14 @@
 import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { DRACOLoader } from '../vendor/DRACOLoader.js';
-import { ARENA_HALF_SIZE } from './config.js?v=20261124z91';
-import { createSoulsArena } from './soulsArena.js?v=20261124z91';
+import { ARENA_HALF_SIZE } from './config.js?v=20261124z92';
+import { createSoulsArena } from './soulsArena.js?v=20261124z92';
 import {
   BOSS_DOOR_CUTSCENE_DURATION,
   evaluateBossDoorCutscene,
   getBossDoorCutsceneSkipState,
   computeBossDoorCutsceneShakeOffset
-} from './souls/soulsCutsceneChoreography.js?v=20261124z91';
+} from './souls/soulsCutsceneChoreography.js?v=20261124z92';
 import {
   BOSS_ESCAPE_CUTSCENE_DURATION,
   BOSS_ESCAPE_CUTSCENE_SKIP_TIME,
@@ -21,18 +21,19 @@ import {
   sampleBossEscapeCutscene,
   getBossEscapeCutsceneSkipState,
   computeBossEscapeCameraShakeOffset
-} from './souls/soulsEscapeCutscene.js?v=20261124z91';
+} from './souls/soulsEscapeCutscene.js?v=20261124z92';
 import {
   EXTERIOR_SHORE_ANCHORS,
   createSoulsExteriorShore
-} from './souls/soulsExteriorShore.js?v=20261124z91';
+} from './souls/soulsExteriorShore.js?v=20261124z92';
+import { createSoulsEscapeVfx } from './souls/soulsEscapeVfx.js?v=20261124z92';
 import {
   clampCastleCameraPosition,
   SOULS_CASTLE_CONSTANTS
-} from './souls/soulsCastleLayout.js?v=20261124z91';
-import { createSoulsEnvironmentMap } from './souls/soulsLightingRig.js?v=20261124z91';
-import { applyEldenDissolveToModel } from './souls/soulsDissolveVfx.js?v=20261124z91';
-import * as SoulsFireVfx from './souls/soulsFireVfx.js?v=20261124z91';
+} from './souls/soulsCastleLayout.js?v=20261124z92';
+import { createSoulsEnvironmentMap } from './souls/soulsLightingRig.js?v=20261124z92';
+import { applyEldenDissolveToModel } from './souls/soulsDissolveVfx.js?v=20261124z92';
+import * as SoulsFireVfx from './souls/soulsFireVfx.js?v=20261124z92';
 import {
   createCourtyardStoneTexture,
   createHubMistTexture,
@@ -43,7 +44,7 @@ import {
   createHubContactAoTexture,
   createArcaneCircleTexture,
   getSlashCrescentGeo
-} from './world/textures.js?v=20261124z91';
+} from './world/textures.js?v=20261124z92';
 
 const sharedDracoLoader = new DRACOLoader();
 sharedDracoLoader.setDecoderPath('./vendor/draco/');
@@ -355,6 +356,8 @@ export function createArenaWorld(canvas) {
 
   let soulsArena = null;
   let soulsExteriorShore = null;
+  let soulsEscapeVfx = null;
+  let pendingShoreSwordMesh = null;
   let phase2ArenaFireRingCtrl = null;
   function ensurePhase2ArenaFireRing() {
     if (!phase2ArenaFireRingCtrl && typeof SoulsFireVfx.createPhase2ArenaFireRingController === 'function') {
@@ -402,9 +405,33 @@ export function createArenaWorld(canvas) {
       if (soulsExteriorShore?.rootGroup) {
         arenaGroup.add(soulsExteriorShore.rootGroup);
       }
+      if (pendingShoreSwordMesh) {
+        soulsExteriorShore?.attachRealSwordModel?.(pendingShoreSwordMesh);
+      }
       soulsExteriorShore?.setStageMode?.('none');
     }
     return soulsExteriorShore;
+  }
+
+  function ensureSoulsEscapeVfx() {
+    if (!soulsEscapeVfx) {
+      soulsEscapeVfx = createSoulsEscapeVfx(THREE, {
+        parent: arenaGroup,
+        isMobile: isMobileDevice,
+        lowSpec: lowSpecMode,
+        active: false
+      });
+    }
+    return soulsEscapeVfx;
+  }
+
+  function attachShoreRealSwordModel(swordMesh) {
+    if (!swordMesh) return false;
+    pendingShoreSwordMesh = swordMesh;
+    if (soulsExteriorShore) {
+      return Boolean(soulsExteriorShore.attachRealSwordModel?.(swordMesh));
+    }
+    return true;
   }
 
   function setSoulsZoneMode(mode = 'castle') {
@@ -5699,6 +5726,9 @@ export function createArenaWorld(canvas) {
     bossDoorCutsceneElapsed = 0;
     bossDoorCutsceneDuration = Math.max(0.8, Number(durationSec) || BOSS_DOOR_CUTSCENE_DURATION);
     bossDoorCutsceneActive = true;
+    lockOnTarget = null;
+    lockOnReticle.visible = false;
+    lockOnFootRing.visible = false;
     _cutsceneState = evaluateBossDoorCutscene(
       0,
       _cutsceneStartPos,
@@ -5790,23 +5820,89 @@ export function createArenaWorld(canvas) {
     return _cutsceneState;
   }
 
-  // Cinematic 32.5s 5-Act Boss Escape Cutscene («Escape from the Castle of Ash» -> Exterior Shore)
+  // Cinematic 5-Act Boss Escape Cutscene («Escape from the Castle of Ash» -> Exterior Shore)
   let bossEscapeCutsceneActive = false;
   let bossEscapeCutsceneElapsed = 0;
   let bossEscapeCutsceneRig = null;
   let bossEscapeLastStageMode = 'castle';
   let bossEscapeChasmEnabled = false;
   let bossEscapeGrateBroken = false;
+  let bossEscapeLastCameraCutId = -1;
   const _escapeCutsceneStateOut = createBossEscapeCutsceneState();
   const _escapeCutsceneShakeOut = { x: 0, y: 0, z: 0, roll: 0 };
+  const _escapeShoreNormPos = new THREE.Vector3(0, 3.15, 8.2);
+  const _escapeShoreNormLook = new THREE.Vector3(0, 1.65, 2.5);
   const _escapeCutsceneOpts = {
-    normalCamPos: _cutsceneNormalPos,
-    normalCamLook: _cutsceneNormalLook,
+    normalCamPos: _escapeShoreNormPos,
+    normalCamLook: _escapeShoreNormLook,
     normalFov: 56
   };
   let _escapeCutsceneState = null;
 
-  function applyEscapeStageAndChasmFromState(st) {
+  const SHORE_WAKE_ORBIT_PITCH = 0.245;
+  const SHORE_WAKE_ORBIT_DIST = 5.88;
+
+  function computeShoreNormalCamPose(yaw = 0, outPos = _escapeShoreNormPos, outLook = _escapeShoreNormLook, pitchOverride = null, distOverride = null) {
+    const anchors = soulsExteriorShore?.getAnchors?.() || EXTERIOR_SHORE_ANCHORS;
+    const wake = anchors.wakePos || { x: 0, y: 0, z: 2.5 };
+    const wx = Number.isFinite(wake.x) ? wake.x : 0;
+    const wz = Number.isFinite(wake.z) ? wake.z : 2.5;
+    const hgY = soulsExteriorShore?.getGroundY ? soulsExteriorShore.getGroundY(wx, wz) : (Number.isFinite(wake.y) ? wake.y : 0);
+    const safeYaw = Number.isFinite(Number(yaw)) ? Number(yaw) : 0;
+    const safePitch = (pitchOverride !== null && pitchOverride !== undefined && Number.isFinite(Number(pitchOverride)))
+      ? Number(pitchOverride)
+      : SHORE_WAKE_ORBIT_PITCH;
+    const safeDist = Math.max(
+      2.8,
+      (distOverride !== null && distOverride !== undefined && Number.isFinite(Number(distOverride)))
+        ? Number(distOverride)
+        : SHORE_WAKE_ORBIT_DIST
+    );
+    const hPivotY = hgY + SOULS_CAMERA_PIVOT_Y;
+    const cosP = Math.cos(safePitch);
+    const cX = wx + Math.sin(safeYaw) * cosP * safeDist;
+    const cY = Math.max(hgY + 0.52, hPivotY + Math.sin(safePitch) * safeDist);
+    const cZ = wz + Math.cos(safeYaw) * cosP * safeDist;
+    outPos.set(cX, cY, cZ);
+    outLook.set(wx, hPivotY, wz);
+    return { wx, hgY, wz, hPivotY, safeYaw, safePitch, safeDist };
+  }
+
+  function applyEscapeCutsceneCamera(st, shakeOut = null, normalFov = 56) {
+    if (!st) return;
+    const cutId = Number.isFinite(Number(st.cameraCutId)) ? Number(st.cameraCutId) : -1;
+    if (cutId >= 0 && cutId !== bossEscapeLastCameraCutId) {
+      // Hard montage cut: reset camera smoothing / transient world shake immediately!
+      bossEscapeLastCameraCutId = cutId;
+      shakeIntensity = Math.min(shakeIntensity, Number(st.screenShake) || 0);
+    }
+    const targetCutFov = Number(st.camFov) || normalFov;
+    if (Math.abs(camera.fov - targetCutFov) > 0.01) {
+      camera.fov = targetCutFov;
+      camera.updateProjectionMatrix();
+    }
+    const shX = Number(shakeOut?.x) || 0;
+    const shY = Number(shakeOut?.y) || 0;
+    const shZ = Number(shakeOut?.z) || 0;
+    camera.up.set(0, 1, 0);
+    camera.position.set(
+      (st.camPos?.x || 0) + shX,
+      (st.camPos?.y || 0) + shY,
+      (st.camPos?.z || 0) + shZ
+    );
+    camera.lookAt(
+      (st.camLook?.x || 0) + shX * 0.35,
+      (st.camLook?.y || 0) + shY * 0.35,
+      (st.camLook?.z || 0) + shZ * 0.35
+    );
+    const totalRoll = (Number(st.camRoll) || 0) + (Number(shakeOut?.roll) || 0);
+    if (Math.abs(totalRoll) > 1e-5) {
+      camera.rotateZ(totalRoll);
+    }
+    camera.updateMatrixWorld();
+  }
+
+  function applyEscapeStageAndChasmFromState(st, isSeek = false) {
     if (!st) return;
     const shore = ensureSoulsExteriorShore();
     const stStage = st.stageMode || 'castle';
@@ -5830,12 +5926,43 @@ export function createArenaWorld(canvas) {
         shore?.setChasmState?.(0, st.floorHoleX || 0, st.floorHoleZ ?? SOULS_CASTLE_CONSTANTS.BOSS_CENTER_Z);
         shore?.setStageMode?.('none');
       }
-    } else if (stStage === 'shaft_river') {
-      if ((st.cues?.grateBreakCue || 0) > 0 && !bossEscapeGrateBroken) {
+    } else if (stStage === 'shaft_river' || stStage === 'exterior_shore') {
+      const wantBroken = Boolean(
+        st.grateBroken ||
+        stStage === 'exterior_shore' ||
+        (st.cues?.grateBreakCue || 0) > 0
+      );
+      if (!isSeek && stStage === 'shaft_river' && (st.cues?.grateBreakCue || 0) > 0 && !bossEscapeGrateBroken) {
         bossEscapeGrateBroken = true;
         shore?.triggerGrateBreak?.();
+        shore?.setGrateBroken?.(true);
+      } else if (isSeek && stStage === 'shaft_river' && wantBroken) {
+        bossEscapeGrateBroken = true;
+        const breakElapsed = Math.max(0, (Number(st.t) || 0) - (BOSS_ESCAPE_ACTS?.GRATE_BREAK_TIME ?? 27.65));
+        const animP = Math.min(1.45, 0.32 + breakElapsed * 1.15);
+        shore?.setGrateBroken?.(true, animP);
+      } else {
+        bossEscapeGrateBroken = wantBroken;
+        shore?.setGrateBroken?.(wantBroken);
       }
     }
+  }
+
+  const _escapeVfxHeroPos = { x: 0, y: 0, z: 0 };
+
+  function syncEscapeVfxStreams(st) {
+    if (!soulsEscapeVfx || !st) return;
+    const uw = Number(st.underwater01) || 0;
+    soulsEscapeVfx.setUnderwaterBubbles?.(uw > 0.15, st.camPos || camera.position);
+    const fallingInShaft = Boolean(
+      st.stageMode === 'shaft_river' &&
+      (Number(st.cues?.waterSplashCue) || 0) === 0 &&
+      (Number(st.heroY) || 0) > 0.35
+    );
+    _escapeVfxHeroPos.x = Number(st.heroX) || 0;
+    _escapeVfxHeroPos.y = Number(st.heroY) || 0;
+    _escapeVfxHeroPos.z = Number(st.heroZ) || 0;
+    soulsEscapeVfx.setFallingDebrisStream?.(fallingInShaft, _escapeVfxHeroPos);
   }
 
   function startBossEscapeCutscene(anchorX = 0, anchorZ = SOULS_CASTLE_CONSTANTS.BOSS_CENTER_Z) {
@@ -5843,6 +5970,9 @@ export function createArenaWorld(canvas) {
     bossDoorCutsceneActive = false;
     bossDoorCutsceneElapsed = 0;
     _cutsceneState = null;
+    lockOnTarget = null;
+    lockOnReticle.visible = false;
+    lockOnFootRing.visible = false;
 
     const shore = ensureSoulsExteriorShore();
     shore?.setGrateBroken?.(false);
@@ -5851,14 +5981,22 @@ export function createArenaWorld(canvas) {
     shore?.setChasmState?.(0, anchorX, anchorZ);
     shore?.setStageMode?.('none');
 
+    const escVfx = ensureSoulsEscapeVfx();
+    escVfx?.reset?.();
+    escVfx?.setActive?.(true);
+
     bossEscapeCutsceneRig = createBossEscapeCutsceneRig(anchorX, anchorZ);
     bossEscapeCutsceneElapsed = 0;
     bossEscapeLastStageMode = 'castle';
     bossEscapeChasmEnabled = false;
     bossEscapeGrateBroken = false;
+    bossEscapeLastCameraCutId = -1;
     setSoulsZoneMode('castle');
     bossEscapeCutsceneActive = true;
 
+    computeShoreNormalCamPose(0, _escapeShoreNormPos, _escapeShoreNormLook);
+    _escapeCutsceneOpts.normalCamPos = _escapeShoreNormPos;
+    _escapeCutsceneOpts.normalCamLook = _escapeShoreNormLook;
     _escapeCutsceneOpts.normalFov = getCombatFovForBiome(camera.aspect || 1);
     _escapeCutsceneState = sampleBossEscapeCutscene(
       bossEscapeCutsceneRig,
@@ -5867,7 +6005,10 @@ export function createArenaWorld(canvas) {
       _escapeCutsceneOpts
     );
     _escapeCutsceneState.active = true;
-    applyEscapeStageAndChasmFromState(_escapeCutsceneState);
+    applyEscapeStageAndChasmFromState(_escapeCutsceneState, true);
+    applyEscapeCutsceneCamera(_escapeCutsceneState, null, _escapeCutsceneOpts.normalFov);
+    syncEscapeVfxStreams(_escapeCutsceneState);
+    escVfx?.update?.(0.016, 0, _escapeCutsceneState);
     return _escapeCutsceneState;
   }
 
@@ -5884,11 +6025,12 @@ export function createArenaWorld(canvas) {
     if (!isBossEscapeCutsceneActive() || !bossEscapeCutsceneRig) return null;
     const clampedT = Math.max(0, Math.min(BOSS_ESCAPE_CUTSCENE_DURATION - 0.001, Number(tSec) || 0));
     bossEscapeCutsceneElapsed = clampedT;
-    const shore = ensureSoulsExteriorShore();
-    if (clampedT < BOSS_ESCAPE_ACTS.GRATE_BREAK_TIME) {
-      bossEscapeGrateBroken = false;
-      shore?.setGrateBroken?.(false);
-    }
+    lockOnTarget = null;
+    lockOnReticle.visible = false;
+    lockOnFootRing.visible = false;
+    computeShoreNormalCamPose(0, _escapeShoreNormPos, _escapeShoreNormLook);
+    _escapeCutsceneOpts.normalCamPos = _escapeShoreNormPos;
+    _escapeCutsceneOpts.normalCamLook = _escapeShoreNormLook;
     _escapeCutsceneOpts.normalFov = getCombatFovForBiome(camera.aspect || 1);
     _escapeCutsceneState = sampleBossEscapeCutscene(
       bossEscapeCutsceneRig,
@@ -5897,23 +6039,84 @@ export function createArenaWorld(canvas) {
       _escapeCutsceneOpts
     );
     _escapeCutsceneState.active = !_escapeCutsceneState.finished;
-    applyEscapeStageAndChasmFromState(_escapeCutsceneState);
-    if (Math.abs(camera.fov - _escapeCutsceneState.camFov) > 0.01) {
-      camera.fov = _escapeCutsceneState.camFov;
+    applyEscapeStageAndChasmFromState(_escapeCutsceneState, true);
+    applyEscapeCutsceneCamera(_escapeCutsceneState, null, _escapeCutsceneOpts.normalFov);
+
+    // Sync 3-point cinema lighting, underwater bubbles, shaft debris & preview impact bursts on seek frames!
+    const escVfx = ensureSoulsEscapeVfx();
+    escVfx?.reset?.();
+    escVfx?.setActive?.(true);
+    syncEscapeVfxStreams(_escapeCutsceneState);
+    const st = _escapeCutsceneState;
+    const hx = Number(st.heroX) || 0;
+    const hy = Number(st.heroY) || 0;
+    const hz = Number(st.heroZ) || 0;
+    const bx = Number(st.bossX) || 0;
+    const bz = Number(st.bossZ) || hz - 2;
+    const fx = Number(st.floorHoleX) || 0;
+    const fz = Number(st.floorHoleZ) ?? SOULS_CASTLE_CONSTANTS.BOSS_CENTER_Z;
+    if (st.stageMode === 'castle') {
+      if ((Number(st.impactFlash01) || 0) > 0.12 && clampedT < 4.5) {
+        escVfx?.emitParrySparks?.((hx + bx) * 0.5, 1.38, (hz + bz) * 0.5, 1.1);
+      } else if (clampedT >= 3.30 && clampedT <= 4.60) {
+        escVfx?.emitDustImpact?.(hx, 0.14, hz, 1.25);
+      } else if ((Number(st.floorHoleProgress) || 0) > 0.04 && clampedT < 21.3) {
+        escVfx?.emitFloorCollapseBurst?.(fx, 0.25, fz);
+      }
+    } else if (st.stageMode === 'shaft_river') {
+      if ((Number(st.cues?.waterSplashCue) || 0) > 0 && clampedT < 26.2) {
+        escVfx?.emitWaterSplash?.(hx, 0.15, hz, 1.3);
+      } else if (Boolean(st.grateBroken) && clampedT < 28.8) {
+        escVfx?.emitGrateBreakBurst?.(hx, 0.55, Math.min(26.2, hz + 0.6));
+      }
+    }
+    escVfx?.update?.(0.08, clampedT, st);
+    return _escapeCutsceneState;
+  }
+
+  function syncOrbitFromFinalEscapeState(st, normalFov) {
+    const anchors = ensureSoulsExteriorShore()?.getAnchors?.() || EXTERIOR_SHORE_ANCHORS;
+    const wake = anchors.wakePos || { x: 0, y: 0, z: 2.5 };
+    const wx = Number.isFinite(wake.x) ? wake.x : 0;
+    const wz = Number.isFinite(wake.z) ? wake.z : 2.5;
+    const hgY = getGroundHeight(wx, wz);
+    const hPivotY = hgY + SOULS_CAMERA_PIVOT_Y;
+    const finalYaw = Number.isFinite(Number(st?.finalCamYaw)) ? Number(st.finalCamYaw) : 0;
+
+    // Derive exact pitch & distance from the cutscene's last camera frame (t = 34.0s) if on Exterior Shore
+    // so there is ZERO jump when control hands back to live gameplay!
+    let finalPitch = SHORE_WAKE_ORBIT_PITCH;
+    let finalDist = SHORE_WAKE_ORBIT_DIST;
+    const aspectMult = camera.aspect < 0.92 ? 1.15 : 1;
+    if (st?.camPos && Number.isFinite(st.camPos.x) && Number.isFinite(st.camPos.y) && Number.isFinite(st.camPos.z)) {
+      const dx = st.camPos.x - wx;
+      const dy = st.camPos.y - hPivotY;
+      const dz = st.camPos.z - wz;
+      const d = Math.hypot(dx, dy, dz);
+      if (d >= 2.8 && d <= 14.0) {
+        finalDist = d / aspectMult;
+        finalPitch = Math.max(0.14, Math.min(0.85, Math.asin(Math.max(-0.95, Math.min(0.95, dy / d)))));
+      }
+    }
+
+    setCombatOrbitYaw(finalYaw, finalPitch, finalDist);
+    soulsLockDistBonus = 0;
+    targetX = wx;
+    targetY = hgY;
+    targetZ = wz;
+    lastHeroX = wx;
+    lastHeroZ = wz;
+    hasFollowedOnce = true;
+
+    computeShoreNormalCamPose(finalYaw, _cutsceneNormalPos, _cutsceneNormalLook, finalPitch, finalDist * aspectMult);
+    if (Math.abs(camera.fov - normalFov) > 0.01) {
+      camera.fov = normalFov;
       camera.updateProjectionMatrix();
     }
-    camera.position.set(
-      _escapeCutsceneState.camPos.x,
-      _escapeCutsceneState.camPos.y,
-      _escapeCutsceneState.camPos.z
-    );
-    camera.lookAt(
-      _escapeCutsceneState.camLook.x,
-      _escapeCutsceneState.camLook.y,
-      _escapeCutsceneState.camLook.z
-    );
+    camera.up.set(0, 1, 0);
+    camera.position.copy(_cutsceneNormalPos);
+    camera.lookAt(_cutsceneNormalLook);
     camera.updateMatrixWorld();
-    return _escapeCutsceneState;
   }
 
   function skipBossEscapeCutscene(force = false) {
@@ -5922,39 +6125,23 @@ export function createArenaWorld(canvas) {
       return null;
     }
     const normalFov = getCombatFovForBiome(camera.aspect || 1);
-    const anchors = ensureSoulsExteriorShore()?.getAnchors?.() || EXTERIOR_SHORE_ANCHORS;
-    const wake = anchors.wakePos || { x: 0, y: 0, z: 2.5 };
 
     bossEscapeCutsceneActive = false;
     bossEscapeCutsceneElapsed = BOSS_ESCAPE_CUTSCENE_DURATION;
     bossEscapeLastStageMode = 'exterior_shore';
     bossEscapeChasmEnabled = false;
     bossEscapeGrateBroken = true;
+    bossEscapeLastCameraCutId = -1;
+    soulsEscapeVfx?.setUnderwaterBubbles?.(false);
+    soulsEscapeVfx?.setFallingDebrisStream?.(false);
+    soulsEscapeVfx?.setActive?.(false);
+    soulsEscapeVfx?.reset?.();
     setSoulsZoneMode('exterior_shore');
     soulsExteriorShore?.setGrateBroken?.(true);
 
-    // Position chase camera cleanly behind Hero facing North (-Z) toward the Waterfall & Castle of Ash!
-    orbitYaw = orbitTargetYaw = 0;
-    orbitPitch = orbitTargetPitch = SOULS_DEFAULT_ORBIT_PITCH;
-    orbitDist = orbitTargetDist = SOULS_DEFAULT_ORBIT_DIST;
-    soulsCamClipDist = SOULS_DEFAULT_ORBIT_DIST;
-    soulsLockDistBonus = 0;
-    targetX = wake.x;
-    targetZ = wake.z;
-    lastHeroX = wake.x;
-    lastHeroZ = wake.z;
-    const hgY = getGroundHeight(wake.x, wake.z);
-    targetY = hgY;
-    const hPivotY = hgY + SOULS_CAMERA_PIVOT_Y;
-    const cosP = Math.cos(orbitPitch);
-    const reqDist = Math.max(2.8, orbitDist);
-    const cX = wake.x + Math.sin(orbitYaw) * cosP * reqDist;
-    const cY = Math.max(hgY + 0.52, hPivotY + Math.sin(orbitPitch) * reqDist);
-    const cZ = wake.z + Math.cos(orbitYaw) * cosP * reqDist;
-    _cutsceneNormalPos.set(cX, cY, cZ);
-    _cutsceneNormalLook.set(wake.x, hPivotY, wake.z);
-    hasFollowedOnce = false;
-
+    computeShoreNormalCamPose(0, _escapeShoreNormPos, _escapeShoreNormLook);
+    _escapeCutsceneOpts.normalCamPos = _escapeShoreNormPos;
+    _escapeCutsceneOpts.normalCamLook = _escapeShoreNormLook;
     _escapeCutsceneOpts.normalFov = normalFov;
     _escapeCutsceneState = getBossEscapeCutsceneSkipState(
       bossEscapeCutsceneRig,
@@ -5962,13 +6149,7 @@ export function createArenaWorld(canvas) {
       _escapeCutsceneOpts
     );
     _escapeCutsceneState.active = false;
-    if (Math.abs(camera.fov - normalFov) > 0.01) {
-      camera.fov = normalFov;
-      camera.updateProjectionMatrix();
-    }
-    camera.position.copy(_cutsceneNormalPos);
-    camera.lookAt(_cutsceneNormalLook);
-    camera.updateMatrixWorld();
+    syncOrbitFromFinalEscapeState(_escapeCutsceneState, normalFov);
     return _escapeCutsceneState;
   }
   let hasFollowedOnce = false;
@@ -6713,7 +6894,7 @@ export function createArenaWorld(canvas) {
     if (devEditors) return Promise.resolve(devEditors);
     if (!isDevModeEnabled()) return Promise.resolve(null);
     if (!devEditorsPromise) {
-      devEditorsPromise = import('./world/devEditors.js?v=20261124z91')
+      devEditorsPromise = import('./world/devEditors.js?v=20261124z92')
         .then((mod) => {
           devEditors = mod.createWorldDevEditors({
             scene,
@@ -6839,6 +7020,24 @@ export function createArenaWorld(canvas) {
   }
 
   function getCombatOrbitYaw() {
+    return orbitYaw;
+  }
+
+  function setCombatOrbitYaw(yaw = 0, pitch = null, dist = null) {
+    const safeYaw = Number.isFinite(Number(yaw)) ? Number(yaw) : 0;
+    orbitYaw = safeYaw;
+    orbitTargetYaw = safeYaw;
+    if (pitch !== null && pitch !== undefined && Number.isFinite(Number(pitch))) {
+      const clampedPitch = Math.max(0.10, Math.min(1.48, Number(pitch)));
+      orbitPitch = clampedPitch;
+      orbitTargetPitch = clampedPitch;
+    }
+    if (dist !== null && dist !== undefined && Number.isFinite(Number(dist))) {
+      const clampedDist = Math.max(2.8, Math.min(68.0, Number(dist)));
+      orbitDist = clampedDist;
+      orbitTargetDist = clampedDist;
+      if (isSoulsBiome()) soulsCamClipDist = clampedDist;
+    }
     return orbitYaw;
   }
 
@@ -7111,8 +7310,8 @@ export function createArenaWorld(canvas) {
     lockLookOffsetY += (wantLookOffY - lockLookOffsetY) * lookSmooth;
     lockLookOffsetZ += (wantLookOffZ - lockLookOffsetZ) * lookSmooth;
 
-    // Update iconic 3D Lock-On reticle (ZERO floor ring in Soulslike mode — Elden Ring chest pinpoint only!)
-    if (lockOnTarget) {
+    // Update iconic 3D Lock-On reticle (ZERO floor ring in Soulslike mode — hidden 100% during cutscenes!)
+    if (lockOnTarget && !bossEscapeCutsceneActive && !bossDoorCutsceneActive) {
       lockOnPulseTime += clampedDt;
       const spPulse = 1 + Math.sin(lockOnPulseTime * 6.5) * 0.08;
       const spBase = lockOnTarget.isBoss ? 0.56 : 0.40;
@@ -7217,16 +7416,13 @@ export function createArenaWorld(canvas) {
 
     if (bossEscapeCutsceneActive && isSouls && bossEscapeCutsceneRig) {
       const prevSlowMo = Math.max(0.22, Math.min(1.0, Number(_escapeCutsceneState?.slowMoFactor) || 1.0));
-      bossEscapeCutsceneElapsed += clampedDt * prevSlowMo;
+      const hitstopScale = (Number(_escapeCutsceneState?.hitstopSec) || 0) > 0.005 ? 0.30 : 1.0;
+      bossEscapeCutsceneElapsed += clampedDt * prevSlowMo * hitstopScale;
       const normalFov = getCombatFovForBiome(camera.aspect || 1);
+      computeShoreNormalCamPose(0, _escapeShoreNormPos, _escapeShoreNormLook);
+      _escapeCutsceneOpts.normalCamPos = _escapeShoreNormPos;
+      _escapeCutsceneOpts.normalCamLook = _escapeShoreNormLook;
       _escapeCutsceneOpts.normalFov = normalFov;
-      // During Act 5 handoff (31.35..32.5s), blend smoothly into chase camera behind Hero facing North (-Z)!
-      if (bossEscapeCutsceneElapsed >= BOSS_ESCAPE_ACTS.SHORE_TRANSITION_TIME) {
-        orbitYaw = orbitTargetYaw = 0;
-        orbitPitch = orbitTargetPitch = SOULS_DEFAULT_ORBIT_PITCH;
-        orbitDist = orbitTargetDist = SOULS_DEFAULT_ORBIT_DIST;
-        soulsCamClipDist = SOULS_DEFAULT_ORBIT_DIST;
-      }
       _escapeCutsceneState = sampleBossEscapeCutscene(
         bossEscapeCutsceneRig,
         bossEscapeCutsceneElapsed,
@@ -7234,45 +7430,30 @@ export function createArenaWorld(canvas) {
         _escapeCutsceneOpts
       );
       _escapeCutsceneState.active = !_escapeCutsceneState.finished;
-      applyEscapeStageAndChasmFromState(_escapeCutsceneState);
+      applyEscapeStageAndChasmFromState(_escapeCutsceneState, false);
 
       if (_escapeCutsceneState.finished) {
         bossEscapeCutsceneActive = false;
         bossEscapeCutsceneElapsed = BOSS_ESCAPE_CUTSCENE_DURATION;
         bossEscapeLastStageMode = 'exterior_shore';
         bossEscapeChasmEnabled = false;
+        bossEscapeGrateBroken = true;
+        bossEscapeLastCameraCutId = -1;
+        soulsEscapeVfx?.setUnderwaterBubbles?.(false);
+        soulsEscapeVfx?.setFallingDebrisStream?.(false);
+        soulsEscapeVfx?.setActive?.(false);
+        soulsEscapeVfx?.reset?.();
         setSoulsZoneMode('exterior_shore');
-        if (Math.abs(camera.fov - normalFov) > 0.01) {
-          camera.fov = normalFov;
-          camera.updateProjectionMatrix();
-        }
-        camera.position.set(finalNormCamX, finalNormCamY, finalNormCamZ);
-        camera.lookAt(finalNormLookX, finalNormLookY, finalNormLookZ);
+        soulsExteriorShore?.setGrateBroken?.(true);
+        syncOrbitFromFinalEscapeState(_escapeCutsceneState, normalFov);
       } else {
-        const targetCutFov = Number(_escapeCutsceneState.camFov) || normalFov;
-        if (Math.abs(camera.fov - targetCutFov) > 0.01) {
-          camera.fov = targetCutFov;
-          camera.updateProjectionMatrix();
-        }
         const totalShake = Math.max(Number(_escapeCutsceneState.screenShake) || 0, shakeIntensity);
         const sh = computeBossEscapeCameraShakeOffset(
           bossEscapeCutsceneElapsed,
           totalShake,
           _escapeCutsceneShakeOut
         );
-        camera.position.set(
-          _escapeCutsceneState.camPos.x + sh.x,
-          _escapeCutsceneState.camPos.y + sh.y,
-          _escapeCutsceneState.camPos.z + sh.z
-        );
-        camera.lookAt(
-          _escapeCutsceneState.camLook.x + sh.x * 0.35,
-          _escapeCutsceneState.camLook.y + sh.y * 0.35,
-          _escapeCutsceneState.camLook.z + sh.z * 0.35
-        );
-        if (sh.roll) {
-          camera.rotateZ(sh.roll);
-        }
+        applyEscapeCutsceneCamera(_escapeCutsceneState, sh, normalFov);
       }
     } else if (bossDoorCutsceneActive && isSouls) {
       bossDoorCutsceneElapsed += clampedDt;
@@ -7610,6 +7791,10 @@ export function createArenaWorld(canvas) {
           playerX: lastHeroX,
           playerZ: lastHeroZ
         });
+      }
+      if (soulsEscapeVfx && bossEscapeCutsceneActive && _escapeCutsceneState) {
+        syncEscapeVfxStreams(_escapeCutsceneState);
+        soulsEscapeVfx.update(soulsAnimDt, t, _escapeCutsceneState);
       }
     } else if (cameraMode !== 'hub' && isMistyBiome(currentBiome) && mistyArena?.isLoaded()) {
       // Animate Misty Forest / Frost Ruins / Ash Citadel mist, glowing portal sigil, campfire & lanterns
@@ -8663,6 +8848,7 @@ export function createArenaWorld(canvas) {
     mistyArena?.setLowSpecMode?.(lowSpecMode);
     soulsArena?.setLowSpecMode?.(lowSpecMode);
     soulsExteriorShore?.setLowSpecMode?.(lowSpecMode);
+    soulsEscapeVfx?.setLowSpecMode?.(lowSpecMode);
     phase2ArenaFireRingCtrl?.setLowSpec?.(lowSpecMode);
     for (let i = 0; i < activeGroundFractures.length; i++) {
       activeGroundFractures[i].fireField?.setLowSpec?.(lowSpecMode);
@@ -8817,6 +9003,7 @@ export function createArenaWorld(canvas) {
     lockLookOffsetY = 0;
     lockLookOffsetZ = 0;
     lockOnReticle.visible = false;
+    soulsEscapeVfx?.reset?.();
   }
 
   return {
@@ -8847,6 +9034,7 @@ export function createArenaWorld(canvas) {
     getArenaProps,
     setArenaPropPos,
     getCombatOrbitYaw,
+    setCombatOrbitYaw,
     resetCombatOrbit,
     setCameraMode,
     setArenaBiome,
@@ -8868,10 +9056,17 @@ export function createArenaWorld(canvas) {
     setSoulsZoneMode,
     getSoulsZoneMode: () => soulsZoneMode,
     getExteriorShoreAnchors: () => (soulsExteriorShore?.getAnchors?.() || EXTERIOR_SHORE_ANCHORS),
+    attachShoreRealSwordModel,
     setShoreSwordPickedUp: (picked) => ensureSoulsExteriorShore()?.setSwordPickedUp?.(Boolean(picked)),
     setShoreBonfireLit: (lit) => ensureSoulsExteriorShore()?.setBonfireLit?.(Boolean(lit)),
     setShoreGrateBroken: (broken) => ensureSoulsExteriorShore()?.setGrateBroken?.(Boolean(broken)),
     triggerShoreGrateBreak: () => ensureSoulsExteriorShore()?.triggerGrateBreak?.(),
+    getSoulsEscapeVfx: () => ensureSoulsEscapeVfx(),
+    emitEscapeParrySparks: (x, y, z, intensity = 1.0) => ensureSoulsEscapeVfx()?.emitParrySparks?.(x, y, z, intensity),
+    emitEscapeDustImpact: (x, y, z, scale = 1.0) => ensureSoulsEscapeVfx()?.emitDustImpact?.(x, y, z, scale),
+    emitEscapeFloorCollapseBurst: (x, y, z) => ensureSoulsEscapeVfx()?.emitFloorCollapseBurst?.(x, y, z),
+    emitEscapeWaterSplash: (x, y, z, scale = 1.0) => ensureSoulsEscapeVfx()?.emitWaterSplash?.(x, y, z, scale),
+    emitEscapeGrateBreakBurst: (x, y, z) => ensureSoulsEscapeVfx()?.emitGrateBreakBurst?.(x, y, z),
     setSoulsFogGate: (sealed) => {
       const isSealed = Boolean(sealed);
       if (!isSealed) {
