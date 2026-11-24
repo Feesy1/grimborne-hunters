@@ -2,7 +2,7 @@
 // Studio 44.1 kHz 16-bit WAV samples + acoustic procedural fallbacks during decode.
 // Strictly isolated from PvE biomes; zero external dependencies (Vanilla ES Module).
 
-export const SOULS_ENV_AUDIO_VERSION = '20261124z96';
+export const SOULS_ENV_AUDIO_VERSION = '20261124z97';
 
 const BASE_AUDIO_PATH = './assets/audio';
 
@@ -24,11 +24,20 @@ export const SOULS_ENV_SAMPLE_MANIFEST = Object.freeze([
   ['bonfire_crackle', `${BASE_AUDIO_PATH}/souls_env_bonfire_crackle.wav?v=${SOULS_ENV_AUDIO_VERSION}`],
   ['fog_gate', `${BASE_AUDIO_PATH}/souls_env_fog_gate.wav?v=${SOULS_ENV_AUDIO_VERSION}`],
   ['cathedral_drone', `${BASE_AUDIO_PATH}/souls_env_cathedral_drone.wav?v=${SOULS_ENV_AUDIO_VERSION}`],
+  ['shore_wind', `${BASE_AUDIO_PATH}/souls_shore_wind_ambient.mp3?v=${SOULS_ENV_AUDIO_VERSION}`],
   ['door_open', `${BASE_AUDIO_PATH}/souls_env_door_open.wav?v=${SOULS_ENV_AUDIO_VERSION}`],
   ['door_close', `${BASE_AUDIO_PATH}/souls_env_door_close.wav?v=${SOULS_ENV_AUDIO_VERSION}`]
 ]);
 
-const STONE_SURFACES = new Set(['stone_courtyard', 'stone_bridge', 'cathedral_stone']);
+const STONE_SURFACES = new Set([
+  'stone_courtyard',
+  'stone_bridge',
+  'cathedral_stone',
+  'wet_stone',
+  'gravel',
+  'shallow_water'
+]);
+const SHORE_SURFACES = new Set(['wet_stone', 'gravel', 'shallow_water']);
 
 function safeGet(fn) {
   if (typeof fn !== 'function') return null;
@@ -84,11 +93,17 @@ export function createSoulsEnvAudio({
   // Ambient loop state (strictly active inside Abandoned Knight Rift)
   let ambientActive = false;
   let bonfireLevel = 0;
+  let shoreBonfireLevel = 0;
 
   let droneNode = null;
   let droneGain = null;
   let droneStopTimer = null;
   let droneDestRef = null;
+
+  let castleWindNode = null;
+  let castleWindGain = null;
+  let castleWindStopTimer = null;
+  let castleWindDestRef = null;
 
   let bonfireNode = null;
   let bonfireGain = null;
@@ -133,9 +148,10 @@ export function createSoulsEnvAudio({
     }
   }
 
-  function getReflAmount(surface, base = 0.46) {
-    if (surface === 'cathedral_stone') return base * 1.52;
-    if (surface === 'stone_bridge') return base * 1.22;
+  function getReflAmount(surface, base = 0.34) {
+    if (SHORE_SURFACES.has(surface)) return 0.16;
+    if (surface === 'cathedral_stone') return base * 1.45;
+    if (surface === 'stone_bridge') return base * 1.18;
     return base;
   }
 
@@ -713,6 +729,23 @@ export function createSoulsEnvAudio({
     droneDestRef = null;
   }
 
+  function teardownCastleWind() {
+    if (castleWindStopTimer !== null) {
+      clearTimeout(castleWindStopTimer);
+      castleWindStopTimer = null;
+    }
+    if (castleWindNode) {
+      try { castleWindNode.stop(); } catch {}
+      try { castleWindNode.disconnect(); } catch {}
+      castleWindNode = null;
+    }
+    if (castleWindGain) {
+      try { castleWindGain.disconnect(); } catch {}
+      castleWindGain = null;
+    }
+    castleWindDestRef = null;
+  }
+
   function teardownBonfire() {
     if (bonfireStopTimer !== null) {
       clearTimeout(bonfireStopTimer);
@@ -739,7 +772,8 @@ export function createSoulsEnvAudio({
     if (!ctx) {
       if (!ambientActive) {
         teardownDrone();
-        teardownBonfire();
+        teardownCastleWind();
+        if (shoreBonfireLevel <= 0.01) teardownBonfire();
       }
       return;
     }
@@ -780,7 +814,7 @@ export function createSoulsEnvAudio({
         }
       }
       if (droneGain) {
-        const droneTarget = musicDest ? 0.28 : 0.11;
+        const droneTarget = musicDest ? 0.24 : 0.10;
         droneGain.gain.cancelScheduledValues(t);
         droneGain.gain.setTargetAtTime(droneTarget, t, 0.42);
       }
@@ -795,9 +829,54 @@ export function createSoulsEnvAudio({
       }
     }
 
-    // 2. Warm Bonfire Crackle (routes to sfxDest so 2-8 kHz ember snaps stay crystal clear)
+    // 1b. Haunting Cold Nocturnal Wind bed layered softly in Castle courtyard & ruins!
+    const targetWindDest = sfxDest || musicDest;
+    const wantCastleWind = ambientActive && Boolean(targetWindDest);
+    const windBuf = buffers.get('shore_wind');
+    if (wantCastleWind) {
+      if (castleWindStopTimer !== null) {
+        clearTimeout(castleWindStopTimer);
+        castleWindStopTimer = null;
+      }
+      if (castleWindNode && castleWindDestRef !== targetWindDest) {
+        teardownCastleWind();
+      }
+      if (!castleWindNode && windBuf) {
+        try {
+          const src = ctx.createBufferSource();
+          src.buffer = windBuf;
+          src.loop = true;
+          const g = ctx.createGain();
+          g.gain.setValueAtTime(0.0001, t);
+          src.connect(g);
+          g.connect(targetWindDest);
+          src.start(t);
+          castleWindNode = src;
+          castleWindGain = g;
+          castleWindDestRef = targetWindDest;
+        } catch {
+          teardownCastleWind();
+        }
+      }
+      if (castleWindGain) {
+        castleWindGain.gain.cancelScheduledValues(t);
+        castleWindGain.gain.setTargetAtTime(0.26, t, 0.55);
+      }
+    } else if (castleWindGain) {
+      castleWindGain.gain.cancelScheduledValues(t);
+      castleWindGain.gain.setTargetAtTime(0.0001, t, 0.26);
+      if (castleWindStopTimer === null) {
+        castleWindStopTimer = setTimeout(() => {
+          castleWindStopTimer = null;
+          if (!ambientActive) teardownCastleWind();
+        }, 1050);
+      }
+    }
+
+    // 2. Warm Bonfire Crackle (Castle Bonfire OR lit Exterior Shore Bonfire!)
     const targetBonfireDest = sfxDest || musicDest;
-    const wantBonfire = ambientActive && bonfireLevel > 0.01 && Boolean(targetBonfireDest);
+    const effectiveBonfire = Math.max(ambientActive ? bonfireLevel : 0, shoreBonfireLevel);
+    const wantBonfire = effectiveBonfire > 0.01 && Boolean(targetBonfireDest);
     const bonfireBuf = buffers.get('bonfire_crackle');
 
     if (wantBonfire) {
@@ -819,7 +898,7 @@ export function createSoulsEnvAudio({
           g.connect(targetBonfireDest);
           if (reverbDest) {
             const refl = ctx.createGain();
-            refl.gain.setValueAtTime(0.26, t);
+            refl.gain.setValueAtTime(0.24, t);
             g.connect(refl);
             refl.connect(reverbDest);
             bonfireReflSend = refl;
@@ -833,7 +912,7 @@ export function createSoulsEnvAudio({
         }
       }
       if (bonfireGain) {
-        const bonfireTarget = Math.max(0.0001, 0.22 * bonfireLevel);
+        const bonfireTarget = Math.max(0.0001, 0.26 * effectiveBonfire);
         bonfireGain.gain.cancelScheduledValues(t);
         bonfireGain.gain.setTargetAtTime(bonfireTarget, t, 0.28);
       }
@@ -843,7 +922,7 @@ export function createSoulsEnvAudio({
       if (bonfireStopTimer === null) {
         bonfireStopTimer = setTimeout(() => {
           bonfireStopTimer = null;
-          if (!ambientActive || bonfireLevel <= 0.01) teardownBonfire();
+          if ((!ambientActive || bonfireLevel <= 0.01) && shoreBonfireLevel <= 0.01) teardownBonfire();
         }, 950);
       }
     }
@@ -871,7 +950,10 @@ export function createSoulsEnvAudio({
         .then((decoded) => {
           if (decoded) {
             buffers.set(key, decoded);
-            if (ambientActive && (key === 'cathedral_drone' || key === 'bonfire_crackle')) {
+            if (
+              (ambientActive && (key === 'cathedral_drone' || key === 'bonfire_crackle' || key === 'shore_wind')) ||
+              (shoreBonfireLevel > 0.01 && key === 'bonfire_crackle')
+            ) {
               syncAmbientLoops();
             }
           }
@@ -905,7 +987,7 @@ export function createSoulsEnvAudio({
     const sfxDest = safeGet(getSfxDest);
     if (!ctx || !sfxDest) return false;
 
-    const minStepIntervalMs = isSprinting ? 215 : 285;
+    const minStepIntervalMs = isSprinting ? 175 : 230;
     if (!canFire('stone_step', minStepIntervalMs)) return false;
 
     const reverbDest = safeGet(getStoneReverbDest);
@@ -932,21 +1014,22 @@ export function createSoulsEnvAudio({
       });
     }
 
-    const classWeight = isWarrior ? 1.0 : isMage ? 0.72 : 0.85;
-    const sprintMult = isSprinting ? 1.18 : 1.0;
-    const gainJit = 0.93 + Math.random() * 0.14;
-    const gainPeak = 0.42 * classWeight * sprintMult * gainJit;
+    const classWeight = isWarrior ? 1.0 : isMage ? 0.78 : 0.88;
+    const sprintMult = isSprinting ? 1.12 : 1.0;
+    const gainJit = 0.95 + Math.random() * 0.10;
+    const gainPeak = Math.min(0.96, 0.78 * classWeight * sprintMult * gainJit);
 
-    const footTilt = parity === 0 ? 0.985 : 1.015;
-    const rate = footTilt * (isSprinting ? 1.03 : 1.0) * (0.97 + Math.random() * 0.06);
-    const highShelfDb = isWarrior ? 0 : isMage ? -3.0 : -1.5;
+    // Ultra-faithful ±1.5% pitch spread so footsteps preserve 100% of the exact reference timbre!
+    const footTilt = parity === 0 ? 0.992 : 1.008;
+    const rate = footTilt * (isSprinting ? 1.02 : 1.0) * (0.985 + Math.random() * 0.03);
+    const highShelfDb = isWarrior ? 0.6 : isMage ? -2.4 : -1.0;
 
     return playLoadedBuffer(ctx, buf, {
       dest: sfxDest,
       reverbDest,
       gainPeak,
       rate,
-      reverbSend: getReflAmount(surface, 0.46),
+      reverbSend: getReflAmount(surface, 0.34),
       highShelfDb,
       highShelfFreq: 3800
     });
@@ -1083,9 +1166,18 @@ export function createSoulsEnvAudio({
 
     if (ambientActive) {
       const ctx = safeGet(getCtx);
-      if (ctx && (!buffers.has('cathedral_drone') || !buffers.has('bonfire_crackle'))) {
+      if (ctx && (!buffers.has('cathedral_drone') || !buffers.has('bonfire_crackle') || !buffers.has('shore_wind'))) {
         preload(ctx);
       }
+    }
+    syncAmbientLoops();
+  }
+
+  function setShoreBonfireLevel(level = 0) {
+    shoreBonfireLevel = clamp(Number(level) || 0, 0, 1);
+    if (shoreBonfireLevel > 0.01) {
+      const ctx = safeGet(getCtx);
+      if (ctx && !buffers.has('bonfire_crackle')) preload(ctx);
     }
     syncAmbientLoops();
   }
@@ -1093,7 +1185,9 @@ export function createSoulsEnvAudio({
   function dispose() {
     ambientActive = false;
     bonfireLevel = 0;
+    shoreBonfireLevel = 0;
     teardownDrone();
+    teardownCastleWind();
     teardownBonfire();
     buffers.clear();
     pendingLoads.clear();
@@ -1110,6 +1204,7 @@ export function createSoulsEnvAudio({
     playCastleDoorOpen,
     playCastleDoorClose,
     setAmbientActive,
+    setShoreBonfireLevel,
     dispose,
     getLoadedCount() {
       return buffers.size;

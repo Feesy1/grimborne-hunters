@@ -3,7 +3,7 @@
 // All clash sparks also layer with native `spawnSoulsClashSparks`; this module supplies compact dark stone collapse chunks,
 // crisp metallic embers, water splash droplets, and subtle underwater bubbles with zero per-frame allocations.
 
-export const SOULS_ESCAPE_VFX_VERSION = '20261124z96';
+export const SOULS_ESCAPE_VFX_VERSION = '20261124z97';
 
 function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
 

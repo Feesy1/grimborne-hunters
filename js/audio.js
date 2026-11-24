@@ -1,12 +1,12 @@
 // Procedural Web Audio API Dark-Fantasy Synthesizer + Abandoned Knight Rift Studio Audio Router
 // Instant startup, crisp dynamics, full suspend/mute compliance.
 
-import { createSoulsEnvAudio } from './souls/soulsEnvAudio.js?v=20261124z96';
-import { createSoulsHeroAudio } from './souls/soulsHeroAudio.js?v=20261124z96';
-import { createSoulsEnemyAudio } from './souls/soulsEnemyAudio.js?v=20261124z96';
-import { createSoulsMusicManager } from './souls/soulsMusicManager.js?v=20261124z96';
-import { createSoulsSpatialAudio } from './souls/soulsSpatialAudio.js?v=20261124z96';
-import { createSoulsEscapeAudio } from './souls/soulsEscapeAudio.js?v=20261124z96';
+import { createSoulsEnvAudio } from './souls/soulsEnvAudio.js?v=20261124z97';
+import { createSoulsHeroAudio } from './souls/soulsHeroAudio.js?v=20261124z97';
+import { createSoulsEnemyAudio } from './souls/soulsEnemyAudio.js?v=20261124z97';
+import { createSoulsMusicManager } from './souls/soulsMusicManager.js?v=20261124z97';
+import { createSoulsSpatialAudio } from './souls/soulsSpatialAudio.js?v=20261124z97';
+import { createSoulsEscapeAudio } from './souls/soulsEscapeAudio.js?v=20261124z97';
 
 export function createAudioEngine() {
   let ctx = null;
@@ -26,7 +26,7 @@ export function createAudioEngine() {
 
   function preloadExternalSamples(audioCtx) {
     if (!audioCtx || typeof fetch === 'undefined') return;
-    const stepVer = '20261124z96';
+    const stepVer = '20261124z97';
     const files = [
       ['step_warrior_1', `./assets/audio/step_warrior_1.wav?v=${stepVer}`],
       ['step_warrior_2', `./assets/audio/step_warrior_2.wav?v=${stepVer}`],
@@ -261,7 +261,7 @@ export function createAudioEngine() {
     getVoiceVolume: () => cutsceneVoiceVolume,
     getStoneReverbDest: () => getOrCreateStoneReverbSend(),
     duckMusic: (db, holdSec, relSec) => soulsMusic?.duck?.(db, holdSec, relSec),
-    assetVer: '20261124z96'
+    assetVer: '20261124z97'
   });
   soulsEscape.setMuted?.(muted);
   soulsEscape.setVoiceVolume?.(Math.max(0, Math.min(1.6, cutsceneVoiceVolume * 1.08)));
@@ -270,8 +270,8 @@ export function createAudioEngine() {
   // - rift_explore: Elden Castle Drone (Bonfire / Castle Corridor / East Alcove)
   // - boss_phase1/boss_phase2: unified Epic Boss Battle (God of War Style)
   // Routed directly to masterGain (bypassing retro 980Hz musicFilter lowpass!) with own musicVolume scaling
-  const SOULS_EXPLORE_TRACK_URL = './assets/audio/music_rift_explore.mp3?v=20261124z96';
-  const SOULS_BOSS_TRACK_URL = './assets/audio/music_boss_rift.mp3?v=20261124z96';
+  const SOULS_EXPLORE_TRACK_URL = './assets/audio/music_rift_explore.mp3?v=20261124z97';
+  const SOULS_BOSS_TRACK_URL = './assets/audio/music_boss_rift.mp3?v=20261124z97';
   let soulsAmbientActive = false;
   const soulsMusic = createSoulsMusicManager({
     getCtx: () => ctx,
@@ -1353,9 +1353,16 @@ export function createAudioEngine() {
       const minStepMs = isSprinting ? 160 : 180;
       if (!readyToPlay() || !canTrigger('footstep', minStepMs)) return;
 
-      // Dedicated Abandoned Knight Rift 44.1 kHz studio stone/bridge footsteps + plate clink
-      // (zero earthen step_warrior_1..6.wav samples and zero dry gravel kick!)
-      if (surface === 'stone_courtyard' || surface === 'stone_bridge' || surface === 'cathedral_stone') {
+      // Dedicated Abandoned Knight Rift & Exterior Shore 44.1 kHz authentic stone/shore footsteps + plate clink
+      // (zero earthen step_warrior_1..6.wav samples on stone, wet stone, shore gravel, or shallow river rim!)
+      if (
+        surface === 'stone_courtyard' ||
+        surface === 'stone_bridge' ||
+        surface === 'cathedral_stone' ||
+        surface === 'wet_stone' ||
+        surface === 'gravel' ||
+        surface === 'shallow_water'
+      ) {
         preloadSoulsAudio(ctx);
         soulsEnv.playStoneFootstep({ classId, stepParity, isSprinting, surface });
         return;
@@ -2517,14 +2524,21 @@ export function createAudioEngine() {
       try { soulsSpatial?.playBossArmorShift?.(0.35); } catch {}
     },
 
-    setExteriorShoreAmbient(active) {
+    setExteriorShoreAmbient(active, opts = null) {
       const want = Boolean(active);
       if (want && (!readyToPlay() || muted || suspendedBySystem)) {
         try { soulsEscape?.setExteriorShoreAmbient?.(false); } catch {}
+        try { soulsEnv?.setShoreBonfireLevel?.(0); } catch {}
         return;
       }
       if (want) preloadSoulsAudio(ctx);
       try { soulsEscape?.setExteriorShoreAmbient?.(want); } catch {}
+      try {
+        const bfProx = want && opts && Number.isFinite(Number(opts.bonfireProximity))
+          ? Number(opts.bonfireProximity)
+          : 0;
+        soulsEnv?.setShoreBonfireLevel?.(bfProx);
+      } catch {}
     },
 
     playHeroRoll(heavy = false) {
@@ -2589,6 +2603,7 @@ export function createAudioEngine() {
       soulsAmbientActive = Boolean(active);
       if (!soulsAmbientActive || muted || suspendedBySystem) {
         soulsEnv.setAmbientActive(false);
+        soulsEnv.setShoreBonfireLevel?.(0);
         try {
           soulsSpatial.update?.(0, 0, 0, false, false, 0.016);
           if (!soulsAmbientActive) {
@@ -2616,6 +2631,16 @@ export function createAudioEngine() {
 
     preloadSoulsAudio() {
       if (ctx) preloadSoulsAudio(ctx);
+    },
+
+    getSoulsAudioStatus() {
+      return {
+        envLoadedCount: soulsEnv?.getLoadedCount?.() || 0,
+        envAmbientActive: Boolean(soulsEnv?.isAmbientActive?.()),
+        shoreAmbientActive: Boolean(soulsEscape?.isExteriorShoreAmbientActive?.()),
+        shoreWindLoaded: Boolean(soulsEscape?.isShoreWindSampleLoaded?.()),
+        usingRealShoreWind: Boolean(soulsEscape?.isUsingShoreWindSample?.())
+      };
     },
 
     playSwordSwing(comboStep = 1, isHeavy = false) {
