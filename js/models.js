@@ -8,7 +8,7 @@ import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { DRACOLoader } from '../vendor/DRACOLoader.js';
 import { clone as cloneSkinned } from '../vendor/SkeletonUtils.js';
-import { WEAPONS } from './config.js?v=20261124z87';
+import { WEAPONS } from './config.js?v=20261124z88';
 import {
   getGeo,
   getMat,
@@ -17,28 +17,28 @@ import {
   createAnimController,
   setBoneRelEuler,
   solveMixamoArmIK
-} from './models/shared.js?v=20261124z87';
+} from './models/shared.js?v=20261124z88';
 import {
   getWarriorWeaponMountConfig,
   createWarriorStanceState,
   applyWarriorWeaponStance,
   applyWarriorAttackOverlay
-} from './models/warriorStances.js?v=20261124z87';
+} from './models/warriorStances.js?v=20261124z88';
 import {
   computeFootSyncPlaybackRate,
   computeCombatPostureDynamics,
   applyCombatPostureToObject3D,
   applyCombatRecoilImpulse
-} from './souls/soulsPhysicsFeel.js?v=20261124z87';
-import { createActorContactShadowMesh } from './souls/soulsAtmosphere.js?v=20261124z87';
+} from './souls/soulsPhysicsFeel.js?v=20261124z88';
+import { createActorContactShadowMesh } from './souls/soulsAtmosphere.js?v=20261124z88';
 import {
   applyEldenDissolveToModel,
   resetEldenDissolveFromModel
-} from './souls/soulsDissolveVfx.js?v=20261124z87';
+} from './souls/soulsDissolveVfx.js?v=20261124z88';
 
 const MODEL_PATHS = {
   // Warrior Knight (Mixamo Sword & Shield Run + Diagonal Slash + Turn_180 + Combat_Roll + Heavy_Thrust + Door_Push)
-  warrior_run: './assets/models/Warrior_Run.glb?v=20261124z87',
+  warrior_run: './assets/models/Warrior_Run.glb?v=20261124z88',
 
   // All 5 Warrior Melee Weapons + Shield (preserved for in-world discovery & future equipment!)
   sword_tripo: './assets/models/Sword_Tripo.glb?v=20261120z34',
@@ -49,10 +49,10 @@ const MODEL_PATHS = {
   hammer_tripo: './assets/models/Hammer_Tripo.glb?v=20261120z34',
 
   // Castle of Ash Enemies & Boss (Boss untouched!)
-  rift_boss: './assets/models/Rift_Boss_Tripo.glb?v=20261124z87',
-  rift_executioner: './assets/models/Rift_Executioner_Tripo.glb?v=20261124z87',
-  rift_vanguard: './assets/models/Rift_Vanguard_Tripo.glb?v=20261124z87',
-  rift_acolyte: './assets/models/Rift_Acolyte_Tripo.glb?v=20261124z87'
+  rift_boss: './assets/models/Rift_Boss_Tripo.glb?v=20261124z88',
+  rift_executioner: './assets/models/Rift_Executioner_Tripo.glb?v=20261124z88',
+  rift_vanguard: './assets/models/Rift_Vanguard_Tripo.glb?v=20261124z88',
+  rift_acolyte: './assets/models/Rift_Acolyte_Tripo.glb?v=20261124z88'
 };
 
 const gltfCache = new Map();
@@ -10501,6 +10501,7 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
             const isNonAttackClip =
               !activeClip ||
               activeClip === 'Recover_Heft' ||
+              activeClip === 'Whirl_End' ||
               activeClip === 'Roar_Taunt' ||
               activeClip === 'Hit_React' ||
               activeClip === 'Hit_React_Left' ||

@@ -7,8 +7,8 @@ import {
   clamp,
   normalizeAngle,
   lerpAngle
-} from './bridge.js?v=20261124z87';
-import { SOULS_CASTLE_CONSTANTS } from '../souls/soulsCastleLayout.js?v=20261124z87';
+} from './bridge.js?v=20261124z88';
+import { SOULS_CASTLE_CONSTANTS } from '../souls/soulsCastleLayout.js?v=20261124z88';
 
 export function updateBossAI(boss, dt, elapsedTime, ctx) {
   const {
@@ -652,6 +652,7 @@ export const SOULS_BOSS_CLIP_TIMINGS = Object.freeze({
     trackingCutoff01: 0.84
   }),
   Recover_Heft: Object.freeze({ duration: 0.950, speed: 1.08 }),
+  Whirl_End: Object.freeze({ duration: 0.950, speed: 1.00 }),
   Walk_Backward: Object.freeze({ duration: 1.200, speed: 1.04 }),
   Strafe_Left: Object.freeze({ duration: 1.100, speed: 1.06 }),
   Strafe_Right: Object.freeze({ duration: 1.100, speed: 1.06 }),
@@ -2271,7 +2272,7 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
     return { isMoving: false };
   }
 
-  const enterRecover = (recoverSec, punishTier = null) => {
+  const enterRecover = (recoverSec, punishTier = null, recoverClipOverride = null) => {
     cancelSoulsBossTelegraph(boss, elapsedTime);
     clearWalkOverride(true);
     boss.model?.handle?.setClipOverride?.(null);
@@ -2295,16 +2296,20 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
       boss.soulsChainCount = 0;
     }
 
-    // Play Recover_Heft strictly when recoverSec >= 0.45s (light/heavy punish breathers), time-scaled to end
-    // cleanly with recoverSec; for short non-punishable guard returns (e.g. Heavy_Cleave 0.20..0.26s), hand off
-    // smoothly to base Idle/locomotion so a lingering Recover_Heft one-shot NEVER freezes legs during movement!
-    if (recoverSec >= 0.45 && bossHasClip(boss, 'Recover_Heft')) {
-      const cfgHeft = SOULS_BOSS_CLIP_TIMINGS.Recover_Heft;
-      const heftSpeed = clamp((cfgHeft.duration || 0.95) / Math.max(0.45, recoverSec), 0.90, 2.0);
-      playBossAttackClip(boss, 'Recover_Heft', heftSpeed, SOULS_BOSS_CROSSFADE_SEC);
+    // Play dedicated Whirl_End braking recovery after Whirl_Spin (eliminates sudden vertical snap!),
+    // or clean Recover_Heft when recoverSec >= 0.45s; for short breathers hand off smoothly to Idle.
+    const chosenRecClip =
+      recoverClipOverride && bossHasClip(boss, recoverClipOverride)
+        ? recoverClipOverride
+        : (recoverSec >= 0.45 && bossHasClip(boss, 'Recover_Heft') ? 'Recover_Heft' : null);
+    if (chosenRecClip) {
+      const cfgRec = SOULS_BOSS_CLIP_TIMINGS[chosenRecClip] || SOULS_BOSS_CLIP_TIMINGS.Recover_Heft;
+      const recSpeed = clamp((cfgRec.duration || 0.95) / Math.max(0.45, recoverSec), 0.78, 1.85);
+      const fadeSec = chosenRecClip === 'Whirl_End' ? 0.14 : SOULS_BOSS_CROSSFADE_SEC;
+      playBossAttackClip(boss, chosenRecClip, recSpeed, fadeSec);
       boss._soulsRecoverHeftPlaying = true;
     } else {
-      boss.model?.handle?.handoffToBase?.('Idle', 1.0, 0.22);
+      boss.model?.handle?.handoffToBase?.('Idle', 1.0, 0.24);
       boss._soulsRecoverHeftPlaying = false;
     }
 
@@ -3572,19 +3577,19 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
     boss.soulsPosturePhase01 = spinU;
     const peakVel = boss.soulsSpinPeakVel || (phase2 ? 5.05 : 4.35);
     const startVel = 1.65;
-    const endVel = 1.55;
+    const endVel = 0.48;
     let baseAngVel;
-    if (spinU < 0.30) {
-      // Heavy colossus acceleration overcoming warhammer inertia (0..30%)
-      const kAcc = spinU / 0.30;
+    if (spinU < 0.28) {
+      // Heavy colossus acceleration overcoming warhammer inertia (0..28%)
+      const kAcc = spinU / 0.28;
       const easeAcc = kAcc * kAcc * (3 - 2 * kAcc);
       baseAngVel = startVel + (peakVel - startVel) * easeAcc;
-    } else if (spinU <= 0.74) {
-      // Sustained foot-driven cyclone rotation (30..74%)
+    } else if (spinU <= 0.70) {
+      // Sustained foot-driven cyclone rotation (28..70%)
       baseAngVel = peakVel;
     } else {
-      // Heavy rotational momentum wind-down (74..100%)
-      const kDec = (spinU - 0.74) / 0.26;
+      // Extended heavy rotational deceleration (70..100%) down to near-stop before braking plant!
+      const kDec = (spinU - 0.70) / 0.30;
       const easeDec = kDec * kDec * (3 - 2 * kDec);
       baseAngVel = peakVel + (endVel - peakVel) * easeDec;
     }
@@ -3636,7 +3641,9 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
         spawnPhase2VolcanicAftershock(boss.x, boss.z);
       }
       const pWS = SOULS_BOSS_PUNISH_PROFILES.whirl_spin;
-      enterRecover(phase2 ? pWS.recoverP2 : pWS.recoverP1, pWS.tier);
+      boss._whirlCoastTimer = 0.28;
+      boss._whirlCoastVel = Math.max(0.45, Math.min(1.2, boss.soulsSpinAngVel || 0.6));
+      enterRecover(phase2 ? pWS.recoverP2 : pWS.recoverP1, pWS.tier, 'Whirl_End');
     }
     return { isMoving: false };
   }
@@ -3653,7 +3660,14 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
     if ((boss.soulsPunishTimer || 0) > 0) {
       boss.soulsPunishTimer = Math.max(0, boss.soulsPunishTimer - dt);
     }
-    stepBossTurn(boss, angToPlayer, 2.2, dt);
+    // Smooth residual rotational momentum coast-down during Whirl_End braking step (ZERO hard stop!)
+    if ((boss._whirlCoastTimer || 0) > 0) {
+      boss._whirlCoastTimer = Math.max(0, boss._whirlCoastTimer - dt);
+      const coastFrac = boss._whirlCoastTimer / 0.28;
+      boss.facing = normalizeAngle((boss.facing || 0) + dt * (boss._whirlCoastVel || 0.6) * coastFrac * coastFrac);
+    } else {
+      stepBossTurn(boss, angToPlayer, 2.2, dt);
+    }
 
     // Heavy punish window: warm golden exhale sparks so the player reads "OPEN!"
     if (boss.soulsPunishWindow === 'heavy' && Math.random() < dt * 10) {

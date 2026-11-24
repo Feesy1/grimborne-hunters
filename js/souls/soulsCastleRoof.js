@@ -1,6 +1,6 @@
 // Monumental High-Gothic Vaulted Roof, Star-Ribbed Tierceron Ceilings, Deep Traceried Clerestory Windows,
 // Enlarged Boss Cathedral Dome & Swaying Wrought-Iron Candle Chandeliers
-// for Chapter 26 — «Abandoned Knight Rift» (Wave 2 `?v=20261124z87` — Pure Vanilla ES Module, Three.js r160).
+// for Chapter 26 — «Abandoned Knight Rift» (Wave 2 `?v=20261124z88` — Pure Vanilla ES Module, Three.js r160).
 //
 // Wave 2 Architectural & Next-Gen PBR Upgrade (+200% PC Geometry, Depth & Physical Realism):
 //   - 2x Smoother Multi-Segment Pointed Arch Curvature & 10-Face Gothic Roll-and-Fillet Cavetto Rib Mouldings on PC!
@@ -28,7 +28,7 @@ import {
   SOULS_CASTLE_ROOMS,
   SOULS_CASTLE_VAULTS,
   SOULS_CASTLE_CHANDELIERS
-} from './soulsCastleLayout.js?v=20261124z87';
+} from './soulsCastleLayout.js?v=20261124z88';
 
 // ============================================================================
 // Canonical Architectural Roof Spec (derived 100% live from soulsCastleLayout.js!)
