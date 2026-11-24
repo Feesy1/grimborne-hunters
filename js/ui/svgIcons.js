@@ -1,7 +1,7 @@
 // Custom Gothic Dark-Fantasy Vector SVG Generators
 // Extracted from js/ui.js (Wave 1 modularization): weapons, stat runes, talent runes, modal icons, mandala, blessing relics.
 
-import { el, isWeaponHighlightChoice } from './resolvers.js?v=20261124z84';
+import { el, isWeaponHighlightChoice } from './resolvers.js?v=20261124z85';
 
 let svgUidCounter = 0;
 

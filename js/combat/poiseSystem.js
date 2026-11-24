@@ -18,11 +18,18 @@ export const BOSS_POISE_CFG = Object.freeze({
   maxPoiseCap: 110,
   escalationDecayDelaySec: 6.5,
   escalationDecayRate: 3.5,
-  interruptCooldownSec: 10.5,
-  windupCutoff01: 0.68,
-  interruptMicroStunSec: 0.58,
-  interruptClip: 'Hit_React_Gut',
-  interruptClipSpeed: 1.30
+  maxConsecutiveInterrupts: 2,
+  interruptLockoutSec: 5.0,
+  interruptComboResetSec: 2.2,
+  interruptCooldownSec: 5.0,
+  windupCutoff01: 0.62,
+  interruptMicroStunSec: 0.36,
+  interruptClip: 'Hit_React',
+  interruptClipLeft: 'Hit_React_Left',
+  interruptClipCenter: 'Hit_React_Gut',
+  interruptClipSpeed: 1.35,
+  joltScaleReact: 0.28,
+  joltScaleOverlay: 0.24
 });
 
 export const POISE_PROFILES = Object.freeze({
@@ -31,18 +38,18 @@ export const POISE_PROFILES = Object.freeze({
     poiseMax: BOSS_POISE_CFG.basePoiseMax,
     poiseRegenDelaySec: 3.2,
     poiseRegenRate: 14,
-    poiseImmunitySec: 4.4,
+    poiseImmunitySec: BOSS_POISE_CFG.interruptLockoutSec,
     microStunSec: BOSS_POISE_CFG.interruptMicroStunSec,
     hitClip: BOSS_POISE_CFG.interruptClip,
     hitSpeed: BOSS_POISE_CFG.interruptClipSpeed,
-    punishHitClip: BOSS_POISE_CFG.interruptClip,
+    punishHitClip: BOSS_POISE_CFG.interruptClipCenter,
     punishHitSpeed: BOSS_POISE_CFG.interruptClipSpeed,
     punishMicroStunSec: BOSS_POISE_CFG.interruptMicroStunSec,
     hyperArmorPoiseLeak: 0.25,
     hyperArmorPoiseCapRatio: 0.78,
-    joltScaleNormal: 0.55,
-    joltScaleHyperArmor: 0.28,
-    joltScaleBreak: 1.0,
+    joltScaleNormal: BOSS_POISE_CFG.joltScaleReact,
+    joltScaleHyperArmor: BOSS_POISE_CFG.joltScaleOverlay,
+    joltScaleBreak: BOSS_POISE_CFG.joltScaleReact,
     interruptsActiveAttack: true
   }),
   boss: Object.freeze({
@@ -277,6 +284,8 @@ export const BOSS_HYPER_ARMOR_STATES = new Set([
   'leap_slam',
   'whirl_windup',
   'whirl_spin',
+  'rising_upcut',
+  'ram_thrust_hook',
   'telegraph_dash',
   'dashing',
   'slam',
@@ -325,7 +334,9 @@ export const BOSS_STANDARD_INTERRUPTIBLE_ATTACKS = new Set([
   'combo_sweep_1',
   'combo_backhand_2',
   'combo_slam_3',
-  'whirl_windup'
+  'whirl_windup',
+  'rising_upcut',
+  'ram_thrust_hook'
 ]);
 
 export const BOSS_UNINTERRUPTIBLE_STATES = new Set([
@@ -377,9 +388,33 @@ function resolveSoulsBossPoiseMax(enemy, profile) {
   return Math.min(BOSS_POISE_CFG.maxPoiseCap, Math.round(baseMax + bonus));
 }
 
+export function resolveBossDirectionalHitClip(hitInfo = {}) {
+  const swingDir = typeof hitInfo?.swingDir === 'string' ? hitInfo.swingDir.trim().toLowerCase() : '';
+  if (swingDir === 'left_to_right') return BOSS_POISE_CFG.interruptClipLeft;
+  if (swingDir === 'center') return BOSS_POISE_CFG.interruptClipCenter;
+  if (swingDir === 'right_to_left') return BOSS_POISE_CFG.interruptClip;
+  const atkKey = typeof hitInfo?.attackKey === 'string' ? hitInfo.attackKey.trim().toLowerCase() : '';
+  if (atkKey === 'r1_2') return BOSS_POISE_CFG.interruptClipLeft;
+  if (atkKey === 'r1_3' || atkKey === 'r2' || atkKey === 'charged_r2' || atkKey === 'guard_counter') {
+    return BOSS_POISE_CFG.interruptClipCenter;
+  }
+  return BOSS_POISE_CFG.interruptClip;
+}
+
+function isSoulsBossInterruptLockoutActive(enemy) {
+  return (enemy?._bossInterruptLockoutTimer || 0) > 0 || (enemy?.bossPoiseInterruptCd || 0) > 0;
+}
+
+function isSoulsBossMidAirLeap(enemy, soulsSt) {
+  if (!enemy?.isSoulsBoss) return false;
+  if (enemy._soulsAirborne === true || soulsSt === 'leap_air' || soulsSt === 'leaping') return true;
+  const posturePhase = normState(enemy.soulsPosturePhase);
+  return soulsSt === 'leap_slam' && posturePhase === 'active' && !enemy.soulsHit1Done;
+}
+
 function isSoulsBossEarlyWindupOpen(enemy, soulsSt) {
   if (!enemy?.isSoulsBoss) return false;
-  if ((enemy.bossPoiseInterruptCd || 0) > 0) return false;
+  if (isSoulsBossInterruptLockoutActive(enemy)) return false;
   const activeAtk = normState(enemy.soulsActiveAttack);
   const moveType = normState(enemy.soulsMoveType);
   if (
@@ -434,6 +469,8 @@ export function ensureEnemyPoiseState(enemy, opts = null) {
   const profile = getEnemyPoiseProfile(enemy, opts?.profiles);
   if (!Number.isFinite(enemy.bossPoiseInterruptCd)) enemy.bossPoiseInterruptCd = 0;
   if (!Number.isFinite(enemy.bossPoiseBonus)) enemy.bossPoiseBonus = 0;
+  if (!Number.isFinite(enemy._bossConsecutiveInterrupts)) enemy._bossConsecutiveInterrupts = 0;
+  if (!Number.isFinite(enemy._bossInterruptLockoutTimer)) enemy._bossInterruptLockoutTimer = 0;
   if (enemy.isSoulsBoss) {
     enemy.poiseMax = resolveSoulsBossPoiseMax(enemy, profile);
   } else if (!(Number(enemy.poiseMax) > 0)) {
@@ -496,11 +533,17 @@ export function getEnemyHyperArmorState(enemy, opts = null) {
   }
 
   const thronePhase = normState(enemy.soulsThronePhase);
-  if (enemy.isSoulsBoss && (THRONE_HYPER_ARMOR_PHASES.has(thronePhase) || !enemy.soulsAwake)) {
+  const soulsSt = normState(enemy.soulsState);
+  if (
+    enemy.isSoulsBoss &&
+    (THRONE_HYPER_ARMOR_PHASES.has(thronePhase) ||
+      enemy.soulsAwake === false ||
+      soulsSt === 'throne_sit' ||
+      soulsSt === 'cutscene')
+  ) {
     return { active: true, reason: 'throne_sequence' };
   }
 
-  const soulsSt = normState(enemy.soulsState);
   const bossSt = normState(enemy.bossSubState);
   const chargeSt = normState(enemy.chargeState);
 
@@ -519,20 +562,22 @@ export function getEnemyHyperArmorState(enemy, opts = null) {
   if (isBossTier) {
     if (enemy.isSoulsBoss) {
       const activeAtk = normState(enemy.soulsActiveAttack);
+      const moveType = normState(enemy.soulsMoveType);
       const posturePhase = normState(enemy.soulsPosturePhase);
       if (
         BOSS_UNINTERRUPTIBLE_STATES.has(soulsSt) ||
         BOSS_UNINTERRUPTIBLE_STATES.has(activeAtk) ||
+        BOSS_UNINTERRUPTIBLE_STATES.has(moveType) ||
         (soulsSt === 'leap_slam' && posturePhase === 'active')
       ) {
-        return { active: true, reason: `boss_uninterruptible_${soulsSt || activeAtk}` };
+        return { active: true, reason: `boss_uninterruptible_${soulsSt || activeAtk || moveType}` };
       }
-      // Conditional DS3 / Elden Ring Boss poise window:
-      //   When `bossPoiseInterruptCd <= 0`, Boss can be poise-interrupted in neutral (`stalk` / `recover`)
-      //   OR during early/mid windup (`soulsPosturePhase === 'windup'`, `soulsPosturePhase01 <= 0.68`)
-      //   of standard attacks (`overhead_cleave`, `sweep_combo`, `delayed_crush`, `aaa_combo`, `whirl_windup`).
-      if ((enemy.bossPoiseInterruptCd || 0) <= 0) {
-        if (soulsSt === 'stalk' || soulsSt === 'recover' || NON_HYPER_ARMOR_STATES.has(soulsSt)) {
+      // 2-Hit Interrupt Cap & Early-Windup Window (`windup01 <= 0.62`):
+      //   When `_bossInterruptLockoutTimer <= 0`, Boss can be interrupted up to 2 consecutive times
+      //   in neutral (`idle` / `stalk` / `recover` / `hit_react`) OR early windup (`<= 0.62`).
+      //   Once `_bossConsecutiveInterrupts >= 2`, `_bossInterruptLockoutTimer = 5.0s` grants Hyper-Armor!
+      if (!isSoulsBossInterruptLockoutActive(enemy)) {
+        if (soulsSt === 'stalk' || soulsSt === 'recover' || soulsSt === 'idle' || NON_HYPER_ARMOR_STATES.has(soulsSt)) {
           return {
             active: false,
             reason: enemy.soulsPunishWindow ? `punish_window_${enemy.soulsPunishWindow}` : 'boss_neutral_poise_open'
@@ -541,16 +586,8 @@ export function getEnemyHyperArmorState(enemy, opts = null) {
         if (isSoulsBossEarlyWindupOpen(enemy, soulsSt)) {
           return { active: false, reason: 'boss_early_windup_open' };
         }
-      } else if (
-        soulsSt === 'recover' &&
-        !enemy.soulsPunishWindow &&
-        !((enemy.stunTimer || 0) > 0) &&
-        !((enemy.parriedRiposteTimer || 0) > 0)
-      ) {
-        return { active: true, reason: 'boss_short_recover_cd' };
-      }
-      if (enemy.soulsPunishWindow && (soulsSt === 'recover' || soulsSt === 'hit_react')) {
-        return { active: false, reason: `punish_window_${enemy.soulsPunishWindow}` };
+      } else {
+        return { active: true, reason: 'boss_interrupt_lockout' };
       }
     }
     if (BOSS_HYPER_ARMOR_STATES.has(soulsSt)) {
@@ -764,12 +801,160 @@ export function evaluateEnemyHitReact(enemy, hitInfo = {}, opts = null) {
   const soulsSt = normState(enemy.soulsState);
   const bossSt = normState(enemy.bossSubState);
 
-  // Never override a full Stance Break (Stagger_Kneel), Stagger_Recover, Riposte, Roar, or Airborne Leap!
+  // Dedicated ТЗ 4.1 Souls Boss Hit-React & Max-2-Consecutive-Interrupt Controller:
+  //   1) 100% reliable subtle visual reaction (`shouldReact: true`) on EVERY direct melee sword hit
+  //      outside riposte / cutscene / stagger_kneel / stagger_recover / mid-air leap!
+  //   2) Strict 2-consecutive-interrupt cap (`_bossConsecutiveInterrupts` -> `_bossInterruptLockoutTimer = 5.0s`)
+  //      in neutral (`idle`/`stalk`/`recover`) or early windup (`windup01 <= 0.62` on non-unstoppable moves).
+  //      During lockout or committed hyper-armor (`windup01 > 0.62`), `interruptsActiveAttack` is `false`
+  //      and `playSubtleOverlayOnly` is `true` (`joltScale: 0.24`) so the Boss can NEVER be stunlocked!
+  if (enemy.isSoulsBoss) {
+    const thronePhase = normState(enemy.soulsThronePhase);
+    const inCutsceneOrThrone =
+      THRONE_HYPER_ARMOR_PHASES.has(thronePhase) ||
+      enemy.soulsAwake === false ||
+      soulsSt === 'throne_sit' ||
+      soulsSt === 'cutscene' ||
+      soulsSt === 'throne_standup';
+    const inKneelOrRiposte =
+      (enemy.staggeredTimer || 0) > 0 ||
+      Boolean(enemy.soulsRiposteInvuln) ||
+      STAGGER_KNEEL_STATES.has(soulsSt) ||
+      STAGGER_KNEEL_STATES.has(bossSt) ||
+      STAGGER_RECOVER_STATES.has(soulsSt) ||
+      STAGGER_RECOVER_STATES.has(bossSt);
+    const inMidAirLeap = isSoulsBossMidAirLeap(enemy, soulsSt);
+    const isProjectileHit = Boolean(hitInfo?.isProjectile || hitInfo?.isShotgunPellet);
+
+    if (inCutsceneOrThrone || inKneelOrRiposte || inMidAirLeap || isProjectileHit) {
+      return {
+        triggered: false,
+        shouldReact: false,
+        shouldStun: false,
+        playSubtleOverlayOnly: false,
+        reason: inMidAirLeap
+          ? 'mid_air_leap'
+          : inCutsceneOrThrone
+            ? 'cutscene_or_throne'
+            : isProjectileHit
+              ? 'projectile'
+              : 'already_staggered',
+        hyperArmored: true,
+        joltScale: 0,
+        clipName: null,
+        flinchAnim: null,
+        clipSpeed: BOSS_POISE_CFG.interruptClipSpeed,
+        microStunSec: 0,
+        immunitySec: enemy._bossInterruptLockoutTimer || 0,
+        bossPoiseInterruptCd: enemy._bossInterruptLockoutTimer || 0,
+        interruptsAttack: false,
+        interruptsActiveAttack: false,
+        poise: enemy.poise,
+        poiseMax: enemy.poiseMax,
+        poiseDamage: enemy.poiseDamage,
+        poiseRatio: enemy.poiseMax > 0 ? clamp01(enemy.poise / enemy.poiseMax) : 1
+      };
+    }
+
+    if (
+      (enemy._bossInterruptLockoutTimer || 0) <= 0 &&
+      (enemy.poiseLastHitAge || 0) > BOSS_POISE_CFG.interruptComboResetSec
+    ) {
+      enemy._bossConsecutiveInterrupts = 0;
+    }
+    enemy.poiseLastHitAge = 0;
+
+    const clipName = resolveBossDirectionalHitClip(hitInfo);
+    const clipSpeed = BOSS_POISE_CFG.interruptClipSpeed;
+    const activeAtk = normState(enemy.soulsActiveAttack);
+    const moveType = normState(enemy.soulsMoveType);
+    const lockoutActive = isSoulsBossInterruptLockoutActive(enemy) && !hitInfo?.ignorePoiseImmunity;
+    const explicitHA =
+      Boolean(opts?.forceHyperArmor === true || enemy.hyperArmor === true || (enemy.hyperArmorTimer || 0) > 0) &&
+      !hitInfo?.bypassHyperArmor;
+    const uninterruptibleMove =
+      BOSS_UNINTERRUPTIBLE_STATES.has(soulsSt) ||
+      BOSS_UNINTERRUPTIBLE_STATES.has(activeAtk) ||
+      BOSS_UNINTERRUPTIBLE_STATES.has(moveType);
+    const inNeutral =
+      !uninterruptibleMove &&
+      NON_HYPER_ARMOR_STATES.has(soulsSt) &&
+      (!activeAtk || soulsSt === 'stalk' || soulsSt === 'idle' || soulsSt === 'recover' || soulsSt === 'hit_react');
+    const inEarlyWindup = !uninterruptibleMove && isSoulsBossEarlyWindupOpen(enemy, soulsSt);
+    const canInterrupt = !lockoutActive && !explicitHA && (inNeutral || inEarlyWindup);
+
+    if (canInterrupt) {
+      enemy._bossConsecutiveInterrupts = (enemy._bossConsecutiveInterrupts || 0) + 1;
+      enemy.poiseBreakCount = (enemy.poiseBreakCount || 0) + 1;
+      const microStunSec = BOSS_POISE_CFG.interruptMicroStunSec;
+      enemy.poiseMicroStunTimer = microStunSec;
+      enemy.poiseDamage = 0;
+      enemy.poise = enemy.poiseMax;
+
+      if (enemy._bossConsecutiveInterrupts >= BOSS_POISE_CFG.maxConsecutiveInterrupts) {
+        enemy._bossInterruptLockoutTimer = BOSS_POISE_CFG.interruptLockoutSec;
+        enemy.bossPoiseInterruptCd = BOSS_POISE_CFG.interruptLockoutSec;
+        enemy.poiseImmunityTimer = BOSS_POISE_CFG.interruptLockoutSec;
+      }
+
+      return {
+        triggered: true,
+        shouldReact: true,
+        shouldStun: true,
+        playSubtleOverlayOnly: false,
+        reason: inEarlyWindup ? 'boss_windup_interrupt' : 'boss_neutral_interrupt',
+        hyperArmored: false,
+        joltScale: BOSS_POISE_CFG.joltScaleReact,
+        clipName,
+        flinchAnim: clipName,
+        clipSpeed,
+        microStunSec,
+        immunitySec: enemy._bossInterruptLockoutTimer || 0,
+        bossPoiseInterruptCd: enemy._bossInterruptLockoutTimer || 0,
+        consecutiveInterrupts: enemy._bossConsecutiveInterrupts,
+        interruptLockoutTimer: enemy._bossInterruptLockoutTimer || 0,
+        interruptsAttack: true,
+        interruptsActiveAttack: true,
+        poise: enemy.poise,
+        poiseMax: enemy.poiseMax,
+        poiseDamage: 0,
+        poiseRatio: 1
+      };
+    }
+
+    // Boss has Hyper-Armor (lockout active after 2 interrupts, late windup > 0.62, active swing,
+    // grounded Leap_Slam extraction, Whirl_Spin, or Phase-2 Roar):
+    // NEVER interrupt his attack, ALWAYS play subtle torso overlay recoil (`joltScale: 0.24`)!
+    return {
+      triggered: true,
+      shouldReact: true,
+      shouldStun: false,
+      playSubtleOverlayOnly: true,
+      reason: lockoutActive ? 'boss_interrupt_lockout_overlay' : 'boss_hyper_armor_overlay',
+      hyperArmored: true,
+      joltScale: BOSS_POISE_CFG.joltScaleOverlay,
+      clipName,
+      flinchAnim: clipName,
+      clipSpeed,
+      microStunSec: 0,
+      immunitySec: enemy._bossInterruptLockoutTimer || 0,
+      bossPoiseInterruptCd: enemy._bossInterruptLockoutTimer || 0,
+      consecutiveInterrupts: enemy._bossConsecutiveInterrupts || 0,
+      interruptLockoutTimer: enemy._bossInterruptLockoutTimer || 0,
+      interruptsAttack: false,
+      interruptsActiveAttack: false,
+      poise: enemy.poise,
+      poiseMax: enemy.poiseMax,
+      poiseDamage: enemy.poiseDamage,
+      poiseRatio: enemy.poiseMax > 0 ? clamp01(enemy.poise / enemy.poiseMax) : 1
+    };
+  }
+
+  // Never override a full Stance Break (Stagger_Kneel) or Stagger_Recover on regular mobs/bosses!
   if (
     (enemy.staggeredTimer || 0) > 0 ||
     STAGGER_KNEEL_STATES.has(soulsSt) ||
-    STAGGER_KNEEL_STATES.has(bossSt) ||
-    (enemy.isSoulsBoss && BOSS_UNINTERRUPTIBLE_STATES.has(soulsSt))
+    STAGGER_KNEEL_STATES.has(bossSt)
   ) {
     return {
       triggered: false,
@@ -792,37 +977,9 @@ export function evaluateEnemyHitReact(enemy, hitInfo = {}, opts = null) {
     };
   }
 
-  const poiseHitBase = computeHitPoiseDamage(hitInfo, enemy);
-  // Open Souls Boss punish window: amplified poise intake (heavy ×1.40, light ×1.20) rewards correct punishes.
-  const punishWindow = enemy.isSoulsBoss ? enemy.soulsPunishWindow || null : null;
-  const punishPoiseMult = punishWindow === 'heavy' ? 1.4 : punishWindow === 'light' ? 1.2 : 1.0;
-  const poiseHit = Math.round(poiseHitBase * punishPoiseMult);
+  const poiseHit = computeHitPoiseDamage(hitInfo, enemy);
 
-  // Souls Boss 10.5s conditional poise interrupt cooldown: prevents infinite poise stunlocking!
-  if (enemy.isSoulsBoss && (enemy.bossPoiseInterruptCd || 0) > 0 && !hitInfo?.ignorePoiseImmunity) {
-    return {
-      triggered: false,
-      shouldReact: false,
-      shouldStun: false,
-      reason: 'boss_poise_cooldown',
-      hyperArmored: true,
-      joltScale: profile.joltScaleHyperArmor,
-      clipName: null,
-      flinchAnim: null,
-      clipSpeed: profile.hitSpeed,
-      microStunSec: 0,
-      immunitySec: enemy.bossPoiseInterruptCd,
-      bossPoiseInterruptCd: enemy.bossPoiseInterruptCd,
-      interruptsAttack: false,
-      interruptsActiveAttack: false,
-      poise: enemy.poise,
-      poiseMax: enemy.poiseMax,
-      poiseDamage: enemy.poiseDamage,
-      poiseRatio: enemy.poiseMax > 0 ? clamp01(enemy.poise / enemy.poiseMax) : 1
-    };
-  }
-
-  // 1) Hyper-Armor check (committed late windup, active swing, leap, whirl_spin, roar, throne rise, stagger_recover)
+  // 1) Hyper-Armor check (committed late windup, active swing, leap, whirl_spin, roar, stagger_recover)
   const haState = getEnemyHyperArmorState(enemy, opts);
   if (haState.active && !hitInfo?.bypassHyperArmor) {
     if (poiseHit > 0 && profile.hyperArmorPoiseLeak > 0 && enemy.poiseImmunityTimer <= 0) {
@@ -941,48 +1098,9 @@ export function evaluateEnemyHitReact(enemy, hitInfo = {}, opts = null) {
     };
   }
 
-  // 4) Poise threshold reached -> trigger Hit_React_Gut (Souls Boss) or Hit_React (Souls Mob)!
+  // 4) Poise threshold reached -> trigger Hit_React (Souls Mob) or Hit_A (regular enemy)!
   enemy.poiseDamage = 0;
   enemy.poiseBreakCount = (enemy.poiseBreakCount || 0) + 1;
-
-  if (enemy.isSoulsBoss) {
-    const maxBonus = BOSS_POISE_CFG.maxPoiseCap - BOSS_POISE_CFG.basePoiseMax;
-    enemy.bossPoiseBonus = Math.min(
-      maxBonus,
-      Math.max(0, Number(enemy.bossPoiseBonus) || 0) + BOSS_POISE_CFG.escalationPerInterrupt
-    );
-    enemy.poiseMax = resolveSoulsBossPoiseMax(enemy, profile);
-    enemy.poise = enemy.poiseMax;
-    enemy.bossPoiseInterruptCd = BOSS_POISE_CFG.interruptCooldownSec;
-    enemy._consecFlinches = 1;
-    const bossClip = BOSS_POISE_CFG.interruptClip;
-    const bossSpeed = BOSS_POISE_CFG.interruptClipSpeed;
-    const bossStunSec = BOSS_POISE_CFG.interruptMicroStunSec;
-    enemy.poiseMicroStunTimer = bossStunSec;
-    enemy.poiseImmunityTimer = profile.poiseImmunitySec;
-
-    return {
-      triggered: true,
-      shouldReact: true,
-      shouldStun: true,
-      reason: haState.reason === 'boss_early_windup_open' ? 'boss_windup_poise_interrupt' : 'boss_poise_break',
-      hyperArmored: false,
-      joltScale: profile.joltScaleBreak,
-      clipName: bossClip,
-      flinchAnim: bossClip,
-      clipSpeed: bossSpeed,
-      microStunSec: bossStunSec,
-      immunitySec: BOSS_POISE_CFG.interruptCooldownSec,
-      bossPoiseInterruptCd: enemy.bossPoiseInterruptCd,
-      interruptsAttack: true,
-      interruptsActiveAttack: true,
-      poise: enemy.poise,
-      poiseMax: enemy.poiseMax,
-      poiseDamage: 0,
-      poiseRatio: 1
-    };
-  }
-
   enemy.poise = enemy.poiseMax;
   const nextChain = isCounteringMobAttack && curChainFlinches >= maxChainFlinches ? maxChainFlinches : curChainFlinches + 1;
   enemy._consecFlinches = nextChain;
@@ -1207,6 +1325,13 @@ export function tickEnemyPoise(enemy, dt, opts = null) {
   if (!enemy || !(dt > 0)) return;
   const profile = ensureEnemyPoiseState(enemy, opts);
   enemy.bossPoiseInterruptCd = Math.max(0, (enemy.bossPoiseInterruptCd || 0) - dt);
+  if ((enemy._bossInterruptLockoutTimer || 0) > 0) {
+    enemy._bossInterruptLockoutTimer = Math.max(0, enemy._bossInterruptLockoutTimer - dt);
+    if (enemy._bossInterruptLockoutTimer <= 0) {
+      enemy._bossConsecutiveInterrupts = 0;
+      enemy.bossPoiseInterruptCd = 0;
+    }
+  }
   if ((enemy.poiseMicroStunTimer || 0) > 0) {
     enemy.poiseMicroStunTimer = Math.max(0, enemy.poiseMicroStunTimer - dt);
   }
@@ -1220,6 +1345,14 @@ export function tickEnemyPoise(enemy, dt, opts = null) {
     enemy.hyperArmorTimer = Math.max(0, enemy.hyperArmorTimer - dt);
   }
   enemy.poiseLastHitAge = (enemy.poiseLastHitAge || 0) + dt;
+  if (
+    enemy.isSoulsBoss &&
+    (enemy._bossInterruptLockoutTimer || 0) <= 0 &&
+    (enemy._bossConsecutiveInterrupts || 0) > 0 &&
+    enemy.poiseLastHitAge > BOSS_POISE_CFG.interruptComboResetSec
+  ) {
+    enemy._bossConsecutiveInterrupts = 0;
+  }
   if ((enemy._consecFlinches || 0) > 0 && enemy.poiseLastHitAge >= 1.35 && (enemy.poiseImmunityTimer || 0) <= 0) {
     enemy._consecFlinches = 0;
   }
@@ -1305,12 +1438,19 @@ export function resetEntityPoise(entity, opts = null) {
   }
 
   const profile = getEnemyPoiseProfile(entity, opts?.profiles);
+  entity._bossConsecutiveInterrupts = 0;
   if (!opts?.keepCooldown && !opts?.grantImmunity) {
     entity.bossPoiseInterruptCd = 0;
+    entity._bossInterruptLockoutTimer = 0;
     entity.bossPoiseBonus = 0;
   } else {
     if (!Number.isFinite(entity.bossPoiseInterruptCd)) entity.bossPoiseInterruptCd = 0;
+    if (!Number.isFinite(entity._bossInterruptLockoutTimer)) entity._bossInterruptLockoutTimer = 0;
     if (!Number.isFinite(entity.bossPoiseBonus)) entity.bossPoiseBonus = 0;
+    if (entity.isSoulsBoss && opts?.grantImmunity) {
+      entity._bossInterruptLockoutTimer = Math.max(entity._bossInterruptLockoutTimer || 0, 1.6);
+      entity.bossPoiseInterruptCd = entity._bossInterruptLockoutTimer;
+    }
   }
   entity.poiseMax = entity.isSoulsBoss ? resolveSoulsBossPoiseMax(entity, profile) : profile.poiseMax;
   entity.poiseDamage = 0;
@@ -1351,6 +1491,7 @@ export function createPoiseController(config = {}) {
     getStanceRegenDelay,
     getPlayerHitstunSpec,
     computeBlockedStaminaCost,
+    resolveBossDirectionalHitClip,
     getEnemyPoiseProfile: (enemy) => getEnemyPoiseProfile(enemy, opts.profiles),
     computeHitPoiseDamage,
     getEnemyHyperArmorState: (enemy, callOpts = null) =>

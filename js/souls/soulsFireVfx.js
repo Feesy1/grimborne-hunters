@@ -15,6 +15,9 @@
 //   - createCandleFlameTeardropGeometry(opts)
 //   - createHammerFireTrailMaterial(opts)
 //   - createWallFlameJetTraps(trapSpecs, opts)
+//   - createVolumetricFireFieldMesh(opts)
+//   - createVolumetricFireRoadMesh(opts)
+//   - createPhase2ArenaFireRingController(opts)
 //
 // Every returned object & material supports:
 //   .update(time, dt), .setLowSpec(enabled), .dispose() (0 WebGL leaks).
@@ -2085,20 +2088,23 @@ export function createCandleFlameShaderMaterial(opts = {}) {
 }
 
 // ============================================================================
-// 6. BOSS PHASE-2 HAMMER VOLCANIC FIRE TRAIL SHADER MATERIAL
-//    - Anisotropic high-velocity Simplex FBM fire streaks ripping backward off
-//      the Boss's warhammer during Phase 2 enrage & heavy cleaves!
-//    - Supports swept ribbon trails (flowAxis: 'u', u=0 leading edge -> u=1 tail)
-//      AND 3D hammer flame sheaths (flowAxis: 'v', v=0 hammer head -> v=1 tips).
-//    - Balanced NormalBlending by default (charred dark-crimson smoke wake +
-//      blazing magma-orange body + white-gold impact leading edge!) or optional
-//      additive: true for layered additive core ribbons.
+// 6. BOSS PHASE-2 STREAMLINED AERODYNAMIC HAMMER FLAME SHEATH & CURVED WAKE SHADER
+//    - Sleek liquid-fire forge sheath hugging the iron warhammer faces at the
+//      front stagnation boundary & tapering smoothly into curved licking tongues
+//      along the C2-filtered airflow + swing-curvature Bezier vector!
+//    - Supports 3D multi-shell hammer sheaths (flowAxis: 'v', v=0 iron head -> v=1 tips)
+//      AND multi-segment curved wake ribbons (flowAxis: 'u', u=0 sheath -> u=1 comet tail)
+//      with parallel-transported twist-free cross-section framing (`curvedSpine: true`).
+//    - Rich Planckian blackbody temperature ramp (incandescent white-gold iron core ->
+//      solar gold -> vivid liquid amber-orange -> deep crimson-carmine -> soft dark
+//      smoke/heat-dissolve edge) + Fresnel grazing-angle fade (ZERO hard polygon seams!).
 // ============================================================================
 export function createHammerFireTrailMaterial(opts = {}) {
   const isMobile = opts.isMobile !== undefined ? Boolean(opts.isMobile) : IS_MOBILE_DEFAULT;
   let lowSpec = Boolean(opts.lowSpec);
   const flowAlongV = opts.flowAxis === 'v';
   const additive = Boolean(opts.additive);
+  const curvedSpine = Boolean(opts.curvedSpine);
 
   let baseIntensity = Number.isFinite(opts.intensity) ? opts.intensity : 1.0;
 
@@ -2109,14 +2115,24 @@ export function createHammerFireTrailMaterial(opts = {}) {
     uWindup: { value: Number.isFinite(opts.windup) ? opts.windup : 0.0 },
     uStaggerDim: { value: 1.0 },
     uDetail: { value: (isMobile || lowSpec) ? 0.0 : 1.0 },
-    uSpeed: { value: Number.isFinite(opts.speed) ? opts.speed : 4.6 },
+    uSpeed: { value: Number.isFinite(opts.speed) ? opts.speed : 4.8 },
     uFlowAxis: { value: flowAlongV ? 1.0 : 0.0 },
-    uVertexDistort: { value: Number.isFinite(opts.vertexDistort) ? opts.vertexDistort : (flowAlongV ? 0.065 : 0.025) },
-    uColSoot:  { value: toColorVec3(opts.sootColor,  0x5e0902) }, // Deep glowing volcanic crimson wake
-    uColOuter: { value: toColorVec3(opts.outerColor, 0xc41a04) }, // Violent volcanic crimson-scarlet tongues
-    uColMid:   { value: toColorVec3(opts.midColor,   0xff5806) }, // Roaring magma-orange fire body
-    uColHot:   { value: toColorVec3(opts.hotColor,   0xffcf36) }, // Incandescent golden impact flare
-    uColCore:  { value: toColorVec3(opts.coreColor,  0xfffbe0) }  // Scorching white-yellow leading rim
+    uAdditive: { value: additive ? 1.0 : 0.0 },
+    uCurvedSpineMode: { value: curvedSpine ? 1.0 : 0.0 },
+    uVertexDistort: { value: Number.isFinite(opts.vertexDistort) ? opts.vertexDistort : (flowAlongV ? 0.055 : 0.024) },
+    // Streamlined C2 aerodynamic uniforms in mesh local space (0 quaternion flips!)
+    uAeroFlowDir: { value: flowAlongV ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(0, 0, 1) },
+    uAeroBendDir: { value: new THREE.Vector3(0, 0, 0) },
+    uWakeRight:   { value: new THREE.Vector3(1, 0, 0) },
+    uWakeUp:      { value: new THREE.Vector3(0, 1, 0) },
+    uSwingStretch: { value: 0.0 },
+    uImpactBurst:  { value: 0.0 },
+    // 5-stop Planckian forge-fire blackbody ramp
+    uColSoot:  { value: toColorVec3(opts.sootColor,  0x520602) }, // Deep carmine-crimson ember wake
+    uColOuter: { value: toColorVec3(opts.outerColor, 0xc41804) }, // Rich crimson-scarlet licking tongues
+    uColMid:   { value: toColorVec3(opts.midColor,   0xff6208) }, // Vivid molten amber-orange liquid fire
+    uColHot:   { value: toColorVec3(opts.hotColor,   0xffcf38) }, // Radiant golden-amber forge mantle
+    uColCore:  { value: toColorVec3(opts.coreColor,  0xfff0b8) }  // Incandescent white-gold iron-contact core (0 flat-white clip!)
   };
 
   const mat = new THREE.ShaderMaterial({
@@ -2128,40 +2144,164 @@ export function createHammerFireTrailMaterial(opts = {}) {
     side: THREE.DoubleSide,
     toneMapped: false,
     vertexShader: /* glsl */ `
+      attribute vec4 aFlameMeta;
+
       uniform float uTime;
       uniform float uSpeed;
       uniform float uPhase2;
       uniform float uWindup;
       uniform float uFlowAxis;
+      uniform float uCurvedSpineMode;
       uniform float uVertexDistort;
+      uniform vec3 uAeroFlowDir;
+      uniform vec3 uAeroBendDir;
+      uniform vec3 uWakeRight;
+      uniform vec3 uWakeUp;
+      uniform float uSwingStretch;
+      uniform float uImpactBurst;
 
       varying vec2 vUv;
       varying vec3 vBasePos;
       varying vec3 vLocalPos;
       varying vec3 vNormalV;
       varying vec3 vViewDir;
+      varying vec4 vMeta;
+      varying float vWindward;
 
       void main() {
         vUv = uv;
         vBasePos = position;
-        float along = (uFlowAxis > 0.5) ? uv.y : uv.x;
-        float across = (uFlowAxis > 0.5) ? uv.x : uv.y;
+        vMeta = aFlameMeta;
+
+        float along = clamp((uFlowAxis > 0.5) ? uv.y : uv.x, 0.0, 1.0);
+        float across = clamp((uFlowAxis > 0.5) ? uv.x : uv.y, 0.0, 1.0);
         float ac = (across - 0.5) * 2.0;
+        float role = aFlameMeta.z;
 
         vec3 p = position;
-        // Symmetric counter-propagating flame flutter (zero one-sided diagonal shear!)
-        float whipAmp = uVertexDistort * pow(max(clamp(along, 0.0, 1.0), 0.0001), 1.35) * (0.65 + 0.55 * uPhase2 + 0.45 * uWindup);
-        float petalPhase = dot(position, vec3(2.11, 0.87, 2.63));
-        float t = uTime * (uSpeed * 1.85);
-        float wave = (
-          sin(t - along * 8.8 + ac * 2.35 + petalPhase) +
-          sin(t * 1.13 - along * 9.4 - ac * 2.35 - petalPhase * 0.73)
-        ) * 0.34 + cos(t * 1.58 - along * 13.4 + petalPhase * 1.29) * 0.32;
-        p += normal * (wave * whipAmp);
+        vec3 n = normal;
+        float windward = 0.0;
 
+        float stretch = clamp(uSwingStretch, 0.0, 1.45);
+        float burst = clamp(uImpactBurst, 0.0, 1.25);
+        float flowLen = length(uAeroFlowDir);
+        vec3 flowDir = (flowLen > 0.001)
+          ? (uAeroFlowDir / flowLen)
+          : ((uFlowAxis > 0.5) ? vec3(0.0, 1.0, 0.0) : vec3(0.0, 0.0, 1.0));
+
+        float petalPhase = aFlameMeta.x + dot(position, vec3(1.93, 0.81, 2.37));
+        float t = uTime * (uSpeed * (1.65 + 0.55 * stretch + 0.25 * burst));
+
+        if (uFlowAxis > 0.5) {
+          // ==================================================================
+          // Streamlined Liquid-Fire Teardrop Sheath around Warhammer Head
+          // ==================================================================
+          vec3 radVec = vec3(p.x, p.y * 0.36, p.z);
+          float radLen = length(radVec);
+          vec3 radDir = (radLen > 0.0005) ? (radVec / radLen) : vec3(0.0, 1.0, 0.0);
+
+          // Stagnation face compression: windward side hugs the forged iron tightly,
+          // leeward side tapers smoothly into aerodynamic teardrop flame tongues!
+          windward = clamp(dot(radDir, -flowDir), 0.0, 1.0);
+          float leeward = clamp(dot(radDir, flowDir), 0.0, 1.0);
+          float stagCompress = 1.0 - windward * stretch * 0.36 * (1.0 - along * 0.35);
+          float crossNarrow = 1.0 - stretch * 0.16 * along * (1.0 - leeward * 0.55);
+          p.xz *= stagCompress * crossNarrow;
+
+          // Inner core shell (role ~ 1.0) stays sleek & tight around the metal;
+          // outer aerofoil tongues sweep smoothly into the resultant airflow & arc bend!
+          float isInnerCore = step(0.5, role) * (1.0 - step(1.5, role));
+          float sweepWeight = mix(1.0, 0.52, isInnerCore);
+          float alongPow1 = pow(max(along, 0.0001), 1.16);
+          float alongPow2 = pow(max(along, 0.0001), 2.02);
+
+          // Smooth deflection from upright +Y toward resultant airflow (buoyancy + swing wake)
+          vec3 aeroDelta = (flowDir - vec3(0.0, 1.0, 0.0)) * (alongPow1 * (1.15 + 1.35 * stretch) * sweepWeight);
+          // Smooth C2 arc curvature along lagged swing wake (uAeroBendDir)
+          vec3 arcBend = uAeroBendDir * (alongPow2 * (1.05 + 1.15 * stretch) * sweepWeight);
+          // Leeward teardrop elongation during fast cleaves + radial forge flare on slam impact!
+          vec3 wakeStretch = flowDir * (alongPow1 * stretch * (0.55 + 0.42 * leeward) * sweepWeight);
+          vec3 impactSwell = (radDir * (0.26 * sin(along * 3.14159)) + vec3(0.0, 0.18 * along, 0.0)) * burst;
+
+          p += aeroDelta + arcBend + wakeStretch + impactSwell;
+
+          // Smooth traveling Kelvin-Helmholtz flame shear waves along the sheath
+          float whipAmp = uVertexDistort * pow(max(along, 0.0001), 1.32)
+            * (0.52 + 0.42 * uPhase2 + 0.36 * uWindup + 0.30 * stretch + 0.38 * burst)
+            * mix(1.0, 0.42, isInnerCore);
+          float wave = (
+            sin(t - along * 8.4 + ac * 2.10 + petalPhase) +
+            sin(t * 1.17 - along * 9.2 - ac * 2.10 - petalPhase * 0.71)
+          ) * 0.34 + cos(t * 1.54 - along * 12.6 + petalPhase * 1.23) * 0.30;
+          p += n * (wave * whipAmp);
+
+          // Rotate normal subtly toward swept flow tangent for accurate Fresnel soft-edge fade
+          vec3 sweptN = normalize(n + (flowDir - vec3(0.0, 1.0, 0.0)) * (0.38 * along * stretch));
+          n = sweptN;
+        } else if (uCurvedSpineMode > 0.5) {
+          // ==================================================================
+          // Multi-Segment Curved Bezier Liquid-Fire Wake Ribbon (0 Twist / 0 Pop!)
+          // ==================================================================
+          float s = along;
+          float s1 = pow(max(s, 0.0001), 1.06);
+          float s2 = s * s;
+
+          // Continuous wake reach: short buoyant lick at idle -> sweeping comet arc on fast swings!
+          float wakeLen = mix(0.68, 3.95, clamp(stretch / 1.15, 0.0, 1.0))
+            + 0.34 * uWindup
+            + 0.42 * burst;
+          vec3 bendVec = uAeroBendDir * (wakeLen * 0.92);
+          vec3 thermalLift = vec3(0.0, (0.18 + 0.16 * (1.0 - clamp(stretch, 0.0, 1.0))) * wakeLen, 0.0);
+
+          // Smooth curved Bezier wake spine anchored right inside the warhammer sheath (s = 0)
+          vec3 spinePos = flowDir * ((s1 * 0.96 - 0.08) * wakeLen)
+            + bendVec * s2
+            + thermalLift * s2;
+          vec3 spineTan = normalize(
+            flowDir * wakeLen
+            + bendVec * (2.0 * s)
+            + thermalLift * (2.0 * s)
+            + vec3(0.0, 0.0001, 0.0)
+          );
+
+          // Re-orthogonalize parallel-transported cross-section basis smoothly along the curved tangent
+          vec3 rAxis = uWakeRight - spineTan * dot(uWakeRight, spineTan);
+          float rLen = length(rAxis);
+          rAxis = (rLen > 0.001) ? (rAxis / rLen) : vec3(1.0, 0.0, 0.0);
+          vec3 uAxis = normalize(cross(spineTan, rAxis));
+
+          // Aerofoil cross-section taper + gentle helical flame-ribbon roll along wake
+          float crossWidth = (0.76 + 0.22 * uPhase2 + 0.20 * uWindup + 0.28 * burst + 0.16 * clamp(stretch, 0.0, 1.0))
+            * mix(1.02, 0.16, pow(max(s, 0.0001), 1.28));
+          float vortexRoll = (aFlameMeta.y * 0.48 + sin(t * 0.58 - s * 4.4 + aFlameMeta.x) * 0.24) * s;
+          float cr = cos(vortexRoll);
+          float sr = sin(vortexRoll);
+          vec2 csRot = mat2(cr, -sr, sr, cr) * (position.xy * crossWidth);
+          vec2 nRot  = mat2(cr, -sr, sr, cr) * normal.xy;
+
+          // Traveling shear flutter perpendicular to curved ribbon surface
+          float flutterAmp = uVertexDistort * pow(max(s, 0.0001), 1.18) * (0.55 + 0.50 * stretch + 0.35 * uPhase2);
+          float flutter = sin(t * 1.12 - s * 9.6 + ac * 2.2 + petalPhase) * 0.58
+            + cos(t * 1.62 - s * 13.8 - petalPhase * 0.85) * 0.42;
+
+          vec3 surfNorm = normalize(rAxis * nRot.x + uAxis * nRot.y + spineTan * (normal.z * 0.35));
+          p = spinePos + rAxis * csRot.x + uAxis * csRot.y + surfNorm * (flutter * flutterAmp);
+          n = surfNorm;
+          windward = clamp(1.0 - s * 2.2, 0.0, 1.0);
+        } else {
+          // Legacy straight +Z ribbon mode for standalone callers
+          float whipAmp = uVertexDistort * pow(max(along, 0.0001), 1.35) * (0.65 + 0.55 * uPhase2 + 0.45 * uWindup);
+          float wave = (
+            sin(t - along * 8.8 + ac * 2.35 + petalPhase) +
+            sin(t * 1.13 - along * 9.4 - ac * 2.35 - petalPhase * 0.73)
+          ) * 0.34 + cos(t * 1.58 - along * 13.4 + petalPhase * 1.29) * 0.32;
+          p += n * (wave * whipAmp);
+        }
+
+        vWindward = windward;
         vLocalPos = p;
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
-        vNormalV = normalize(normalMatrix * normal);
+        vNormalV = normalize(normalMatrix * n);
         vViewDir = normalize(-mv.xyz);
         gl_Position = projectionMatrix * mv;
       }
@@ -2175,6 +2315,9 @@ export function createHammerFireTrailMaterial(opts = {}) {
       uniform float uDetail;
       uniform float uSpeed;
       uniform float uFlowAxis;
+      uniform float uAdditive;
+      uniform float uSwingStretch;
+      uniform float uImpactBurst;
 
       uniform vec3 uColSoot;
       uniform vec3 uColOuter;
@@ -2187,96 +2330,137 @@ export function createHammerFireTrailMaterial(opts = {}) {
       varying vec3 vLocalPos;
       varying vec3 vNormalV;
       varying vec3 vViewDir;
+      varying vec4 vMeta;
+      varying float vWindward;
 
       ${GLSL_SIMPLEX_NOISE}
 
       void main() {
-        // Normalize coordinates so along = 0 at hot hammer base/leading edge -> 1 at torn fire spire/tail
         float along  = clamp((uFlowAxis > 0.5) ? vUv.y : vUv.x, 0.0, 1.0);
         float across = clamp((uFlowAxis > 0.5) ? vUv.x : vUv.y, 0.0, 1.0);
         float ac = (across - 0.5) * 2.0;
+        float role = vMeta.z;
+        float isClosedCore = step(0.5, role) * (1.0 - step(1.5, role));
 
-        float speedMult = 0.85 + 0.45 * uPhase2 + 0.40 * uWindup;
+        float stretch = clamp(uSwingStretch, 0.0, 1.45);
+        float burst = clamp(uImpactBurst, 0.0, 1.25);
+
+        // View-angle Fresnel grazing fade eliminates ALL hard polygon ribbon seams!
+        float ndv = clamp(abs(dot(normalize(vNormalV), normalize(vViewDir))), 0.0, 1.0);
+        float fresnelWeight = mix(0.68, 0.52, isClosedCore);
+        float viewFade = mix(1.0, smoothstep(0.05, 0.54, ndv), fresnelWeight);
+        float sideFeather = mix(
+          smoothstep(0.0, 0.22, across) * smoothstep(1.0, 0.78, across),
+          1.0,
+          isClosedCore
+        );
+
+        float speedMult = 0.86 + 0.42 * uPhase2 + 0.36 * uWindup + 0.52 * stretch + 0.25 * burst;
         float t = uTime * uSpeed * speedMult;
-        float petalOff = (vBasePos.x - vBasePos.z) * 0.95;
+        float petalOff = vMeta.x * 0.42 + (vBasePos.x - vBasePos.z) * 0.85;
 
-        // Align flow along the bilateral-symmetric (1, 1) axis of the 2D Simplex lattice
-        // so vertical 'v' crowns rise straight up with zero 45-degree diagonal slant!
-        float warpFlow  = along * 2.25 - t * 0.80 + petalOff * 0.45;
-        float warpCross = ac * 1.40;
+        // Bilateral-symmetric (1, 1) Simplex lattice flow -> zero 45-degree diagonal drift!
+        float flowFreq = mix(2.55, 2.05, clamp(stretch * 0.65, 0.0, 1.0));
+        float warpFlow  = along * flowFreq - t * 0.86 + petalOff * 0.42;
+        float warpCross = ac * 1.35;
         vec2 warpUv = vec2(warpFlow + warpCross, warpFlow - warpCross) * 0.70710678;
         vec2 warpV = fireDomainWarp(warpUv, uDetail);
         float wx = (warpV.x - warpV.y) * 0.70710678;
         float wy = (warpV.x + warpV.y) * 0.70710678;
-        float warpAmt = (0.15 + 0.50 * along) * (0.78 + 0.32 * uPhase2);
+        float warpAmt = (0.13 + 0.46 * along) * (0.76 + 0.28 * uPhase2 + 0.18 * burst);
 
         vec3 p3 = (uFlowAxis > 0.5)
           ? vec3(
-              vLocalPos.x * 2.25 + wx * warpAmt * 0.75,
-              along * 3.15 - t * 1.08,
-              vLocalPos.z * 2.25 + wy * warpAmt * 0.75
+              vLocalPos.x * 2.15 + wx * warpAmt * 0.72,
+              along * 2.95 - t * 1.14,
+              vLocalPos.z * 2.15 + wy * warpAmt * 0.72
             )
           : vec3(
-              vLocalPos.x * 2.20 + wx * warpAmt,
-              vLocalPos.y * 2.20 + wy * warpAmt,
-              along * 3.10 - t * 1.05
+              vLocalPos.x * 2.10 + wx * warpAmt,
+              vLocalPos.y * 2.10 + wy * warpAmt,
+              along * 2.85 - t * 1.28
             );
 
-        // Symmetric Simplex FBM coordinates: flow scrolls straight along (1,1), cross spans (1,-1)
-        float uCross = ac * 2.85 + wx * warpAmt * 1.05 + petalOff * 0.65;
-        float uFlow  = along * 3.45 - t * 1.75 + wy * warpAmt * 0.50;
+        float uCross = ac * 2.65 + wx * warpAmt * 0.98 + petalOff * 0.60;
+        float uFlow  = along * (3.20 - 0.55 * clamp(stretch, 0.0, 1.0)) - t * 1.82 + wy * warpAmt * 0.48;
         vec2 p2 = vec2(uFlow + uCross, uFlow - uCross) * 0.70710678;
         vec2 turb = fireTurbulenceFbm(p3, p2, uDetail);
         float fbm = turb.x;
         float streaks = turb.y;
 
-        // Symmetric cross-width envelope (tapers cleanly toward spire/tail, zero one-sided drift)
-        float halfW = mix(0.49, 0.24, pow(max(along, 0.0001), 0.95));
-        float swayAcross = mix(0.12, 0.075, uFlowAxis);
+        // Streamlined teardrop width profile (closed inner core wraps 360° seamlessly)
+        float halfW = mix(0.49, 0.21, pow(max(along, 0.0001), 1.05));
+        float swayAcross = mix(0.11, 0.07, uFlowAxis);
         float distAcross = abs((across - 0.5) - wx * swayAcross * along);
-        float edgeMask = clamp(1.0 - pow(max(distAcross / max(halfW, 0.08), 0.0001), 1.85), 0.0, 1.0);
+        float ribbonMask = clamp(1.0 - pow(max(distAcross / max(halfW, 0.08), 0.0001), 1.90), 0.0, 1.0);
+        float edgeMask = mix(ribbonMask, 0.92 + 0.08 * fbm, isClosedCore);
 
-        // Organic turbulent base/leading-edge ignition + jagged flame erosion along spire/tail
-        float leadIn = smoothstep(0.0, 0.07 + (1.0 - fbm) * 0.09, along);
-        float tailFade = smoothstep(1.0, 0.10, along);
-        float shredBurst = smoothstep(0.56, 0.88, fbm) * smoothstep(0.32, 0.70, along) * smoothstep(0.99, 0.74, along) * 0.44;
+        // Smooth molten boundary ignition near iron + sleek licking tongue erosion at tail
+        float leadIn = smoothstep(0.0, mix(0.08 + (1.0 - fbm) * 0.07, 0.03, isClosedCore), along);
+        float tailFade = smoothstep(1.0, 0.08, along);
+        float lickTip = smoothstep(0.52, 0.86, fbm) * smoothstep(0.28, 0.68, along) * smoothstep(0.99, 0.72, along) * 0.42;
 
-        float field = edgeMask * (0.66 + 0.46 * tailFade)
-          + (fbm - 0.45) * mix(0.34, 1.08, pow(max(along, 0.0001), 0.65))
-          + shredBurst
-          - pow(max(along, 0.0001), 1.15) * 0.58;
+        float field = edgeMask * (0.70 + 0.44 * tailFade)
+          + (fbm - 0.45) * mix(0.30, 1.02, pow(max(along, 0.0001), 0.62))
+          + lickTip
+          + vWindward * 0.14 * (1.0 - along * 0.65)
+          - pow(max(along, 0.0001), 1.18) * mix(0.56, 0.42, isClosedCore);
         field *= leadIn;
 
-        float effIntensity = clamp(uIntensity * uStaggerDim * (0.68 + 0.48 * uPhase2 + 0.55 * uWindup), 0.0, 1.75);
-        float fireEdge  = smoothstep(0.08, 0.28, field);
-        float tailSmoke = smoothstep(0.55, 0.94, along) * smoothstep(0.02, 0.14, field) * (1.0 - fireEdge);
-        float alpha = clamp(fireEdge * 0.96 + tailSmoke * 0.34, 0.0, 1.0) * clamp(effIntensity, 0.0, 1.0);
-        if (alpha < 0.02) discard;
+        float effIntensity = clamp(
+          uIntensity * uStaggerDim * (0.72 + 0.46 * uPhase2 + 0.50 * uWindup + 0.24 * burst),
+          0.0,
+          1.75
+        );
+        float fireEdge  = smoothstep(0.06, 0.34, field);
+        float tailSmoke = (1.0 - isClosedCore) * smoothstep(0.52, 0.95, along) * smoothstep(0.01, 0.16, field) * (1.0 - fireEdge * 0.85);
+        float alpha = clamp(fireEdge * 0.94 + tailSmoke * 0.30, 0.0, 0.96)
+          * viewFade
+          * sideFeather
+          * clamp(effIntensity, 0.0, 1.0);
+        if (alpha < 0.015) discard;
 
-        // Bilateral-symmetric volcanic combustion temperature: hottest along central core spine & base
-        float centerSpineHot = 1.0 - smoothstep(0.0, 0.95, abs(ac));
-        float leadHeat = smoothstep(0.26, 0.01, along) * (0.34 + 0.24 * centerSpineHot + 0.28 * uWindup + 0.16 * uPhase2);
+        // Planckian Blackbody Temperature:
+        // White-gold iron boundary & windward stagnation edge -> solar gold -> liquid amber -> deep carmine -> dark smoke dissolve!
+        float centerSpineHot = mix(1.0 - smoothstep(0.0, 0.92, abs(ac)), 0.75 + 0.25 * ndv, isClosedCore);
+        float ironBoundaryHot = smoothstep(0.34, 0.01, along)
+          * (0.36 + 0.26 * centerSpineHot + 0.24 * uWindup + 0.16 * uPhase2 + 0.18 * vWindward + 0.20 * burst);
         float temp = clamp(
-          smoothstep(0.08, 0.88, field) * 0.52
-          + leadHeat
-          + (streaks - 0.46) * 0.32
-          - smoothstep(0.30, 0.94, along) * 0.46,
+          smoothstep(0.06, 0.86, field) * 0.50
+          + ironBoundaryHot
+          + (streaks - 0.46) * 0.30
+          + vMeta.y * 0.22
+          + isClosedCore * 0.16 * (1.0 - along * 0.55)
+          - smoothstep(0.28, 0.95, along) * 0.48,
           0.0,
           1.0
         );
 
-        vec3 col = mix(uColSoot, uColOuter, smoothstep(0.00, 0.24, temp));
-        col = mix(col, uColMid,  smoothstep(0.22, 0.52, temp));
-        col = mix(col, uColHot,  smoothstep(0.50, 0.80, temp));
-        col = mix(col, uColCore, smoothstep(0.78, 0.97, temp));
-        col = mix(col, vec3(0.22, 0.03, 0.015), tailSmoke * 0.65);
+        vec3 col = mix(uColSoot, uColOuter, smoothstep(0.00, 0.25, temp));
+        col = mix(col, uColMid,  smoothstep(0.22, 0.54, temp));
+        col = mix(col, uColHot,  smoothstep(0.52, 0.82, temp));
+        col = mix(col, uColCore, smoothstep(0.80, 0.98, temp));
 
-        // Bright crackling lava-fire veins streaming through the ribbon
-        float vein = smoothstep(0.56, 0.90, streaks) * smoothstep(0.22, 0.65, temp) * (1.0 - along * 0.42);
-        col = mix(col, uColCore, vein * (0.28 + 0.24 * uWindup));
+        // Soft dark smoke / heat-dissolve rim at cool trailing tips
+        vec3 smokeRimCol = mix(vec3(0.20, 0.028, 0.014), vec3(0.075, 0.045, 0.042), smoothstep(0.68, 0.98, along));
+        col = mix(col, smokeRimCol, clamp(tailSmoke * 0.72, 0.0, 0.85));
 
-        float boost = 0.95 + 0.16 * uPhase2 + 0.24 * uWindup;
-        gl_FragColor = vec4(min(col * boost, vec3(1.12)), clamp(alpha, 0.0, 0.95));
+        // Incandescent liquid-fire filaments streaming off the forged iron
+        float filament = smoothstep(0.58, 0.91, streaks) * smoothstep(0.26, 0.68, temp) * (1.0 - along * 0.45);
+        col = mix(col, uColCore, filament * (0.24 + 0.20 * uWindup + 0.16 * stretch));
+
+        // Soft-knee gold-preserving shoulder so toneMapped:false + wake/halo NEVER clips to flat white!
+        float boost = 0.92 + 0.12 * uPhase2 + 0.16 * uWindup + 0.12 * burst;
+        vec3 hdrCol = col * boost;
+        float maxC = max(hdrCol.r, max(hdrCol.g, hdrCol.b));
+        if (maxC > 0.88) {
+          float soft = 0.88 + 0.12 * ((maxC - 0.88) / ((maxC - 0.88) + 0.24));
+          hdrCol *= (soft / max(maxC, 0.0001));
+        }
+        vec3 ceiling = mix(vec3(1.00, 0.92, 0.68), vec3(0.94, 0.72, 0.30), uAdditive);
+        hdrCol = min(hdrCol, ceiling);
+        float outAlpha = clamp(alpha * mix(1.0, 0.62, uAdditive), 0.0, 0.92);
+        gl_FragColor = vec4(hdrCol, outAlpha);
       }
     `
   });
@@ -2305,12 +2489,35 @@ export function createHammerFireTrailMaterial(opts = {}) {
     uniforms.uIntensity.value = lowSpec ? baseIntensity * 0.85 : baseIntensity;
   };
 
+  mat.setAerodynamics = function setAerodynamics({
+    flowDir,
+    bendDir,
+    wakeRight,
+    wakeUp,
+    stretch,
+    impactBurst
+  } = {}) {
+    if (disposed) return;
+    if (flowDir && Number.isFinite(flowDir.x)) uniforms.uAeroFlowDir.value.copy(flowDir);
+    if (bendDir && Number.isFinite(bendDir.x)) uniforms.uAeroBendDir.value.copy(bendDir);
+    if (wakeRight && Number.isFinite(wakeRight.x)) uniforms.uWakeRight.value.copy(wakeRight);
+    if (wakeUp && Number.isFinite(wakeUp.x)) uniforms.uWakeUp.value.copy(wakeUp);
+    if (Number.isFinite(stretch)) uniforms.uSwingStretch.value = Math.max(0.0, Math.min(1.5, stretch));
+    if (Number.isFinite(impactBurst)) uniforms.uImpactBurst.value = Math.max(0.0, Math.min(1.3, impactBurst));
+  };
+
   mat.setCombatState = function setCombatState({
     heat,
     intensity,
     phase2,
     windup,
-    staggerDim
+    staggerDim,
+    aeroFlowDir,
+    aeroBendDir,
+    wakeRight,
+    wakeUp,
+    swingStretch,
+    impactBurst
   } = {}) {
     if (disposed) return;
     if (Number.isFinite(intensity)) {
@@ -2321,6 +2528,12 @@ export function createHammerFireTrailMaterial(opts = {}) {
     if (Number.isFinite(phase2)) uniforms.uPhase2.value = Math.max(0.0, Math.min(1.0, phase2));
     if (Number.isFinite(windup)) uniforms.uWindup.value = Math.max(0.0, Math.min(1.5, windup));
     if (Number.isFinite(staggerDim)) uniforms.uStaggerDim.value = Math.max(0.0, Math.min(1.0, staggerDim));
+    if (aeroFlowDir && Number.isFinite(aeroFlowDir.x)) uniforms.uAeroFlowDir.value.copy(aeroFlowDir);
+    if (aeroBendDir && Number.isFinite(aeroBendDir.x)) uniforms.uAeroBendDir.value.copy(aeroBendDir);
+    if (wakeRight && Number.isFinite(wakeRight.x)) uniforms.uWakeRight.value.copy(wakeRight);
+    if (wakeUp && Number.isFinite(wakeUp.x)) uniforms.uWakeUp.value.copy(wakeUp);
+    if (Number.isFinite(swingStretch)) uniforms.uSwingStretch.value = Math.max(0.0, Math.min(1.5, swingStretch));
+    if (Number.isFinite(impactBurst)) uniforms.uImpactBurst.value = Math.max(0.0, Math.min(1.3, impactBurst));
   };
 
   const baseDispose = mat.dispose.bind(mat);
@@ -3762,6 +3975,2393 @@ export function createWallFlameJetTraps(trapSpecs = [], opts = {}) {
     isPointInFlame,
     setLowSpec,
     setIntensity,
+    dispose
+  };
+}
+
+// ============================================================================
+// 8 & 9. 3X VOLUMETRIC BOSS FIRE FIELD (`circle`) & FIRE ROAD (`ash_fissure`)
+//        - Ref-counted shared GPU geometries across pooled world.js entries
+//        - Domain-warped Voronoi molten magma fissure beds (NormalBlending,
+//          ragged volcanic edges — ZERO flat cartoon circles or rectangles!)
+//        - Multi-tier 3D rising flame crowns & undulating 3D fissure curtains
+//          with travelling wave-crest surge (`uWaveFront01`), Fresnel soft edges,
+//          Planckian blackbody HDR color ramp & GPU rising sparks/ember curl!
+// ============================================================================
+const GLSL_VORONOI_MAGMA = /* glsl */ `
+vec2 magmaHash22(vec2 p) {
+  vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.xx + p3.yz) * p3.zy);
+}
+
+// Returns vec2(crackMask, cellCenterGlow) with strict single-exit return (0 X4000 warnings!)
+vec2 magmaVoronoiCracks(vec2 x, float detail) {
+  vec2 outRes = vec2(0.0);
+#ifdef FIRE_MOBILE_FAST
+  float r1 = 1.0 - abs(snoise2(x * 0.62));
+  float r2 = 1.0 - abs(snoise2(x * 1.31 + vec2(3.7, -2.1)));
+  float crMobile = pow(max(r1, 0.0001), 3.2) * 0.72 + pow(max(r2, 0.0001), 4.0) * 0.48;
+  outRes = vec2(clamp(crMobile, 0.0, 1.0), r1 * 0.5);
+#else
+  if (detail > 0.5) {
+    vec2 n = floor(x);
+    vec2 f = fract(x);
+    float md1 = 8.0;
+    float md2 = 8.0;
+    for (int j = -1; j <= 1; j++) {
+      for (int i = -1; i <= 1; i++) {
+        vec2 g = vec2(float(i), float(j));
+        vec2 o = magmaHash22(n + g);
+        vec2 r = g + (0.14 + 0.72 * o) - f;
+        float d = length(r);
+        if (d < md1) {
+          md2 = md1;
+          md1 = d;
+        } else if (d < md2) {
+          md2 = d;
+        }
+      }
+    }
+    float edge = md2 - md1;
+    float primaryCrack = smoothstep(0.16, 0.008, edge);
+    float fineVein = pow(max(1.0 - abs(snoise2(x * 1.45 + vec2(2.3, -4.1))), 0.0001), 4.2);
+    float centerHeat = clamp(1.0 - md1 * 1.25, 0.0, 1.0);
+    outRes = vec2(clamp(primaryCrack * 0.88 + fineVein * 0.42, 0.0, 1.0), centerHeat);
+  } else {
+    float r1 = 1.0 - abs(snoise2(x * 0.62));
+    float r2 = 1.0 - abs(snoise2(x * 1.31 + vec2(3.7, -2.1)));
+    float crLow = pow(max(r1, 0.0001), 3.2) * 0.72 + pow(max(r2, 0.0001), 4.0) * 0.48;
+    outRes = vec2(clamp(crLow, 0.0, 1.0), r1 * 0.5);
+  }
+#endif
+  return outRes;
+}
+`;
+
+const _sharedFloorFireCache = {
+  desktop: null,
+  mobile: null
+};
+
+function buildFireFieldCrownGeometry(isMobile) {
+  const parts = [];
+  const outerCount = isMobile ? 7 : 10;
+  const midCount = isMobile ? 4 : 6;
+  const segX = isMobile ? 3 : 5;
+  const segY = isMobile ? 7 : 11;
+
+  // Tier 1: Outer perimeter ring of cupped, tangentially-curled 3D flame tongues (0.78m..1.34m)
+  for (let i = 0; i < outerCount; i++) {
+    const ang = (i / outerCount) * Math.PI * 2.0 + 0.19;
+    const tall = i % 2 === 0;
+    const mid = i % 3 === 1;
+    const h = tall ? 1.32 : (mid ? 1.06 : 0.84);
+    const w = tall ? 0.62 : 0.52;
+    const rOff = tall ? 0.78 : 0.84;
+    parts.push(createCurvedFlameRibbon({
+      width: w,
+      height: h,
+      segX,
+      segY,
+      cupDepth: -0.13,
+      twist: (i % 2 === 0 ? 0.42 : -0.38),
+      leanOut: 0.09,
+      inwardTip: 0.24,
+      radialOffset: rOff,
+      yOffset: -0.01,
+      angle: ang + (i % 2 === 0 ? 0.22 : -0.22),
+      phaseOffset: i * 1.47,
+      heatBias: tall ? 0.06 : -0.02,
+      layerRole: 0.0,
+      swayScale: 1.12
+    }));
+  }
+
+  // Tier 2: Mid-radius swirling 3D flame tongues filling the interior from Souls 3/4 overhead camera (0.72m..1.16m)
+  for (let i = 0; i < midCount; i++) {
+    const ang = (i / midCount) * Math.PI * 2.0 + 0.61;
+    const tall = i % 2 === 0;
+    parts.push(createCurvedFlameRibbon({
+      width: tall ? 0.58 : 0.48,
+      height: tall ? 1.16 : 0.78,
+      segX: isMobile ? 2 : 4,
+      segY: isMobile ? 6 : 9,
+      cupDepth: 0.11,
+      twist: tall ? -0.36 : 0.34,
+      leanOut: 0.06,
+      inwardTip: 0.15,
+      radialOffset: tall ? 0.42 : 0.50,
+      yOffset: 0.0,
+      angle: ang,
+      phaseOffset: 2.1 + i * 1.83,
+      heatBias: 0.10,
+      layerRole: 0.0,
+      swayScale: 1.0
+    }));
+  }
+
+  // Tier 3: Central roaring impact spire + compact incandescent white-gold heart (`layerRole = 1.0`)
+  for (let i = 0; i < 3; i++) {
+    const ang = (i / 3) * Math.PI + 0.28;
+    parts.push(createCurvedFlameRibbon({
+      width: 0.64,
+      height: (i === 1 ? 1.28 : 0.98),
+      segX: isMobile ? 2 : 4,
+      segY: isMobile ? 6 : 9,
+      cupDepth: 0.10,
+      twist: i % 2 === 0 ? 0.32 : -0.30,
+      leanOut: 0.04,
+      inwardTip: 0.06,
+      radialOffset: 0.0,
+      yOffset: 0.0,
+      angle: ang,
+      phaseOffset: 0.85 + i * 2.09,
+      heatBias: 0.16,
+      layerRole: 0.0,
+      swayScale: 0.92
+    }));
+  }
+
+  for (let i = 0; i < 2; i++) {
+    parts.push(createCurvedFlameRibbon({
+      width: 0.46,
+      height: 0.68,
+      segX: 2,
+      segY: isMobile ? 4 : 6,
+      cupDepth: 0.07,
+      twist: i === 0 ? 0.22 : -0.22,
+      leanOut: 0.02,
+      inwardTip: 0.02,
+      radialOffset: 0.0,
+      yOffset: 0.02,
+      angle: i * Math.PI * 0.5 + 0.42,
+      phaseOffset: 0.4 + i * 1.71,
+      heatBias: 0.32,
+      layerRole: 1.0,
+      swayScale: 0.68
+    }));
+  }
+
+  return mergeFlameParts(parts);
+}
+
+function buildFireFieldSparksGeometry(isMobile) {
+  const count = isMobile ? 24 : 48;
+  const rng = makeRng(0x51a9d307);
+  const pos = new Float32Array(count * 3);
+  const param = new Float32Array(count * 4); // speed, phase, maxRise, size (negative = dark-amber ember)
+  const swirl = new Float32Array(count * 3); // radialDrift, swirlFreq, radiusNorm
+
+  for (let i = 0; i < count; i++) {
+    const ang = rng() * Math.PI * 2.0;
+    const r = rng() < 0.64 ? (0.64 + rng() * 0.28) : Math.sqrt(rng()) * 0.68;
+    pos[i * 3] = Math.cos(ang) * r;
+    pos[i * 3 + 1] = 0.04 + rng() * 0.08;
+    pos[i * 3 + 2] = Math.sin(ang) * r;
+
+    const isCinder = i % 2 === 1;
+    param[i * 4] = isCinder ? (0.85 + rng() * 0.75) : (1.35 + rng() * 1.10);
+    param[i * 4 + 1] = rng();
+    param[i * 4 + 2] = isCinder ? (0.75 + rng() * 0.70) : (1.05 + rng() * 0.85);
+    const sz = isCinder ? (0.095 + rng() * 0.065) : (0.060 + rng() * 0.050);
+    param[i * 4 + 3] = isCinder ? -sz : sz;
+
+    swirl[i * 3] = (rng() - 0.5) * 0.34;
+    swirl[i * 3 + 1] = (rng() < 0.5 ? -1 : 1) * (2.6 + rng() * 3.2);
+    swirl[i * 3 + 2] = r;
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('aSparkParam', new THREE.BufferAttribute(param, 4));
+  geo.setAttribute('aSparkSwirl', new THREE.BufferAttribute(swirl, 3));
+  return geo;
+}
+
+function createUndulatingRoadFlameCurtain({
+  xBase = 0.0,
+  zStart = -0.96,
+  zEnd = 0.96,
+  heightMin = 1.25,
+  heightMax = 1.85,
+  weaveAmp = 0.14,
+  weaveFreq = 4.2,
+  weavePhase = 0.0,
+  leanX = 0.0,
+  cupSide = 0.08,
+  segU = 22,
+  segV = 9,
+  phaseOffset = 0.0,
+  heatBias = 0.0,
+  layerRole = 0.0,
+  swayScale = 1.0
+} = {}) {
+  const len = zEnd - zStart;
+  const plane = new THREE.PlaneGeometry(len, 1.0, segU, segV);
+  const pos = plane.attributes.position;
+  const uv = plane.attributes.uv;
+
+  for (let i = 0; i < pos.count; i++) {
+    const u = uv.getX(i); // 0..1 along road (-Z -> +Z)
+    const v = uv.getY(i); // 0..1 vertical base -> flame crest
+    const z = zStart + u * len;
+
+    // Taper smoothly at both ends of the fissure segment while peaking in a jagged volcanic profile
+    const endEnv = Math.sin(Math.min(1.0, Math.max(0.0, u)) * Math.PI);
+    const crownProfile = 0.66 + 0.34 * endEnv;
+    const ridgeMod = 0.5 + 0.5 * Math.sin(u * Math.PI * 5.0 + weavePhase * 1.7);
+    const localH = (heightMin + (heightMax - heightMin) * ridgeMod) * crownProfile;
+
+    const sWeave = Math.sin(z * weaveFreq + weavePhase) * weaveAmp * (0.45 + 0.55 * v);
+    const cup = cupSide * Math.sin(v * Math.PI) * (1.0 - Math.abs(u - 0.5) * 0.5);
+    const x = xBase + sWeave + cup + leanX * v * v;
+    const y = v * localH;
+
+    pos.setXYZ(i, x, y, z);
+  }
+
+  plane.computeVertexNormals();
+  return normalizeForMerge(plane, phaseOffset, heatBias, layerRole, swayScale);
+}
+
+function buildFireRoadWallGeometry(isMobile) {
+  const parts = [];
+  const segU = isMobile ? 13 : 22;
+  const segV = isMobile ? 6 : 10;
+
+  // 1. Central tall undulating volcanic flame curtain (1.38m..1.88m)
+  parts.push(createUndulatingRoadFlameCurtain({
+    xBase: 0.0,
+    zStart: -0.96,
+    zEnd: 0.96,
+    heightMin: 1.38,
+    heightMax: 1.88,
+    weaveAmp: 0.14,
+    weaveFreq: 4.4,
+    weavePhase: 0.25,
+    leanX: 0.0,
+    cupSide: 0.07,
+    segU,
+    segV,
+    phaseOffset: 0.0,
+    heatBias: 0.12,
+    layerRole: 0.0,
+    swayScale: 1.0
+  }));
+
+  // 2 & 3. Twin flanking undulating 3D flame walls (1.12m..1.56m) framing the molten trench
+  parts.push(createUndulatingRoadFlameCurtain({
+    xBase: -0.32,
+    zStart: -0.92,
+    zEnd: 0.94,
+    heightMin: 1.12,
+    heightMax: 1.56,
+    weaveAmp: 0.11,
+    weaveFreq: 5.1,
+    weavePhase: 1.9,
+    leanX: -0.10,
+    cupSide: 0.09,
+    segU: isMobile ? 10 : 18,
+    segV: isMobile ? 5 : 8,
+    phaseOffset: 1.85,
+    heatBias: 0.02,
+    layerRole: 0.0,
+    swayScale: 1.12
+  }));
+
+  parts.push(createUndulatingRoadFlameCurtain({
+    xBase: 0.32,
+    zStart: -0.92,
+    zEnd: 0.94,
+    heightMin: 1.12,
+    heightMax: 1.56,
+    weaveAmp: 0.11,
+    weaveFreq: 5.1,
+    weavePhase: 4.1,
+    leanX: 0.10,
+    cupSide: -0.09,
+    segU: isMobile ? 10 : 18,
+    segV: isMobile ? 5 : 8,
+    phaseOffset: 3.45,
+    heatBias: 0.02,
+    layerRole: 0.0,
+    swayScale: 1.12
+  }));
+
+  // 4. Scorching white-gold lower magma core spine (`layerRole = 1.0`)
+  parts.push(createUndulatingRoadFlameCurtain({
+    xBase: 0.0,
+    zStart: -0.90,
+    zEnd: 0.92,
+    heightMin: 0.72,
+    heightMax: 1.04,
+    weaveAmp: 0.07,
+    weaveFreq: 4.6,
+    weavePhase: 0.9,
+    leanX: 0.0,
+    cupSide: -0.04,
+    segU: isMobile ? 8 : 14,
+    segV: 4,
+    phaseOffset: 0.65,
+    heatBias: 0.30,
+    layerRole: 1.0,
+    swayScale: 0.68
+  }));
+
+  // 5. Transverse cupped 3D eruption tongues along the trench (eliminates down-axis plane flatness!)
+  const tongueCount = isMobile ? 5 : 9;
+  for (let i = 0; i < tongueCount; i++) {
+    const frac = tongueCount > 1 ? i / (tongueCount - 1) : 0.5;
+    const zPos = -0.84 + frac * 1.68;
+    const side = (i % 3) - 1;
+    const tall = i % 2 === 0;
+    const rib = createCurvedFlameRibbon({
+      width: tall ? 0.68 : 0.56,
+      height: tall ? 1.78 : 1.36,
+      segX: isMobile ? 2 : 4,
+      segY: isMobile ? 6 : 9,
+      cupDepth: 0.12,
+      twist: i % 2 === 0 ? 0.36 : -0.34,
+      leanOut: 0.10,
+      inwardTip: 0.14,
+      radialOffset: 0.0,
+      yOffset: 0.0,
+      angle: (i % 2 === 0 ? 1.12 : -1.12) + side * 0.25,
+      phaseOffset: 1.1 + i * 1.37,
+      heatBias: tall ? 0.14 : 0.04,
+      layerRole: 0.0,
+      swayScale: 1.08
+    });
+    rib.translate(side * 0.16, 0.0, zPos);
+    parts.push(rib);
+  }
+
+  return mergeFlameParts(parts);
+}
+
+function buildFireRoadSparksGeometry(isMobile) {
+  const count = isMobile ? 28 : 56;
+  const rng = makeRng(0x94c27e3b);
+  const pos = new Float32Array(count * 3);
+  const param = new Float32Array(count * 4); // speed, phase, maxRise, size (negative = dark-amber ember)
+  const roadMeta = new Float32Array(count * 3); // along01, latDrift, swirlFreq
+
+  for (let i = 0; i < count; i++) {
+    const along01 = (i + rng() * 0.85) / count;
+    const z = -0.94 + along01 * 1.88;
+    const x = (rng() - 0.5) * 0.78;
+    pos[i * 3] = x;
+    pos[i * 3 + 1] = 0.05 + rng() * 0.10;
+    pos[i * 3 + 2] = z;
+
+    const isCinder = i % 2 === 1;
+    param[i * 4] = isCinder ? (0.90 + rng() * 0.80) : (1.45 + rng() * 1.15);
+    param[i * 4 + 1] = rng();
+    param[i * 4 + 2] = isCinder ? (0.95 + rng() * 0.80) : (1.25 + rng() * 1.05);
+    const sz = isCinder ? (0.100 + rng() * 0.065) : (0.064 + rng() * 0.052);
+    param[i * 4 + 3] = isCinder ? -sz : sz;
+
+    roadMeta[i * 3] = along01;
+    roadMeta[i * 3 + 1] = (rng() - 0.5) * 0.42;
+    roadMeta[i * 3 + 2] = (rng() < 0.5 ? -1 : 1) * (2.8 + rng() * 3.4);
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('aSparkParam', new THREE.BufferAttribute(param, 4));
+  geo.setAttribute('aRoadMeta', new THREE.BufferAttribute(roadMeta, 3));
+  return geo;
+}
+
+function acquireSharedFloorFireGeos(isMobile) {
+  const key = isMobile ? 'mobile' : 'desktop';
+  let bucket = _sharedFloorFireCache[key];
+  if (!bucket) {
+    const fieldBedGeo = new THREE.PlaneGeometry(2.16, 2.16, 1, 1);
+    fieldBedGeo.rotateX(-Math.PI * 0.5);
+
+    const roadBedGeo = new THREE.PlaneGeometry(2.16, 2.24, 1, 1);
+    roadBedGeo.rotateX(-Math.PI * 0.5);
+
+    bucket = {
+      refCount: 0,
+      fieldBedGeo,
+      fieldCrownGeo: buildFireFieldCrownGeometry(isMobile),
+      fieldSparksGeo: buildFireFieldSparksGeometry(isMobile),
+      roadBedGeo,
+      roadWallGeo: buildFireRoadWallGeometry(isMobile),
+      roadSparksGeo: buildFireRoadSparksGeometry(isMobile)
+    };
+    _sharedFloorFireCache[key] = bucket;
+  }
+  bucket.refCount += 1;
+  return bucket;
+}
+
+function releaseSharedFloorFireGeos(isMobile) {
+  const key = isMobile ? 'mobile' : 'desktop';
+  const bucket = _sharedFloorFireCache[key];
+  if (!bucket) return;
+  bucket.refCount = Math.max(0, bucket.refCount - 1);
+  if (bucket.refCount === 0) {
+    bucket.fieldBedGeo.dispose();
+    bucket.fieldCrownGeo.dispose();
+    bucket.fieldSparksGeo.dispose();
+    bucket.roadBedGeo.dispose();
+    bucket.roadWallGeo.dispose();
+    bucket.roadSparksGeo.dispose();
+    _sharedFloorFireCache[key] = null;
+  }
+}
+
+/**
+ * Section 5.0 — 3x Volumetric Boss Fire Field (`circle`, `duration = 1.0s` friendly):
+ *   1) Domain-warped Voronoi molten magma fissure bed (`bedMesh`, ragged scorch border, 0 flat circle!)
+ *   2) Multi-ring 3D crown of rising flame tongues (`crownMesh`, `0.65m..1.35m`, FBM curl + Fresnel soft edges!)
+ *   3) GPU rising forge sparks & dark-amber curling embers (`sparksPoints`)
+ */
+export function createVolumetricFireFieldMesh(opts = {}) {
+  const isMobile = opts.isMobile !== undefined ? Boolean(opts.isMobile) : IS_MOBILE_DEFAULT;
+  let lowSpec = Boolean(opts.lowSpec);
+  const shared = acquireSharedFloorFireGeos(isMobile);
+
+  const group = new THREE.Group();
+  group.name = 'volumetric_boss_fire_field';
+
+  const seedInit = Number.isFinite(opts.seed) ? opts.seed : 0.0;
+
+  // 1. Domain-warped Voronoi magma-fissure ground bed
+  const bedUniforms = {
+    uTime: { value: 0.0 },
+    uErupt01: { value: 1.0 },
+    uBurnDown01: { value: 0.0 },
+    uIntensity: { value: 1.0 },
+    uDetail: { value: (isMobile || lowSpec) ? 0.0 : 1.0 },
+    uSeed: { value: seedInit }
+  };
+
+  const bedMat = new THREE.ShaderMaterial({
+    defines: isMobile ? { FIRE_MOBILE_FAST: 1 } : {},
+    uniforms: bedUniforms,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.NormalBlending,
+    polygonOffset: true,
+    polygonOffsetFactor: -3,
+    toneMapped: false,
+    vertexShader: /* glsl */ `
+      varying vec3 vBedPos;
+      void main() {
+        vBedPos = position;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform float uTime;
+      uniform float uErupt01;
+      uniform float uBurnDown01;
+      uniform float uIntensity;
+      uniform float uDetail;
+      uniform float uSeed;
+
+      varying vec3 vBedPos;
+
+      ${GLSL_SIMPLEX_NOISE}
+      ${GLSL_VORONOI_MAGMA}
+
+      void main() {
+        if (uIntensity < 0.01) discard;
+        vec2 p = vBedPos.xz;
+        float r = length(p);
+        if (r > 1.08) discard;
+
+        // Organic domain-warped ragged perimeter (ZERO geometric cartoon circle!)
+        vec2 warp = fireDomainWarp(p * 2.35 + vec2(uSeed, -uTime * 0.85), uDetail);
+        float rimNoise = snoise2(p * 3.8 + warp * 0.55 + vec2(uSeed * 1.7, uTime * 0.6));
+        float rWarped = r + rimNoise * 0.14 + (warp.x - warp.y) * 0.06;
+
+        float expandR = mix(0.28, 1.0, uErupt01);
+        if (rWarped > expandR + 0.04) discard;
+
+        float outerMask = 1.0 - smoothstep(expandR - 0.24, expandR + 0.02, rWarped);
+        if (outerMask < 0.01) discard;
+
+        // Voronoi cellular magma cracks + convective boiling fissures
+        vec2 cellCoord = p * 4.4 + warp * 0.68 + vec2(uSeed * 2.1, -uTime * 0.35);
+        vec2 vor = magmaVoronoiCracks(cellCoord, uDetail);
+        float crack = vor.x;
+        float boil = snoise2(p * 5.6 - vec2(0.0, uTime * 2.8) + warp * 0.9) * 0.5 + 0.5;
+
+        // Ring hot-band under the outer 3D flame curtain + central impact furnace
+        float perimeterHot = exp(-pow((r - 0.78) * 4.6, 2.0)) * 0.65;
+        float centerHot = smoothstep(0.72, 0.04, r) * 0.55;
+        float liveHeat = (1.0 - uBurnDown01 * 0.86) * uErupt01;
+
+        float magmaHeat = clamp(
+          (crack * (0.68 + 0.52 * boil) + perimeterHot * (0.45 + 0.55 * boil) + centerHot * crack * 0.65) * liveHeat,
+          0.0,
+          1.25
+        );
+
+        // Dark charred volcanic basalt crust between glowing magma fissures
+        vec3 crustCol = mix(vec3(0.05, 0.028, 0.024), vec3(0.14, 0.045, 0.018), vor.y);
+        vec3 colDeep  = vec3(0.66, 0.06, 0.01);
+        vec3 colMid   = vec3(0.98, 0.34, 0.03);
+        vec3 colGold  = vec3(1.00, 0.80, 0.26);
+        vec3 colCore  = vec3(1.00, 0.96, 0.78);
+
+        vec3 magmaCol = mix(colDeep, colMid, smoothstep(0.08, 0.42, magmaHeat));
+        magmaCol = mix(magmaCol, colGold, smoothstep(0.40, 0.78, magmaHeat));
+        magmaCol = mix(magmaCol, colCore, smoothstep(0.76, 1.05, magmaHeat));
+
+        float glowBlend = smoothstep(0.06, 0.38, magmaHeat);
+        vec3 finalCol = mix(crustCol, magmaCol, glowBlend);
+
+        // Crust grounds the fire bed physically, dissolving cleanly as it burns down
+        float crustAlpha = outerMask * (0.56 * (1.0 - uBurnDown01 * 0.92));
+        float crackAlpha = outerMask * smoothstep(0.05, 0.32, magmaHeat) * 0.94 * (1.0 - uBurnDown01 * 0.65);
+        float alpha = max(crustAlpha, crackAlpha) * clamp(uIntensity, 0.0, 1.25);
+        if (alpha < 0.012) discard;
+
+        gl_FragColor = vec4(min(finalCol, vec3(1.15)), clamp(alpha, 0.0, 0.94));
+      }
+    `
+  });
+
+  const bedMesh = new THREE.Mesh(shared.fieldBedGeo, bedMat);
+  bedMesh.name = 'fire_field_magma_bed';
+  bedMesh.position.y = 0.032;
+  bedMesh.renderOrder = 4;
+  bedMesh.frustumCulled = false;
+  group.add(bedMesh);
+
+  // 2. 3D Crown of Rising Flame Tongues (0.65m..1.35m)
+  const crownUniforms = {
+    uTime: { value: 0.0 },
+    uErupt01: { value: 1.0 },
+    uBurnDown01: { value: 0.0 },
+    uIntensity: { value: 1.0 },
+    uDetail: { value: (isMobile || lowSpec) ? 0.0 : 1.0 },
+    uSeed: { value: seedInit }
+  };
+
+  const crownMat = new THREE.ShaderMaterial({
+    defines: isMobile ? { FIRE_MOBILE_FAST: 1 } : {},
+    uniforms: crownUniforms,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.NormalBlending,
+    side: THREE.DoubleSide,
+    toneMapped: false,
+    vertexShader: /* glsl */ `
+      attribute vec4 aFlameMeta;
+
+      uniform float uTime;
+      uniform float uErupt01;
+      uniform float uBurnDown01;
+      uniform float uSeed;
+
+      varying vec2 vUv;
+      varying vec3 vLocalPos;
+      varying vec3 vNormalV;
+      varying vec3 vViewDir;
+      varying vec4 vMeta;
+
+      void main() {
+        vUv = uv;
+        vMeta = aFlameMeta;
+
+        float h = clamp(uv.y, 0.0, 1.0);
+        float ph = aFlameMeta.x + uSeed * 1.37;
+        float swayScale = aFlameMeta.w;
+        float bend = pow(max(h, 0.0001), 1.35) * swayScale;
+
+        vec3 p = position;
+        vec3 n = normal;
+
+        // Fast volcanic geyser eruption (0..0.15) -> fierce roaring blaze -> organic burn-down collapse (0.65..1.0)
+        float eruptOvershoot = mix(0.16, 1.08, uErupt01) - 0.08 * smoothstep(0.75, 1.0, uErupt01);
+        float burnCollapse = mix(1.0, 0.24, uBurnDown01 * uBurnDown01);
+        float t = uTime * 5.2 + ph;
+        float breath = 0.94 + 0.10 * sin(t * 1.45 + ph) + 0.05 * cos(t * 2.9 - ph * 0.7);
+        p.y *= eruptOvershoot * burnCollapse * mix(1.0, breath, h * 0.85);
+
+        // Helical thermal curl around center + turbulent FBM-like tongue whip
+        float twist = sin(t * 0.95 - h * 3.6) * 0.30 * bend;
+        float ct = cos(twist);
+        float st = sin(twist);
+        p.xz = mat2(ct, -st, st, ct) * p.xz;
+        n.xz = mat2(ct, -st, st, ct) * n.xz;
+
+        p.x += (sin(t * 1.35 - h * 4.8 + ph) * 0.65 + cos(t * 2.45 - h * 7.2) * 0.35) * 0.11 * bend;
+        p.z += (cos(t * 1.25 - h * 4.5 - ph) * 0.65 + sin(t * 2.30 - h * 6.8) * 0.35) * 0.11 * bend;
+
+        vLocalPos = p;
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        vNormalV = normalize(normalMatrix * n);
+        vViewDir = normalize(-mv.xyz);
+        gl_Position = projectionMatrix * mv;
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform float uTime;
+      uniform float uErupt01;
+      uniform float uBurnDown01;
+      uniform float uIntensity;
+      uniform float uDetail;
+      uniform float uSeed;
+
+      varying vec2 vUv;
+      varying vec3 vLocalPos;
+      varying vec3 vNormalV;
+      varying vec3 vViewDir;
+      varying vec4 vMeta;
+
+      ${GLSL_SIMPLEX_NOISE}
+
+      void main() {
+        if (uIntensity < 0.01) discard;
+        float h = clamp(vUv.y, 0.0, 1.0);
+        float across = clamp(vUv.x, 0.0, 1.0);
+        float ac = (across - 0.5) * 2.0;
+        float ph = vMeta.x + uSeed;
+        bool isCore = vMeta.z > 0.5;
+
+        // Soft Fresnel grazing-angle fade + lateral ribbon feather -> 0 polygon edges!
+        float ndv = clamp(abs(dot(normalize(vNormalV), normalize(vViewDir))), 0.0, 1.0);
+        float viewFade = mix(1.0, smoothstep(0.05, 0.50, ndv), 0.60);
+        float sideFade = smoothstep(0.0, 0.22, across) * smoothstep(1.0, 0.78, across);
+
+        float t = uTime * 4.6 + ph * 0.73;
+        vec2 warp = fireDomainWarp(vec2(ac * 1.8 + ph * 0.4, h * 2.9 - t * 1.15), uDetail);
+        float warpAmt = 0.20 + 0.55 * h;
+
+        vec3 p3 = vec3(
+          vLocalPos.x * 2.2 + warp.x * warpAmt,
+          vLocalPos.y * 2.4 - t * 1.65,
+          vLocalPos.z * 2.2 + warp.y * warpAmt
+        );
+        vec2 p2 = vec2(
+          ac * 2.9 + warp.x * warpAmt * 1.2 + ph * 0.6,
+          h * 3.6 - t * 2.15 + warp.y * warpAmt * 0.6
+        );
+        vec2 turb = fireTurbulenceFbm(p3, p2, uDetail);
+        float fbm = turb.x;
+        float streaks = turb.y;
+
+        float halfW = mix(0.48, 0.20, pow(max(h, 0.0001), 0.92));
+        float distX = abs(ac * 0.5 - warp.x * 0.09 * h);
+        float shape = clamp(1.0 - pow(max(distX / max(halfW, 0.08), 0.0001), 1.85), 0.0, 1.0);
+
+        float baseIn = smoothstep(0.0, 0.08, h);
+        float tipOut = smoothstep(1.0, 0.12, h);
+        float lick = smoothstep(0.52, 0.86, fbm) * smoothstep(0.28, 0.68, h) * smoothstep(0.98, 0.72, h) * 0.45;
+        float burnErode = uBurnDown01 * (0.45 + 0.65 * h);
+
+        float field = (shape * (0.68 + 0.40 * tipOut) + (fbm - 0.44) * mix(0.36, 1.15, pow(max(h, 0.0001), 0.65)) + lick - pow(max(h, 0.0001), 1.12) * 0.56 - burnErode) * baseIn;
+
+        float flameEdge = isCore ? smoothstep(0.20, 0.58, field) : smoothstep(0.07, 0.36, field);
+        float smokeTip = isCore ? 0.0 : smoothstep(0.54, 0.95, h) * smoothstep(0.01, 0.16, field) * (1.0 - flameEdge * 0.82);
+        float liveFade = smoothstep(0.0, 0.12, uErupt01) * (1.0 - smoothstep(0.72, 1.0, uBurnDown01));
+        float alpha = clamp(flameEdge * 0.92 + smokeTip * 0.28, 0.0, 0.94)
+          * viewFade
+          * sideFade
+          * liveFade
+          * clamp(uIntensity, 0.0, 1.35);
+        if (alpha < 0.015) discard;
+
+        float spineHot = (1.0 - smoothstep(0.0, 0.85, abs(ac))) * smoothstep(0.68, 0.02, h);
+        float temp = clamp(
+          smoothstep(0.06, 0.86, field) * 0.50
+          + spineHot * 0.34
+          + (streaks - 0.46) * 0.30
+          + vMeta.y * 0.55
+          + (isCore ? 0.20 : 0.0)
+          - smoothstep(0.30, 0.94, h) * 0.46
+          - uBurnDown01 * 0.22,
+          0.0,
+          1.0
+        );
+
+        vec3 colRim   = vec3(0.54, 0.04, 0.01);
+        vec3 colOuter = vec3(0.88, 0.16, 0.02);
+        vec3 colMid   = vec3(1.00, 0.48, 0.05);
+        vec3 colGold  = vec3(1.00, 0.82, 0.28);
+        vec3 colCore  = vec3(1.00, 0.97, 0.84);
+
+        vec3 col = mix(colRim, colOuter, smoothstep(0.00, 0.24, temp));
+        col = mix(col, colMid,  smoothstep(0.22, 0.54, temp));
+        col = mix(col, colGold, smoothstep(0.52, 0.82, temp));
+        col = mix(col, colCore, smoothstep(0.80, 0.98, temp));
+        col = mix(col, vec3(0.14, 0.03, 0.02), clamp(smokeTip * 0.72, 0.0, 0.85));
+
+        float boost = 0.96 + 0.14 * (1.0 - uBurnDown01);
+        gl_FragColor = vec4(min(col * boost, vec3(1.16)), clamp(alpha, 0.0, 0.92));
+      }
+    `
+  });
+
+  const crownMesh = new THREE.Mesh(shared.fieldCrownGeo, crownMat);
+  crownMesh.name = 'fire_field_flame_crown';
+  crownMesh.position.y = 0.018;
+  crownMesh.renderOrder = 6;
+  crownMesh.frustumCulled = false;
+  group.add(crownMesh);
+
+  // 3. GPU Billboarding Rising Sparks & Dark-Amber Ember Curl
+  const sparkUniforms = {
+    uTime: { value: 0.0 },
+    uErupt01: { value: 1.0 },
+    uBurnDown01: { value: 0.0 },
+    uIntensity: { value: 1.0 },
+    uPixelRatio: { value: getSafePixelRatio(isMobile, lowSpec) },
+    uSeed: { value: seedInit }
+  };
+
+  const sparksMat = new THREE.ShaderMaterial({
+    uniforms: sparkUniforms,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+    vertexShader: /* glsl */ `
+      attribute vec4 aSparkParam;
+      attribute vec3 aSparkSwirl;
+
+      uniform float uTime;
+      uniform float uErupt01;
+      uniform float uBurnDown01;
+      uniform float uIntensity;
+      uniform float uPixelRatio;
+      uniform float uSeed;
+
+      varying float vLife;
+      varying float vIsCinder;
+      varying float vAlpha;
+
+      void main() {
+        float life = fract(uTime * aSparkParam.x + aSparkParam.y + uSeed * 0.17);
+        vLife = life;
+        vIsCinder = aSparkParam.w < 0.0 ? 1.0 : 0.0;
+
+        float swirlAng = life * aSparkSwirl.y + aSparkParam.y * 6.28318 + uSeed;
+        float curlR = (0.06 + 0.18 * life) * (0.65 + 0.35 * vIsCinder);
+        vec3 p = position;
+        p.x += cos(swirlAng) * curlR + aSparkSwirl.x * life;
+        p.z += sin(swirlAng) * curlR - aSparkSwirl.x * 0.7 * life;
+        p.y += life * aSparkParam.z * mix(0.35, 1.05, uErupt01);
+
+        float env = smoothstep(0.0, 0.10, life) * smoothstep(1.0, 0.28, life);
+        float live = smoothstep(0.0, 0.08, uErupt01) * (1.0 - smoothstep(0.76, 1.0, uBurnDown01));
+        vAlpha = env * live * clamp(uIntensity, 0.0, 1.35);
+
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        float sz = abs(aSparkParam.w) * (0.55 + 0.65 * env) * step(0.01, vAlpha);
+        gl_PointSize = clamp((sz * 310.0 * uPixelRatio) / max(1.0, -mv.z), 0.0, 18.0);
+        gl_Position = projectionMatrix * mv;
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      varying float vLife;
+      varying float vIsCinder;
+      varying float vAlpha;
+
+      void main() {
+        if (vAlpha < 0.015) discard;
+        float d = length(gl_PointCoord - vec2(0.5));
+        float soft = smoothstep(0.48, 0.05, d);
+        if (soft < 0.02) discard;
+
+        vec3 sparkHot  = mix(vec3(1.00, 0.96, 0.74), vec3(1.00, 0.62, 0.14), vIsCinder);
+        vec3 sparkCool = mix(vec3(1.00, 0.36, 0.04), vec3(0.76, 0.10, 0.02), vIsCinder);
+        vec3 col = mix(sparkHot, sparkCool, smoothstep(0.08, 0.92, vLife));
+        float a = soft * vAlpha * mix(0.95, 0.78, vIsCinder);
+        if (a < 0.012) discard;
+        gl_FragColor = vec4(col, a);
+      }
+    `
+  });
+
+  const sparksPoints = new THREE.Points(shared.fieldSparksGeo, sparksMat);
+  sparksPoints.name = 'fire_field_sparks';
+  sparksPoints.renderOrder = 7;
+  sparksPoints.frustumCulled = false;
+  sparksPoints.visible = !lowSpec;
+  group.add(sparksPoints);
+
+  let disposed = false;
+
+  function reset({ radius, heightScale = 1.0, seed } = {}) {
+    if (disposed) return;
+    if (Number.isFinite(seed)) {
+      bedUniforms.uSeed.value = seed;
+      crownUniforms.uSeed.value = seed;
+      sparkUniforms.uSeed.value = seed;
+    }
+    if (Number.isFinite(radius) && radius > 0) {
+      group.scale.set(radius, Number.isFinite(heightScale) ? heightScale : 1.0, radius);
+    }
+    bedUniforms.uTime.value = 0.0;
+    crownUniforms.uTime.value = 0.0;
+    sparkUniforms.uTime.value = 0.0;
+    bedUniforms.uErupt01.value = 0.08;
+    crownUniforms.uErupt01.value = 0.08;
+    sparkUniforms.uErupt01.value = 0.08;
+    bedUniforms.uBurnDown01.value = 0.0;
+    crownUniforms.uBurnDown01.value = 0.0;
+    sparkUniforms.uBurnDown01.value = 0.0;
+  }
+
+  function update(entryOrElapsed, elapsed, life01, intensity = 1.0) {
+    if (disposed) return;
+    let tVal = 0.0;
+    let l01 = 0.25;
+    let intVal = 1.0;
+
+    if (entryOrElapsed && typeof entryOrElapsed === 'object') {
+      const entry = entryOrElapsed;
+      if (Number.isFinite(entry.seed)) {
+        bedUniforms.uSeed.value = entry.seed;
+        crownUniforms.uSeed.value = entry.seed;
+        sparkUniforms.uSeed.value = entry.seed;
+      }
+      tVal = Number.isFinite(elapsed)
+        ? elapsed
+        : (Number.isFinite(entry.elapsed) ? entry.elapsed : (Number.isFinite(entry.age) ? entry.age : 0.0));
+      if (Number.isFinite(life01)) {
+        l01 = life01;
+      } else if (Number.isFinite(entry.life01)) {
+        l01 = entry.life01;
+      } else if (Number.isFinite(entry.age) && Number.isFinite(entry.duration) && entry.duration > 0) {
+        l01 = entry.age / entry.duration;
+      }
+      intVal = Number.isFinite(intensity) ? intensity : (Number.isFinite(entry.intensity) ? entry.intensity : 1.0);
+    } else {
+      tVal = Number.isFinite(entryOrElapsed) ? entryOrElapsed : 0.0;
+      l01 = Number.isFinite(life01) ? life01 : 0.25;
+      intVal = Number.isFinite(intensity) ? intensity : 1.0;
+    }
+
+    const clampedLife = Math.max(0.0, Math.min(1.0, l01));
+    // 0.00..0.15: fast volcanic eruption; 0.15..0.65: fierce blaze; 0.65..1.00: organic burn-down!
+    const erupt01 = smoothstep01(0.0, 0.15, clampedLife);
+    const burnDown01 = smoothstep01(0.65, 1.0, clampedLife);
+    const effInt = Math.max(0.0, intVal) * (lowSpec ? 0.85 : 1.0);
+
+    bedUniforms.uTime.value = tVal;
+    bedUniforms.uErupt01.value = Math.max(0.05, erupt01);
+    bedUniforms.uBurnDown01.value = burnDown01;
+    bedUniforms.uIntensity.value = effInt;
+
+    crownUniforms.uTime.value = tVal;
+    crownUniforms.uErupt01.value = Math.max(0.05, erupt01);
+    crownUniforms.uBurnDown01.value = burnDown01;
+    crownUniforms.uIntensity.value = effInt;
+
+    if (sparksPoints.visible) {
+      sparkUniforms.uTime.value = tVal;
+      sparkUniforms.uErupt01.value = Math.max(0.05, erupt01);
+      sparkUniforms.uBurnDown01.value = burnDown01;
+      sparkUniforms.uIntensity.value = effInt;
+    }
+  }
+
+  function setLowSpec(enabled = false) {
+    if (disposed) return;
+    lowSpec = Boolean(enabled);
+    const det = (isMobile || lowSpec) ? 0.0 : 1.0;
+    bedUniforms.uDetail.value = det;
+    crownUniforms.uDetail.value = det;
+    sparksPoints.visible = !lowSpec;
+    sparkUniforms.uPixelRatio.value = getSafePixelRatio(isMobile, lowSpec);
+  }
+
+  function dispose() {
+    if (disposed) return;
+    disposed = true;
+    bedMat.dispose();
+    crownMat.dispose();
+    sparksMat.dispose();
+    releaseSharedFloorFireGeos(isMobile);
+  }
+
+  return {
+    group,
+    bedMesh,
+    crownMesh,
+    sparksPoints,
+    reset,
+    update,
+    setLowSpec,
+    dispose
+  };
+}
+
+/**
+ * Section 5.0 — 3x Volumetric Boss Fire Road / Wave (`ash_fissure`):
+ *   1) Domain-warped ragged molten-lava trench bed (`trenchBedMesh`, 0 straight rectangle!)
+ *   2) Triple undulating 3D vertical flame-wall ribbons + surging eruption wave crest (`1.15m..1.90m`, `uWaveFront01`!)
+ *   3) GPU surging fissure sparks & curling magma embers (`sparksPoints`)
+ */
+export function createVolumetricFireRoadMesh(opts = {}) {
+  const isMobile = opts.isMobile !== undefined ? Boolean(opts.isMobile) : IS_MOBILE_DEFAULT;
+  let lowSpec = Boolean(opts.lowSpec);
+  const shared = acquireSharedFloorFireGeos(isMobile);
+
+  const group = new THREE.Group();
+  group.name = 'volumetric_boss_fire_road';
+
+  const seedInit = Number.isFinite(opts.seed) ? opts.seed : 0.0;
+
+  // 1. Cracked molten-lava trench bed with ragged volcanic edges
+  const trenchUniforms = {
+    uTime: { value: 0.0 },
+    uWaveFront01: { value: 1.0 },
+    uBurnDown01: { value: 0.0 },
+    uIntensity: { value: 1.0 },
+    uDetail: { value: (isMobile || lowSpec) ? 0.0 : 1.0 },
+    uSeed: { value: seedInit }
+  };
+
+  const trenchMat = new THREE.ShaderMaterial({
+    defines: isMobile ? { FIRE_MOBILE_FAST: 1 } : {},
+    uniforms: trenchUniforms,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.NormalBlending,
+    polygonOffset: true,
+    polygonOffsetFactor: -3,
+    toneMapped: false,
+    vertexShader: /* glsl */ `
+      varying vec3 vBedPos;
+      void main() {
+        vBedPos = position;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform float uTime;
+      uniform float uWaveFront01;
+      uniform float uBurnDown01;
+      uniform float uIntensity;
+      uniform float uDetail;
+      uniform float uSeed;
+
+      varying vec3 vBedPos;
+
+      ${GLSL_SIMPLEX_NOISE}
+      ${GLSL_VORONOI_MAGMA}
+
+      void main() {
+        if (uIntensity < 0.01) discard;
+        float x = vBedPos.x;
+        float z = vBedPos.z;
+        if (abs(x) > 1.08 || abs(z) > 1.12) discard;
+
+        // along01 = 0 at Boss start (-Z), 1 at fissure tip (+Z)
+        float along01 = clamp((z + 1.0) * 0.5, 0.0, 1.0);
+        float frontGate = smoothstep(uWaveFront01 + 0.05, uWaveFront01 - 0.09, along01);
+        if (frontGate < 0.01) discard;
+
+        // Domain-warped jagged volcanic trench boundaries (NEVER a straight rectangular strip!)
+        vec2 warp = fireDomainWarp(vec2(x * 2.6 + uSeed, z * 2.2 - uTime * 1.35), uDetail);
+        float jagA = snoise2(vec2(z * 4.2 + uSeed * 1.9, x * 2.1));
+        float jagB = snoise2(vec2(z * 8.6 - uSeed * 0.7, x * 3.8 + uTime * 0.5));
+        float raggedHalfW = (0.58 + 0.24 * (jagA * 0.65 + jagB * 0.35)) * smoothstep(1.10, 0.78, abs(z + jagA * 0.08));
+        float ax = abs(x + warp.x * 0.14);
+
+        float trenchMask = 1.0 - smoothstep(raggedHalfW - 0.22, raggedHalfW + 0.04, ax);
+        if (trenchMask < 0.01) discard;
+
+        // Voronoi magma fissures + fast surging lava spine down +Z
+        vec2 vor = magmaVoronoiCracks(vec2(x * 4.6 + warp.x * 0.75, z * 3.8 - uTime * 0.95 + warp.y * 0.65), uDetail);
+        float crack = vor.x;
+        float lavaFlow = snoise2(vec2(x * 5.2 + warp.x, z * 4.4 - uTime * 3.8)) * 0.5 + 0.5;
+        float spine = exp(-pow((x + sin(z * 4.2 + uSeed) * 0.12) * 3.2, 2.0));
+        float crestFlash = exp(-pow((along01 - uWaveFront01) * 7.5, 2.0)) * smoothstep(0.02, 0.98, uWaveFront01);
+
+        float liveHeat = (1.0 - uBurnDown01 * 0.84) * frontGate;
+        float magmaHeat = clamp(
+          (crack * (0.62 + 0.52 * lavaFlow) + spine * (0.48 + 0.44 * lavaFlow) + crestFlash * 0.55) * liveHeat,
+          0.0,
+          1.25
+        );
+
+        vec3 crustCol = mix(vec3(0.05, 0.028, 0.024), vec3(0.15, 0.048, 0.020), vor.y);
+        vec3 magmaCol = mix(vec3(0.68, 0.06, 0.01), vec3(0.99, 0.36, 0.03), smoothstep(0.08, 0.42, magmaHeat));
+        magmaCol = mix(magmaCol, vec3(1.00, 0.82, 0.28), smoothstep(0.40, 0.78, magmaHeat));
+        magmaCol = mix(magmaCol, vec3(1.00, 0.97, 0.80), smoothstep(0.76, 1.05, magmaHeat));
+
+        vec3 finalCol = mix(crustCol, magmaCol, smoothstep(0.06, 0.36, magmaHeat));
+        float crustAlpha = trenchMask * frontGate * 0.58 * (1.0 - uBurnDown01 * 0.90);
+        float lavaAlpha  = trenchMask * frontGate * smoothstep(0.05, 0.30, magmaHeat) * 0.95 * (1.0 - uBurnDown01 * 0.62);
+        float alpha = max(crustAlpha, lavaAlpha) * clamp(uIntensity, 0.0, 1.25);
+        if (alpha < 0.012) discard;
+
+        gl_FragColor = vec4(min(finalCol, vec3(1.16)), clamp(alpha, 0.0, 0.95));
+      }
+    `
+  });
+
+  const trenchBedMesh = new THREE.Mesh(shared.roadBedGeo, trenchMat);
+  trenchBedMesh.name = 'fire_road_trench_bed';
+  trenchBedMesh.position.y = 0.034;
+  trenchBedMesh.renderOrder = 4;
+  trenchBedMesh.frustumCulled = false;
+  group.add(trenchBedMesh);
+
+  // 2. Triple undulating 3D vertical flame-wall ribbons + surging eruption crest
+  const wallUniforms = {
+    uTime: { value: 0.0 },
+    uWaveFront01: { value: 1.0 },
+    uBurnDown01: { value: 0.0 },
+    uIntensity: { value: 1.0 },
+    uDetail: { value: (isMobile || lowSpec) ? 0.0 : 1.0 },
+    uSeed: { value: seedInit }
+  };
+
+  const wallMat = new THREE.ShaderMaterial({
+    defines: isMobile ? { FIRE_MOBILE_FAST: 1 } : {},
+    uniforms: wallUniforms,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.NormalBlending,
+    side: THREE.DoubleSide,
+    toneMapped: false,
+    vertexShader: /* glsl */ `
+      attribute vec4 aFlameMeta;
+
+      uniform float uTime;
+      uniform float uWaveFront01;
+      uniform float uBurnDown01;
+      uniform float uSeed;
+
+      varying vec2 vUv;
+      varying vec3 vLocalPos;
+      varying vec3 vNormalV;
+      varying vec3 vViewDir;
+      varying vec4 vMeta;
+      varying float vAlongRoad;
+      varying float vCrest;
+
+      void main() {
+        vUv = uv;
+        vMeta = aFlameMeta;
+
+        float h = clamp(uv.y, 0.0, 1.0);
+        float alongRoad = clamp((position.z + 1.0) * 0.5, 0.0, 1.0);
+        vAlongRoad = alongRoad;
+
+        float frontGate = smoothstep(uWaveFront01 + 0.06, uWaveFront01 - 0.11, alongRoad);
+        float crest = exp(-pow((alongRoad - uWaveFront01) * 5.8, 2.0)) * smoothstep(0.02, 0.99, uWaveFront01);
+        vCrest = crest;
+
+        vec3 p = position;
+        vec3 n = normal;
+
+        float ph = aFlameMeta.x + uSeed * 1.41 + position.z * 2.1;
+        float t = uTime * 5.6 + ph;
+        float bend = pow(max(h, 0.0001), 1.32) * aFlameMeta.w;
+
+        // Travelling wave crest surges flames up to ~1.9m high & leans forward along +Z!
+        float heightScale = frontGate * (1.0 + 0.34 * crest) * mix(1.0, 0.24, uBurnDown01 * uBurnDown01);
+        float breath = 0.94 + 0.10 * sin(t * 1.5 - position.z * 3.4);
+        p.y *= heightScale * mix(1.0, breath, h * 0.85);
+
+        p.x += (sin(t * 1.4 - h * 5.0) * 0.68 + cos(t * 2.5 - h * 7.4 + ph) * 0.32) * 0.12 * bend;
+        p.z += (0.18 + 0.22 * crest + 0.08 * sin(t * 1.2 - h * 4.2)) * bend * frontGate;
+
+        vLocalPos = p;
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        vNormalV = normalize(normalMatrix * n);
+        vViewDir = normalize(-mv.xyz);
+        gl_Position = projectionMatrix * mv;
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform float uTime;
+      uniform float uWaveFront01;
+      uniform float uBurnDown01;
+      uniform float uIntensity;
+      uniform float uDetail;
+      uniform float uSeed;
+
+      varying vec2 vUv;
+      varying vec3 vLocalPos;
+      varying vec3 vNormalV;
+      varying vec3 vViewDir;
+      varying vec4 vMeta;
+      varying float vAlongRoad;
+      varying float vCrest;
+
+      ${GLSL_SIMPLEX_NOISE}
+
+      void main() {
+        if (uIntensity < 0.01) discard;
+        float frontGate = smoothstep(uWaveFront01 + 0.05, uWaveFront01 - 0.10, vAlongRoad);
+        if (frontGate < 0.015) discard;
+
+        float h = clamp(vUv.y, 0.0, 1.0);
+        float across = clamp(vUv.x, 0.0, 1.0);
+        float ph = vMeta.x + uSeed;
+        bool isCore = vMeta.z > 0.5;
+
+        float ndv = clamp(abs(dot(normalize(vNormalV), normalize(vViewDir))), 0.0, 1.0);
+        float viewFade = mix(1.0, smoothstep(0.05, 0.48, ndv), 0.58);
+        float endFeather = smoothstep(0.0, 0.12, across) * smoothstep(1.0, 0.88, across);
+
+        float t = uTime * 5.0 + ph * 0.65;
+        vec2 warp = fireDomainWarp(vec2(vLocalPos.z * 2.4 - t * 0.65 + ph, h * 3.0 - t * 1.35), uDetail);
+        float warpAmt = 0.22 + 0.56 * h;
+
+        vec3 p3 = vec3(
+          vLocalPos.x * 2.3 + warp.x * warpAmt,
+          vLocalPos.y * 2.2 - t * 1.85,
+          vLocalPos.z * 2.1 - t * 1.15 + warp.y * warpAmt
+        );
+        vec2 p2 = vec2(
+          vLocalPos.z * 3.4 - t * 1.05 + warp.x * warpAmt * 1.1,
+          h * 3.8 - t * 2.35 + warp.y * warpAmt * 0.65
+        );
+        vec2 turb = fireTurbulenceFbm(p3, p2, uDetail);
+        float fbm = turb.x;
+        float streaks = turb.y;
+
+        float baseIn = smoothstep(0.0, 0.07, h);
+        float tipOut = smoothstep(1.0, 0.10, h);
+        // Jagged individual vertical flame tongues carved out of the undulating curtain!
+        float tongueCarve = sin(vLocalPos.z * 11.5 - t * 0.8 + warp.x * 2.4) * 0.14 * pow(max(h, 0.0001), 0.85);
+        float lick = smoothstep(0.50, 0.86, fbm) * smoothstep(0.25, 0.68, h) * smoothstep(0.98, 0.72, h) * 0.48;
+        float burnErode = uBurnDown01 * (0.44 + 0.68 * h);
+
+        float field = ((0.64 + 0.44 * tipOut) + tongueCarve + (fbm - 0.44) * mix(0.40, 1.22, pow(max(h, 0.0001), 0.62)) + lick + vCrest * 0.22 - pow(max(h, 0.0001), 1.08) * 0.58 - burnErode) * baseIn;
+
+        float flameEdge = isCore ? smoothstep(0.20, 0.58, field) : smoothstep(0.08, 0.38, field);
+        float smokeTip = isCore ? 0.0 : smoothstep(0.54, 0.96, h) * smoothstep(0.01, 0.16, field) * (1.0 - flameEdge * 0.82);
+        float alpha = clamp(flameEdge * 0.92 + smokeTip * 0.28, 0.0, 0.94)
+          * viewFade
+          * endFeather
+          * frontGate
+          * (1.0 - smoothstep(0.74, 1.0, uBurnDown01))
+          * clamp(uIntensity, 0.0, 1.35);
+        if (alpha < 0.015) discard;
+
+        float baseHot = smoothstep(0.65, 0.02, h);
+        float temp = clamp(
+          smoothstep(0.06, 0.86, field) * 0.50
+          + baseHot * 0.30
+          + vCrest * 0.22
+          + (streaks - 0.46) * 0.30
+          + vMeta.y * 0.50
+          + (isCore ? 0.20 : 0.0)
+          - smoothstep(0.32, 0.95, h) * 0.48
+          - uBurnDown01 * 0.22,
+          0.0,
+          1.0
+        );
+
+        vec3 col = mix(vec3(0.54, 0.04, 0.01), vec3(0.90, 0.16, 0.02), smoothstep(0.00, 0.24, temp));
+        col = mix(col, vec3(1.00, 0.50, 0.05), smoothstep(0.22, 0.54, temp));
+        col = mix(col, vec3(1.00, 0.84, 0.30), smoothstep(0.52, 0.82, temp));
+        col = mix(col, vec3(1.00, 0.98, 0.86), smoothstep(0.80, 0.98, temp));
+        col = mix(col, vec3(0.14, 0.03, 0.02), clamp(smokeTip * 0.72, 0.0, 0.85));
+
+        float boost = 0.96 + 0.18 * vCrest + 0.10 * (1.0 - uBurnDown01);
+        gl_FragColor = vec4(min(col * boost, vec3(1.18)), clamp(alpha, 0.0, 0.93));
+      }
+    `
+  });
+
+  const flameWallMesh = new THREE.Mesh(shared.roadWallGeo, wallMat);
+  flameWallMesh.name = 'fire_road_flame_walls';
+  flameWallMesh.position.y = 0.018;
+  flameWallMesh.renderOrder = 6;
+  flameWallMesh.frustumCulled = false;
+  group.add(flameWallMesh);
+
+  // 3. GPU Fissure Wave Sparks & Curling Embers
+  const sparkUniforms = {
+    uTime: { value: 0.0 },
+    uWaveFront01: { value: 1.0 },
+    uBurnDown01: { value: 0.0 },
+    uIntensity: { value: 1.0 },
+    uPixelRatio: { value: getSafePixelRatio(isMobile, lowSpec) },
+    uSeed: { value: seedInit }
+  };
+
+  const sparksMat = new THREE.ShaderMaterial({
+    uniforms: sparkUniforms,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+    vertexShader: /* glsl */ `
+      attribute vec4 aSparkParam;
+      attribute vec3 aRoadMeta;
+
+      uniform float uTime;
+      uniform float uWaveFront01;
+      uniform float uBurnDown01;
+      uniform float uIntensity;
+      uniform float uPixelRatio;
+      uniform float uSeed;
+
+      varying float vLife;
+      varying float vIsCinder;
+      varying float vAlpha;
+
+      void main() {
+        float alongRoad = aRoadMeta.x;
+        float frontGate = smoothstep(uWaveFront01 + 0.04, uWaveFront01 - 0.08, alongRoad);
+        float crest = exp(-pow((alongRoad - uWaveFront01) * 6.0, 2.0));
+
+        float life = fract(uTime * aSparkParam.x + aSparkParam.y + uSeed * 0.19);
+        vLife = life;
+        vIsCinder = aSparkParam.w < 0.0 ? 1.0 : 0.0;
+
+        float swirlAng = life * aRoadMeta.z + aSparkParam.y * 6.28318 + uSeed;
+        vec3 p = position;
+        p.x += cos(swirlAng) * (0.08 + 0.18 * life) + aRoadMeta.y * life;
+        p.z += sin(swirlAng) * 0.08 + life * (0.28 + 0.35 * crest);
+        p.y += life * aSparkParam.z * (1.0 + 0.45 * crest);
+
+        float env = smoothstep(0.0, 0.10, life) * smoothstep(1.0, 0.26, life);
+        float live = frontGate * (1.0 - smoothstep(0.76, 1.0, uBurnDown01));
+        vAlpha = env * live * clamp(uIntensity, 0.0, 1.35);
+
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        float sz = abs(aSparkParam.w) * (0.58 + 0.68 * env + 0.25 * crest) * step(0.01, vAlpha);
+        gl_PointSize = clamp((sz * 315.0 * uPixelRatio) / max(1.0, -mv.z), 0.0, 18.0);
+        gl_Position = projectionMatrix * mv;
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      varying float vLife;
+      varying float vIsCinder;
+      varying float vAlpha;
+
+      void main() {
+        if (vAlpha < 0.015) discard;
+        float d = length(gl_PointCoord - vec2(0.5));
+        float soft = smoothstep(0.48, 0.05, d);
+        if (soft < 0.02) discard;
+
+        vec3 sparkHot  = mix(vec3(1.00, 0.97, 0.78), vec3(1.00, 0.64, 0.16), vIsCinder);
+        vec3 sparkCool = mix(vec3(1.00, 0.36, 0.04), vec3(0.78, 0.10, 0.02), vIsCinder);
+        vec3 col = mix(sparkHot, sparkCool, smoothstep(0.08, 0.92, vLife));
+        float a = soft * vAlpha * mix(0.95, 0.80, vIsCinder);
+        if (a < 0.012) discard;
+        gl_FragColor = vec4(col, a);
+      }
+    `
+  });
+
+  const sparksPoints = new THREE.Points(shared.roadSparksGeo, sparksMat);
+  sparksPoints.name = 'fire_road_sparks';
+  sparksPoints.renderOrder = 7;
+  sparksPoints.frustumCulled = false;
+  sparksPoints.visible = !lowSpec;
+  group.add(sparksPoints);
+
+  let disposed = false;
+
+  function reset({ radius, widthScale, lengthScale, heightScale = 1.0, seed } = {}) {
+    if (disposed) return;
+    if (Number.isFinite(seed)) {
+      trenchUniforms.uSeed.value = seed;
+      wallUniforms.uSeed.value = seed;
+      sparkUniforms.uSeed.value = seed;
+    }
+    if (Number.isFinite(widthScale) || Number.isFinite(lengthScale)) {
+      const sx = Number.isFinite(widthScale) ? widthScale : 1.0;
+      const sy = Number.isFinite(heightScale) ? heightScale : 1.0;
+      const sz = Number.isFinite(lengthScale) ? lengthScale : 1.0;
+      group.scale.set(sx, sy, sz);
+    } else if (Number.isFinite(radius) && radius > 0) {
+      group.scale.set(radius * 0.88, Number.isFinite(heightScale) ? heightScale : 1.0, radius * 1.16);
+    }
+    trenchUniforms.uTime.value = 0.0;
+    wallUniforms.uTime.value = 0.0;
+    sparkUniforms.uTime.value = 0.0;
+    trenchUniforms.uWaveFront01.value = 0.12;
+    wallUniforms.uWaveFront01.value = 0.12;
+    sparkUniforms.uWaveFront01.value = 0.12;
+    trenchUniforms.uBurnDown01.value = 0.0;
+    wallUniforms.uBurnDown01.value = 0.0;
+    sparkUniforms.uBurnDown01.value = 0.0;
+  }
+
+  function update(entryOrElapsed, elapsed, life01, intensity = 1.0, waveFront01) {
+    if (disposed) return;
+    let tVal = 0.0;
+    let l01 = 0.25;
+    let intVal = 1.0;
+    let explicitWave = waveFront01;
+
+    if (entryOrElapsed && typeof entryOrElapsed === 'object') {
+      const entry = entryOrElapsed;
+      if (Number.isFinite(entry.seed)) {
+        trenchUniforms.uSeed.value = entry.seed;
+        wallUniforms.uSeed.value = entry.seed;
+        sparkUniforms.uSeed.value = entry.seed;
+      }
+      tVal = Number.isFinite(elapsed)
+        ? elapsed
+        : (Number.isFinite(entry.elapsed) ? entry.elapsed : (Number.isFinite(entry.age) ? entry.age : 0.0));
+      if (Number.isFinite(life01)) {
+        l01 = life01;
+      } else if (Number.isFinite(entry.life01)) {
+        l01 = entry.life01;
+      } else if (Number.isFinite(entry.age) && Number.isFinite(entry.duration) && entry.duration > 0) {
+        l01 = entry.age / entry.duration;
+      }
+      intVal = Number.isFinite(intensity) ? intensity : (Number.isFinite(entry.intensity) ? entry.intensity : 1.0);
+      if (!Number.isFinite(explicitWave) && Number.isFinite(entry.waveFront01)) {
+        explicitWave = entry.waveFront01;
+      }
+    } else {
+      tVal = Number.isFinite(entryOrElapsed) ? entryOrElapsed : 0.0;
+      l01 = Number.isFinite(life01) ? life01 : 0.25;
+      intVal = Number.isFinite(intensity) ? intensity : 1.0;
+    }
+
+    const clampedLife = Math.max(0.0, Math.min(1.0, l01));
+    // Travelling wave crest surges down +Z from Boss toward endpoint over the opening ~26% of lifetime!
+    const wf = Number.isFinite(explicitWave)
+      ? Math.max(0.0, Math.min(1.15, explicitWave))
+      : (0.10 + 0.98 * smoothstep01(0.0, 0.26, clampedLife));
+    const burnDown01 = smoothstep01(0.68, 1.0, clampedLife);
+    const effInt = Math.max(0.0, intVal) * (lowSpec ? 0.85 : 1.0);
+
+    trenchUniforms.uTime.value = tVal;
+    trenchUniforms.uWaveFront01.value = wf;
+    trenchUniforms.uBurnDown01.value = burnDown01;
+    trenchUniforms.uIntensity.value = effInt;
+
+    wallUniforms.uTime.value = tVal;
+    wallUniforms.uWaveFront01.value = wf;
+    wallUniforms.uBurnDown01.value = burnDown01;
+    wallUniforms.uIntensity.value = effInt;
+
+    if (sparksPoints.visible) {
+      sparkUniforms.uTime.value = tVal;
+      sparkUniforms.uWaveFront01.value = wf;
+      sparkUniforms.uBurnDown01.value = burnDown01;
+      sparkUniforms.uIntensity.value = effInt;
+    }
+  }
+
+  function setLowSpec(enabled = false) {
+    if (disposed) return;
+    lowSpec = Boolean(enabled);
+    const det = (isMobile || lowSpec) ? 0.0 : 1.0;
+    trenchUniforms.uDetail.value = det;
+    wallUniforms.uDetail.value = det;
+    sparksPoints.visible = !lowSpec;
+    sparkUniforms.uPixelRatio.value = getSafePixelRatio(isMobile, lowSpec);
+  }
+
+  function dispose() {
+    if (disposed) return;
+    disposed = true;
+    trenchMat.dispose();
+    wallMat.dispose();
+    sparksMat.dispose();
+    releaseSharedFloorFireGeos(isMobile);
+  }
+
+  return {
+    group,
+    trenchBedMesh,
+    flameWallMesh,
+    sparksPoints,
+    reset,
+    update,
+    setLowSpec,
+    dispose
+  };
+}
+
+// ============================================================================
+// 10. SECTION 4.6 — PHASE-2 ARENA PERIMETER FIRE AWAKENING CONTROLLER
+//     - Purely visual (0 damage!) Throne Hall spectacle when Boss enters Phase 2:
+//       1) Fiery liquid-magma stream shoots across flagstones from `(bx, bz)`
+//          outward to the Throne Hall perimeter (`radius ~ 11.8m` around `(0, -44.0)`,
+//          clamped cleanly inside Boss Doors, Throne steps & curved Hall walls);
+//       2) Splits CW + CCW & races 360° around the entire arena perimeter (`~2.4s`),
+//          meeting on the opposite side with a convergence flare;
+//       3) Sustains an awakening ring of low gothic floor flames & rising
+//          golden-crimson embers for `~4.5s` before gracefully subsiding!
+// ============================================================================
+function softClampMax(val, maxLimit, softness = 1.0) {
+  if (softness <= 1e-5) return Math.min(val, maxLimit);
+  const diff = maxLimit - val;
+  return maxLimit - 0.5 * (diff + Math.sqrt(diff * diff + softness * softness));
+}
+
+function softClampMin(val, minLimit, softness = 1.0) {
+  if (softness <= 1e-5) return Math.max(val, minLimit);
+  const diff = val - minLimit;
+  return minLimit + 0.5 * (diff + Math.sqrt(diff * diff + softness * softness));
+}
+
+function evalDefaultBossHallFloorY(x, z) {
+  // Matches SOULS_CASTLE_ELEVATION_PLATFORMS subtle dais plinth near the Obsidian Throne (-57.6)
+  const ax = Math.abs(x);
+  if (z < -54.9 && ax < 3.85) {
+    const wx = 1.0 - smoothstep01(3.60, 3.88, ax);
+    const wz = 1.0 - smoothstep01(-55.25, -54.95, z);
+    return 0.06 * wx * wz;
+  }
+  if (z > -33.1 && ax < 3.25) {
+    const wx = 1.0 - smoothstep01(3.00, 3.28, ax);
+    const wz = smoothstep01(-33.10, -32.80, z);
+    return 0.05 * wx * wz;
+  }
+  return 0.0;
+}
+
+function evalThronePerimeterContour(theta, cfg, out) {
+  // theta = 0 -> North (-Z), PI/2 -> East (+X), PI -> South (+Z), 3*PI/2 -> West (-X)
+  let x = cfg.centerX + Math.sin(theta) * cfg.radius;
+  let z = cfg.centerZ - Math.cos(theta) * cfg.radius;
+
+  // 1. Stay cleanly inside sealed Boss Doors & protruding door jambs at south end (`z <= -33.55`)
+  z = softClampMax(z, cfg.maxZ, 0.95);
+
+  // 2. Curve gracefully across the foot of the Obsidian Throne steps at north end (`z >= -54.45` near |x| < 4.1)
+  const throneBand = 1.0 - smoothstep01(2.6, 4.5, Math.abs(x - cfg.centerX));
+  const northFloorMinZ = cfg.minZ + throneBand * 0.75;
+  z = softClampMin(z, northFloorMinZ, 0.85);
+
+  // 3. Clamp smoothly inside circular Boss Hall stone walls (`BOSS_CENTER = (0, -47.2), R = 16.0 -> <= 14.5m`)
+  const dxH = x - cfg.hallCenterX;
+  const dzH = z - cfg.hallCenterZ;
+  const distH = Math.hypot(dxH, dzH);
+  if (distH > 0.001) {
+    const clampedDistH = softClampMax(distH, cfg.hallMaxRadius, 0.80);
+    const scaleH = clampedDistH / distH;
+    x = cfg.hallCenterX + dxH * scaleH;
+    z = cfg.hallCenterZ + dzH * scaleH;
+  }
+
+  const y = typeof cfg.getGroundHeight === 'function'
+    ? (Number(cfg.getGroundHeight(x, z)) || 0.0)
+    : evalDefaultBossHallFloorY(x, z);
+
+  out.x = x;
+  out.y = y;
+  out.z = z;
+  return out;
+}
+
+function setRingSAttr(geo, sValues) {
+  geo.setAttribute('aRingS', new THREE.BufferAttribute(sValues, 1));
+  return geo;
+}
+
+function buildRadialFeederStreamGeometry(isMobile) {
+  const parts = [];
+  const segZ = isMobile ? 12 : 20;
+
+  // Layer 0: Molten floor channel (`z in [0, 1]`, `width = 1.10m`)
+  const bed = new THREE.PlaneGeometry(1.10, 1.0, 2, segZ);
+  bed.rotateX(-Math.PI * 0.5);
+  // After -PI/2 X-rotation: local z spans [-0.5..+0.5], with uv.y=1 at z=-0.5 and uv.y=0 at z=+0.5.
+  // Shift to z in [0..1] and rewrite uv.y = z so uv.y = 0 at Boss `(bx,bz)` -> 1 at perimeter `P(s0)`!
+  bed.translate(0, 0.004, 0.5);
+  const bedPos = bed.attributes.position;
+  const bedUv = bed.attributes.uv;
+  for (let i = 0; i < bedPos.count; i++) {
+    bedUv.setY(i, Math.max(0.0, Math.min(1.0, bedPos.getZ(i))));
+  }
+  const bedNorm = normalizeForMerge(bed, 0.0, 0.15, -1.0, 0.0);
+  setRingSAttr(bedNorm, new Float32Array(bedNorm.attributes.position.count));
+  parts.push(bedNorm);
+
+  // Layer 1: Twin low surging liquid-fire ribbons (`height = 0.52m`, `z in [0, 1]`)
+  for (let r = 0; r < 2; r++) {
+    const side = r === 0 ? -1 : 1;
+    const rib = new THREE.PlaneGeometry(1.0, 0.52, segZ, 4);
+    const rPos = rib.attributes.position;
+    const rUv = rib.attributes.uv;
+    for (let i = 0; i < rPos.count; i++) {
+      const u = rUv.getX(i); // 0..1 along stream
+      const v = rUv.getY(i); // 0..1 base -> tip
+      const z = u;
+      const weave = Math.sin(u * Math.PI * 3.0 + r * 1.8) * 0.08 * side;
+      const x = weave + side * 0.06 * (1.0 - v * 0.5);
+      const y = v * 0.52 * (0.65 + 0.35 * Math.sin(u * Math.PI));
+      rPos.setXYZ(i, x, y, z);
+      rUv.setXY(i, (r === 0 ? 0.35 : 0.65), u); // uv.y = 0..1 along +Z stream!
+    }
+    rib.computeVertexNormals();
+    const ribNorm = normalizeForMerge(rib, r * 2.1, 0.24, 0.0, 1.0);
+    setRingSAttr(ribNorm, new Float32Array(ribNorm.attributes.position.count));
+    parts.push(ribNorm);
+  }
+
+  return mergeFlameParts(parts);
+}
+
+function buildArenaPerimeterGeometries(stations, isMobile) {
+  const N = stations.length; // Closed loop of N stations (`s = i / N`)
+
+  // 1. Perimeter Molten Magma Seam Bed (`width = 1.38m` across floor normal)
+  const bedHalfW = 0.69;
+  const bedPositions = new Float32Array((N + 1) * 2 * 3);
+  const bedNormals = new Float32Array((N + 1) * 2 * 3);
+  const bedUvs = new Float32Array((N + 1) * 2 * 2);
+  const bedRingS = new Float32Array((N + 1) * 2);
+  const bedIndices = [];
+
+  for (let i = 0; i <= N; i++) {
+    const st = stations[i % N];
+    const sContinuous = i / N;
+    const sWrapped = (i % N) / N;
+
+    const v0 = i * 2;
+    const v1 = v0 + 1;
+
+    bedPositions[v0 * 3]     = st.x - st.nx * bedHalfW;
+    bedPositions[v0 * 3 + 1] = st.y + 0.032;
+    bedPositions[v0 * 3 + 2] = st.z - st.nz * bedHalfW;
+
+    bedPositions[v1 * 3]     = st.x + st.nx * bedHalfW;
+    bedPositions[v1 * 3 + 1] = st.y + 0.032;
+    bedPositions[v1 * 3 + 2] = st.z + st.nz * bedHalfW;
+
+    bedNormals[v0 * 3 + 1] = 1.0;
+    bedNormals[v1 * 3 + 1] = 1.0;
+
+    bedUvs[v0 * 2] = 0.0;
+    bedUvs[v0 * 2 + 1] = sContinuous * 16.0;
+    bedUvs[v1 * 2] = 1.0;
+    bedUvs[v1 * 2 + 1] = sContinuous * 16.0;
+
+    bedRingS[v0] = sWrapped;
+    bedRingS[v1] = sWrapped;
+
+    if (i < N) {
+      const a = v0;
+      const b = v1;
+      const c = v0 + 2;
+      const d = v0 + 3;
+      bedIndices.push(a, c, b, b, c, d);
+    }
+  }
+
+  const bedGeo = new THREE.BufferGeometry();
+  bedGeo.setAttribute('position', new THREE.BufferAttribute(bedPositions, 3));
+  bedGeo.setAttribute('normal', new THREE.BufferAttribute(bedNormals, 3));
+  bedGeo.setAttribute('uv', new THREE.BufferAttribute(bedUvs, 2));
+  bedGeo.setAttribute('aRingS', new THREE.BufferAttribute(bedRingS, 1));
+  bedGeo.setIndex(bedIndices);
+
+  // 2. Perimeter 360° Low Awakening Floor Flame Crown (continuous twin curtains + sculpted 3D tongues)
+  const crownParts = [];
+  const rowsV = isMobile ? 4 : 6;
+
+  for (let wallIdx = 0; wallIdx < 2; wallIdx++) {
+    const radialShift = wallIdx === 0 ? -0.14 : 0.14;
+    const tiltInward = wallIdx === 0 ? 0.08 : -0.12;
+    const baseH = wallIdx === 0 ? 0.68 : 0.56;
+    const vCount = (N + 1) * (rowsV + 1);
+    const cPos = new Float32Array(vCount * 3);
+    const cUv = new Float32Array(vCount * 2);
+    const cIndices = [];
+
+    for (let i = 0; i <= N; i++) {
+      const st = stations[i % N];
+      const sCont = i / N;
+      const hMod = 0.78 + 0.28 * Math.sin(sCont * Math.PI * 24.0 + wallIdx * 2.1)
+        + 0.16 * Math.cos(sCont * Math.PI * 14.0 - wallIdx);
+      const localH = baseH * hMod;
+
+      for (let r = 0; r <= rowsV; r++) {
+        const v = r / rowsV;
+        const idx = i * (rowsV + 1) + r;
+        const nOff = radialShift + tiltInward * v * v + Math.sin(v * Math.PI) * (wallIdx === 0 ? -0.05 : 0.05);
+        cPos[idx * 3]     = st.x + st.nx * nOff;
+        cPos[idx * 3 + 1] = st.y + 0.02 + v * localH;
+        cPos[idx * 3 + 2] = st.z + st.nz * nOff;
+
+        cUv[idx * 2]     = sCont * 18.0;
+        cUv[idx * 2 + 1] = v;
+
+        if (i < N && r < rowsV) {
+          const a = idx;
+          const b = idx + 1;
+          const c = idx + (rowsV + 1);
+          const d = c + 1;
+          cIndices.push(a, c, b, b, c, d);
+        }
+      }
+    }
+
+    const rawWall = new THREE.BufferGeometry();
+    rawWall.setAttribute('position', new THREE.BufferAttribute(cPos, 3));
+    rawWall.setAttribute('uv', new THREE.BufferAttribute(cUv, 2));
+    rawWall.setIndex(cIndices);
+    rawWall.computeVertexNormals();
+
+    const nonIdx = normalizeForMerge(rawWall, wallIdx * 1.9, wallIdx === 0 ? 0.10 : 0.02, 0.0, 1.0);
+    // Compute exact wrapped `aRingS` per vertex from XZ angle relative to stations
+    const pAttr = nonIdx.attributes.position;
+    const uvAttr = nonIdx.attributes.uv;
+    const sArr = new Float32Array(pAttr.count);
+    for (let k = 0; k < pAttr.count; k++) {
+      const rawS = (uvAttr.getX(k) / 18.0) % 1.0;
+      sArr[k] = rawS < 0 ? rawS + 1.0 : rawS;
+    }
+    setRingSAttr(nonIdx, sArr);
+    crownParts.push(nonIdx);
+  }
+
+  // Add 3D angled flame tongues around the perimeter so camera looking parallel to wall sees rich 3D licks!
+  const tongueCount = isMobile ? 28 : 48;
+  for (let tIdx = 0; tIdx < tongueCount; tIdx++) {
+    const sVal = tIdx / tongueCount;
+    const stIdx = Math.floor(sVal * N) % N;
+    const st = stations[stIdx];
+    const tall = tIdx % 2 === 0;
+    const isCore = tIdx % 4 === 0;
+    const tangYaw = Math.atan2(st.tx, st.tz) + (tall ? 0.72 : -0.72);
+
+    const tongue = createCurvedFlameRibbon({
+      width: tall ? 0.68 : 0.54,
+      height: tall ? 0.98 : 0.72,
+      segX: 2,
+      segY: isMobile ? 5 : 7,
+      cupDepth: 0.10,
+      twist: tall ? 0.34 : -0.32,
+      leanOut: 0.06,
+      inwardTip: 0.12,
+      radialOffset: 0.0,
+      yOffset: 0.0,
+      angle: tangYaw,
+      phaseOffset: tIdx * 0.93,
+      heatBias: isCore ? 0.24 : 0.08,
+      layerRole: isCore ? 1.0 : 0.0,
+      swayScale: 1.05
+    });
+    tongue.translate(st.x, st.y + 0.02, st.z);
+    const sFill = new Float32Array(tongue.attributes.position.count);
+    sFill.fill(sVal);
+    setRingSAttr(tongue, sFill);
+    crownParts.push(tongue);
+  }
+
+  const crownGeo = mergeFlameParts(crownParts);
+
+  // 3. Perimeter GPU Rising Golden-Crimson Embers & Racing Vanguard Sparks
+  const sparkCount = isMobile ? 84 : 168;
+  const rng = makeRng(0x7c41e829);
+  const spPos = new Float32Array(sparkCount * 3);
+  const spParam = new Float32Array(sparkCount * 4); // speed, phase, maxRise, size (neg = crimson cinder)
+  const spRing = new Float32Array(sparkCount * 3);  // ringS, driftTangential, swirlFreq
+
+  for (let i = 0; i < sparkCount; i++) {
+    const sVal = (i + rng() * 0.9) / sparkCount;
+    const fIdx = sVal * N;
+    const i0 = Math.floor(fIdx) % N;
+    const i1 = (i0 + 1) % N;
+    const frac = fIdx - Math.floor(fIdx);
+    const st0 = stations[i0];
+    const st1 = stations[i1];
+
+    const jitterN = (rng() - 0.5) * 0.62;
+    const bx = st0.x + (st1.x - st0.x) * frac + st0.nx * jitterN;
+    const by = st0.y + (st1.y - st0.y) * frac + 0.06 + rng() * 0.08;
+    const bz = st0.z + (st1.z - st0.z) * frac + st0.nz * jitterN;
+
+    spPos[i * 3]     = bx;
+    spPos[i * 3 + 1] = by;
+    spPos[i * 3 + 2] = bz;
+
+    const isCrimson = i % 3 === 1;
+    spParam[i * 4]     = isCrimson ? (0.62 + rng() * 0.58) : (1.05 + rng() * 0.95);
+    spParam[i * 4 + 1] = rng();
+    spParam[i * 4 + 2] = isCrimson ? (1.35 + rng() * 1.15) : (1.65 + rng() * 1.25);
+    const sz = isCrimson ? (0.105 + rng() * 0.065) : (0.068 + rng() * 0.055);
+    spParam[i * 4 + 3] = isCrimson ? -sz : sz;
+
+    spRing[i * 3]     = sVal % 1.0;
+    spRing[i * 3 + 1] = (rng() - 0.5) * 0.55;
+    spRing[i * 3 + 2] = (rng() < 0.5 ? -1 : 1) * (2.2 + rng() * 2.8);
+  }
+
+  const sparksGeo = new THREE.BufferGeometry();
+  sparksGeo.setAttribute('position', new THREE.BufferAttribute(spPos, 3));
+  sparksGeo.setAttribute('aSparkParam', new THREE.BufferAttribute(spParam, 4));
+  sparksGeo.setAttribute('aSparkRing', new THREE.BufferAttribute(spRing, 3));
+
+  return { bedGeo, crownGeo, sparksGeo };
+}
+
+/**
+ * Section 4.6 — Phase-2 Arena Perimeter Fire Awakening Controller (`0` damage!)
+ * Returns `{ group, trigger(bx, bz), update(dt, elapsed), reset(), clear(), setLowSpec(enabled), isActive(), getLightHint(), prewarm(), dispose() }`
+ */
+export function createPhase2ArenaFireRingController(opts = {}) {
+  const isMobile = opts.isMobile !== undefined ? Boolean(opts.isMobile) : IS_MOBILE_DEFAULT;
+  let lowSpec = Boolean(opts.lowSpec);
+
+  const cfg = {
+    centerX: Number.isFinite(opts.centerX) ? opts.centerX : 0.0,
+    centerZ: Number.isFinite(opts.centerZ) ? opts.centerZ : -44.0,
+    radius: Number.isFinite(opts.radius) ? opts.radius : 11.8,
+    maxZ: Number.isFinite(opts.maxZ) ? opts.maxZ : -33.55,
+    minZ: Number.isFinite(opts.minZ) ? opts.minZ : -54.55,
+    hallCenterX: Number.isFinite(opts.hallCenterX) ? opts.hallCenterX : 0.0,
+    hallCenterZ: Number.isFinite(opts.hallCenterZ) ? opts.hallCenterZ : -47.2,
+    hallMaxRadius: Number.isFinite(opts.hallMaxRadius) ? opts.hallMaxRadius : 14.5,
+    getGroundHeight: typeof opts.getGroundHeight === 'function' ? opts.getGroundHeight : null
+  };
+
+  // Bake smooth 96-station Throne Hall perimeter contour + outward floor normals
+  const STATION_COUNT = isMobile ? 64 : 96;
+  const stations = new Array(STATION_COUNT);
+  const tmpPt = { x: 0, y: 0, z: 0 };
+  for (let i = 0; i < STATION_COUNT; i++) {
+    const theta = (i / STATION_COUNT) * Math.PI * 2.0;
+    evalThronePerimeterContour(theta, cfg, tmpPt);
+    stations[i] = { x: tmpPt.x, y: tmpPt.y, z: tmpPt.z, tx: 0, tz: 1, nx: 1, nz: 0 };
+  }
+  for (let i = 0; i < STATION_COUNT; i++) {
+    const prev = stations[(i - 1 + STATION_COUNT) % STATION_COUNT];
+    const next = stations[(i + 1) % STATION_COUNT];
+    let tx = next.x - prev.x;
+    let tz = next.z - prev.z;
+    const tLen = Math.hypot(tx, tz) || 1.0;
+    tx /= tLen;
+    tz /= tLen;
+    // Outward normal in XZ (since theta=0 is North -Z and increases CW toward East +X, outward is (-tz, tx) or checked via radial dot!)
+    let nx = -tz;
+    let nz = tx;
+    const rx = stations[i].x - cfg.centerX;
+    const rz = stations[i].z - cfg.centerZ;
+    if (nx * rx + nz * rz < 0) {
+      nx = -nx;
+      nz = -nz;
+    }
+    stations[i].tx = tx;
+    stations[i].tz = tz;
+    stations[i].nx = nx;
+    stations[i].nz = nz;
+  }
+
+  const group = new THREE.Group();
+  group.name = 'phase2_arena_perimeter_fire_ring';
+  group.visible = false;
+
+  const feederGeo = buildRadialFeederStreamGeometry(isMobile);
+  const { bedGeo, crownGeo, sparksGeo } = buildArenaPerimeterGeometries(stations, isMobile);
+
+  // Shared timeline uniforms
+  const ringUniforms = {
+    uTime: { value: 0.0 },
+    uHitS: { value: 0.0 },
+    uRunnerFront01: { value: 0.0 },
+    uRunnerFade: { value: 0.0 },
+    uSweep01: { value: 0.0 },
+    uMeetFlare: { value: 0.0 },
+    uRingFade: { value: 0.0 },
+    uDetail: { value: (isMobile || lowSpec) ? 0.0 : 1.0 },
+    uPixelRatio: { value: getSafePixelRatio(isMobile, lowSpec) }
+  };
+
+  // DC #1: Radial Feeder Fire Stream (`(bx, bz)` -> Throne Hall Perimeter `P(s0)`)
+  const feederMat = new THREE.ShaderMaterial({
+    defines: isMobile ? { FIRE_MOBILE_FAST: 1 } : {},
+    uniforms: ringUniforms,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.NormalBlending,
+    side: THREE.DoubleSide,
+    polygonOffset: true,
+    polygonOffsetFactor: -3,
+    toneMapped: false,
+    vertexShader: /* glsl */ `
+      attribute vec4 aFlameMeta;
+      uniform float uTime;
+      uniform float uRunnerFront01;
+      uniform float uRunnerFade;
+
+      varying vec2 vUv;
+      varying vec4 vMeta;
+
+      void main() {
+        vUv = uv;
+        vMeta = aFlameMeta;
+        vec3 p = position;
+        if (aFlameMeta.z > -0.5) {
+          float s = clamp(uv.y, 0.0, 1.0);
+          float h = clamp((p.y) / 0.52, 0.0, 1.0);
+          float headBoost = 1.0 + 0.45 * exp(-pow((s - uRunnerFront01) * 6.5, 2.0));
+          p.y *= headBoost * (0.35 + 0.65 * uRunnerFade);
+          p.x += sin(uTime * 14.0 - s * 10.0 + aFlameMeta.x) * 0.08 * h;
+        }
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform float uTime;
+      uniform float uRunnerFront01;
+      uniform float uRunnerFade;
+      uniform float uDetail;
+
+      varying vec2 vUv;
+      varying vec4 vMeta;
+
+      ${GLSL_SIMPLEX_NOISE}
+
+      void main() {
+        if (uRunnerFade < 0.015) discard;
+        float s = clamp(vUv.y, 0.0, 1.0);
+        float frontMask = smoothstep(uRunnerFront01 + 0.05, uRunnerFront01 - 0.10, s);
+        if (frontMask < 0.015) discard;
+
+        float headGlow = exp(-pow((s - uRunnerFront01) * 7.0, 2.0));
+        float n = snoise2(vec2(vUv.x * 4.5 + vMeta.x, s * 8.0 - uTime * 7.5)) * 0.5 + 0.5;
+        float endCaps = smoothstep(0.0, 0.06, s) * smoothstep(1.0, 0.92, s);
+
+        if (vMeta.z < -0.5) {
+          // Molten stone seam along radial runner
+          float ax = abs(vUv.x - 0.5) * 2.0 + (n - 0.5) * 0.35;
+          float seam = 1.0 - smoothstep(0.28, 0.92, ax);
+          float alpha = seam * frontMask * endCaps * uRunnerFade * 0.88;
+          if (alpha < 0.015) discard;
+          float temp = clamp(seam * (0.55 + 0.55 * n) + headGlow * 0.55, 0.0, 1.0);
+          vec3 col = mix(vec3(0.45, 0.04, 0.01), vec3(0.98, 0.38, 0.04), smoothstep(0.05, 0.50, temp));
+          col = mix(col, vec3(1.00, 0.92, 0.58), smoothstep(0.50, 0.96, temp));
+          gl_FragColor = vec4(col, alpha);
+          return;
+        }
+
+        // Low racing flame lick along runner
+        float flame = (0.65 + 0.55 * (n - 0.42) + headGlow * 0.35) * frontMask * endCaps;
+        float alpha = smoothstep(0.18, 0.58, flame) * uRunnerFade * 0.86;
+        if (alpha < 0.015) discard;
+        vec3 col = mix(vec3(0.86, 0.14, 0.02), vec3(1.00, 0.62, 0.10), smoothstep(0.20, 0.68, flame));
+        col = mix(col, vec3(1.00, 0.96, 0.76), clamp(headGlow * 0.85, 0.0, 1.0));
+        gl_FragColor = vec4(col, alpha);
+      }
+    `
+  });
+
+  const radialStreamMesh = new THREE.Mesh(feederGeo, feederMat);
+  radialStreamMesh.name = 'phase2_arena_feeder_stream';
+  radialStreamMesh.renderOrder = 5;
+  radialStreamMesh.frustumCulled = false;
+  group.add(radialStreamMesh);
+
+  // DC #2: 360° Perimeter Molten Floor Seam
+  const perimeterBedMat = new THREE.ShaderMaterial({
+    defines: isMobile ? { FIRE_MOBILE_FAST: 1 } : {},
+    uniforms: ringUniforms,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.NormalBlending,
+    polygonOffset: true,
+    polygonOffsetFactor: -3,
+    toneMapped: false,
+    vertexShader: /* glsl */ `
+      attribute float aRingS;
+      varying vec2 vUv;
+      varying float vRingS;
+      void main() {
+        vUv = uv;
+        vRingS = aRingS;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform float uTime;
+      uniform float uHitS;
+      uniform float uSweep01;
+      uniform float uMeetFlare;
+      uniform float uRingFade;
+      uniform float uDetail;
+
+      varying vec2 vUv;
+      varying float vRingS;
+
+      ${GLSL_SIMPLEX_NOISE}
+      ${GLSL_VORONOI_MAGMA}
+
+      void main() {
+        if (uRingFade < 0.012 || uSweep01 < 0.005) discard;
+        float arcDist = abs(fract(vRingS - uHitS + 0.5) - 0.5) * 2.0;
+        float sweepGate = smoothstep(uSweep01 + 0.035, uSweep01 - 0.055, arcDist);
+        if (sweepGate < 0.012) discard;
+
+        float headWave = exp(-pow((arcDist - uSweep01) * 11.0, 2.0)) * step(uSweep01, 0.995);
+        float antiFlare = exp(-pow((1.0 - arcDist) * 7.5, 2.0)) * uMeetFlare;
+
+        float across = (vUv.x - 0.5) * 2.0;
+        float jag = snoise2(vec2(vUv.y * 2.4, across * 2.2 - uTime * 0.7));
+        float ax = abs(across + jag * 0.24);
+        float bandMask = 1.0 - smoothstep(0.46, 0.96, ax);
+        if (bandMask < 0.012) discard;
+
+        vec2 vor = magmaVoronoiCracks(vec2(across * 2.6, vUv.y * 2.8 - uTime * 0.45), uDetail);
+        float boil = snoise2(vec2(across * 3.8, vUv.y * 3.5 - uTime * 2.6)) * 0.5 + 0.5;
+        float spine = exp(-across * across * 5.2);
+
+        float heat = clamp(
+          (vor.x * (0.58 + 0.48 * boil) + spine * 0.44 + headWave * 0.65 + antiFlare * 0.55) * uRingFade,
+          0.0,
+          1.25
+        );
+
+        vec3 crust = vec3(0.055, 0.03, 0.025);
+        vec3 magma = mix(vec3(0.65, 0.06, 0.01), vec3(0.98, 0.36, 0.03), smoothstep(0.08, 0.44, heat));
+        magma = mix(magma, vec3(1.00, 0.84, 0.32), smoothstep(0.42, 0.80, heat));
+        magma = mix(magma, vec3(1.00, 0.97, 0.82), smoothstep(0.78, 1.05, heat));
+
+        vec3 col = mix(crust, magma, smoothstep(0.06, 0.38, heat));
+        float alpha = bandMask * sweepGate * mix(0.46, 0.92, smoothstep(0.06, 0.36, heat)) * uRingFade;
+        if (alpha < 0.012) discard;
+
+        gl_FragColor = vec4(min(col, vec3(1.15)), clamp(alpha, 0.0, 0.92));
+      }
+    `
+  });
+
+  const perimeterBedMesh = new THREE.Mesh(bedGeo, perimeterBedMat);
+  perimeterBedMesh.name = 'phase2_arena_perimeter_bed';
+  perimeterBedMesh.renderOrder = 4;
+  perimeterBedMesh.frustumCulled = false;
+  group.add(perimeterBedMesh);
+
+  // DC #3: 360° Perimeter Low Awakening Floor Flame Crown
+  const perimeterCrownMat = new THREE.ShaderMaterial({
+    defines: isMobile ? { FIRE_MOBILE_FAST: 1 } : {},
+    uniforms: ringUniforms,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.NormalBlending,
+    side: THREE.DoubleSide,
+    toneMapped: false,
+    vertexShader: /* glsl */ `
+      attribute vec4 aFlameMeta;
+      attribute float aRingS;
+
+      uniform float uTime;
+      uniform float uHitS;
+      uniform float uSweep01;
+      uniform float uMeetFlare;
+      uniform float uRingFade;
+
+      varying vec2 vUv;
+      varying vec3 vLocalPos;
+      varying vec3 vNormalV;
+      varying vec3 vViewDir;
+      varying vec4 vMeta;
+      varying float vRingS;
+      varying float vHeadBoost;
+
+      void main() {
+        vUv = uv;
+        vMeta = aFlameMeta;
+        vRingS = aRingS;
+
+        float h = clamp(uv.y, 0.0, 1.0);
+        float arcDist = abs(fract(aRingS - uHitS + 0.5) - 0.5) * 2.0;
+        float sweepGate = smoothstep(uSweep01 + 0.04, uSweep01 - 0.06, arcDist);
+        float headWave = exp(-pow((arcDist - uSweep01) * 10.5, 2.0)) * step(uSweep01, 0.995);
+        float antiFlare = exp(-pow((1.0 - arcDist) * 7.0, 2.0)) * uMeetFlare;
+        float crest = clamp(headWave + antiFlare * 0.9, 0.0, 1.4);
+        vHeadBoost = crest;
+
+        vec3 p = position;
+        vec3 n = normal;
+
+        float ph = aFlameMeta.x + aRingS * 37.699;
+        float t = uTime * 5.2 + ph;
+        float scaleH = sweepGate * (0.35 + 0.65 * uRingFade) * (1.0 + 0.62 * crest);
+        float breath = 0.92 + 0.12 * sin(t * 1.6 + ph);
+
+        // Lift relative to local base height smoothly so flames grow from stone floor & subside back down!
+        p.y += h * 0.62 * (scaleH * breath - 1.0);
+        float sway = sin(t * 1.4 - h * 4.5 + ph) * 0.09 * pow(max(h, 0.0001), 1.35) * aFlameMeta.w;
+        p.x += sway;
+        p.z += cos(t * 1.25 - h * 4.2 - ph) * 0.09 * pow(max(h, 0.0001), 1.35) * aFlameMeta.w;
+
+        vLocalPos = p;
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        vNormalV = normalize(normalMatrix * n);
+        vViewDir = normalize(-mv.xyz);
+        gl_Position = projectionMatrix * mv;
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform float uTime;
+      uniform float uHitS;
+      uniform float uSweep01;
+      uniform float uRingFade;
+      uniform float uDetail;
+
+      varying vec2 vUv;
+      varying vec3 vLocalPos;
+      varying vec3 vNormalV;
+      varying vec3 vViewDir;
+      varying vec4 vMeta;
+      varying float vRingS;
+      varying float vHeadBoost;
+
+      ${GLSL_SIMPLEX_NOISE}
+
+      void main() {
+        if (uRingFade < 0.015 || uSweep01 < 0.005) discard;
+        float arcDist = abs(fract(vRingS - uHitS + 0.5) - 0.5) * 2.0;
+        float sweepGate = smoothstep(uSweep01 + 0.035, uSweep01 - 0.055, arcDist);
+        if (sweepGate < 0.015) discard;
+
+        float h = clamp(vUv.y, 0.0, 1.0);
+        bool isCore = vMeta.z > 0.5;
+        float ndv = clamp(abs(dot(normalize(vNormalV), normalize(vViewDir))), 0.0, 1.0);
+        float viewFade = mix(1.0, smoothstep(0.05, 0.46, ndv), 0.52);
+
+        float t = uTime * 4.8 + vMeta.x;
+        vec2 warp = fireDomainWarp(vec2(vRingS * 28.0 + vMeta.x, h * 3.2 - t * 1.25), uDetail);
+        vec3 p3 = vec3(
+          vLocalPos.x * 0.85 + warp.x * 0.35,
+          h * 3.0 - t * 1.75,
+          vLocalPos.z * 0.85 + warp.y * 0.35
+        );
+        vec2 p2 = vec2(vRingS * 44.0 + warp.x * 0.85, h * 3.8 - t * 2.25 + warp.y * 0.55);
+        vec2 turb = fireTurbulenceFbm(p3, p2, uDetail);
+        float fbm = turb.x;
+        float streaks = turb.y;
+
+        // Carve distinct dancing low floor flame licks all around the 360° perimeter!
+        float crownWave = sin(vRingS * 113.097 + warp.x * 2.6 - t * 0.5) * 0.16 * pow(max(h, 0.0001), 0.8);
+        float baseIn = smoothstep(0.0, 0.08, h);
+        float tipOut = smoothstep(1.0, 0.12, h);
+        float erode = (1.0 - uRingFade) * (0.42 + 0.58 * h);
+
+        float field = ((0.64 + 0.42 * tipOut) + crownWave + (fbm - 0.44) * mix(0.42, 1.18, pow(max(h, 0.0001), 0.62)) + vHeadBoost * 0.28 - pow(max(h, 0.0001), 1.06) * 0.60 - erode) * baseIn;
+
+        float flameEdge = isCore ? smoothstep(0.20, 0.58, field) : smoothstep(0.08, 0.38, field);
+        float alpha = flameEdge * viewFade * sweepGate * uRingFade * 0.90;
+        if (alpha < 0.015) discard;
+
+        float temp = clamp(
+          smoothstep(0.06, 0.85, field) * 0.52
+          + smoothstep(0.65, 0.02, h) * 0.30
+          + vHeadBoost * 0.28
+          + (streaks - 0.46) * 0.28
+          + vMeta.y * 0.45
+          - smoothstep(0.30, 0.95, h) * 0.46,
+          0.0,
+          1.0
+        );
+
+        vec3 col = mix(vec3(0.56, 0.04, 0.01), vec3(0.92, 0.16, 0.02), smoothstep(0.00, 0.25, temp));
+        col = mix(col, vec3(1.00, 0.52, 0.06), smoothstep(0.22, 0.55, temp));
+        col = mix(col, vec3(1.00, 0.84, 0.30), smoothstep(0.54, 0.84, temp));
+        col = mix(col, vec3(1.00, 0.98, 0.84), smoothstep(0.82, 0.99, temp));
+
+        float boost = 0.95 + 0.20 * vHeadBoost;
+        gl_FragColor = vec4(min(col * boost, vec3(1.18)), clamp(alpha, 0.0, 0.92));
+      }
+    `
+  });
+
+  const perimeterCrownMesh = new THREE.Mesh(crownGeo, perimeterCrownMat);
+  perimeterCrownMesh.name = 'phase2_arena_perimeter_flames';
+  perimeterCrownMesh.renderOrder = 6;
+  perimeterCrownMesh.frustumCulled = false;
+  group.add(perimeterCrownMesh);
+
+  // DC #4: 360° Perimeter Rising Golden-Crimson Embers & Vanguard Sparks
+  const perimeterSparksMat = new THREE.ShaderMaterial({
+    uniforms: ringUniforms,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+    vertexShader: /* glsl */ `
+      attribute vec4 aSparkParam;
+      attribute vec3 aSparkRing;
+
+      uniform float uTime;
+      uniform float uHitS;
+      uniform float uSweep01;
+      uniform float uMeetFlare;
+      uniform float uRingFade;
+      uniform float uPixelRatio;
+
+      varying float vLife;
+      varying float vIsCrimson;
+      varying float vAlpha;
+
+      void main() {
+        float ringS = aSparkRing.x;
+        float arcDist = abs(fract(ringS - uHitS + 0.5) - 0.5) * 2.0;
+        float sweepGate = smoothstep(uSweep01 + 0.03, uSweep01 - 0.05, arcDist);
+        float headWave = exp(-pow((arcDist - uSweep01) * 11.0, 2.0)) * step(uSweep01, 0.995);
+        float antiFlare = exp(-pow((1.0 - arcDist) * 7.5, 2.0)) * uMeetFlare;
+        float boost = clamp(headWave + antiFlare, 0.0, 1.4);
+
+        float life = fract(uTime * aSparkParam.x + aSparkParam.y);
+        vLife = life;
+        vIsCrimson = aSparkParam.w < 0.0 ? 1.0 : 0.0;
+
+        float swirlAng = life * aSparkRing.z + aSparkParam.y * 6.28318;
+        vec3 p = position;
+        p.x += cos(swirlAng) * (0.10 + 0.24 * life) + aSparkRing.y * life;
+        p.z += sin(swirlAng) * (0.10 + 0.24 * life);
+        p.y += life * aSparkParam.z * (0.85 + 0.55 * boost);
+
+        float env = smoothstep(0.0, 0.10, life) * smoothstep(1.0, 0.26, life);
+        vAlpha = env * sweepGate * uRingFade * (0.85 + 0.35 * boost);
+
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        float sz = abs(aSparkParam.w) * (0.60 + 0.65 * env + 0.30 * boost) * step(0.01, vAlpha);
+        gl_PointSize = clamp((sz * 320.0 * uPixelRatio) / max(1.0, -mv.z), 0.0, 18.0);
+        gl_Position = projectionMatrix * mv;
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      varying float vLife;
+      varying float vIsCrimson;
+      varying float vAlpha;
+
+      void main() {
+        if (vAlpha < 0.015) discard;
+        float d = length(gl_PointCoord - vec2(0.5));
+        float soft = smoothstep(0.48, 0.05, d);
+        if (soft < 0.02) discard;
+
+        vec3 colGoldHot = mix(vec3(1.00, 0.94, 0.62), vec3(1.00, 0.44, 0.08), vIsCrimson);
+        vec3 colCrimEnd = mix(vec3(0.98, 0.28, 0.03), vec3(0.76, 0.06, 0.02), vIsCrimson);
+        vec3 col = mix(colGoldHot, colCrimEnd, smoothstep(0.06, 0.92, vLife));
+        float a = soft * vAlpha * 0.92;
+        if (a < 0.012) discard;
+        gl_FragColor = vec4(col, a);
+      }
+    `
+  });
+
+  const perimeterSparksPoints = new THREE.Points(sparksGeo, perimeterSparksMat);
+  perimeterSparksPoints.name = 'phase2_arena_perimeter_sparks';
+  perimeterSparksPoints.renderOrder = 7;
+  perimeterSparksPoints.frustumCulled = false;
+  perimeterSparksPoints.visible = !lowSpec;
+  group.add(perimeterSparksPoints);
+
+  // Timeline constants:
+  //   0.00..0.38s: Fiery stream shoots across stone floor from `(bx, bz)` to perimeter `P(s0)`
+  //   0.34..2.74s: Splits CW + CCW and sweeps 360° around the arena border (`2.40s` sweep!)
+  //   2.74..7.24s: Awakening low floor flames & golden-crimson embers hold ~4.5s & subside cleanly!
+  const STREAM_TRAVEL_SEC = 0.38;
+  const RING_START_SEC = 0.34;
+  const RING_SWEEP_SEC = 2.40;
+  const RING_HOLD_END_SEC = RING_START_SEC + RING_SWEEP_SEC + 3.00; // 5.74s
+  const TOTAL_DURATION_SEC = RING_START_SEC + RING_SWEEP_SEC + 4.50; // 7.24s
+
+  let active = false;
+  let age = 0.0;
+  let clockTime = 0.0;
+  let disposed = false;
+
+  const lightHint = {
+    active: false,
+    x: cfg.centerX,
+    y: 0.65,
+    z: cfg.centerZ,
+    color: 0xff6e18,
+    intensity: 0.0,
+    distance: 22.0
+  };
+  let originX = 0.0;
+  let originZ = -47.2;
+  let hitX = 0.0;
+  let hitZ = -54.0;
+
+  function trigger(bx = 0.0, bz = -47.2) {
+    if (disposed) return false;
+    const safeBx = Number.isFinite(bx) ? bx : 0.0;
+    const safeBz = Number.isFinite(bz) ? bz : -47.2;
+    originX = safeBx;
+    originZ = safeBz;
+
+    // Pick outward radial target on the Throne Hall perimeter (nearest perimeter point along Boss radial ray,
+    // or closest station on the perimeter so the floor stream shoots cleanly to the nearest arena border!)
+    let bestIdx = 0;
+    let bestScore = Infinity;
+    const rdx = safeBx - cfg.centerX;
+    const rdz = safeBz - cfg.centerZ;
+    const rLen = Math.hypot(rdx, rdz);
+
+    for (let i = 0; i < STATION_COUNT; i++) {
+      const st = stations[i];
+      const d = Math.hypot(st.x - safeBx, st.z - safeBz);
+      let score = d;
+      if (rLen < 0.35) {
+        // If triggered near exact center `(0, -44)`, shoot straight North (`theta = 0`) toward Throne steps!
+        score = Math.abs(st.x - cfg.centerX) + (st.z - cfg.minZ) * 0.5;
+      }
+      if (score < bestScore) {
+        bestScore = score;
+        bestIdx = i;
+      }
+    }
+
+    const hitSt = stations[bestIdx];
+    hitX = hitSt.x;
+    hitZ = hitSt.z;
+    const hitS = bestIdx / STATION_COUNT;
+    const startFloorY = typeof cfg.getGroundHeight === 'function'
+      ? (Number(cfg.getGroundHeight(safeBx, safeBz)) || 0.0)
+      : evalDefaultBossHallFloorY(safeBx, safeBz);
+
+    const dx = hitX - safeBx;
+    const dz = hitZ - safeBz;
+    const streamDist = Math.hypot(dx, dz);
+    const streamYaw = streamDist > 0.01 ? Math.atan2(dx, dz) : 0.0;
+
+    radialStreamMesh.position.set(safeBx, startFloorY + 0.028, safeBz);
+    radialStreamMesh.rotation.set(0, streamYaw, 0);
+    radialStreamMesh.scale.set(1.0, 1.0, Math.max(0.65, streamDist));
+
+    ringUniforms.uHitS.value = hitS;
+    ringUniforms.uRunnerFront01.value = 0.04;
+    ringUniforms.uRunnerFade.value = streamDist > 0.35 ? 1.0 : 0.0;
+    ringUniforms.uSweep01.value = 0.0;
+    ringUniforms.uMeetFlare.value = 0.0;
+    ringUniforms.uRingFade.value = 0.0;
+
+    age = 0.0;
+    active = true;
+    group.visible = true;
+    return true;
+  }
+
+  function reset() {
+    active = false;
+    age = 0.0;
+    group.visible = false;
+    ringUniforms.uRunnerFront01.value = 0.0;
+    ringUniforms.uRunnerFade.value = 0.0;
+    ringUniforms.uSweep01.value = 0.0;
+    ringUniforms.uMeetFlare.value = 0.0;
+    ringUniforms.uRingFade.value = 0.0;
+    lightHint.active = false;
+    lightHint.intensity = 0.0;
+  }
+
+  function update(dt = 0.016, elapsed) {
+    if (disposed || !active) return false;
+    const safeDt = Number.isFinite(dt) ? Math.max(0.0, Math.min(dt, 0.1)) : 0.016;
+    age += safeDt;
+    clockTime = Number.isFinite(elapsed) ? elapsed : (clockTime + safeDt);
+
+    if (age >= TOTAL_DURATION_SEC) {
+      reset();
+      return false;
+    }
+
+    ringUniforms.uTime.value = clockTime;
+
+    // 1. Radial feeder stream (`0.00..0.38s` shoot, `0.55..1.85s` fade behind the split)
+    const runnerFront = smoothstep01(0.0, STREAM_TRAVEL_SEC, age);
+    const runnerFade = (1.0 - smoothstep01(0.60, 1.85, age)) * (lowSpec ? 0.85 : 1.0);
+    ringUniforms.uRunnerFront01.value = runnerFront;
+    ringUniforms.uRunnerFade.value = runnerFade;
+
+    // 2. 360° CW + CCW perimeter split sweep (`0.34..2.74s` -> `2.40s` sweep)
+    let sweep01 = 0.0;
+    let ringFade = 0.0;
+    let meetFlare = 0.0;
+
+    if (age >= RING_START_SEC) {
+      const ringElapsed = age - RING_START_SEC;
+      const rawSweep = Math.min(1.0, ringElapsed / RING_SWEEP_SEC);
+      // Slight ease-out at convergence while maintaining crisp energetic racing speed
+      sweep01 = rawSweep < 1.0 ? (rawSweep * (1.18 - 0.18 * rawSweep)) : 1.0;
+
+      const fadeIn = smoothstep01(0.0, 0.16, ringElapsed);
+      const subside = 1.0 - smoothstep01(RING_HOLD_END_SEC, TOTAL_DURATION_SEC, age);
+      ringFade = fadeIn * subside * (lowSpec ? 0.85 : 1.0);
+
+      // Antipodal convergence flare right as CW & CCW fire heads collide at `RING_START_SEC + RING_SWEEP_SEC`!
+      const meetT = age - (RING_START_SEC + RING_SWEEP_SEC);
+      if (meetT > -0.16 && meetT < 0.85) {
+        meetFlare = meetT < 0.0
+          ? smoothstep01(-0.16, 0.0, meetT)
+          : Math.exp(-meetT * 4.2);
+      }
+    }
+
+    ringUniforms.uSweep01.value = sweep01;
+    ringUniforms.uMeetFlare.value = meetFlare;
+    ringUniforms.uRingFade.value = ringFade;
+
+    // Optional zero-alloc light hint for world lighting rigs
+    if (age < RING_START_SEC) {
+      lightHint.active = true;
+      lightHint.x = originX + (hitX - originX) * runnerFront;
+      lightHint.z = originZ + (hitZ - originZ) * runnerFront;
+      lightHint.intensity = 3.2 * runnerFade;
+    } else {
+      lightHint.active = ringFade > 0.02;
+      lightHint.x = cfg.centerX;
+      lightHint.z = cfg.centerZ;
+      lightHint.intensity = (2.8 + 1.4 * meetFlare) * ringFade;
+    }
+
+    return true;
+  }
+
+  function setLowSpec(enabled = false) {
+    if (disposed) return;
+    lowSpec = Boolean(enabled);
+    ringUniforms.uDetail.value = (isMobile || lowSpec) ? 0.0 : 1.0;
+    ringUniforms.uPixelRatio.value = getSafePixelRatio(isMobile, lowSpec);
+    perimeterSparksPoints.visible = !lowSpec;
+  }
+
+  function prewarm(renderer, camera) {
+    if (disposed || !renderer || !camera) return;
+    const prevVis = group.visible;
+    group.visible = true;
+    renderer.compile(group, camera);
+    group.visible = prevVis;
+  }
+
+  function dispose() {
+    if (disposed) return;
+    disposed = true;
+    reset();
+    feederGeo.dispose();
+    bedGeo.dispose();
+    crownGeo.dispose();
+    sparksGeo.dispose();
+    feederMat.dispose();
+    perimeterBedMat.dispose();
+    perimeterCrownMat.dispose();
+    perimeterSparksMat.dispose();
+  }
+
+  return {
+    group,
+    radialStreamMesh,
+    perimeterBedMesh,
+    perimeterCrownMesh,
+    perimeterSparksPoints,
+    trigger,
+    update,
+    reset,
+    clear: reset,
+    setLowSpec,
+    isActive: () => active,
+    getLightHint: () => lightHint,
+    prewarm,
     dispose
   };
 }

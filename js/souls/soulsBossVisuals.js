@@ -8,7 +8,7 @@
 
 import * as THREE from '../../vendor/three.module.js';
 import { mergeGeometries } from '../../vendor/BufferGeometryUtils.js';
-import { createHammerFireTrailMaterial } from './soulsFireVfx.js?v=20261124z84';
+import { createHammerFireTrailMaterial } from './soulsFireVfx.js?v=20261124z85';
 
 // ============================================================================
 // Module-level State, Mobile Detection & Ref-Counted Shared GPU Resources
@@ -57,14 +57,16 @@ const _calVecB = new THREE.Vector3();
 const _calVecC = new THREE.Vector3();
 const _calMin = new THREE.Vector3();
 const _calMax = new THREE.Vector3();
-// Reusable scratch objects for per-frame buoyant flame crown & velocity-aligned fire trail (0 allocations!)
+// Reusable scratch objects for per-frame buoyant flame sheath & C2 curved Bezier fire wake (0 allocations!)
 const _updCrownQuat = new THREE.Quaternion();
-const _updTrailWorldQuat = new THREE.Quaternion();
 const _updCurrHammerPos = new THREE.Vector3();
 const _updDeltaHammerPos = new THREE.Vector3();
 const _updInstHammerVel = new THREE.Vector3();
-const _updWakeDir = new THREE.Vector3();
-const _AXIS_PLUS_Z = new THREE.Vector3(0, 0, 1);
+const _updTargetFlow = new THREE.Vector3();
+const _updBendVec = new THREE.Vector3();
+const _updWakeUp = new THREE.Vector3();
+const _WORLD_UP = new THREE.Vector3(0, 1, 0);
+const _WORLD_X = new THREE.Vector3(1, 0, 0);
 
 const PHASE2_IGNITION_DURATION = 2.6;
 const PHASE2_EXTINGUISH_DURATION = 1.15;
@@ -378,9 +380,9 @@ function buildSoftEmberHaloTexture() {
 }
 
 // ============================================================================
-// Unit-Scale Sculpted 3D Hammer Flame Crown & Swept Fire Trail Geometries
+// Unit-Scale Streamlined Multi-Shell Hammer Flame Sheath & Curved Wake Geometries
 // ============================================================================
-function normalizeGeomForMerge(rawGeo) {
+function normalizeGeomForMerge(rawGeo, phaseOffset = 0.0, heatBias = 0.0, layerRole = 0.0, swayScale = 1.0) {
   const g = rawGeo.index ? rawGeo.toNonIndexed() : rawGeo.clone();
   if (g !== rawGeo) rawGeo.dispose();
   for (const attrName of Object.keys(g.attributes)) {
@@ -389,21 +391,54 @@ function normalizeGeomForMerge(rawGeo) {
     }
   }
   if (!g.attributes.normal) g.computeVertexNormals();
+  const count = g.attributes.position.count;
+  const meta = new Float32Array(count * 4);
+  for (let i = 0; i < count; i++) {
+    meta[i * 4]     = phaseOffset;
+    meta[i * 4 + 1] = heatBias;
+    meta[i * 4 + 2] = layerRole;
+    meta[i * 4 + 3] = swayScale;
+  }
+  g.setAttribute('aFlameMeta', new THREE.BufferAttribute(meta, 4));
   return g;
 }
 
 function buildUnitHammerFireCrownGeometry() {
   const parts = [];
 
-  // Tier A: 8 radially symmetric cupped flame petals hugging the iron warhammer head
-  // (0 crooked X/Z tilt bias, equal & opposite gentle helical twist <= 0.20, rising straight along +Y!)
-  const ringCount = 8;
+  // Shell 1 (`layerRole = 1.0`): Sleek closed-seam 3D teardrop forge sheath hugging the iron warhammer head
+  // (exact rotational symmetry -> 0.000000 X/Z centroid bias; wraps striking faces tightly with incandescent core!)
+  const sheathProfile = [
+    new THREE.Vector2(0.02, -0.52),
+    new THREE.Vector2(0.56, -0.44),
+    new THREE.Vector2(0.86, -0.22),
+    new THREE.Vector2(0.92,  0.06),
+    new THREE.Vector2(0.82,  0.38),
+    new THREE.Vector2(0.62,  0.76),
+    new THREE.Vector2(0.38,  1.16),
+    new THREE.Vector2(0.16,  1.50),
+    new THREE.Vector2(0.01,  1.74)
+  ];
+  const innerLathe = new THREE.LatheGeometry(sheathProfile, IS_MOBILE_DEVICE ? 10 : 14);
+  const latheUv = innerLathe.attributes.uv;
+  const lathePos = innerLathe.attributes.position;
+  for (let k = 0; k < lathePos.count; k++) {
+    const yn = clamp01((lathePos.getY(k) + 0.52) / 2.26);
+    latheUv.setY(k, yn);
+  }
+  innerLathe.computeVertexNormals();
+  parts.push(normalizeGeomForMerge(innerLathe, 0.35, 0.28, 1.0, 0.65));
+
+  // Shell 2 (`layerRole = 0.0`): 10 streamlined cupped aerofoil teardrop petals hugging the hammer perimeter
+  // High vertical subdivision (`segY = 13`) bends silkily along `uAeroFlowDir` + `uAeroBendDir` with 0 kinks!
+  const ringCount = IS_MOBILE_DEVICE ? 8 : 10;
+  const segY = IS_MOBILE_DEVICE ? 9 : 13;
   for (let i = 0; i < ringCount; i++) {
     const yaw = (i / ringCount) * Math.PI * 2.0;
     const tall = i % 2 === 0;
-    const w = tall ? 1.48 : 1.30;
-    const h = tall ? 2.52 : 2.08;
-    const plane = new THREE.PlaneGeometry(w, h, 4, 8);
+    const w = tall ? 1.34 : 1.18;
+    const h = tall ? 2.48 : 2.06;
+    const plane = new THREE.PlaneGeometry(w, h, 4, segY);
     const pos = plane.attributes.position;
     const uv = plane.attributes.uv;
 
@@ -411,13 +446,14 @@ function buildUnitHammerFireCrownGeometry() {
       const u = uv.getX(k);
       const v = uv.getY(k);
       const uc = (u - 0.5) * 2.0;
-      const widthScale = 0.94 + Math.sin(v * Math.PI) * 0.18 - v * v * 0.28;
+      // Sleek teardrop aerofoil taper: snug lower belly, pointed liquid-fire tip
+      const widthScale = (0.90 + Math.sin(v * Math.PI * 0.86) * 0.20) * (1.0 - Math.pow(v, 1.45) * 0.52);
       const lx = pos.getX(k) * widthScale;
-      const ly = (v - 0.15) * h;
-      const cup = -0.22 * (1.0 - uc * uc) * (0.35 + 0.65 * Math.sin(v * Math.PI));
-      const flare = 0.46 + Math.sin(v * Math.PI * 0.92) * 0.24 - Math.pow(v, 1.55) * 0.36;
+      const ly = (v - 0.18) * h;
+      const cup = -0.20 * (1.0 - uc * uc) * (0.40 + 0.60 * Math.sin(v * Math.PI));
+      const flare = 0.42 + Math.sin(v * Math.PI * 0.88) * 0.18 - Math.pow(v, 1.42) * 0.38;
       const lz = cup + flare;
-      const tw = (tall ? 0.20 : -0.20) * Math.pow(v, 1.30);
+      const tw = (tall ? 0.18 : -0.18) * Math.pow(v, 1.28);
       const ct = Math.cos(tw);
       const st = Math.sin(tw);
       pos.setXYZ(k, lx * ct - lz * st, ly, lx * st + lz * ct);
@@ -425,18 +461,17 @@ function buildUnitHammerFireCrownGeometry() {
 
     plane.rotateY(yaw);
     plane.computeVertexNormals();
-    parts.push(normalizeGeomForMerge(plane));
+    parts.push(normalizeGeomForMerge(plane, i * 1.256, tall ? 0.08 : -0.02, 0.0, 1.0));
   }
 
-  // Tier B: 4 full-360° C4-symmetric central vertical flame spires rising straight along world +Y
-  // (exact (x,z) <-> (-x,-z) antipodal symmetry -> 0.000000 X/Z centroid bias, gentle +-0.18 twist!)
+  // Shell 3 (`layerRole = 0.0`): 4 C4-symmetric central streamlined flame tongues
   const spireCount = 4;
   for (let i = 0; i < spireCount; i++) {
     const yaw = (i / spireCount) * Math.PI * 2.0 + Math.PI * 0.25;
     const tall = i % 2 === 0;
-    const w = tall ? 1.66 : 1.52;
-    const h = tall ? 2.78 : 2.54;
-    const plane = new THREE.PlaneGeometry(w, h, 4, 9);
+    const w = tall ? 1.46 : 1.32;
+    const h = tall ? 2.68 : 2.42;
+    const plane = new THREE.PlaneGeometry(w, h, 4, segY);
     const pos = plane.attributes.position;
     const uv = plane.attributes.uv;
 
@@ -444,10 +479,11 @@ function buildUnitHammerFireCrownGeometry() {
       const u = uv.getX(k);
       const v = uv.getY(k);
       const uc = (u - 0.5) * 2.0;
-      const lx = pos.getX(k) * (0.98 + Math.sin(v * Math.PI) * 0.15 - v * v * 0.32);
-      const ly = (v - 0.17) * h;
-      const lz = 0.16 * (1.0 - uc * uc) * Math.sin(v * Math.PI);
-      const tw = (tall ? 0.18 : -0.18) * Math.pow(v, 1.25);
+      const taper = (0.94 + Math.sin(v * Math.PI * 0.85) * 0.14) * (1.0 - Math.pow(v, 1.48) * 0.50);
+      const lx = pos.getX(k) * taper;
+      const ly = (v - 0.18) * h;
+      const lz = 0.14 * (1.0 - uc * uc) * Math.sin(v * Math.PI);
+      const tw = (tall ? 0.16 : -0.16) * Math.pow(v, 1.25);
       const ct = Math.cos(tw);
       const st = Math.sin(tw);
       pos.setXYZ(k, lx * ct - lz * st, ly, lx * st + lz * ct);
@@ -455,7 +491,7 @@ function buildUnitHammerFireCrownGeometry() {
 
     plane.rotateY(yaw);
     plane.computeVertexNormals();
-    parts.push(normalizeGeomForMerge(plane));
+    parts.push(normalizeGeomForMerge(plane, 0.78 + i * 1.57, 0.14, 0.0, 0.94));
   }
 
   const merged = mergeGeometries(parts, false);
@@ -465,17 +501,19 @@ function buildUnitHammerFireCrownGeometry() {
 
 function buildUnitHammerFireTrailGeometry() {
   const parts = [];
-  // 3 balanced volumetric ribbons rolled 60 deg apart, streaming cleanly along local +Z
-  // so trailMesh.quaternion aligns the fire wake directly opposite real world-space velocity!
+  const segU = IS_MOBILE_DEVICE ? 12 : 20;
+  // 4 cupped aerofoil ribbons rolled 45 deg apart (`segU = 20` lengthwise segments!)
+  // Vertex shader bends `uv.x` smoothly along the C2 Bezier wake curve (`uAeroFlowDir` + `uAeroBendDir`)!
   const ribbonSpecs = [
-    { roll: 0.0,                   len: 3.65, width: 1.50, cup:  0.14, twist:  0.24 },
-    { roll: Math.PI / 3.0,         len: 3.35, width: 1.38, cup: -0.14, twist: -0.24 },
-    { roll: (Math.PI * 2.0) / 3.0, len: 3.15, width: 1.28, cup:  0.10, twist:  0.18 }
+    { roll: 0.0,                   len: 3.55, width: 1.42, cup:  0.15, twist:  0.22, phase: 0.00, heat:  0.12 },
+    { roll: Math.PI * 0.25,        len: 3.35, width: 1.30, cup: -0.14, twist: -0.22, phase: 1.57, heat:  0.04 },
+    { roll: Math.PI * 0.50,        len: 3.45, width: 1.36, cup:  0.14, twist:  0.18, phase: 3.14, heat:  0.08 },
+    { roll: Math.PI * 0.75,        len: 3.20, width: 1.22, cup: -0.12, twist: -0.18, phase: 4.71, heat: -0.02 }
   ];
 
   for (let r = 0; r < ribbonSpecs.length; r++) {
     const sp = ribbonSpecs[r];
-    const plane = new THREE.PlaneGeometry(sp.len, sp.width, 10, 4);
+    const plane = new THREE.PlaneGeometry(sp.len, sp.width, segU, 4);
     const pos = plane.attributes.position;
     const uv = plane.attributes.uv;
 
@@ -484,25 +522,21 @@ function buildUnitHammerFireTrailGeometry() {
       const v = uv.getY(k);
       const vc = (v - 0.5) * 2.0;
 
-      const sweepDist = u * sp.len;
-      const wScale = 0.78 + Math.sin(u * Math.PI * 0.82) * 0.36 - u * u * 0.42;
-      const halfSpan = vc * (sp.width * 0.5) * wScale;
-      const arch = sp.cup * (1.0 - vc * vc) * Math.sin(u * Math.PI);
+      // Cross-section profile in XY (taper handled dynamically along Bezier spine in vertex shader)
+      const profile = 0.86 + Math.sin(u * Math.PI * 0.78) * 0.24;
+      const halfSpan = vc * (sp.width * 0.5) * profile;
+      const arch = sp.cup * (1.0 - vc * vc) * (0.42 + 0.58 * Math.sin(u * Math.PI));
 
-      const tw = sp.twist * u;
-      const ct = Math.cos(tw);
-      const st = Math.sin(tw);
-
-      const lx = halfSpan * ct - arch * st;
-      const ly = halfSpan * st + arch * ct;
-      const lz = sweepDist * 0.92 - 0.26;
+      const lx = halfSpan;
+      const ly = arch;
+      const lz = u * sp.len * 0.92 - 0.20;
 
       pos.setXYZ(k, lx, ly, lz);
     }
 
     plane.rotateZ(sp.roll);
     plane.computeVertexNormals();
-    parts.push(normalizeGeomForMerge(plane));
+    parts.push(normalizeGeomForMerge(plane, sp.phase, sp.twist, 2.0, 1.0));
   }
 
   const merged = mergeGeometries(parts, false);
@@ -1534,6 +1568,8 @@ function createHammerEmberPoints(radius) {
       uIntensity: { value: 0.0 },
       uWindup: { value: 0.0 },
       uPhase2: { value: 0.0 },
+      uSwingStretch: { value: 0.0 },
+      uFlowDir: { value: new THREE.Vector3(0, 1, 0) },
       uPixelRatio: { value: Math.min(dpr, globalLowSpec ? 1.0 : IS_MOBILE_DEVICE ? 1.15 : 1.5) }
     },
     transparent: true,
@@ -1547,21 +1583,25 @@ function createHammerEmberPoints(radius) {
       uniform float uIntensity;
       uniform float uWindup;
       uniform float uPhase2;
+      uniform float uSwingStretch;
+      uniform vec3 uFlowDir;
       uniform float uPixelRatio;
       varying float vLife;
       varying float vHeat;
       void main() {
-        float speedMult = 0.88 + uPhase2 * 0.72 + uWindup * 1.20;
+        float speedMult = 0.88 + uPhase2 * 0.72 + uWindup * 1.15 + uSwingStretch * 0.75;
         float life = fract(uTime * aParam.x * speedMult + aParam.y);
         vLife = life;
-        vHeat = clamp(0.48 + uPhase2 * 0.38 + uWindup * 0.68, 0.0, 1.45);
+        vHeat = clamp(0.48 + uPhase2 * 0.38 + uWindup * 0.68 + uSwingStretch * 0.25, 0.0, 1.45);
 
         float swirlAng = life * (4.1 + uPhase2 * 2.4) + aParam.y * 6.28318;
-        float spread = aParam.z * (0.68 + uPhase2 * 0.58 + uWindup * 0.85) * life;
+        float spread = aParam.z * (0.62 + uPhase2 * 0.52 + uWindup * 0.75) * life;
         vec3 p = position + aDir * spread;
-        p.x += sin(swirlAng) * aParam.z * 0.26 * life;
-        p.y += (cos(swirlAng * 0.85) * 0.26 + 0.36) * aParam.z * life;
+        p.x += sin(swirlAng) * aParam.z * 0.24 * life;
+        p.y += (cos(swirlAng * 0.85) * 0.24 + 0.36) * aParam.z * life;
         p.z += sin(swirlAng * 1.15) * aParam.z * 0.20 * life;
+        // Stream sparks smoothly into the aerodynamic hammer wake during swings!
+        p += (uFlowDir - vec3(0.0, 1.0, 0.0)) * (aParam.z * (0.85 + 1.25 * uSwingStretch) * life);
 
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
         float env = sin(life * 3.14159);
@@ -1580,9 +1620,9 @@ function createHammerEmberPoints(radius) {
         float soft = smoothstep(0.5, 0.05, d);
         if (soft < 0.02) discard;
         float fade = smoothstep(0.0, 0.12, vLife) * smoothstep(1.0, 0.42, vLife);
-        vec3 colStart = mix(vec3(1.0, 0.88, 0.45), vec3(1.0, 0.98, 0.80), uWindup);
-        vec3 colEnd = vec3(1.0, 0.22, 0.02);
-        vec3 col = mix(colStart, colEnd, clamp(vLife * 1.15, 0.0, 1.0)) * vHeat;
+        vec3 colStart = mix(vec3(1.0, 0.78, 0.20), vec3(1.0, 0.88, 0.32), uWindup);
+        vec3 colEnd = vec3(0.96, 0.20, 0.02);
+        vec3 col = min(mix(colStart, colEnd, clamp(vLife * 1.15, 0.0, 1.0)) * vHeat, vec3(1.0, 0.86, 0.26));
         float alpha = soft * fade * clamp(uIntensity, 0.0, 1.0);
         if (alpha < 0.01) discard;
         gl_FragColor = vec4(col, alpha);
@@ -2043,8 +2083,8 @@ export function enhanceSoulsBossModel(bossRoot, options = {}) {
     intensity: 0.42,
     phase2: 0.0,
     windup: 0.0,
-    speed: 4.5,
-    vertexDistort: hammerCal.radius * 0.28,
+    speed: 4.6,
+    vertexDistort: hammerCal.radius * 0.24,
     isMobile: IS_MOBILE_DEVICE,
     lowSpec: globalLowSpec
   });
@@ -2059,12 +2099,13 @@ export function enhanceSoulsBossModel(bossRoot, options = {}) {
 
   const hammerFireTrailMat = createHammerFireTrailMaterial({
     flowAxis: 'u',
-    additive: true,
+    curvedSpine: true,
+    additive: false,
     intensity: 0.0,
     phase2: 0.0,
     windup: 0.0,
-    speed: 5.6,
-    vertexDistort: hammerCal.radius * 0.36,
+    speed: 5.4,
+    vertexDistort: hammerCal.radius * 0.28,
     isMobile: IS_MOBILE_DEVICE,
     lowSpec: globalLowSpec
   });
@@ -2133,9 +2174,16 @@ export function enhanceSoulsBossModel(bossRoot, options = {}) {
     prevHammerWorldPos: new THREE.Vector3(),
     hasPrevHammerWorldPos: false,
     smoothHammerVel: new THREE.Vector3(),
-    lastTrailDirWorld: new THREE.Vector3(0, 0.25, -1).normalize(),
+    aeroFlowFast: new THREE.Vector3(0, 1, 0),
+    aeroFlowSlow: new THREE.Vector3(0, 1, 0),
+    wakeRightWorld: new THREE.Vector3(1, 0, 0),
+    lastTrailDirWorld: new THREE.Vector3(0, 1, 0),
     hammerLinearSpeed: 0,
     smoothHammerSpeed: 0,
+    prevSmoothVelLen: 0,
+    smoothSwingStretch: 0,
+    impactFlareBlend: 0,
+    attackTrailGate: 1,
     baseHammerRadius: hammerCal.radius,
     baseHaloScale,
     baseLanternHaloScale: lanternCal.haloScale || 0.34,
@@ -2343,7 +2391,7 @@ export function updateSoulsBossVisuals(bossRoot, dt, params = {}) {
     state.shoulderLanternHaloMat.opacity = lhOp > 0.24 ? 0.24 : lhOp < 0 ? 0 : lhOp;
   }
 
-  // Track real world-space Warhammer core position & velocity (0 per-frame Vector3 allocations!)
+  // Track real world-space Warhammer head position, C2 aerodynamic airflow, arc curvature & impact burst (0 allocations!)
   let hasBuoyantQuat = false;
   let rawHammerSpeed = 0.0;
   if (state.hammerEmberCore) {
@@ -2368,34 +2416,89 @@ export function updateSoulsBossVisuals(bossRoot, dt, params = {}) {
         const invDt = 1.0 / safeDt;
         rawHammerSpeed = stepDist * invDt;
         _updInstHammerVel.copy(_updDeltaHammerPos).multiplyScalar(invDt);
-        const kVel = 1.0 - Math.exp(-20.0 * safeDt);
+        const kVel = 1.0 - Math.exp(-18.0 * safeDt);
         state.smoothHammerVel.lerp(_updInstHammerVel, kVel);
-        const velSq = state.smoothHammerVel.lengthSq();
-        if (velSq > 0.04) {
-          _updWakeDir.copy(state.smoothHammerVel).multiplyScalar(-1.0 / Math.sqrt(velSq));
-          _updWakeDir.y += 0.12;
-          _updWakeDir.normalize();
-          state.lastTrailDirWorld.copy(_updWakeDir);
-        }
       } else {
         state.smoothHammerVel.set(0, 0, 0);
       }
     }
   }
-  state.hammerLinearSpeed = rawHammerSpeed;
-  const kHammerSpeed = 1.0 - Math.exp(-(rawHammerSpeed > state.smoothHammerSpeed ? 18.0 : 12.5) * safeDt);
-  state.smoothHammerSpeed += (rawHammerSpeed - state.smoothHammerSpeed) * kHammerSpeed;
-  const allowAttackTrail = params?.isAttacking === undefined ? true : Boolean(params.isAttacking);
-  const targetTrailGate = allowAttackTrail ? 1.0 : 0.0;
-  const kTrailGate = 1.0 - Math.exp(-(targetTrailGate > (state.attackTrailGate || 0) ? 16.0 : 14.0) * safeDt);
-  state.attackTrailGate = (state.attackTrailGate || 0) + (targetTrailGate - (state.attackTrailGate || 0)) * kTrailGate;
-  const speedFactor = smoothstepRange(5.4, 12.0, state.smoothHammerSpeed) * state.attackTrailGate;
 
-  // 3. Real Volumetric Simplex FBM Fire Crown on Hammer Head (ramping smoothly 0.25x -> 0.80x -> 1.00x in Stage 2..3!)
+  const velLen = state.smoothHammerVel.length();
+  // Detect heavy slam / cleave deceleration (`dv/dt`) to bloom an organic forge-fire impact burst instead of snapping!
+  if (safeDt > 0.0005 && state.prevSmoothVelLen > 4.0) {
+    const decel = (state.prevSmoothVelLen - velLen) / safeDt;
+    if (decel > 22.0) {
+      const burstAdd = clamp01((decel - 22.0) / 85.0) * 0.85;
+      state.impactFlareBlend = Math.min(1.0, state.impactFlareBlend + burstAdd);
+    }
+  }
+  state.impactFlareBlend *= Math.exp(-7.2 * safeDt);
+  if (state.impactFlareBlend < 0.002) state.impactFlareBlend = 0.0;
+  state.prevSmoothVelLen = velLen;
+
+  // Continuous resultant airflow vector = thermal buoyancy (0, 1, 0) + opposite swing velocity (-v * 0.24).
+  // Never vanishes or flips 180° during backswing-to-downswing reversals — arcs smoothly over +Y like real fire!
+  _updTargetFlow.set(
+    -state.smoothHammerVel.x * 0.24,
+    1.0 - state.smoothHammerVel.y * 0.22,
+    -state.smoothHammerVel.z * 0.24
+  );
+  const tfLenSq = _updTargetFlow.lengthSq();
+  if (tfLenSq > 0.0004) {
+    _updTargetFlow.multiplyScalar(1.0 / Math.sqrt(tfLenSq));
+  } else {
+    _updTargetFlow.set(0, 1, 0);
+  }
+
+  // Smooth direction filtering (`exp(-dt * 14)` fast + `exp(-dt * 5.2)` lagged wake memory -> C2 arc bend!)
+  const kDirFast = 1.0 - Math.exp(-14.0 * safeDt);
+  const kDirSlow = 1.0 - Math.exp(-5.2 * safeDt);
+  state.aeroFlowFast.lerp(_updTargetFlow, kDirFast);
+  if (state.aeroFlowFast.lengthSq() > 0.0001) state.aeroFlowFast.normalize();
+  else state.aeroFlowFast.set(0, 1, 0);
+
+  state.aeroFlowSlow.lerp(state.aeroFlowFast, kDirSlow);
+  if (state.aeroFlowSlow.lengthSq() > 0.0001) state.aeroFlowSlow.normalize();
+  else state.aeroFlowSlow.copy(state.aeroFlowFast);
+
+  state.lastTrailDirWorld.copy(state.aeroFlowFast);
+  _updBendVec.subVectors(state.aeroFlowSlow, state.aeroFlowFast).multiplyScalar(1.42);
+
+  // Parallel-transport cross-section basis (`wakeRightWorld`, `_updWakeUp`) along `aeroFlowFast` -> 0 ribbon twist!
+  const rw = state.wakeRightWorld;
+  rw.addScaledVector(state.aeroFlowFast, -rw.dot(state.aeroFlowFast));
+  if (rw.lengthSq() > 0.0001) {
+    rw.normalize();
+  } else {
+    rw.copy(Math.abs(state.aeroFlowFast.x) < 0.85 ? _WORLD_X : _WORLD_UP);
+    rw.addScaledVector(state.aeroFlowFast, -rw.dot(state.aeroFlowFast)).normalize();
+  }
+  _updWakeUp.crossVectors(state.aeroFlowFast, rw).normalize();
+
+  state.hammerLinearSpeed = rawHammerSpeed;
+  const kHammerSpeed = 1.0 - Math.exp(-(rawHammerSpeed > state.smoothHammerSpeed ? 14.0 : 10.0) * safeDt);
+  state.smoothHammerSpeed += (rawHammerSpeed - state.smoothHammerSpeed) * kHammerSpeed;
+
+  const allowAttackTrail = params?.isAttacking === undefined ? true : Boolean(params.isAttacking);
+  const targetTrailGate = allowAttackTrail ? 1.0 : 0.35;
+  const kTrailGate = 1.0 - Math.exp(-10.0 * safeDt);
+  state.attackTrailGate += (targetTrailGate - state.attackTrailGate) * kTrailGate;
+
+  // Smooth swing-stretch filtering (`exp(-dt * 10)`) from gentle walk -> windup -> high-speed cleave!
+  const targetStretch =
+    smootherstepRange(0.45, 10.8, velLen) * (0.42 + 0.58 * state.attackTrailGate) +
+    weaponFlare * 0.14;
+  const kStretch = 1.0 - Math.exp(-10.0 * safeDt);
+  state.smoothSwingStretch += (targetStretch - state.smoothSwingStretch) * kStretch;
+  const swingStretch = state.smoothSwingStretch;
+  const impactBurst = state.impactFlareBlend;
+
+  // 3. Streamlined Liquid-Fire Teardrop Sheath on Warhammer Head (cold iron in Phase 1; smooth 2.6s ignition in Phase 2!)
   const crownMat = state.hammerFireCrownMat;
   const crownMesh = state.hammerFireCrownMesh;
   if (crownMat && crownMesh) {
-    const crownInt = crownIntEnv * (0.94 + weaponFlare * 0.50 + pulse * 0.22) * staggerDim;
+    const crownInt = crownIntEnv * (0.94 + weaponFlare * 0.48 + impactBurst * 0.32 + pulse * 0.20) * staggerDim;
     const crownVis = crownInt > 0.008;
     crownMesh.visible = crownVis;
     if (crownVis) {
@@ -2405,6 +2508,10 @@ export function updateSoulsBossVisuals(bossRoot, dt, params = {}) {
       cs.phase2 = crownStageCurve;
       cs.windup = weaponFlare;
       cs.staggerDim = staggerDim;
+      cs.aeroFlowDir = state.aeroFlowFast;
+      cs.aeroBendDir = _updBendVec;
+      cs.swingStretch = swingStretch;
+      cs.impactBurst = impactBurst;
       crownMat.setCombatState(cs);
       crownMat.update(t, safeDt);
 
@@ -2412,20 +2519,23 @@ export function updateSoulsBossVisuals(bossRoot, dt, params = {}) {
         crownMesh.quaternion.copy(_updCrownQuat);
       }
       const rBase = state.baseHammerRadius;
-      const sx = rBase * crownWidthMult * (0.96 + effPhase2 * 0.24 + weaponFlare * 0.28 + pulse * 0.10) * (0.68 + 0.32 * staggerDim);
-      const sy = rBase * crownHeightMult * (0.98 + effPhase2 * 0.34 + weaponFlare * 0.42 + pulse * 0.14) * (0.62 + 0.38 * staggerDim);
+      // Sleeker radial profile so the sheath hugs the iron warhammer faces tightly instead of looking bulbous!
+      const sx = rBase * crownWidthMult * (0.90 + effPhase2 * 0.18 + weaponFlare * 0.20 + pulse * 0.08) * (0.70 + 0.30 * staggerDim);
+      const sy = rBase * crownHeightMult * (0.94 + effPhase2 * 0.28 + weaponFlare * 0.34 + pulse * 0.12) * (0.64 + 0.36 * staggerDim);
       crownMesh.scale.set(sx, sy, sx);
     }
   }
 
-  // 4. Velocity-Driven Volcanic Fire Trail Ribbons (strictly gated by swing motion > 2.4 m/s & aligned opposite velocity!)
+  // 4. Curved Bezier Liquid-Fire Wake Ribbon (flows continuously from subtle ember lick -> sweeping comet arc -> impact settle!)
   const trailMat = state.hammerFireTrailMat;
   const trailMesh = state.hammerFireTrailMesh;
   if (trailMat && trailMesh) {
+    const wakeMotionEnv = smootherstepRange(0.55, 8.6, velLen) * state.attackTrailGate;
+    const wakePresence = Math.min(1.15, 0.10 + wakeMotionEnv * 0.92 + weaponFlare * 0.18 + impactBurst * 0.30);
     const trailInt = globalLowSpec
       ? 0.0
-      : crownIntEnv * speedFactor * (0.88 + weaponFlare * 0.62) * staggerDim;
-    const trailVis = trailInt > 0.015;
+      : crownIntEnv * wakePresence * (0.86 + weaponFlare * 0.54 + impactBurst * 0.28) * staggerDim;
+    const trailVis = trailInt > 0.012;
     trailMesh.visible = trailVis;
     if (trailVis) {
       const ts = state.trailCombatState;
@@ -2434,54 +2544,55 @@ export function updateSoulsBossVisuals(bossRoot, dt, params = {}) {
       ts.phase2 = effPhase2;
       ts.windup = weaponFlare;
       ts.staggerDim = staggerDim;
+      ts.aeroFlowDir = state.aeroFlowFast;
+      ts.aeroBendDir = _updBendVec;
+      ts.wakeRight = state.wakeRightWorld;
+      ts.wakeUp = _updWakeUp;
+      ts.swingStretch = swingStretch;
+      ts.impactBurst = impactBurst;
       trailMat.setCombatState(ts);
       trailMat.update(t, safeDt);
 
-      _updTrailWorldQuat.setFromUnitVectors(_AXIS_PLUS_Z, state.lastTrailDirWorld);
       if (hasBuoyantQuat) {
-        trailMesh.quaternion.copy(_updCrownQuat).multiply(_updTrailWorldQuat);
-      } else {
-        trailMesh.quaternion.copy(_updTrailWorldQuat);
+        trailMesh.quaternion.copy(_updCrownQuat);
       }
-
       const rBase = state.baseHammerRadius;
-      const trailScaleXY = rBase * (0.86 + effPhase2 * 0.22 + weaponFlare * 0.28);
-      const trailScaleZ = trailScaleXY * (0.42 + 0.72 * speedFactor + weaponFlare * 0.22);
-      trailMesh.scale.set(trailScaleXY, trailScaleXY, trailScaleZ);
+      const trailScale = rBase * (0.86 + effPhase2 * 0.18 + weaponFlare * 0.20);
+      trailMesh.scale.setScalar(trailScale);
     }
   }
 
   // 5. Tight Volumetric Hammer Halo Sprite (swelling softly across Stage 2..3!)
   const halo = state.hammerHaloSprite;
   if (halo) {
-    const haloOp = haloIgniteEnv * (0.38 + weaponFlare * 0.28 + pulse * 0.10) * staggerDim;
+    const haloOp = haloIgniteEnv * (0.28 + weaponFlare * 0.20 + impactBurst * 0.16 + pulse * 0.08) * staggerDim;
     halo.visible = haloOp > 0.006;
     if (halo.visible) {
       const haloScale =
         state.baseHaloScale *
         haloScaleIgnite *
-        (0.86 + effPhase2 * 0.32 + weaponFlare * 0.42 + pulse * 0.14) *
+        (0.84 + effPhase2 * 0.30 + weaponFlare * 0.38 + impactBurst * 0.22 + pulse * 0.12) *
         (0.52 + 0.48 * staggerDim);
       halo.scale.set(haloScale, haloScale, 1);
-      state.haloMat.opacity = haloOp > 0.82 ? 0.82 : haloOp;
+      state.haloMat.opacity = haloOp > 0.58 ? 0.58 : haloOp;
 
       const r = 1.0;
-      const g = 0.34 + 0.08 * haloIgniteEnv + weaponFlare * 0.28 - stg * 0.14;
-      const b = 0.06 + 0.03 * haloIgniteEnv + weaponFlare * 0.20 - stg * 0.04;
+      const g = 0.32 + 0.07 * haloIgniteEnv + weaponFlare * 0.22 + impactBurst * 0.12 - stg * 0.12;
+      const b = 0.04 + 0.02 * haloIgniteEnv + weaponFlare * 0.12 + impactBurst * 0.06 - stg * 0.03;
       state.haloMat.color.setRGB(
         r,
-        g < 0.08 ? 0.08 : g > 1.0 ? 1.0 : g,
-        b < 0.02 ? 0.02 : b > 0.72 ? 0.72 : b
+        g < 0.08 ? 0.08 : g > 0.85 ? 0.85 : g,
+        b < 0.01 ? 0.01 : b > 0.32 ? 0.32 : b
       );
     } else {
       state.haloMat.opacity = 0;
     }
   }
 
-  // 6. GPU Hammer Ember Sparks (begin gently rising off hot iron in Stage 1, roaring in Stage 3!)
+  // 6. GPU Hammer Ember Sparks (begin gently rising off hot iron in Stage 1, streaming into wake during swings!)
   const sparks = state.hammerEmberPoints;
   if (sparks) {
-    const rawSparkInt = sparkIgniteEnv * (0.88 + weaponFlare * 0.65) * staggerDim;
+    const rawSparkInt = sparkIgniteEnv * (0.88 + weaponFlare * 0.65 + swingStretch * 0.28 + impactBurst * 0.32) * staggerDim;
     const sparkVisible = rawSparkInt > 0.012;
     sparks.visible = sparkVisible;
     if (sparkVisible) {
@@ -2493,6 +2604,8 @@ export function updateSoulsBossVisuals(bossRoot, dt, params = {}) {
       eu.uIntensity.value = rawSparkInt > 1.3 ? 1.3 : rawSparkInt;
       eu.uWindup.value = weaponFlare;
       eu.uPhase2.value = effPhase2;
+      eu.uSwingStretch.value = swingStretch;
+      eu.uFlowDir.value.copy(state.aeroFlowFast);
     }
   }
 

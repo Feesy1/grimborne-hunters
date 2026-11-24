@@ -8,7 +8,7 @@ import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { DRACOLoader } from '../vendor/DRACOLoader.js';
 import { clone as cloneSkinned } from '../vendor/SkeletonUtils.js';
-import { WEAPONS } from './config.js?v=20261124z84';
+import { WEAPONS } from './config.js?v=20261124z85';
 import {
   getGeo,
   getMat,
@@ -17,28 +17,28 @@ import {
   createAnimController,
   setBoneRelEuler,
   solveMixamoArmIK
-} from './models/shared.js?v=20261124z84';
+} from './models/shared.js?v=20261124z85';
 import {
   getWarriorWeaponMountConfig,
   createWarriorStanceState,
   applyWarriorWeaponStance,
   applyWarriorAttackOverlay
-} from './models/warriorStances.js?v=20261124z84';
+} from './models/warriorStances.js?v=20261124z85';
 import {
   computeFootSyncPlaybackRate,
   computeCombatPostureDynamics,
   applyCombatPostureToObject3D,
   applyCombatRecoilImpulse
-} from './souls/soulsPhysicsFeel.js?v=20261124z84';
-import { createActorContactShadowMesh } from './souls/soulsAtmosphere.js?v=20261124z84';
+} from './souls/soulsPhysicsFeel.js?v=20261124z85';
+import { createActorContactShadowMesh } from './souls/soulsAtmosphere.js?v=20261124z85';
 import {
   applyEldenDissolveToModel,
   resetEldenDissolveFromModel
-} from './souls/soulsDissolveVfx.js?v=20261124z84';
+} from './souls/soulsDissolveVfx.js?v=20261124z85';
 
 const MODEL_PATHS = {
   // Warrior Knight (Mixamo Sword & Shield Run + Diagonal Slash + Turn_180 + Combat_Roll + Heavy_Thrust + Door_Push)
-  warrior_run: './assets/models/Warrior_Run.glb?v=20261124z84',
+  warrior_run: './assets/models/Warrior_Run.glb?v=20261124z85',
 
   // All 5 Warrior Melee Weapons + Shield (preserved for in-world discovery & future equipment!)
   sword_tripo: './assets/models/Sword_Tripo.glb?v=20261120z34',
@@ -49,10 +49,10 @@ const MODEL_PATHS = {
   hammer_tripo: './assets/models/Hammer_Tripo.glb?v=20261120z34',
 
   // Castle of Ash Enemies & Boss (Boss untouched!)
-  rift_boss: './assets/models/Rift_Boss_Tripo.glb?v=20261124z84',
-  rift_executioner: './assets/models/Rift_Executioner_Tripo.glb?v=20261124z84',
-  rift_vanguard: './assets/models/Rift_Vanguard_Tripo.glb?v=20261124z84',
-  rift_acolyte: './assets/models/Rift_Acolyte_Tripo.glb?v=20261124z84'
+  rift_boss: './assets/models/Rift_Boss_Tripo.glb?v=20261124z85',
+  rift_executioner: './assets/models/Rift_Executioner_Tripo.glb?v=20261124z85',
+  rift_vanguard: './assets/models/Rift_Vanguard_Tripo.glb?v=20261124z85',
+  rift_acolyte: './assets/models/Rift_Acolyte_Tripo.glb?v=20261124z85'
 };
 
 const gltfCache = new Map();
@@ -1057,9 +1057,9 @@ function loadSingleModelKey(key) {
                   }
                 }
               }
-              // Build complementary lower-body-only clip for Idle / Running_A / Running_Back
-              // so upper-body attacks play at 100% pure amplitude (0% Idle/Run dilution on arms & torso!)
-              if (/^(?:Idle|Running_A|Sprint_A|Running_Back)(?:\.\d+)?$/i.test(clip.name || '')) {
+              // Build complementary lower-body-only clip for Idle / Running_A / Sprint_A / Running_Back / Strafe_Left / Strafe_Right
+              // so upper-body attacks & shield block play at 100% pure amplitude (0% Idle/Run/Strafe dilution on arms & torso!)
+              if (/^(?:Idle|Running_A|Sprint_A|Running_Back|Strafe_Left|Strafe_Right)(?:\.\d+)?$/i.test(clip.name || '')) {
                 const lowerTracks = (clip.tracks || []).filter((tr) => {
                   const nodePart = (tr?.name || '').split('.')[0] || '';
                   return LOWER_BODY_RE.test(nodePart);
@@ -2556,11 +2556,11 @@ function smoothstep01(edge0, edge1, x) {
   return t * t * (3 - 2 * t);
 }
 
-// Precomputed Warrior RightHand model-space orientation for relaxed lowered-hip sword hold
-// (blade points down, outward-right, and back along (-0.42, -0.44, -0.79) — clear of face & floor!)
-const _FLASK_SWORD_LOWER_HAND_R_MODEL_Q = (() => {
-  const qMount = new THREE.Quaternion().setFromEuler(new THREE.Euler(-1.04, 0.24, -1.52, 'XYZ'));
-  const qFlip = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI, 0, 0, 'XYZ'));
+// Precomputed Warrior RightHand model-space orientations for relaxed lowered-hip weapon hold while drinking Estus Flask
+// (blade/shaft points down, outward-right, and back along (-0.42, -0.44, -0.79) — clear of face & floor!)
+function buildFlaskLowerHandRModelQuat(rx, ry, rz, rotY = 0) {
+  const qMount = new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz, 'XYZ'));
+  const qFlip = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI, rotY, 0, 'XYZ'));
   const qWeaponInHandRInv = qMount.multiply(qFlip).normalize().invert();
   const bladeY = new THREE.Vector3(-0.42, -0.44, -0.79).normalize();
   const xHint = new THREE.Vector3(0.85, -0.25, -0.45).normalize();
@@ -2570,7 +2570,10 @@ const _FLASK_SWORD_LOWER_HAND_R_MODEL_Q = (() => {
   const m = new THREE.Matrix4().makeBasis(wx, bladeY, wz);
   const qWeaponModel = new THREE.Quaternion().setFromRotationMatrix(m);
   return qWeaponModel.multiply(qWeaponInHandRInv).normalize();
-})();
+}
+const _FLASK_SWORD_LOWER_HAND_R_MODEL_Q = buildFlaskLowerHandRModelQuat(-1.0515, 0.4449, -1.6262, 0);
+const _FLASK_2H_LOWER_HAND_R_MODEL_Q = buildFlaskLowerHandRModelQuat(-1.04, 0.24, -1.52, 0);
+const _FLASK_ZWEI_LOWER_HAND_R_MODEL_Q = buildFlaskLowerHandRModelQuat(-1.04, 0.24, -1.52, Math.PI * 0.5);
 
 const _FLASK_UPRIGHT_AXIS_M = new THREE.Vector3(-0.14, 0.98, 0.12).normalize();
 const _FLASK_POUR_AXIS_M = new THREE.Vector3(-0.35, 0.42, -0.84).normalize();
@@ -2691,7 +2694,9 @@ const HERO_FOOT_PLANT_PHASES = {
   warrior_run: {
     Running_A: [0.315, 0.835],     // 2.200s loop: L heel-plant Fr 20.8, R heel-plant Fr 55.1
     Sprint_A: [0.315, 0.835],      // 2.200s full-sprint loop: synchronized stride phase with Running_A
-    Running_Back: [0.365, 0.835]   // 1.333s loop: L toe-plant Fr 14.6, R toe-plant Fr 33.4
+    Running_Back: [0.365, 0.835],  // 1.333s loop: L toe-plant Fr 14.6, R toe-plant Fr 33.4
+    Strafe_Left: [0.49, 0.98],     // 0.900s loop: L outward boot-plant u=0.50, R cross-behind boot-plant u=0.98
+    Strafe_Right: [0.98, 0.49]     // 0.900s loop: L cross-behind boot-plant u=0.98, R outward boot-plant u=0.50
   },
   gunslinger_tripo: {
     Running_A: [0.47, 0.97],       // 0.833s loop: L plant Fr 9.4, R plant Fr 19.4
@@ -3558,6 +3563,24 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
     return { style: '1h_sword', twoHanded: Boolean(WEAPONS[id]?.twoHanded) };
   }
 
+  const FLASK_RESTORE_MX_BONES = [
+    'Spine', 'Spine1', 'Spine2', 'Neck', 'Head',
+    'RightShoulder', 'RightArm', 'RightForeArm', 'RightHand',
+    'LeftShoulder', 'LeftArm', 'LeftForeArm', 'LeftHand'
+  ];
+  let flaskBonesDirty = false;
+
+  function restoreWeaponToRightHand() {
+    if (safeClass !== 'warrior' || !mountedWeaponObj || !handR) return;
+    if (mountedWeaponObj.parent !== handR) {
+      handR.add(mountedWeaponObj);
+    }
+    if (mountedWeaponObj.userData?.basePos) mountedWeaponObj.position.copy(mountedWeaponObj.userData.basePos);
+    if (mountedWeaponObj.userData?.baseQuat) mountedWeaponObj.quaternion.copy(mountedWeaponObj.userData.baseQuat);
+    if (mountedWeaponObj.userData?.baseScale) mountedWeaponObj.scale.copy(mountedWeaponObj.userData.baseScale);
+    mountedWeaponObj.visible = true;
+  }
+
   function restoreShieldToLeftHand() {
     const activeShield = mountedShieldObj || legacyWarriorShieldObj;
     if (!activeShield || !handL) {
@@ -3575,13 +3598,47 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
   }
 
   function cancelFlaskDrinkAnim() {
+    const wasActiveOrDirty = flaskDrinkAnimTimer > 0 || flaskBonesDirty;
     flaskDrinkAnimTimer = 0;
+    flaskBonesDirty = false;
     if (estusFlaskMesh) {
       estusFlaskMesh.visible = false;
       const baseSc = estusFlaskMesh.userData?.baseScale ?? 1.0;
       estusFlaskMesh.scale.setScalar(baseSc);
     }
     restoreShieldToLeftHand();
+    restoreWeaponToRightHand();
+    if (wasActiveOrDirty && safeClass === 'warrior' && modelInstance && !isDisposed) {
+      if (assetKey === 'warrior_run') {
+        for (let i = 0; i < FLASK_RESTORE_MX_BONES.length; i++) {
+          const entry = mx[FLASK_RESTORE_MX_BONES[i]];
+          if (entry?.node && entry.restQ) {
+            entry.node.quaternion.copy(entry.restQ);
+          }
+        }
+      }
+      if (animCtrl?.mixer && !isDeadState) {
+        animCtrl.mixer.update(0);
+      }
+      if (assetKey === 'warrior_run' && isCurrentWeaponTwoHanded && !isDeadState) {
+        warriorStanceRig.modelInstance = modelInstance;
+        warriorStanceRig.mountedWeaponObj = mountedWeaponObj;
+        warriorStanceRig.leftGripSocket = warriorLeftGripSocket;
+        if (warriorStanceRig.state) {
+          warriorStanceRig.state.blend = 1;
+        }
+        applyWarriorWeaponStance(warriorStanceRig, currentWeaponId, 0, {
+          isAttacking: warriorAttackTimer > 0 || Boolean(animCtrl?.isOneShotActive?.()),
+          isBlocking: isWarriorBlocking,
+          isHub: false,
+          moveSpeed: 0,
+          isMoving: false,
+          elapsedTime: 0,
+          isDead: false
+        });
+      }
+      modelInstance.updateWorldMatrix(true, true);
+    }
   }
 
   let isDoorPushing = false;
@@ -3703,14 +3760,18 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
 
         if (handR) {
           if (useDefaultSword) {
-            // Starter Oath Broadsword: exact hand-tuned mount on warrior_run RightHand.
+            // Starter Oath Broadsword: exact palm-centered mount on warrior_run RightHand
+            // (hilt squarely inside closed right palm/fingers; blade tip angled naturally forward +Z in Idle/Walk/Strafe).
             const swordAsset = gltfCache.get('sword_tripo');
             if (swordAsset?.scene) {
               mountedWeaponObj = swordAsset.scene.clone(true);
               mountedWeaponObj.name = 'HeroWeapon_Sword_Mount';
               mountedWeaponObj.scale.setScalar(0.006);
-              mountedWeaponObj.position.set(-0.4787, 0.1255, 0.0683);
-              mountedWeaponObj.rotation.set(-1.04, 0.24, -1.52);
+              mountedWeaponObj.position.set(-0.4458, 0.2314, 0.0689);
+              mountedWeaponObj.rotation.set(-1.0515, 0.4449, -1.6262);
+              mountedWeaponObj.userData.basePos = mountedWeaponObj.position.clone();
+              mountedWeaponObj.userData.baseQuat = mountedWeaponObj.quaternion.clone();
+              mountedWeaponObj.userData.baseScale = mountedWeaponObj.scale.clone();
               mountedWeaponObj.traverse((n) => {
                 if (n.isMesh) {
                   // Disable 21k-tri weapon shadow casting (hero body casts main silhouette; saves 21k tris/shadow pass!)
@@ -3722,6 +3783,9 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
             } else {
               mountedWeaponObj = createHeroWeaponMesh(currentWeaponId, null);
               mountedWeaponObj.name = 'HeroWeapon_Sword_Mount';
+              mountedWeaponObj.userData.basePos = mountedWeaponObj.position.clone();
+              mountedWeaponObj.userData.baseQuat = mountedWeaponObj.quaternion.clone();
+              mountedWeaponObj.userData.baseScale = mountedWeaponObj.scale.clone();
               handR.add(mountedWeaponObj);
               if (MODEL_PATHS.sword_tripo && !failedModelKeys.has('sword_tripo')) {
                 loadSingleModelKey('sword_tripo').then(() => {
@@ -3754,6 +3818,7 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
               mountPivot.rotation.set(cfg.pivotRot.x, cfg.pivotRot.y, cfg.pivotRot.z);
               mountPivot.userData.basePos = mountPivot.position.clone();
               mountPivot.userData.baseQuat = mountPivot.quaternion.clone();
+              mountPivot.userData.baseScale = mountPivot.scale.clone();
 
               const wMesh = weaponAsset.scene.clone(true);
               wMesh.scale.setScalar(cfg.scale);
@@ -3780,6 +3845,9 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
             } else {
               mountedWeaponObj = createHeroWeaponMesh(currentWeaponId, null);
               mountedWeaponObj.name = 'HeroWeapon_Sword_Mount';
+              mountedWeaponObj.userData.basePos = mountedWeaponObj.position.clone();
+              mountedWeaponObj.userData.baseQuat = mountedWeaponObj.quaternion.clone();
+              mountedWeaponObj.userData.baseScale = mountedWeaponObj.scale.clone();
               handR.add(mountedWeaponObj);
               if (weaponKey && MODEL_PATHS[weaponKey] && !failedModelKeys.has(weaponKey)) {
                 loadSingleModelKey(weaponKey).then(() => {
@@ -4538,10 +4606,7 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
     const isZwei = currentWeaponStyle === 'zweihander';
     const isTwoHand = isCurrentWeaponTwoHanded || isSpear || isZwei || isAxe || isHammer;
 
-    if (mountedWeaponObj?.userData?.basePos && mountedWeaponObj?.userData?.baseQuat) {
-      mountedWeaponObj.position.copy(mountedWeaponObj.userData.basePos);
-      mountedWeaponObj.quaternion.copy(mountedWeaponObj.userData.baseQuat);
-    }
+    restoreWeaponToRightHand();
 
     // Warrior_Run.glb:
     //  - 1H Sword + Shield ('club', 'blade', 'claymore'): 100% pure golden Mixamo clips!
@@ -4742,9 +4807,9 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
   //  - RightArm + Sword gently lowers to relaxed right-hip hold (blade pointed down-and-back, NEVER near visor/mouth!)
   //  - LeftArm lifts glowing Golden Estus Flask straight to helmet visor (u: 0..0.28), tilts to pour (0.28..0.72)
   //    with Head tilt-back (-0.22 rad) & golden emissive surge, then lowers cleanly and stows flask (0.72..1.0)!
-  function applyWarriorFlaskDrinkOverlay(safeDt, _isMoving, elapsedTime) {
+  function applyWarriorFlaskDrinkOverlay(safeDt, _isMoving, elapsedTime, timerAlreadyStepped = false) {
     if (flaskDrinkAnimTimer <= 0) {
-      if (estusFlaskMesh?.visible || shieldStowedToModelSpace) {
+      if (estusFlaskMesh?.visible || shieldStowedToModelSpace || flaskBonesDirty) {
         cancelFlaskDrinkAnim();
       }
       return;
@@ -4754,14 +4819,17 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
       return;
     }
 
-    flaskDrinkAnimTimer = Math.max(0, flaskDrinkAnimTimer - safeDt);
-    if (flaskDrinkAnimTimer <= 0) {
-      cancelFlaskDrinkAnim();
-      return;
+    if (!timerAlreadyStepped) {
+      flaskDrinkAnimTimer = Math.max(0, flaskDrinkAnimTimer - safeDt);
+      if (flaskDrinkAnimTimer <= 0) {
+        cancelFlaskDrinkAnim();
+        return;
+      }
     }
     if (safeClass !== 'warrior' || !modelInstance) {
       return;
     }
+    flaskBonesDirty = true;
 
     const u = Math.max(0, Math.min(1, 1 - flaskDrinkAnimTimer / Math.max(0.05, flaskDrinkAnimDur)));
     const stowT = smoothstep01(0.00, 0.15, u) * (1 - smoothstep01(0.82, 1.00, u));
@@ -4868,7 +4936,12 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
         _fTargetRW.copy(_fTargetRM).applyMatrix4(modelInstance.matrixWorld);
         _fPoleRW.copy(_fPoleRM).applyMatrix4(modelInstance.matrixWorld);
         solveMixamoArmIK(mx.RightArm, mx.RightForeArm, mx.RightHand, _fTargetRW, _fPoleRW, armBlend);
-        setFlaskBoneModelQuat(mx.RightHand.node, _FLASK_SWORD_LOWER_HAND_R_MODEL_Q, armBlend);
+        const lowerHandRQ = !isCurrentWeaponTwoHanded
+          ? _FLASK_SWORD_LOWER_HAND_R_MODEL_Q
+          : currentWeaponStyle === 'zweihander'
+            ? _FLASK_ZWEI_LOWER_HAND_R_MODEL_Q
+            : _FLASK_2H_LOWER_HAND_R_MODEL_Q;
+        setFlaskBoneModelQuat(mx.RightHand.node, lowerHandRQ, armBlend);
       }
 
       // E) Left Arm + Glowing Golden Estus Flask: smooth lift from left hip -> jaw/visor -> pour tilt -> lower
@@ -5153,7 +5226,12 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
             runClip = 'Running_Back';
           }
         } else if (isTripoWarrior && !isTurning180 && !isRolling) {
-          if (moveLocalZ < -0.35 && asset?.clips?.has('Running_Back')) {
+          if (!isSprinting && Math.abs(moveLocalX) > Math.abs(moveLocalZ) * 0.68) {
+            const strafeClip = moveLocalX > 0 ? 'Strafe_Left' : 'Strafe_Right';
+            if (asset?.clips?.has(strafeClip)) {
+              runClip = strafeClip;
+            }
+          } else if (moveLocalZ < -0.35 && asset?.clips?.has('Running_Back')) {
             runClip = 'Running_Back';
           } else if (
             isSprinting &&
@@ -5168,12 +5246,16 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
         activeRunClip = runClip;
         let runScale;
         if (assetKey === 'warrior_run') {
-          // Exact z76 heavy-armored knight cadence on Running_A (2.65x -> grounded footsteps, 0 ice-skating!)
+          // Exact z76 heavy-armored knight cadence on Running_A (2.65x -> grounded footsteps, 0 ice-skating!),
+          // grounded lock-on cross-step cadence on Strafe_Left/Strafe_Right (~1.15..1.65x),
           // + faster true forward sprint on Sprint_A (~3.25x)!
           const minRunSpd = flaskDrinkAnimTimer > 0 ? 0.72 : 1.22;
           const minBackSpd = flaskDrinkAnimTimer > 0 ? 0.75 : 1.15;
-          runScale =
-            runClip === 'Running_Back'
+          const minStrafeSpd = flaskDrinkAnimTimer > 0 ? 0.78 : 1.15;
+          const isStrafeClip = runClip === 'Strafe_Left' || runClip === 'Strafe_Right';
+          runScale = isStrafeClip
+            ? Math.max(minStrafeSpd, Math.min(1.65, speedRatio * 1.52))
+            : runClip === 'Running_Back'
               ? Math.max(minBackSpd, Math.min(2.9, speedRatio * 2.55))
               : runClip === 'Sprint_A'
                 ? Math.max(2.65, Math.min(3.50, speedRatio * 2.48))
@@ -5375,8 +5457,23 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
       }
     }
 
+    let flaskTimerSteppedThisFrame = false;
+    if (flaskDrinkAnimTimer > 0) {
+      if (isDeadState || animCtrl?.isRollActive?.() || animCtrl?.isHitActive?.()) {
+        cancelFlaskDrinkAnim();
+      } else {
+        flaskDrinkAnimTimer = Math.max(0, flaskDrinkAnimTimer - safeDt);
+        flaskTimerSteppedThisFrame = true;
+        if (flaskDrinkAnimTimer <= 0) {
+          cancelFlaskDrinkAnim();
+        }
+      }
+    } else if (estusFlaskMesh?.visible || shieldStowedToModelSpace || flaskBonesDirty) {
+      cancelFlaskDrinkAnim();
+    }
+
     applyWarriorWeaponAnimOverlay(safeDt, isMoving, elapsedTime, speedRatio);
-    applyWarriorFlaskDrinkOverlay(safeDt, isMoving, elapsedTime);
+    applyWarriorFlaskDrinkOverlay(safeDt, isMoving, elapsedTime, flaskTimerSteppedThisFrame);
     applyGunslingerWeaponAnimOverlay(safeDt, isMoving, elapsedTime);
 
     if (staffCastPulse > 0) {
@@ -8012,7 +8109,9 @@ const ENEMY_CLIP_IMPACT_FRAC = {
   'Leap_Slam': 0.56,
   'Delayed_Crush': 0.62,
   'Sweep_Combo': 0.46,
-  'Whirl_Spin': 0.50
+  'Whirl_Spin': 0.50,
+  'Rising_Upcut': 0.39,
+  'Ram_Thrust_Hook': 0.31
 };
 
 const enemyMeshPool = new Map();
@@ -9812,8 +9911,21 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
       }
       return null;
     },
-    triggerHitReact(opts = null) {
+    triggerHitReact(arg1 = null, arg2 = null, arg3 = null) {
       if (isDying) return false;
+      let opts = null;
+      let positionalClip = null;
+      let positionalSpeed = null;
+      if (typeof arg1 === 'string') {
+        positionalClip = arg1;
+        opts = arg2 && typeof arg2 === 'object' ? arg2 : null;
+      } else if (typeof arg1 === 'number') {
+        positionalSpeed = arg1;
+        if (typeof arg2 === 'string') positionalClip = arg2;
+        opts = arg3 && typeof arg3 === 'object' ? arg3 : (arg2 && typeof arg2 === 'object' ? arg2 : null);
+      } else if (arg1 && typeof arg1 === 'object') {
+        opts = arg1;
+      }
       const isObj = Boolean(opts && typeof opts === 'object');
       const playClip = isObj && opts.playClip !== undefined ? Boolean(opts.playClip) : true;
       const rawJolt =
@@ -9841,8 +9953,16 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
       if (!playClip || activeClampedAction || activeCutsceneAction || (!forceRestart && hitReactCooldown > 0)) {
         return false;
       }
-      const clipName = isObj && typeof opts.clipName === 'string' && opts.clipName ? opts.clipName : null;
-      const speed = isObj && Number.isFinite(Number(opts.speed)) ? Number(opts.speed) : 1.85;
+      const clipName =
+        (isObj && typeof opts.clipName === 'string' && opts.clipName ? opts.clipName : null) ||
+        positionalClip ||
+        null;
+      const speed =
+        isObj && Number.isFinite(Number(opts.speed))
+          ? Number(opts.speed)
+          : Number.isFinite(Number(positionalSpeed)) && Number(positionalSpeed) > 0
+            ? Number(positionalSpeed)
+            : 1.85;
       const playedClip = animCtrl?.triggerHit?.(speed, clipName, {
         interruptAttack: Boolean(isObj && opts.interruptAttack),
         blockGuard: false,
@@ -9856,8 +9976,8 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
     cancelHitReact() {
       animCtrl?.cancelHit?.();
     },
-    playHitFlinch(opts = null) {
-      return handle.triggerHitReact(opts);
+    playHitFlinch(...args) {
+      return handle.triggerHitReact(...args);
     },
     playDeathCollapse() {
       if (isDying) return;
@@ -10383,7 +10503,9 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
               activeClip === 'Recover_Heft' ||
               activeClip === 'Roar_Taunt' ||
               activeClip === 'Hit_React' ||
+              activeClip === 'Hit_React_Left' ||
               activeClip === 'Hit_React_Gut' ||
+              activeClip === 'Riposte_Stand_Up' ||
               activeClip === 'Block_React' ||
               activeClip === 'Shield_Block_Hit' ||
               activeClip === 'Backstep_Evade';
@@ -10519,10 +10641,14 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
   };
   const enemyAnimFacade = {
     ...(animCtrl || {}),
-    triggerHitReact: (opts) => handle.triggerHitReact(opts),
+    triggerHitReact: (...args) => handle.triggerHitReact(...args),
     cancelHitReact: () => handle.cancelHitReact(),
-    playHitFlinch: (opts) => handle.playHitFlinch(opts),
+    playHitFlinch: (...args) => handle.playHitFlinch(...args),
     playAttackAnim: (c, d, s, b) => handle.playAttackAnim(c, d, s, b),
+    playBossClip: (c, s, b) => handle.playBossClip(c, s, b),
+    playClampedClip: (c, s, b) => handle.playClampedClip(c, s, b),
+    isClampedClipDone: () => handle.isClampedClipDone(),
+    clearClampedClip: (snap, b) => handle.clearClampedClip(snap, b),
     handoffToClipOverride: (c, s, b) => handle.handoffToClipOverride(c, s, b),
     handoffToBase: (c, s, b) => handle.handoffToBase(c, s, b),
     playDeathCollapse: () => handle.playDeathCollapse(),
@@ -10537,6 +10663,10 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
   };
   root.userData.animCtrl = enemyAnimFacade;
   root.userData.triggerHitReact = enemyAnimFacade.triggerHitReact;
+  root.userData.playClampedClip = enemyAnimFacade.playClampedClip;
+  root.userData.isClampedClipDone = enemyAnimFacade.isClampedClipDone;
+  root.userData.clearClampedClip = enemyAnimFacade.clearClampedClip;
+  root.userData.playBossClip = enemyAnimFacade.playBossClip;
   root.userData.getWeaponSegmentWorld = enemyAnimFacade.getWeaponSegmentWorld;
   root.userData.setLocomotionState = enemyAnimFacade.setLocomotionState;
   root.userData.setCombatPostureState = enemyAnimFacade.setCombatPostureState;

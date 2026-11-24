@@ -1,12 +1,13 @@
 // Abandoned Knight Rift — Hero Combat Audio Module
-// Studio 44.1 kHz / 48 kHz WAV sample playback (?v=20261124z84) with cinematic gain (0.80–1.0),
+// Studio 44.1 kHz / 48 kHz WAV sample playback (?v=20261124z85) with cinematic gain (0.80–1.0),
 // razor-crisp sample-accurate attack, ±4% micro-pitch jitter, stone early-reflection send,
 // ElevenLabs parry steel ring support, armored roll slot, and Web Audio fallbacks.
 
-export const SOULS_HERO_AUDIO_VERSION = '20261124z84';
+export const SOULS_HERO_AUDIO_VERSION = '20261124z85';
 const SAMPLE_VER = SOULS_HERO_AUDIO_VERSION;
 
 export const HERO_SAMPLE_MANIFEST = Object.freeze([
+  ['boss_flesh_slash', `./assets/audio/souls_boss_flesh_slash.wav?v=${SAMPLE_VER}`],
   ['hit_unarmored', `./assets/audio/souls_hit_unarmored.wav?v=${SAMPLE_VER}`],
   ['hit_armor_1', `./assets/audio/souls_hero_hit_armor_1.wav?v=${SAMPLE_VER}`],
   ['hit_armor_2', `./assets/audio/souls_hero_hit_armor_2.wav?v=${SAMPLE_VER}`],
@@ -355,63 +356,64 @@ export function createSoulsHeroAudio({
   }
 
   function playSwordHit({ targetKind = null, armored = false, isHeavy = false, isCounter = false } = {}) {
-    if (!canTrigger('hero_hit', 28)) return;
+    if (!canTrigger('hero_hit', 22)) return;
     const resolvedKind = targetKind || (armored ? 'armored_knight' : 'unarmored');
 
     if (resolvedKind === 'boss_flesh') {
-      // Meaty, heavy cloth/hide/flesh slash on the flesh-and-blood Boss (ZERO knight metal clang!)
-      const rate = (0.86 + Math.random() * 0.06) * (isHeavy ? 0.96 : 1.0);
-      const gain = Math.min(1.0, 0.94 + (isHeavy ? 0.04 : 0) + (isCounter ? 0.02 : 0));
-      if (playSample('hit_unarmored', {
-        gain,
+      // Mastered loud, visceral wet blade-slicing-flesh-and-cloth impact on Boss (ZERO metal clang, un-muffled 0.95..1.03x!)
+      const rate = (isHeavy ? 0.95 : 0.97) + Math.random() * 0.06;
+      const sampleOpts = {
+        gain: 1.0,
         rate,
-        reverbSend: 0.24,
-        lowShelfDb: isHeavy ? 4.0 : 3.2,
-        highShelfDb: isCounter ? 1.0 : -0.6
-      })) {
+        reverbSend: isHeavy ? 0.24 : 0.20,
+        lowShelfDb: isHeavy ? 2.8 : 1.8,
+        highShelfDb: isCounter ? 2.8 : 2.4
+      };
+      if (playSample('boss_flesh_slash', sampleOpts) || playSample('hit_unarmored', sampleOpts)) {
         return;
       }
       const env = resolveAudioEnv();
       if (!env) return;
-      fbTone(env, { type: 'sine', f0: 142 * rate, f1: 40 * rate, dur: 0.14, gain: 0.38, attack: 0.001, reverbSend: 0.20 });
-      fbNoise(env, { f0: 1320 * rate, f1: 310 * rate, q: 1.4, dur: 0.14, gain: 0.34, attack: 0.001, reverbSend: 0.18 });
+      fbTone(env, { type: 'sine', f0: 158 * rate, f1: 44 * rate, dur: 0.14, gain: 0.42, attack: 0.001, reverbSend: 0.20 });
+      fbNoise(env, { f0: 2750 * rate, f1: 620 * rate, q: 1.35, dur: 0.16, gain: 0.44, attack: 0.001, reverbSend: 0.20 });
       return;
     }
 
     if (resolvedKind === 'armored_knight') {
-      // Metal armor hit — strictly for the 3 armored knights!
+      // Crisp ringing metallic armor hit — strictly for armored swordsman/spearman bodies (rate ~0.94..1.00)
       const key = pickVariant('hit_armor', ['hit_armor_1', 'hit_armor_2']);
-      const baseRate = isHeavy ? 0.94 : isCounter ? 1.03 : 1.0;
-      const rate = jitterRate(baseRate, 0.04);
-      const gain = Math.min(1.0, 0.88 + (isHeavy ? 0.08 : 0) + (isCounter ? 0.06 : 0));
+      const rate = isCounter
+        ? 1.00 + Math.random() * 0.03
+        : (isHeavy ? 0.94 : 0.96) + Math.random() * 0.04;
+      const gain = Math.min(0.98, 0.92 + (isHeavy ? 0.04 : 0) + (isCounter ? 0.02 : 0));
 
       if (playSample(key, {
         gain,
         rate,
         reverbSend: 0.28,
-        lowShelfDb: isHeavy ? 2.5 : 0.8,
-        highShelfDb: isCounter ? 3.0 : 1.5
+        lowShelfDb: isHeavy ? 2.2 : 0.8,
+        highShelfDb: isCounter ? 2.8 : 2.0
       })) {
         return;
       }
 
       const env = resolveAudioEnv();
       if (!env) return;
-      fbNoise(env, { filterType: 'highpass', f0: 2800 * rate, f1: 1800 * rate, q: 1.4, dur: 0.04, gain: 0.28, attack: 0.001, reverbSend: 0.24 });
-      fbTone(env, { type: 'triangle', f0: 590 * rate, f1: 560 * rate, dur: 0.18, gain: 0.26, attack: 0.001, reverbSend: 0.26 });
-      fbTone(env, { type: 'sine', f0: 1380 * rate, f1: 1340 * rate, dur: 0.14, gain: 0.18, attack: 0.001, reverbSend: 0.26 });
+      fbNoise(env, { filterType: 'highpass', f0: 2900 * rate, f1: 1850 * rate, q: 1.4, dur: 0.042, gain: 0.30, attack: 0.001, reverbSend: 0.24 });
+      fbTone(env, { type: 'triangle', f0: 610 * rate, f1: 580 * rate, dur: 0.18, gain: 0.26, attack: 0.001, reverbSend: 0.26 });
+      fbTone(env, { type: 'sine', f0: 1420 * rate, f1: 1380 * rate, dur: 0.14, gain: 0.19, attack: 0.001, reverbSend: 0.26 });
       return;
     }
 
-    // 'unarmored' (Archer / cloth / unarmored enemies) -> souls_hit_unarmored.wav
-    const rate = (0.98 + Math.random() * 0.06) * (isHeavy ? 0.96 : isCounter ? 1.02 : 1.0);
-    const gain = Math.min(1.0, 0.88 + (isHeavy ? 0.05 : 0) + (isCounter ? 0.04 : 0));
+    // 'unarmored' (Archer / cloth / unarmored enemies) -> mastered souls_hit_unarmored.wav
+    const rate = (isHeavy ? 0.97 : 0.99) + Math.random() * 0.05;
+    const gain = Math.min(0.96, 0.90 + (isHeavy ? 0.04 : 0) + (isCounter ? 0.02 : 0));
     if (playSample('hit_unarmored', {
       gain,
       rate,
       reverbSend: isHeavy ? 0.20 : 0.16,
-      lowShelfDb: isHeavy ? 2.2 : 0.8,
-      highShelfDb: isCounter ? 1.8 : 0.4
+      lowShelfDb: isHeavy ? 2.0 : 0.8,
+      highShelfDb: isCounter ? 2.0 : 1.2
     })) {
       return;
     }
@@ -429,7 +431,32 @@ export function createSoulsHeroAudio({
     const env = resolveAudioEnv();
     if (!env) return;
     fbTone(env, { type: 'sine', f0: (isHeavy ? 155 : 180) * rate, f1: 48 * rate, dur: 0.11, gain: isHeavy ? 0.36 : 0.30, attack: 0.001, reverbSend: 0.16 });
-    fbNoise(env, { f0: 1650 * rate, f1: 380 * rate, q: 1.6, dur: 0.11, gain: 0.30, attack: 0.001, reverbSend: 0.16 });
+    fbNoise(env, { f0: 2150 * rate, f1: 460 * rate, q: 1.5, dur: 0.12, gain: 0.34, attack: 0.001, reverbSend: 0.16 });
+  }
+
+  function playEnemyShieldHit(opts = {}) {
+    if (!canTrigger('enemy_shield_hit', 32)) return;
+    const isHeavy = typeof opts === 'boolean' ? opts : Boolean(opts && (opts.heavy || opts.isHeavy));
+    // Dedicated ringing iron-shield clang (block_1 / block_2, centroid ~5.5kHz, rate 1.02..1.07 — sharper & higher than body armor!)
+    const key = pickVariant('enemy_shield_hit', ['block_1', 'block_2']);
+    const rate = (isHeavy ? 1.02 : 1.035) + Math.random() * 0.035;
+    const gain = isHeavy ? 0.95 : 0.89;
+
+    if (playSample(key, {
+      gain,
+      rate,
+      reverbSend: isHeavy ? 0.28 : 0.22,
+      lowShelfDb: isHeavy ? 1.2 : 0.4,
+      highShelfDb: 2.2
+    })) {
+      return;
+    }
+
+    const env = resolveAudioEnv();
+    if (!env) return;
+    fbNoise(env, { filterType: 'bandpass', f0: 3850 * rate, f1: 1950 * rate, q: 2.5, dur: 0.055, gain: 0.30, attack: 0.001, reverbSend: 0.22 });
+    fbTone(env, { type: 'triangle', f0: 785 * rate, f1: 758 * rate, dur: 0.19, gain: 0.25, attack: 0.001, reverbSend: 0.24 });
+    fbTone(env, { type: 'sine', f0: 1750 * rate, f1: 1705 * rate, dur: 0.15, gain: 0.18, attack: 0.001, reverbSend: 0.24 });
   }
 
   function playShieldBlock({ isBoss = false, heavy = false } = {}) {
@@ -476,6 +503,53 @@ export function createSoulsHeroAudio({
     fbNoise(env, { f0: 1580 * rate, f1: 580 * rate, q: 1.6, dur: 0.075, gain: 0.26, attack: 0.001, reverbSend: 0.14 });
   }
 
+  function playHeroArmorHit({ isHeavy = false } = {}) {
+    if (!canTrigger('hero_armor_hit', 40)) return;
+    // Regular enemy weapon striking Hero's bare steel-plate armor (unblocked):
+    // crisp, expressive ringing steel-on-plate clang (hit_armor_1/2, rate 0.92..0.97, +2.2 dB highShelf)
+    // layered with a tight forged-steel transient so it unmistakably reads as plate armor!
+    const key = pickVariant('hero_armor_hit', ['hit_armor_1', 'hit_armor_2']);
+    const rate = (isHeavy ? 0.92 : 0.94) + Math.random() * 0.03;
+    const env = resolveAudioEnv();
+
+    if (playSample(key, {
+      gain: isHeavy ? 0.96 : 0.90,
+      rate,
+      reverbSend: isHeavy ? 0.28 : 0.24,
+      lowShelfDb: isHeavy ? 2.2 : 1.0,
+      highShelfDb: 2.2
+    })) {
+      if (env) {
+        fbNoise(env, {
+          filterType: 'bandpass',
+          f0: 4250 * rate,
+          f1: 2350 * rate,
+          q: 2.8,
+          dur: 0.038,
+          gain: isHeavy ? 0.15 : 0.12,
+          attack: 0.001,
+          reverbSend: 0.20
+        });
+        fbTone(env, {
+          type: 'sine',
+          f0: 1290 * rate,
+          f1: 1255 * rate,
+          dur: isHeavy ? 0.15 : 0.12,
+          gain: isHeavy ? 0.08 : 0.065,
+          attack: 0.001,
+          reverbSend: 0.22
+        });
+      }
+      return;
+    }
+
+    if (!env) return;
+    fbNoise(env, { filterType: 'highpass', f0: 3100 * rate, f1: 1950 * rate, q: 1.6, dur: 0.045, gain: 0.30, attack: 0.001, reverbSend: 0.24 });
+    fbTone(env, { type: 'triangle', f0: 635 * rate, f1: 608 * rate, dur: 0.19, gain: 0.26, attack: 0.001, reverbSend: 0.26 });
+    fbTone(env, { type: 'sine', f0: 1460 * rate, f1: 1420 * rate, dur: 0.15, gain: 0.20, attack: 0.001, reverbSend: 0.26 });
+    fbTone(env, { type: 'sine', f0: 2780 * rate, f1: 2710 * rate, dur: 0.11, gain: 0.11, attack: 0.001, reverbSend: 0.24 });
+  }
+
   function playBossHitHeroArmor({ isHeavy = true } = {}) {
     if (!canTrigger('hero_hit_by_boss', 45)) return;
     const rate = jitterRate(1.0, 0.03);
@@ -484,16 +558,17 @@ export function createSoulsHeroAudio({
       rate,
       reverbSend: 0.28,
       lowShelfDb: isHeavy ? 2.4 : 1.6,
-      highShelfDb: 0.8
+      highShelfDb: 1.8
     })) {
       return;
     }
 
     const env = resolveAudioEnv();
     if (!env) return;
-    fbTone(env, { type: 'sine', f0: 142 * rate, f1: 32 * rate, dur: 0.24, gain: 0.44, attack: 0.001, reverbSend: 0.24 });
-    fbTone(env, { type: 'triangle', f0: 310 * rate, f1: 135 * rate, dur: 0.13, gain: 0.32, attack: 0.001, reverbSend: 0.22 });
-    fbNoise(env, { f0: 1380 * rate, f1: 340 * rate, q: 1.35, dur: 0.16, gain: 0.36, attack: 0.001, reverbSend: 0.22 });
+    fbTone(env, { type: 'sine', f0: 142 * rate, f1: 32 * rate, dur: 0.24, gain: 0.42, attack: 0.001, reverbSend: 0.24 });
+    fbNoise(env, { filterType: 'highpass', f0: 2800 * rate, f1: 1650 * rate, q: 1.5, dur: 0.055, gain: 0.30, attack: 0.001, reverbSend: 0.24 });
+    fbTone(env, { type: 'triangle', f0: 560 * rate, f1: 535 * rate, dur: 0.20, gain: 0.24, attack: 0.001, reverbSend: 0.24 });
+    fbTone(env, { type: 'sine', f0: 1320 * rate, f1: 1280 * rate, dur: 0.16, gain: 0.16, attack: 0.001, reverbSend: 0.24 });
   }
 
   function playParrySuccess() {
@@ -674,7 +749,9 @@ export function createSoulsHeroAudio({
     playSwordSwing,
     playHeavyThrust,
     playSwordHit,
+    playEnemyShieldHit,
     playShieldBlock,
+    playHeroArmorHit,
     playBossHitHeroArmor,
     playParrySuccess,
     playPartialParry,

@@ -4,20 +4,21 @@
 import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { DRACOLoader } from '../vendor/DRACOLoader.js';
-import { ARENA_HALF_SIZE } from './config.js?v=20261124z84';
-import { createSoulsArena } from './soulsArena.js?v=20261124z84';
+import { ARENA_HALF_SIZE } from './config.js?v=20261124z85';
+import { createSoulsArena } from './soulsArena.js?v=20261124z85';
 import {
   BOSS_DOOR_CUTSCENE_DURATION,
   evaluateBossDoorCutscene,
   getBossDoorCutsceneSkipState,
   computeBossDoorCutsceneShakeOffset
-} from './souls/soulsCutsceneChoreography.js?v=20261124z84';
+} from './souls/soulsCutsceneChoreography.js?v=20261124z85';
 import {
   clampCastleCameraPosition,
   SOULS_CASTLE_CONSTANTS
-} from './souls/soulsCastleLayout.js?v=20261124z84';
-import { createSoulsEnvironmentMap } from './souls/soulsLightingRig.js?v=20261124z84';
-import { applyEldenDissolveToModel } from './souls/soulsDissolveVfx.js?v=20261124z84';
+} from './souls/soulsCastleLayout.js?v=20261124z85';
+import { createSoulsEnvironmentMap } from './souls/soulsLightingRig.js?v=20261124z85';
+import { applyEldenDissolveToModel } from './souls/soulsDissolveVfx.js?v=20261124z85';
+import * as SoulsFireVfx from './souls/soulsFireVfx.js?v=20261124z85';
 import {
   createCourtyardStoneTexture,
   createHubMistTexture,
@@ -28,7 +29,7 @@ import {
   createHubContactAoTexture,
   createArcaneCircleTexture,
   getSlashCrescentGeo
-} from './world/textures.js?v=20261124z84';
+} from './world/textures.js?v=20261124z85';
 
 const sharedDracoLoader = new DRACOLoader();
 sharedDracoLoader.setDecoderPath('./vendor/draco/');
@@ -313,12 +314,41 @@ export function createArenaWorld(canvas) {
   }
 
   let soulsArena = null;
+  let phase2ArenaFireRingCtrl = null;
+  function ensurePhase2ArenaFireRing() {
+    if (!phase2ArenaFireRingCtrl && typeof SoulsFireVfx.createPhase2ArenaFireRingController === 'function') {
+      phase2ArenaFireRingCtrl = SoulsFireVfx.createPhase2ArenaFireRingController({
+        isMobile: isMobileDevice,
+        lowSpec: lowSpecMode,
+        getGroundHeight
+      });
+      if (phase2ArenaFireRingCtrl?.group) {
+        arenaGroup.add(phase2ArenaFireRingCtrl.group);
+      }
+    }
+    return phase2ArenaFireRingCtrl;
+  }
+
+  function triggerPhase2ArenaFireWave(originX = 0, originZ = -44) {
+    if (originX && typeof originX === 'object') {
+      const opts = originX;
+      originX = Number.isFinite(opts.x) ? opts.x : (Number.isFinite(opts.originX) ? opts.originX : 0);
+      originZ = Number.isFinite(opts.z) ? opts.z : (Number.isFinite(opts.originZ) ? opts.originZ : -44);
+    }
+    const bx = Number.isFinite(Number(originX)) ? Number(originX) : 0;
+    const bz = Number.isFinite(Number(originZ)) ? Number(originZ) : -44;
+    const ctrl = ensurePhase2ArenaFireRing();
+    ctrl?.trigger?.(bx, bz);
+    return Boolean(ctrl);
+  }
+
   function ensureSoulsArena() {
     if (!soulsArena) {
       soulsArena = createSoulsArena();
       if (lowSpecMode) soulsArena.setLowSpecMode?.(true);
       arenaGroup.add(soulsArena.group);
     }
+    ensurePhase2ArenaFireRing();
     return soulsArena;
   }
 
@@ -1959,7 +1989,8 @@ export function createArenaWorld(canvas) {
   }
 
   // ==========================================================================
-  // Pooled 3D Shattered Basalt Floor Fractures, Burning Fire Circle & Fire Road
+  // Pooled 3D Shattered Cathedral Stone Craters, Parallax Sunken Funnel Shader,
+  // 3x Volumetric Fire Field ('circle') & Fire Road ('fissure') + Wrench Dust
   // ==========================================================================
   const activeGroundFractures = [];
   const freeGroundFractures = [];
@@ -1972,307 +2003,795 @@ export function createArenaWorld(canvas) {
   burningGroundLight.position.set(0, -80, 0);
   arenaGroup.add(burningGroundLight);
 
-  function buildProceduralFractureTexture({ molten = false, fissure = false } = {}) {
-    const sz = 512;
-    const cv = document.createElement('canvas');
-    cv.width = sz;
-    cv.height = sz;
-    const c = cv.getContext('2d');
-    const mid = sz * 0.5;
-    const maxR = mid * 0.94;
+  // Pooled Soft Dark-Stone Floor Dust Puffs (for crater slams, rock-bounce dust & stuck-hammer extraction tugs)
+  const MAX_STONE_DUST_PUFFS = isMobileDevice ? 28 : 52;
+  const activeStoneDustPuffs = [];
+  const freeStoneDustPuffs = [];
 
-    let seed = (molten ? 918273 : 451937) ^ (fissure ? 0x5f3759df : 0);
+  function spawnStoneDustPuff({
+    x = 0,
+    y = 0.08,
+    z = 0,
+    vx = 0,
+    vy = 0.35,
+    vz = 0,
+    startScale = 0.55,
+    endScale = 1.65,
+    opacity = 0.38,
+    duration = 0.62,
+    color = 0x35303a
+  } = {}) {
+    if (lowSpecMode && activeStoneDustPuffs.length >= 16) return;
+    let dp = freeStoneDustPuffs.pop();
+    if (!dp) {
+      if (activeStoneDustPuffs.length >= MAX_STONE_DUST_PUFFS) {
+        dp = activeStoneDustPuffs.shift();
+      } else {
+        const mat = new THREE.SpriteMaterial({
+          map: hubMistTex,
+          color: 0x35303a,
+          transparent: true,
+          opacity: 0.38,
+          blending: THREE.NormalBlending,
+          depthWrite: false,
+          toneMapped: true
+        });
+        const sprite = new THREE.Sprite(mat);
+        sprite.renderOrder = 5;
+        scene.add(sprite);
+        dp = {
+          sprite,
+          mat,
+          x: 0,
+          y: 0,
+          z: 0,
+          vx: 0,
+          vy: 0,
+          vz: 0,
+          startScale: 0.5,
+          endScale: 1.5,
+          baseOpacity: 0.38,
+          age: 0,
+          duration: 0.6
+        };
+      }
+    }
+    dp.x = x;
+    dp.y = y;
+    dp.z = z;
+    dp.vx = vx;
+    dp.vy = vy;
+    dp.vz = vz;
+    dp.startScale = startScale;
+    dp.endScale = endScale;
+    dp.baseOpacity = Math.min(0.62, Math.max(0.08, opacity));
+    dp.age = 0;
+    dp.duration = Math.max(0.18, duration);
+    dp.mat.color.setHex(color);
+    dp.mat.opacity = dp.baseOpacity * 0.25;
+    dp.sprite.position.set(x, y, z);
+    dp.sprite.scale.set(startScale, startScale * 0.68, 1);
+    dp.sprite.visible = true;
+    activeStoneDustPuffs.push(dp);
+  }
+
+  // Subdivided horizontal XZ grid (x, z in [-1, 1], uv in [0, 1]) for real 3D buckled rim silhouette
+  // + exact tangent-free local-space view ray for Parallax Occlusion Funnel ray-marching!
+  function buildCraterFunnelGridGeometry(segs = 38) {
+    const vertsPerRow = segs + 1;
+    const totalVerts = vertsPerRow * vertsPerRow;
+    const positions = new Float32Array(totalVerts * 3);
+    const uvs = new Float32Array(totalVerts * 2);
+    const indices = [];
+
+    let vIdx = 0;
+    let uvIdx = 0;
+    for (let iz = 0; iz <= segs; iz++) {
+      const vz = iz / segs;
+      const z = vz * 2.0 - 1.0;
+      for (let ix = 0; ix <= segs; ix++) {
+        const ux = ix / segs;
+        const x = ux * 2.0 - 1.0;
+        positions[vIdx++] = x;
+        positions[vIdx++] = 0.0;
+        positions[vIdx++] = z;
+        uvs[uvIdx++] = ux;
+        uvs[uvIdx++] = vz;
+      }
+    }
+    for (let iz = 0; iz < segs; iz++) {
+      for (let ix = 0; ix < segs; ix++) {
+        const a = iz * vertsPerRow + ix;
+        const b = a + 1;
+        const c = a + vertsPerRow;
+        const d = c + 1;
+        indices.push(a, c, b, b, c, d);
+      }
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+    geo.setIndex(indices);
+    return geo;
+  }
+
+  // Multi-channel RGBA DataTexture encoding:
+  //   R = Sharp primary, secondary, concentric & spiderweb hairline fault cracks [0..1]
+  //   G = Sculpted sunken funnel / tectonic trench heightfield [0..1] (neutral floor = 0.64, pit = 0.02, buckled rim = 0.90)
+  //   B = Crushed cathedral flagstone block facets, mortar seams & granite grain [0..1]
+  //   A = Torn polygonal fractured-stone outer perimeter alpha mask [0..1]
+  function buildCraterReliefDataTexture({ fissure = false } = {}) {
+    const sz = 512;
+    const mid = sz * 0.5;
+    const maxR = mid * 0.95;
+
+    const crackCv = document.createElement('canvas');
+    crackCv.width = sz;
+    crackCv.height = sz;
+    const cc = crackCv.getContext('2d');
+    cc.fillStyle = '#000000';
+    cc.fillRect(0, 0, sz, sz);
+
+    const stoneCv = document.createElement('canvas');
+    stoneCv.width = sz;
+    stoneCv.height = sz;
+    const sc = stoneCv.getContext('2d');
+    sc.fillStyle = 'rgb(148, 148, 148)';
+    sc.fillRect(0, 0, sz, sz);
+
+    let seed = fissure ? 0x6d2b79f5 : 0x3b9a71d3;
     const rnd = () => {
       seed = (seed * 1664525 + 1013904223) >>> 0;
       return seed / 4294967296;
     };
 
-    // Draws a sharp chiseled tectonic fault with 3D normal/depth bevel contrast (sunlit stone lip + dark bevel + abyssal/magma core)
-    const drawChiseledFault = (pts, baseWidth, taperTo = 0.28) => {
+    const strokeFault = (pts, startW, endW, intensity = 1.0) => {
       if (pts.length < 2) return;
-      c.save();
-      c.lineCap = 'round';
-      c.lineJoin = 'miter';
+      cc.save();
+      cc.lineCap = 'round';
+      cc.lineJoin = 'round';
+      for (let i = 0; i < pts.length - 1; i++) {
+        const u = i / Math.max(1, pts.length - 1);
+        const w = startW + (endW - startW) * u;
+        const p0 = pts[i];
+        const p1 = pts[i + 1];
+        // Soft fracture shoulder ramp (carves realistic angled stone bevels in heightfield!)
+        const shVal = Math.round(135 * intensity * (1 - u * 0.32));
+        cc.strokeStyle = `rgba(${shVal}, 0, 0, 0.55)`;
+        cc.lineWidth = w * 2.15;
+        cc.beginPath();
+        cc.moveTo(p0[0], p0[1]);
+        cc.lineTo(p1[0], p1[1]);
+        cc.stroke();
 
-      for (let seg = 0; seg < pts.length - 1; seg++) {
-        const u = seg / Math.max(1, pts.length - 1);
-        const w = baseWidth * (1 - u * (1 - taperTo));
-        const x0 = pts[seg][0];
-        const y0 = pts[seg][1];
-        const x1 = pts[seg + 1][0];
-        const y1 = pts[seg + 1][1];
-
-        // 1. Raised sunlit stone fracture lip (+offset) for crisp normal-map-like relief
-        c.strokeStyle = molten ? 'rgba(136, 108, 96, 0.56)' : 'rgba(226, 232, 240, 0.78)';
-        c.lineWidth = w * 1.48;
-        c.beginPath();
-        c.moveTo(x0 + 2.0, y0 + 2.0);
-        c.lineTo(x1 + 2.0, y1 + 2.0);
-        c.stroke();
-
-        // 2. Shadowed opposite stone bevel (-offset)
-        c.strokeStyle = molten ? 'rgba(20, 10, 8, 0.92)' : 'rgba(15, 23, 42, 0.88)';
-        c.lineWidth = w * 1.36;
-        c.beginPath();
-        c.moveTo(x0 - 1.7, y0 - 1.7);
-        c.lineTo(x1 - 1.7, y1 - 1.7);
-        c.stroke();
-
-        // 3. Deep abyssal chasm or incandescent magma fault core
-        if (molten) {
-          c.strokeStyle = 'rgba(154, 52, 18, 0.95)';
-          c.lineWidth = w * 1.05;
-          c.beginPath();
-          c.moveTo(x0, y0);
-          c.lineTo(x1, y1);
-          c.stroke();
-
-          c.strokeStyle = 'rgba(249, 115, 22, 0.96)';
-          c.lineWidth = Math.max(1.4, w * 0.58);
-          c.beginPath();
-          c.moveTo(x0, y0);
-          c.lineTo(x1, y1);
-          c.stroke();
-
-          c.strokeStyle = 'rgba(254, 249, 195, 0.98)';
-          c.lineWidth = Math.max(0.9, w * 0.25);
-          c.beginPath();
-          c.moveTo(x0, y0);
-          c.lineTo(x1, y1);
-          c.stroke();
-        } else {
-          c.strokeStyle = 'rgba(3, 4, 8, 0.98)';
-          c.lineWidth = Math.max(1.3, w * 0.76);
-          c.beginPath();
-          c.moveTo(x0, y0);
-          c.lineTo(x1, y1);
-          c.stroke();
-        }
+        // Razor-sharp incised abyssal fault core
+        const coreVal = Math.round(255 * intensity * (1 - u * 0.18));
+        cc.strokeStyle = `rgba(${coreVal}, 0, 0, 0.96)`;
+        cc.lineWidth = Math.max(0.85, w);
+        cc.beginPath();
+        cc.moveTo(p0[0], p0[1]);
+        cc.lineTo(p1[0], p1[1]);
+        cc.stroke();
       }
-      c.restore();
+      cc.restore();
     };
 
-    if (!fissure) {
-      // CIRCULAR CRATER & VOLCANIC RING BED
-      const bg = c.createRadialGradient(mid, mid, maxR * 0.03, mid, mid, maxR);
-      if (molten) {
-        bg.addColorStop(0.0, 'rgba(28, 9, 5, 0.92)');
-        bg.addColorStop(0.56, 'rgba(20, 8, 5, 0.78)');
-        bg.addColorStop(0.84, 'rgba(36, 12, 6, 0.62)');
-        bg.addColorStop(0.95, 'rgba(14, 8, 6, 0.22)');
-        bg.addColorStop(1.0, 'rgba(0, 0, 0, 0.0)');
-      } else {
-        bg.addColorStop(0.0, 'rgba(14, 16, 22, 0.86)');
-        bg.addColorStop(0.52, 'rgba(24, 27, 34, 0.58)');
-        bg.addColorStop(0.86, 'rgba(38, 42, 50, 0.32)');
-        bg.addColorStop(1.0, 'rgba(0, 0, 0, 0.0)');
-      }
-      c.fillStyle = bg;
-      c.fillRect(0, 0, sz, sz);
+    // Draw staggered cathedral flagstone courses onto stoneCv (radially pinched near impact center!)
+    const rows = 8;
+    const rowH = sz / rows;
+    for (let r = -1; r <= rows; r++) {
+      const y0 = r * rowH;
+      let curX = -((r & 1) ? rowH * 0.65 : rowH * 0.15);
+      while (curX < sz + rowH) {
+        const bw = rowH * (0.85 + rnd() * 0.65);
+        const bh = rowH * (0.92 + (rnd() - 0.5) * 0.08);
+        const shade = Math.round(112 + rnd() * 88);
+        sc.fillStyle = `rgb(${shade}, ${shade}, ${shade})`;
+        sc.strokeStyle = 'rgb(28, 28, 28)';
+        sc.lineWidth = 3.2;
 
-      // Two concentric polygonal shatter rings (inner shock ring ~0.48R + outer perimeter rim ~0.85R)
-      const ringRadii = [0.48, 0.85];
-      for (let ri = 0; ri < ringRadii.length; ri++) {
-        const ringFrac = ringRadii[ri];
-        const ringSegs = ri === 0 ? 22 : 34;
-        const ringPts = [];
-        for (let i = 0; i <= ringSegs; i++) {
-          const a = (i / ringSegs) * Math.PI * 2;
-          const rr = maxR * (ringFrac + (rnd() - 0.5) * 0.065);
-          ringPts.push([mid + Math.cos(a) * rr, mid + Math.sin(a) * rr]);
+        const poly = [
+          [curX + 2 + (rnd() - 0.5) * 4, y0 + 2 + (rnd() - 0.5) * 4],
+          [curX + bw - 2 + (rnd() - 0.5) * 4, y0 + 2 + (rnd() - 0.5) * 4],
+          [curX + bw - 2 + (rnd() - 0.5) * 4, y0 + bh - 2 + (rnd() - 0.5) * 4],
+          [curX + 2 + (rnd() - 0.5) * 4, y0 + bh - 2 + (rnd() - 0.5) * 4]
+        ];
+        // Pull vertices inward toward impact center/trench to pre-bake crushed masonry deformation!
+        for (let k = 0; k < poly.length; k++) {
+          if (!fissure) {
+            const dx = poly[k][0] - mid;
+            const dy = poly[k][1] - mid;
+            const d = Math.hypot(dx, dy) / maxR;
+            const pull = 1.0 - 0.34 * Math.exp(-d * d * 7.5);
+            poly[k][0] = mid + dx * pull;
+            poly[k][1] = mid + dy * pull;
+          } else {
+            const dx = poly[k][0] - mid;
+            const ax = Math.abs(dx) / (sz * 0.45);
+            const pull = 1.0 - 0.28 * Math.exp(-ax * ax * 8.0);
+            poly[k][0] = mid + dx * pull;
+          }
         }
-        drawChiseledFault(ringPts, ri === 0 ? 5.2 : 6.8, 0.88);
+        sc.beginPath();
+        sc.moveTo(poly[0][0], poly[0][1]);
+        for (let k = 1; k < poly.length; k++) sc.lineTo(poly[k][0], poly[k][1]);
+        sc.closePath();
+        sc.fill();
+        sc.stroke();
+        curX += bw;
+      }
+    }
+
+    const rayAngles = [];
+    if (!fissure) {
+      // Central pulverized warhammer socket chasm
+      const pitGrad = cc.createRadialGradient(mid, mid, 2, mid, mid, maxR * 0.22);
+      pitGrad.addColorStop(0.0, 'rgba(255, 0, 0, 0.96)');
+      pitGrad.addColorStop(0.55, 'rgba(185, 0, 0, 0.62)');
+      pitGrad.addColorStop(1.0, 'rgba(0, 0, 0, 0.0)');
+      cc.fillStyle = pitGrad;
+      cc.beginPath();
+      cc.arc(mid, mid, maxR * 0.22, 0, Math.PI * 2);
+      cc.fill();
+
+      // 3 broken polygonal hinge-buckle fault rings (inner pit lip 0.35R, heaved crest 0.57R, outer spall 0.80R)
+      const ringSpecs = [
+        { r: 0.35, segs: 18, w: 6.2, skipChance: 0.14, inten: 0.92 },
+        { r: 0.57, segs: 26, w: 4.8, skipChance: 0.24, inten: 0.78 },
+        { r: 0.80, segs: 32, w: 3.4, skipChance: 0.34, inten: 0.62 }
+      ];
+      for (let ri = 0; ri < ringSpecs.length; ri++) {
+        const rs = ringSpecs[ri];
+        let prevPt = null;
+        for (let s = 0; s <= rs.segs; s++) {
+          const a = (s / rs.segs) * Math.PI * 2 + ri * 0.37;
+          const rad = maxR * (rs.r + (rnd() - 0.5) * 0.068);
+          const pt = [mid + Math.cos(a) * rad, mid + Math.sin(a) * rad];
+          if (prevPt && rnd() > rs.skipChance) {
+            strokeFault([prevPt, pt], rs.w, rs.w * 0.86, rs.inten);
+          }
+          prevPt = pt;
+        }
       }
 
-      // 15 sharp radial tectonic fault lines + branching shear forks
-      const rayCount = 15;
-      for (let r = 0; r < rayCount; r++) {
-        const baseA = (r / rayCount) * Math.PI * 2 + (rnd() - 0.5) * 0.18;
-        const steps = 9;
-        const pts = [[mid + (rnd() - 0.5) * 6, mid + (rnd() - 0.5) * 6]];
+      // 11 primary jagged radial tectonic chasms + branching Y-forks
+      const primaryCount = 11;
+      for (let r = 0; r < primaryCount; r++) {
+        const baseA = (r / primaryCount) * Math.PI * 2 + (rnd() - 0.5) * 0.22;
+        rayAngles.push(baseA);
+        const steps = 10;
+        const maxReach = 0.85 + rnd() * 0.12;
+        const pts = [[mid + (rnd() - 0.5) * 7, mid + (rnd() - 0.5) * 7]];
         let curA = baseA;
         for (let s = 1; s <= steps; s++) {
           const u = s / steps;
-          curA += (rnd() - 0.5) * 0.22;
-          const rad = maxR * (0.94 * u);
-          pts.push([mid + Math.cos(curA) * rad, mid + Math.sin(curA) * rad]);
+          curA += (rnd() - 0.5) * 0.24;
+          const rad = maxR * maxReach * u;
+          const px = mid + Math.cos(curA) * rad;
+          const py = mid + Math.sin(curA) * rad;
+          pts.push([px, py]);
 
           if (s === 3 || s === 5 || s === 7) {
-            const forkDir = rnd() < 0.5 ? 1 : -1;
-            const forkA = curA + forkDir * (0.38 + rnd() * 0.26);
-            const origin = pts[pts.length - 1];
-            const f1x = origin[0] + Math.cos(forkA) * maxR * 0.13;
-            const f1y = origin[1] + Math.sin(forkA) * maxR * 0.13;
-            const f2x = f1x + Math.cos(forkA + forkDir * 0.22) * maxR * 0.14;
-            const f2y = f1y + Math.sin(forkA + forkDir * 0.22) * maxR * 0.14;
-            if (Math.hypot(f2x - mid, f2y - mid) < maxR * 0.95) {
-              drawChiseledFault([origin, [f1x, f1y], [f2x, f2y]], 4.6, 0.32);
+            const forkSide = rnd() < 0.5 ? 1 : -1;
+            const forkA = curA + forkSide * (0.34 + rnd() * 0.30);
+            const f1 = [px + Math.cos(forkA) * maxR * 0.12, py + Math.sin(forkA) * maxR * 0.12];
+            const f2 = [
+              f1[0] + Math.cos(forkA + forkSide * 0.20) * maxR * 0.13,
+              f1[1] + Math.sin(forkA + forkSide * 0.20) * maxR * 0.13
+            ];
+            if (Math.hypot(f2[0] - mid, f2[1] - mid) < maxR * 0.96) {
+              strokeFault([[px, py], f1, f2], 4.8 * (1 - u * 0.35), 1.2, 0.82);
             }
           }
         }
-        drawChiseledFault(pts, 7.8, 0.26);
+        strokeFault(pts, 9.6, 1.8, 1.0);
+      }
+
+      // 16 secondary radial & transverse shear cracks
+      for (let s = 0; s < 16; s++) {
+        const a0 = (s / 16) * Math.PI * 2 + 0.14 + (rnd() - 0.5) * 0.24;
+        const rStart = maxR * (0.12 + rnd() * 0.20);
+        const rEnd = maxR * (0.58 + rnd() * 0.28);
+        const pts = [];
+        let ca = a0;
+        for (let k = 0; k <= 5; k++) {
+          const u = k / 5;
+          ca += (rnd() - 0.5) * 0.26;
+          const rr = rStart + (rEnd - rStart) * u;
+          pts.push([mid + Math.cos(ca) * rr, mid + Math.sin(ca) * rr]);
+        }
+        strokeFault(pts, 4.2, 1.05, 0.76);
+      }
+
+      // 30 fine spiderweb hairline fractures around the sunken pit & buckled rim
+      for (let h = 0; h < 30; h++) {
+        const ha = rnd() * Math.PI * 2;
+        const hr0 = maxR * (0.08 + rnd() * 0.56);
+        const x0 = mid + Math.cos(ha) * hr0;
+        const y0 = mid + Math.sin(ha) * hr0;
+        const dirA = ha + (rnd() - 0.5) * 1.65;
+        const segLen = maxR * (0.08 + rnd() * 0.14);
+        const xm = x0 + Math.cos(dirA) * segLen * 0.52;
+        const ym = y0 + Math.sin(dirA) * segLen * 0.52;
+        const x1 = xm + Math.cos(dirA + (rnd() - 0.5) * 0.55) * segLen * 0.52;
+        const y1 = ym + Math.sin(dirA + (rnd() - 0.5) * 0.55) * segLen * 0.52;
+        strokeFault([[x0, y0], [xm, ym], [x1, y1]], 1.85, 0.75, 0.58);
       }
     } else {
-      // DIRECTIONAL TECTONIC FISSURE ROAD BED (local Z runs along canvas Y: 36..476, feathered cleanly at all 4 borders!)
-      const halfW = sz * 0.36;
-      const latGrad = c.createLinearGradient(mid - halfW, 0, mid + halfW, 0);
-      if (molten) {
-        latGrad.addColorStop(0.0, 'rgba(0, 0, 0, 0.0)');
-        latGrad.addColorStop(0.22, 'rgba(24, 9, 5, 0.55)');
-        latGrad.addColorStop(0.50, 'rgba(32, 10, 4, 0.92)');
-        latGrad.addColorStop(0.78, 'rgba(24, 9, 5, 0.55)');
-        latGrad.addColorStop(1.0, 'rgba(0, 0, 0, 0.0)');
-      } else {
-        latGrad.addColorStop(0.0, 'rgba(0, 0, 0, 0.0)');
-        latGrad.addColorStop(0.25, 'rgba(24, 27, 34, 0.45)');
-        latGrad.addColorStop(0.50, 'rgba(14, 16, 22, 0.86)');
-        latGrad.addColorStop(0.75, 'rgba(24, 27, 34, 0.45)');
-        latGrad.addColorStop(1.0, 'rgba(0, 0, 0, 0.0)');
-      }
-      c.fillStyle = latGrad;
-      c.fillRect(mid - halfW, 24, halfW * 2, sz - 48);
-
-      // Twin intertwined central tectonic fault chasms running down the spine
+      // Directional tectonic fissure trench + chevron shear faults
       for (let sp = 0; sp < 2; sp++) {
-        const spinePts = [];
-        const segs = 16;
+        const pts = [];
+        const segs = 18;
         for (let s = 0; s <= segs; s++) {
           const v = s / segs;
-          const y = 30 + v * (sz - 60);
+          const y = 26 + v * (sz - 52);
           const env = Math.sin(v * Math.PI);
-          const ox = ((sp === 0 ? -1 : 1) * 11 + (rnd() - 0.5) * 34) * env;
-          spinePts.push([mid + ox, y]);
-
-          // Diagonal chevron shear fractures splayed outward by the warhammer shockwave
-          if (s >= 2 && s <= segs - 2 && s % 2 === sp) {
+          const ox = ((sp === 0 ? -1 : 1) * 10 + (rnd() - 0.5) * 32) * env;
+          pts.push([mid + ox, y]);
+          if (s >= 2 && s <= segs - 2) {
             for (let side = -1; side <= 1; side += 2) {
-              const b1x = mid + ox + side * (36 + rnd() * 28) * env;
-              const b1y = y + (18 + rnd() * 18);
-              const b2x = b1x + side * (38 + rnd() * 34) * env;
-              const b2y = b1y + (16 + rnd() * 22);
-              drawChiseledFault([[mid + ox, y], [b1x, b1y], [b2x, b2y]], 5.4, 0.25);
+              if ((s + (sp === 0 ? 0 : 1)) % 2 !== 0) continue;
+              const b1x = mid + ox + side * (34 + rnd() * 32) * env;
+              const b1y = y + (16 + rnd() * 20);
+              const b2x = b1x + side * (36 + rnd() * 36) * env;
+              const b2y = b1y + (14 + rnd() * 22);
+              strokeFault([[mid + ox, y], [b1x, b1y], [b2x, b2y]], 5.2, 1.2, 0.85);
             }
           }
         }
-        drawChiseledFault(spinePts, sp === 0 ? 9.2 : 6.4, 0.72);
+        strokeFault(pts, sp === 0 ? 10.5 : 6.8, sp === 0 ? 7.5 : 5.0, 1.0);
       }
-
-      // Smooth longitudinal alpha feather at top & bottom ends so chained Fire Road segments blend with zero seam
-      c.save();
-      c.globalCompositeOperation = 'destination-in';
-      const endMask = c.createLinearGradient(0, 0, 0, sz);
-      endMask.addColorStop(0.0, 'rgba(0, 0, 0, 0.0)');
-      endMask.addColorStop(0.12, 'rgba(0, 0, 0, 1.0)');
-      endMask.addColorStop(0.88, 'rgba(0, 0, 0, 1.0)');
-      endMask.addColorStop(1.0, 'rgba(0, 0, 0, 0.0)');
-      c.fillStyle = endMask;
-      c.fillRect(0, 0, sz, sz);
-      c.restore();
+      for (let h = 0; h < 24; h++) {
+        const y0 = 42 + rnd() * (sz - 84);
+        const x0 = mid + (rnd() - 0.5) * sz * 0.44;
+        const ang = (rnd() < 0.5 ? 1 : -1) * (0.55 + rnd() * 0.85);
+        const len = 24 + rnd() * 38;
+        strokeFault(
+          [
+            [x0, y0],
+            [x0 + Math.cos(ang) * len * 0.5, y0 + Math.sin(ang) * len * 0.5],
+            [x0 + Math.cos(ang + 0.3) * len, y0 + Math.sin(ang + 0.3) * len]
+          ],
+          2.0,
+          0.8,
+          0.60
+        );
+      }
     }
 
-    const tex = new THREE.CanvasTexture(cv);
-    tex.colorSpace = THREE.SRGBColorSpace;
+    const crackData = cc.getImageData(0, 0, sz, sz).data;
+    const stoneData = sc.getImageData(0, 0, sz, sz).data;
+    const out = new Uint8Array(sz * sz * 4);
+
+    for (let y = 0; y < sz; y++) {
+      // Flip Y into Three.js DataTexture UV convention (v = 0 at iz = 0 -> z = -1)
+      const srcY = y;
+      const ny = (srcY - mid) / maxR;
+      for (let x = 0; x < sz; x++) {
+        const nx = (x - mid) / maxR;
+        const srcIdx = (srcY * sz + x) * 4;
+        const dstIdx = (y * sz + x) * 4;
+
+        const crackVal = crackData[srcIdx] / 255.0;
+        const stoneVal = stoneData[srcIdx] / 255.0;
+
+        // Deterministic multi-frequency mineral grain
+        const gHash = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
+        const microGrain = (gHash - Math.floor(gHash)) - 0.5;
+
+        let h = 0.64;
+        let alpha = 0.0;
+
+        if (!fissure) {
+          const rn = Math.hypot(nx, ny);
+          const ang = Math.atan2(ny, nx);
+          const wedgeWave =
+            0.50 * Math.sin(ang * 7.0 + 0.6) +
+            0.32 * Math.cos(ang * 11.0 - 1.2) +
+            0.18 * Math.sin(ang * 17.0 + 2.1);
+
+          // Sunken central crushed-stone funnel (rn < 0.39) + stepped broken ledges + heaved rim crown (0.50..0.74)
+          if (rn < 0.39) {
+            const uPit = rn / 0.39;
+            // Steep funnel bowl with subtle broken flagstone shelf step around uPit ~ 0.62
+            const bowl = Math.pow(uPit, 1.55) * 0.54;
+            const ledgeStep = Math.tanh((uPit - 0.58) * 9.0) * 0.045;
+            h = 0.035 + bowl + ledgeStep + wedgeWave * 0.032 * uPit;
+          } else if (rn < 0.56) {
+            const uSlope = (rn - 0.39) / 0.17;
+            const sCurve = uSlope * uSlope * (3.0 - 2.0 * uSlope);
+            h = 0.575 + sCurve * (0.275 + wedgeWave * 0.055);
+          } else if (rn < 0.84) {
+            const uRim = (rn - 0.56) / 0.28;
+            const sDown = uRim * uRim * (3.0 - 2.0 * uRim);
+            const crest = 0.850 + wedgeWave * 0.055;
+            h = crest + (0.64 - crest) * sDown;
+          } else {
+            h = 0.64;
+          }
+
+          // Irregular torn-stone outer perimeter (never a smooth circle!)
+          const maxTipBoost = crackVal * 0.085;
+          const rimBoundary = 0.84 + wedgeWave * 0.085 + (stoneVal - 0.5) * 0.05 + maxTipBoost;
+          if (rn <= rimBoundary - 0.12) {
+            alpha = 1.0;
+          } else if (rn < rimBoundary + 0.06) {
+            const tEdge = 1.0 - (rn - (rimBoundary - 0.12)) / 0.18;
+            alpha = Math.max(0.0, Math.min(1.0, tEdge * tEdge * (3.0 - 2.0 * tEdge)));
+          } else {
+            alpha = 0.0;
+          }
+          if (rn > 0.99) alpha = 0.0;
+        } else {
+          const ax = Math.abs(nx);
+          const az = Math.abs(ny);
+          const endEnv = Math.max(0.0, Math.cos(Math.min(1.0, az) * Math.PI * 0.5));
+          const jagWave =
+            0.55 * Math.sin(ny * 11.0 + 0.4) +
+            0.45 * Math.cos(ny * 19.0 - 0.9);
+
+          if (ax < 0.30) {
+            const uTrench = ax / 0.30;
+            h = 0.64 - (0.56 - uTrench * uTrench * 0.48) * endEnv;
+          } else if (ax < 0.54) {
+            const uCurb = (ax - 0.30) / 0.24;
+            const bell = Math.sin(uCurb * Math.PI);
+            h = 0.64 + bell * (0.20 + jagWave * 0.04) * endEnv;
+          } else {
+            h = 0.64;
+          }
+
+          const latBound = (0.68 + jagWave * 0.11 + crackVal * 0.09) * (0.45 + 0.55 * endEnv);
+          const latAlpha = ax < latBound - 0.12
+            ? 1.0
+            : ax < latBound + 0.08
+              ? 1.0 - (ax - (latBound - 0.12)) / 0.20
+              : 0.0;
+          const endAlpha = az < 0.74 ? 1.0 : az < 0.98 ? 1.0 - (az - 0.74) / 0.24 : 0.0;
+          alpha = Math.max(0.0, Math.min(1.0, latAlpha * endAlpha));
+        }
+
+        // Incise cracks + broken stone block tilt into heightfield
+        h = h + (stoneVal - 0.5) * 0.095 + microGrain * 0.022 - crackVal * 0.52;
+        h = Math.max(0.0, Math.min(1.0, h));
+
+        out[dstIdx] = Math.max(0, Math.min(255, Math.round(crackVal * 255)));
+        out[dstIdx + 1] = Math.max(0, Math.min(255, Math.round(h * 255)));
+        out[dstIdx + 2] = Math.max(0, Math.min(255, Math.round(stoneVal * 255)));
+        out[dstIdx + 3] = Math.max(0, Math.min(255, Math.round(alpha * 255)));
+      }
+    }
+
+    const tex = new THREE.DataTexture(out, sz, sz, THREE.RGBAFormat);
+    tex.colorSpace = THREE.NoColorSpace;
+    tex.wrapS = THREE.ClampToEdgeWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    tex.generateMipmaps = true;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.magFilter = THREE.LinearFilter;
     tex.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy?.() || 1);
+    tex.needsUpdate = true;
     return tex;
   }
 
-  function buildProceduralMagmaVeinsTexture({ fissure = false } = {}) {
-    const sz = 512;
-    const cv = document.createElement('canvas');
-    cv.width = sz;
-    cv.height = sz;
-    const c = cv.getContext('2d');
-    const mid = sz * 0.5;
-    const maxR = mid * 0.94;
-    c.clearRect(0, 0, sz, sz);
+  // ==========================================================================
+  // Custom Dark-Gothic Parallax Sunken Funnel & Shattered Stone Shader
+  //   - Parallax Ray-Marched Depth Sink in center (r < 0.38 -> real 3D sunken funnel!)
+  //   - Radial inward masonry UV pinch + procedural infinite-sharp Voronoi stone facets
+  //   - Overhead directional + torch bevel shading with Pit Rim Self-Shadowing
+  //   - ZERO glowing white lines! Cold stone strictly capped <= #3d3740 dusty basalt!
+  // ==========================================================================
+  const CRATER_FUNNEL_VERT_GLSL = /* glsl */ `
+    uniform float uHeave;
+    uniform float uFissure;
+    uniform float uSeed;
 
-    let seed = fissure ? 773195 : 918273;
-    const rnd = () => {
-      seed = (seed * 1664525 + 1013904223) >>> 0;
-      return seed / 4294967296;
-    };
+    varying vec2 vUv;
+    varying vec3 vViewLocal;
+    varying vec3 vAxisX;
+    varying vec3 vAxisY;
+    varying vec3 vAxisZ;
 
-    const drawGlowVein = (pts, w) => {
-      if (pts.length < 2) return;
-      c.save();
-      c.lineCap = 'round';
-      c.lineJoin = 'round';
-      const layers = [
-        { mul: 2.3, col: 'rgba(185, 28, 28, 0.42)' },
-        { mul: 1.3, col: 'rgba(249, 115, 22, 0.78)' },
-        { mul: 0.55, col: 'rgba(254, 240, 138, 0.96)' }
-      ];
-      for (let l = 0; l < layers.length; l++) {
-        c.strokeStyle = layers[l].col;
-        c.lineWidth = w * layers[l].mul;
-        c.beginPath();
-        c.moveTo(pts[0][0], pts[0][1]);
-        for (let i = 1; i < pts.length; i++) c.lineTo(pts[i][0], pts[i][1]);
-        c.stroke();
+    void main() {
+      vUv = uv;
+      vec3 p = position;
+
+      if (uFissure < 0.5) {
+        float r = length(p.xz);
+        float ang = atan(p.z, p.x);
+        float buckle = 0.72 + 0.28 * sin(ang * 5.0 + uSeed) * cos(ang * 3.0 - uSeed * 0.7);
+        float rimRidge = exp(-pow((r - 0.50) / 0.17, 2.0)) * buckle;
+        float baseLift = 0.012 * (1.0 - smoothstep(0.76, 1.0, r)) + 0.005;
+        p.y = baseLift + rimRidge * 0.054 * uHeave;
+      } else {
+        float ax = abs(p.x);
+        float endEnv = sin(clamp(uv.y, 0.0, 1.0) * 3.14159265);
+        float curb = exp(-pow((ax - 0.40) / 0.16, 2.0)) * endEnv;
+        p.y = 0.010 * endEnv + curb * 0.044 * uHeave + 0.005;
       }
-      c.restore();
-    };
 
-    if (!fissure) {
-      // Blazing perimeter ring channel + radial lava arteries
-      const ringSegs = 36;
-      const ringPts = [];
-      for (let i = 0; i <= ringSegs; i++) {
-        const a = (i / ringSegs) * Math.PI * 2;
-        const rr = maxR * (0.85 + (rnd() - 0.5) * 0.05);
-        ringPts.push([mid + Math.cos(a) * rr, mid + Math.sin(a) * rr]);
-      }
-      drawGlowVein(ringPts, 8.5);
+      vec4 worldPos = modelMatrix * vec4(p, 1.0);
+      vec3 axisX = normalize(modelMatrix[0].xyz);
+      vec3 axisY = normalize(modelMatrix[1].xyz);
+      vec3 axisZ = normalize(modelMatrix[2].xyz);
+      vAxisX = axisX;
+      vAxisY = axisY;
+      vAxisZ = axisZ;
 
-      for (let r = 0; r < 14; r++) {
-        let curA = (r / 14) * Math.PI * 2 + (rnd() - 0.5) * 0.2;
-        const pts = [[mid, mid]];
-        for (let s = 1; s <= 8; s++) {
-          curA += (rnd() - 0.5) * 0.22;
-          const rad = maxR * 0.90 * (s / 8);
-          pts.push([mid + Math.cos(curA) * rad, mid + Math.sin(curA) * rad]);
-        }
-        drawGlowVein(pts, 6.2);
-      }
-    } else {
-      const spinePts = [];
-      for (let s = 0; s <= 16; s++) {
-        const v = s / 16;
-        const env = Math.sin(v * Math.PI);
-        const ox = (rnd() - 0.5) * 28 * env;
-        const y = 34 + v * (sz - 68);
-        spinePts.push([mid + ox, y]);
-        if (s >= 2 && s <= 14 && s % 2 === 0) {
-          for (let side = -1; side <= 1; side += 2) {
-            drawGlowVein(
-              [
-                [mid + ox, y],
-                [mid + ox + side * (56 + rnd() * 44) * env, y + 26 + rnd() * 20]
-              ],
-              4.8
-            );
+      vec3 worldView = cameraPosition - worldPos.xyz;
+      vViewLocal = vec3(dot(worldView, axisX), dot(worldView, axisY), dot(worldView, axisZ));
+
+      gl_Position = projectionMatrix * viewMatrix * worldPos;
+    }
+  `;
+
+  const CRATER_FUNNEL_FRAG_GLSL = /* glsl */ `
+    uniform sampler2D uReliefMap;
+    uniform float uOpacity;
+    uniform float uCollapse;
+    uniform float uMolten;
+    uniform float uFissure;
+    uniform float uTime;
+    uniform float uSeed;
+    uniform float uWrenchPulse;
+
+    varying vec2 vUv;
+    varying vec3 vViewLocal;
+    varying vec3 vAxisX;
+    varying vec3 vAxisY;
+    varying vec3 vAxisZ;
+
+    vec2 hash22(vec2 p) {
+      vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
+      p3 += dot(p3, p3.yzx + 33.33);
+      return fract((p3.xx + p3.yz) * p3.zy);
+    }
+
+    // Crisp procedural Voronoi shattered-flagstone cells & hairline border cracks
+    // Returns vec3(borderDist, cellHash, facetTilt)
+    vec3 voronoiStoneCells(vec2 x) {
+      vec2 n = floor(x);
+      vec2 f = fract(x);
+      vec2 mg = vec2(0.0);
+      vec2 mr = vec2(0.0);
+      float md = 8.0;
+      float cellId = 0.0;
+
+      for (int j = -1; j <= 1; j++) {
+        for (int i = -1; i <= 1; i++) {
+          vec2 g = vec2(float(i), float(j));
+          vec2 o = hash22(n + g);
+          vec2 r = g + (0.16 + 0.68 * o) - f;
+          float d = dot(r, r);
+          if (d < md) {
+            md = d;
+            mr = r;
+            mg = g;
+            cellId = o.x * 0.63 + o.y * 0.37;
           }
         }
       }
-      drawGlowVein(spinePts, 10.5);
+
+      md = 8.0;
+      for (int j = -1; j <= 1; j++) {
+        for (int i = -1; i <= 1; i++) {
+          vec2 g = vec2(float(i), float(j));
+          vec2 o = hash22(n + g);
+          vec2 r = g + (0.16 + 0.68 * o) - f;
+          if (dot(mr - r, mr - r) > 0.0001) {
+            md = min(md, dot(0.5 * (mr + r), normalize(r - mr)));
+          }
+        }
+      }
+      float tilt = clamp(0.5 + (mr.x * 0.42 - mr.y * 0.38), 0.0, 1.0);
+      return vec3(md, cellId, tilt);
     }
 
-    const tex = new THREE.CanvasTexture(cv);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy?.() || 1);
-    return tex;
+    void main() {
+      vec2 p0 = vUv * 2.0 - 1.0;
+      float r0 = length(p0);
+      if (uFissure < 0.5 && r0 > 1.01) discard;
+
+      float outerMask = texture2D(uReliefMap, vUv).a;
+      if (outerMask < 0.008) discard;
+
+      // 1. 6-step Parallax Occlusion Ray-March into the sunken crushed-stone funnel!
+      vec3 V = normalize(vViewLocal);
+      float sinkMask = (uFissure < 0.5)
+        ? (1.0 - smoothstep(0.32, 0.86, r0))
+        : (1.0 - smoothstep(0.22, 0.72, abs(p0.x)));
+      vec2 paraSpan = (-V.xz / max(0.38, V.y)) * (0.165 * uCollapse * (0.35 + 0.65 * sinkMask));
+
+      float layerDepth = 0.0;
+      float prevDepth = 0.0;
+      float prevMapDepth = 0.0;
+      vec2 curUv = vUv;
+      float curMapDepth = clamp((0.67 - texture2D(uReliefMap, curUv).g) * 1.49, 0.0, 1.0);
+
+      for (int i = 0; i < 6; i++) {
+        if (layerDepth < curMapDepth) {
+          prevDepth = layerDepth;
+          prevMapDepth = curMapDepth;
+          layerDepth += 0.1666667;
+          curUv = clamp(vUv + paraSpan * layerDepth, 0.003, 0.997);
+          curMapDepth = clamp((0.67 - texture2D(uReliefMap, curUv).g) * 1.49, 0.0, 1.0);
+        }
+      }
+
+      float denom = (curMapDepth - layerDepth) - (prevMapDepth - prevDepth);
+      float secWeight = abs(denom) > 0.0001 ? clamp((curMapDepth - layerDepth) / denom, 0.0, 1.0) : 0.0;
+      vec2 uvPara = clamp(mix(curUv, curUv - paraSpan * 0.1666667, secWeight), 0.003, 0.997);
+
+      // 2. Miniature Funnel Surface Texture Deformation (radial inward pinch & downward shear in r < 0.44!)
+      vec2 pPara = uvPara * 2.0 - 1.0;
+      float rPara = length(pPara);
+      float funnelFocus = (uFissure < 0.5)
+        ? exp(-rPara * rPara * 9.8)
+        : exp(-pPara.x * pPara.x * 11.5);
+      float funnelPinch = funnelFocus * (0.54 + 0.12 * uWrenchPulse) * uCollapse;
+      vec2 pFunnel = pPara * (1.0 + funnelPinch);
+      vec2 uvFunnel = clamp(pFunnel * 0.5 + 0.5, 0.003, 0.997);
+
+      vec4 relA = texture2D(uReliefMap, uvPara);
+      vec4 relF = texture2D(uReliefMap, uvFunnel);
+
+      // Infinite-resolution shattered flagstone Voronoi facets & hairline spiderweb seams
+      vec3 vor = voronoiStoneCells(pFunnel * 4.15 + vec2(uSeed * 0.37, -uSeed * 0.29));
+      float vorSeam = 1.0 - smoothstep(0.012, 0.058, vor.x);
+      float vorFine = 1.0 - smoothstep(0.004, 0.026, voronoiStoneCells(pFunnel * 8.4 + vec2(2.7, -1.9)).x);
+      float vorActive = (uFissure < 0.5)
+        ? (1.0 - smoothstep(0.45, 0.88, rPara))
+        : (1.0 - smoothstep(0.35, 0.76, abs(pPara.x)));
+
+      float crack = clamp(
+        max(relA.r, relF.r * 0.90) + vorSeam * 0.52 * vorActive + vorFine * 0.28 * funnelFocus,
+        0.0,
+        1.0
+      );
+      float hCenter = mix(relA.g, relF.g, 0.46) + (vor.z - 0.5) * 0.075 * vorActive - vorSeam * 0.14 * vorActive;
+
+      // 3. Analytical Central-Difference Surface Normal for realistic directional stone bevels
+      const float texel = 1.0 / 512.0;
+      float hL = texture2D(uReliefMap, clamp(uvPara - vec2(texel * 1.6, 0.0), 0.002, 0.998)).g;
+      float hR = texture2D(uReliefMap, clamp(uvPara + vec2(texel * 1.6, 0.0), 0.002, 0.998)).g;
+      float hD = texture2D(uReliefMap, clamp(uvPara - vec2(0.0, texel * 1.6), 0.002, 0.998)).g;
+      float hU = texture2D(uReliefMap, clamp(uvPara + vec2(0.0, texel * 1.6), 0.002, 0.998)).g;
+      float dhdx = (hR - hL) * 3.85 + (vor.z - 0.5) * 0.32 * vorActive;
+      float dhdz = (hU - hD) * 3.85;
+      vec3 localN = normalize(vec3(-dhdx, 1.0, -dhdz));
+      vec3 worldN = normalize(vAxisX * localN.x + vAxisY * localN.y + vAxisZ * localN.z);
+
+      // World-locked cathedral moonlit key + warm brazier fill
+      vec3 worldKeyL = normalize(vec3(0.44, 0.81, 0.39));
+      vec3 worldWarmL = normalize(vec3(-0.56, 0.44, -0.70));
+      vec2 localKeyXZ = vec2(dot(worldKeyL, vAxisX), dot(worldKeyL, vAxisZ));
+
+      // Pit Rim Self-Shadowing: near lip of crater casts a curved shadow down into the sunken pit!
+      float hLight1 = texture2D(uReliefMap, clamp(uvPara + localKeyXZ * 0.055, 0.003, 0.997)).g;
+      float hLight2 = texture2D(uReliefMap, clamp(uvPara + localKeyXZ * 0.115, 0.003, 0.997)).g;
+      float occluderH = max(hLight1, hLight2);
+      float pitShadow = clamp(1.0 - max(0.0, occluderH - hCenter - 0.04) * 3.15, 0.16, 1.0);
+
+      float ndotlKey = max(0.0, dot(worldN, worldKeyL)) * pitShadow;
+      float ndotlWarm = max(0.0, dot(worldN, worldWarmL));
+
+      float pitDepth01 = clamp((0.60 - hCenter) / 0.56, 0.0, 1.0) * uCollapse;
+      float stoneVar = clamp(relF.b * 0.65 + vor.y * 0.35, 0.0, 1.0);
+      float rimDustBand = (uFissure < 0.5)
+        ? exp(-pow((rPara - 0.56) / 0.19, 2.0))
+        : exp(-pow((abs(pPara.x) - 0.44) / 0.18, 2.0));
+
+      vec3 col = vec3(0.0);
+      float finalAlpha = outerMask * uOpacity;
+
+      if (uMolten < 0.5) {
+        // ====================================================================
+        // PHASE-1 SHATTERED CATHEDRAL STONE CRATER (ZERO WHITE LINES!)
+        // Deep abyssal chasms (#070609 -> #17141b) + dusty basalt rim bevels (<= #3d3740)
+        // ====================================================================
+        vec3 cAbyss     = vec3(0.0020, 0.0017, 0.0026); // #070609 deep fault / pit throat
+        vec3 cPitFloor  = vec3(0.0068, 0.0056, 0.0088); // #141118 crushed sunken pit
+        vec3 cInnerSlab = vec3(0.0135, 0.0114, 0.0170); // #1e1b24 tilted inner masonry shelf
+        vec3 cRimStone  = vec3(0.0245, 0.0208, 0.0285); // #2b2730 weathered cathedral flagstone
+        vec3 cDustBevel = vec3(0.0455, 0.0378, 0.0505); // #3d3740 STRICT MAX dusty basalt bevel!
+
+        vec3 baseStone = mix(cRimStone, cInnerSlab, smoothstep(0.08, 0.52, pitDepth01));
+        baseStone = mix(baseStone, cPitFloor, smoothstep(0.48, 0.92, pitDepth01));
+        baseStone *= (0.80 + 0.36 * stoneVar);
+
+        // Directional overhead + torch bevel relief across broken slabs & crack lips (no painted lines!)
+        float bevelRelief = ndotlKey * 0.95 + ndotlWarm * 0.28;
+        vec3 litStone = baseStone * (0.34 + 0.92 * bevelRelief);
+
+        // Subtle pulverized basalt dust along buckled rim lips (only on sunlit upward/angled facets)
+        float bevelLip = clamp((ndotlKey - 0.52) * 1.85, 0.0, 1.0) * (0.45 + 0.55 * rimDustBand) * (1.0 - pitDepth01 * 0.78);
+        litStone = mix(litStone, cDustBevel, bevelLip * 0.58);
+        litStone = mix(litStone, vec3(0.029, 0.025, 0.033), rimDustBand * 0.24 * (1.0 - crack));
+
+        // Incise deep dark tectonic chasms & sunken warhammer pit AO
+        float cavityAo = (1.0 - pitDepth01 * 0.72) * (1.0 - crack * 0.88);
+        col = mix(cAbyss, litStone * (0.42 + 0.58 * cavityAo), clamp(1.0 - crack * 0.92, 0.0, 1.0));
+
+        // Wrench tug dust shudder darkening/stirring inside pit
+        col = mix(col, vec3(0.026, 0.022, 0.030), uWrenchPulse * 0.22 * rimDustBand);
+
+        // Hard physical cap at #3d3740 so ZERO pixels can ever appear gray/white!
+        col = min(col, cDustBevel);
+
+        // Make central pit & cracks strongly opaque while outer torn-stone edge feathers seamlessly into floor
+        float centerSolid = smoothstep(0.0, 0.35, pitDepth01 + crack * 0.85);
+        finalAlpha = clamp(outerMask * mix(0.84, 0.99, centerSolid), 0.0, 0.99) * uOpacity;
+      } else {
+        // ====================================================================
+        // PHASE-2 SCORCHED OBSIDIAN & MOLTEN MAGMA CRATER/TRENCH BASE
+        // ====================================================================
+        vec3 cCharred = vec3(0.0045, 0.0028, 0.0024);
+        vec3 cBasalt  = vec3(0.0180, 0.0115, 0.0102) * (0.75 + 0.45 * stoneVar);
+        float bevel = 0.35 + 0.85 * ndotlKey + 0.35 * ndotlWarm;
+        vec3 crust = mix(cCharred, cBasalt * bevel, 1.0 - pitDepth01 * 0.65);
+
+        float pulse = 0.82 + 0.18 * sin(uTime * 11.5 + uSeed + rPara * 4.5);
+        float magmaHeat = clamp(crack * 1.12 + pitDepth01 * 0.68, 0.0, 1.0) * pulse * uMolten;
+        vec3 cDeepLava = vec3(0.42, 0.035, 0.006);
+        vec3 cOrange   = vec3(1.15, 0.24, 0.02);
+        vec3 cGoldCore = vec3(2.10, 1.25, 0.32);
+        vec3 lavaCol = magmaHeat < 0.52
+          ? mix(cDeepLava, cOrange, magmaHeat / 0.52)
+          : mix(cOrange, cGoldCore, (magmaHeat - 0.52) / 0.48);
+
+        col = mix(crust, lavaCol, smoothstep(0.14, 0.78, magmaHeat));
+        finalAlpha = clamp(outerMask * mix(0.88, 0.99, clamp(magmaHeat + crack, 0.0, 1.0)), 0.0, 0.99) * uOpacity;
+      }
+
+      if (finalAlpha < 0.006) discard;
+      gl_FragColor = vec4(col, finalAlpha);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+    }
+  `;
+
+  function createShatteredCraterShaderMaterial(defaultReliefTex) {
+    return new THREE.ShaderMaterial({
+      uniforms: {
+        uReliefMap: { value: defaultReliefTex },
+        uOpacity: { value: 1.0 },
+        uCollapse: { value: 1.0 },
+        uHeave: { value: 1.0 },
+        uMolten: { value: 0.0 },
+        uFissure: { value: 0.0 },
+        uTime: { value: 0.0 },
+        uSeed: { value: 0.0 },
+        uWrenchPulse: { value: 0.0 }
+      },
+      vertexShader: CRATER_FUNNEL_VERT_GLSL,
+      fragmentShader: CRATER_FUNNEL_FRAG_GLSL,
+      transparent: true,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+      toneMapped: true
+    });
   }
 
-  function buildJaggedStoneSlabGeo(variant = 0) {
-    const sides = variant === 1 ? 6 : 5;
-    const geo = new THREE.CylinderGeometry(0.24, 0.29, 0.135, sides, 1, false);
+  // Sculpted 3D Fractured Cathedral Flagstone Wedges (4 distinct silhouettes with vertex-colored dark raw split faces!)
+  function buildBrokenCathedralFlagstoneGeo(variant = 0) {
+    const sides = variant === 0 ? 6 : (variant === 1 ? 5 : (variant === 2 ? 6 : 4));
+    const topR = variant === 3 ? 0.20 : 0.27;
+    const botR = variant === 3 ? 0.25 : 0.32;
+    const height = variant === 3 ? 0.16 : 0.135;
+    const rawGeo = new THREE.CylinderGeometry(topR, botR, height, sides, 1, false);
+    const geo = rawGeo.toNonIndexed();
+    rawGeo.dispose();
+
     const pos = geo.attributes.position;
-    let seed = 13579 + variant * 7919;
+    let seed = 24681 + variant * 9733;
     const rnd = () => {
       seed = (seed * 1664525 + 1013904223) >>> 0;
       return seed / 4294967296;
     };
-    // Deterministic vertex beveling so every slab looks like a fractured gothic flagstone wedge
+
     const vMap = new Map();
     for (let i = 0; i < pos.count; i++) {
       const vx = pos.getX(i);
@@ -2281,497 +2800,68 @@ export function createArenaWorld(canvas) {
       const key = `${vx.toFixed(3)}_${vy.toFixed(3)}_${vz.toFixed(3)}`;
       let out = vMap.get(key);
       if (!out) {
-        const sx = 1.05 + (rnd() - 0.5) * 0.42;
-        const sz = 0.88 + (rnd() - 0.5) * 0.36;
-        const topSlope = vy > 0 ? (vz < 0 ? 0.028 : -0.018) + (rnd() - 0.5) * 0.022 : 0;
-        out = [vx * sx, vy + topSlope, vz * sz];
+        // Wedge taper: thinner toward inner fracture tip (-Z), thicker & broader at outer flagstone rim (+Z)
+        const wedgeWidth = (variant === 0 ? 1.24 : 1.06) + (vz > 0 ? 0.22 : -0.16) + (rnd() - 0.5) * 0.34;
+        const wedgeDepth = (variant === 2 ? 1.18 : 0.96) + (rnd() - 0.5) * 0.30;
+        const chiselSlope = vy > 0
+          ? (vz > 0 ? 0.026 : -0.022) + (rnd() - 0.5) * 0.020
+          : (rnd() - 0.5) * 0.012;
+        out = [vx * wedgeWidth, vy + chiselSlope, vz * wedgeDepth];
         vMap.set(key, out);
       }
       pos.setXYZ(i, out[0], out[1], out[2]);
     }
     geo.computeVertexNormals();
-    return geo;
-  }
 
-  function buildVolumetricFlameGeometries() {
-    const createBuilder = () => {
-      const positions = [];
-      const uvs = [];
-      const metas = [];
-      const indices = [];
-      let vCount = 0;
-
-      const addClosedCurtain = ({ rBot, rTop, height, radialSegs, heightSegs, phase, edge = 1.0, waveAmp = 0.035 }) => {
-        const base = vCount;
-        const cols = radialSegs + 1;
-        for (let iy = 0; iy <= heightSegs; iy++) {
-          const v = iy / heightSegs;
-          for (let ix = 0; ix <= radialSegs; ix++) {
-            const u = ix / radialSegs;
-            const ang = u * Math.PI * 2;
-            const rr = rBot + (rTop - rBot) * v + Math.sin(ang * 5.0 + phase) * waveAmp * (0.25 + 0.75 * v);
-            positions.push(Math.cos(ang) * rr, height * v, Math.sin(ang) * rr);
-            uvs.push(u * 4.0, v);
-            metas.push(edge, phase, 0.0);
-            vCount++;
-          }
-        }
-        for (let iy = 0; iy < heightSegs; iy++) {
-          for (let ix = 0; ix < radialSegs; ix++) {
-            const a = base + iy * cols + ix;
-            const b = a + 1;
-            const c = a + cols;
-            const d = c + 1;
-            indices.push(a, b, d, a, d, c);
-          }
-        }
-      };
-
-      const addRibbon = ({ x0, z0, x1, z1, height, leanX = 0, leanZ = 0, segsU = 10, segsV = 4, phase = 0, surge = 0 }) => {
-        const base = vCount;
-        const cols = segsU + 1;
-        for (let iy = 0; iy <= segsV; iy++) {
-          const v = iy / segsV;
-          const v2 = v * v;
-          for (let ix = 0; ix <= segsU; ix++) {
-            const u = ix / segsU;
-            const endEnv = Math.pow(Math.sin(Math.max(0.02, Math.min(0.98, u)) * Math.PI), 0.65);
-            const hLocal = height * (0.54 + 0.46 * endEnv);
-            const bx = x0 + (x1 - x0) * u;
-            const bz = z0 + (z1 - z0) * u;
-            positions.push(bx + leanX * v2, hLocal * v, bz + leanZ * v2);
-            uvs.push(u, v);
-            metas.push(endEnv, phase, surge);
-            vCount++;
-          }
-        }
-        for (let iy = 0; iy < segsV; iy++) {
-          for (let ix = 0; ix < segsU; ix++) {
-            const a = base + iy * cols + ix;
-            const b = a + 1;
-            const c = a + cols;
-            const d = c + 1;
-            indices.push(a, b, d, a, d, c);
-          }
-        }
-      };
-
-      const addCrossedTongue = ({ cx, cz, halfW, height, yaw = 0, leanX = 0, leanZ = 0, phase = 0, surge = 0 }) => {
-        for (let k = 0; k < 2; k++) {
-          const a = yaw + k * Math.PI * 0.5;
-          const dx = Math.cos(a) * halfW;
-          const dz = Math.sin(a) * halfW;
-          addRibbon({
-            x0: cx - dx,
-            z0: cz - dz,
-            x1: cx + dx,
-            z1: cz + dz,
-            height,
-            leanX,
-            leanZ,
-            segsU: 4,
-            segsV: 4,
-            phase: phase + k * 1.57,
-            surge
-          });
-        }
-      };
-
-      const finalize = () => {
-        const geo = new THREE.BufferGeometry();
-        geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-        geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-        geo.setAttribute('aMeta', new THREE.Float32BufferAttribute(metas, 3));
-        geo.setIndex(indices);
-        return geo;
-      };
-
-      return { addClosedCurtain, addRibbon, addCrossedTongue, finalize };
-    };
-
-    // 1. FIRE CIRCLE VOLUMETRIC CROWN: roaring perimeter ring + counter-swirl mid ring + 8 inner licking fire tongues
-    const circleB = createBuilder();
-    circleB.addClosedCurtain({ rBot: 0.85, rTop: 0.92, height: 1.38, radialSegs: 36, heightSegs: 5, phase: 0.0, edge: 1.0, waveAmp: 0.04 });
-    circleB.addClosedCurtain({ rBot: 0.63, rTop: 0.68, height: 0.94, radialSegs: 26, heightSegs: 4, phase: 2.35, edge: 0.88, waveAmp: 0.03 });
-    for (let i = 0; i < 8; i++) {
-      const ang = (i / 8) * Math.PI * 2 + (i % 2) * 0.24;
-      const rr = i % 2 === 0 ? 0.26 : 0.46;
-      const cx = Math.cos(ang) * rr;
-      const cz = Math.sin(ang) * rr;
-      circleB.addCrossedTongue({
-        cx,
-        cz,
-        halfW: 0.24,
-        height: i % 2 === 0 ? 1.12 : 0.88,
-        yaw: ang + 0.35,
-        leanX: Math.cos(ang) * 0.08,
-        leanZ: Math.sin(ang) * 0.08,
-        phase: i * 1.13,
-        surge: 0.0
-      });
+    // Bake dark raw split-basalt side faces vs weathered cathedral flagstone top face (zero bright edges!)
+    const norm = geo.attributes.normal;
+    const colors = new Float32Array(pos.count * 3);
+    for (let i = 0; i < pos.count; i++) {
+      const ny = norm.getY(i);
+      const py = pos.getY(i);
+      // Top worn stone face ~ 0.84; raw split vertical fracture wall ~ 0.44; underside ~ 0.26
+      const shade = ny > 0.55
+        ? 0.78 + (i % 5) * 0.025
+        : (py < 0 ? 0.32 : 0.46 + (i % 3) * 0.04);
+      colors[i * 3] = shade;
+      colors[i * 3 + 1] = shade * 0.96;
+      colors[i * 3 + 2] = shade * 1.03;
     }
-    const fireCircleGeo = circleB.finalize();
-
-    // 2. FIRE ROAD VOLUMETRIC WALL-OF-FIRE: directional surging curtains + forward-raked fire tongues along +Z (dirX, dirZ)
-    const roadB = createBuilder();
-    roadB.addRibbon({ x0: 0, z0: -1.06, x1: 0, z1: 1.06, height: 1.46, leanX: 0.0, leanZ: 0.24, segsU: 16, segsV: 5, phase: 0.4, surge: 1.0 });
-    roadB.addRibbon({ x0: -0.27, z0: -1.02, x1: -0.25, z1: 1.04, height: 1.16, leanX: -0.09, leanZ: 0.22, segsU: 14, segsV: 4, phase: 1.9, surge: 1.0 });
-    roadB.addRibbon({ x0: 0.27, z0: -1.02, x1: 0.25, z1: 1.04, height: 1.16, leanX: 0.09, leanZ: 0.22, segsU: 14, segsV: 4, phase: 3.4, surge: 1.0 });
-    roadB.addRibbon({ x0: -0.50, z0: -0.92, x1: -0.48, z1: 0.94, height: 0.78, leanX: -0.14, leanZ: 0.16, segsU: 12, segsV: 3, phase: 4.7, surge: 1.0 });
-    roadB.addRibbon({ x0: 0.50, z0: -0.92, x1: 0.48, z1: 0.94, height: 0.78, leanX: 0.14, leanZ: 0.16, segsU: 12, segsV: 3, phase: 5.8, surge: 1.0 });
-    for (let i = 0; i < 7; i++) {
-      const zPos = -0.84 + (i / 6) * 1.68;
-      const xOff = ((i % 3) - 1) * 0.18;
-      roadB.addCrossedTongue({
-        cx: xOff,
-        cz: zPos,
-        halfW: 0.34,
-        height: 1.22 - Math.abs(zPos) * 0.22,
-        yaw: 0.28 + i * 0.42,
-        leanX: xOff * 0.25,
-        leanZ: 0.26,
-        phase: i * 1.31 + 0.7,
-        surge: 1.0
-      });
-    }
-    const fireRoadGeo = roadB.finalize();
-
-    return { fireCircleGeo, fireRoadGeo };
-  }
-
-  const VOLUMETRIC_FIRE_VERT_GLSL = `
-    attribute vec3 aMeta;
-    uniform float uTime;
-    uniform float uIgnite;
-    uniform float uExtinguish;
-    uniform float uSeed;
-    varying vec2 vUv;
-    varying vec3 vMeta;
-    varying vec3 vLocalPos;
-    void main() {
-      vUv = uv;
-      vMeta = aMeta;
-      float h = clamp(uv.y, 0.0, 1.0);
-      float h2 = h * h;
-      vec3 p = position;
-      float heightEnv = (0.28 + 0.72 * uIgnite) * (0.24 + 0.76 * uExtinguish);
-      p.y *= heightEnv;
-      float ph = aMeta.y + uSeed;
-      float swayA = sin(uTime * 9.4 + position.z * 3.1 + position.x * 2.4 + ph);
-      float swayB = cos(uTime * 13.2 - position.x * 3.6 + position.z * 2.1 + ph * 1.3);
-      p.x += swayA * 0.095 * h2;
-      p.z += swayB * 0.075 * h2 + aMeta.z * (0.18 + 0.09 * swayA) * h2 * uExtinguish;
-      vLocalPos = p;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
-    }
-  `;
-
-  const VOLUMETRIC_FIRE_FRAG_GLSL = `
-    uniform float uTime;
-    uniform float uOpacity;
-    uniform float uExtinguish;
-    uniform float uSeed;
-    varying vec2 vUv;
-    varying vec3 vMeta;
-    varying vec3 vLocalPos;
-
-    float hash31(vec3 p) {
-      p = fract(p * 0.1031);
-      p += dot(p, p.yzx + 33.33);
-      return fract((p.x + p.y) * p.z);
-    }
-
-    float vnoise3(vec3 x) {
-      vec3 i = floor(x);
-      vec3 f = fract(x);
-      f = f * f * (3.0 - 2.0 * f);
-      float n000 = hash31(i);
-      float n100 = hash31(i + vec3(1.0, 0.0, 0.0));
-      float n010 = hash31(i + vec3(0.0, 1.0, 0.0));
-      float n110 = hash31(i + vec3(1.0, 1.0, 0.0));
-      float n001 = hash31(i + vec3(0.0, 0.0, 1.0));
-      float n101 = hash31(i + vec3(1.0, 0.0, 1.0));
-      float n011 = hash31(i + vec3(0.0, 1.0, 1.0));
-      float n111 = hash31(i + vec3(1.0, 1.0, 1.0));
-      float nx00 = mix(n000, n100, f.x);
-      float nx10 = mix(n010, n110, f.x);
-      float nx01 = mix(n001, n101, f.x);
-      float nx11 = mix(n011, n111, f.x);
-      float nxy0 = mix(nx00, nx10, f.y);
-      float nxy1 = mix(nx01, nx11, f.y);
-      return mix(nxy0, nxy1, f.z);
-    }
-
-    float fbm3(vec3 p) {
-      float v = 0.0;
-      float a = 0.52;
-      for (int i = 0; i < 4; i++) {
-        v += a * vnoise3(p);
-        p = p * 2.04 + vec3(13.7, -9.2, 7.4);
-        a *= 0.5;
-      }
-      return v;
-    }
-
-    void main() {
-      float h = clamp(vUv.y, 0.0, 1.0);
-      float edgeMask = clamp(vMeta.x, 0.0, 1.0);
-      float surge = vMeta.z;
-
-      vec3 q = vec3(
-        vLocalPos.x * 2.45 + uSeed * 3.1,
-        vLocalPos.y * 1.95 - uTime * 4.85,
-        vLocalPos.z * 2.45 - surge * uTime * 3.65 + vMeta.y * 0.9
-      );
-      float n1 = fbm3(q);
-      float n2 = fbm3(q * 2.1 + vec3(n1 * 1.25, -uTime * 3.1, n1 * 1.05));
-      float turb = mix(n1, n2, 0.56);
-
-      float baseContact = smoothstep(0.0, 0.09, h);
-      float tipFade = 1.0 - smoothstep(0.80, 1.0, h);
-      float cutoff = pow(h, 0.78) * 0.84 + (1.0 - uExtinguish) * 0.56 + (1.0 - edgeMask) * 0.42;
-      float tongue = smoothstep(cutoff - 0.18, cutoff + 0.24, turb);
-      float alpha = tongue * baseContact * tipFade * edgeMask * uOpacity * uExtinguish;
-      if (alpha < 0.006) discard;
-
-      // Planckian blackbody fire gradient: deep crimson -> volcanic orange -> solar gold -> incandescent white-gold core
-      float temp = clamp(tongue * (1.18 - h * 0.58) + (1.0 - h) * 0.30 * turb, 0.0, 1.0);
-      vec3 cCrimson = vec3(0.55, 0.04, 0.01);
-      vec3 cOrange  = vec3(0.96, 0.22, 0.02);
-      vec3 cGold    = vec3(1.00, 0.64, 0.08);
-      vec3 cWhite   = vec3(1.00, 0.96, 0.80);
-      vec3 col = temp < 0.34
-        ? mix(cCrimson, cOrange, temp / 0.34)
-        : (temp < 0.72
-            ? mix(cOrange, cGold, (temp - 0.34) / 0.38)
-            : mix(cGold, cWhite, (temp - 0.72) / 0.28));
-
-      gl_FragColor = vec4(col, alpha);
-    }
-  `;
-
-  const GROUND_FIRE_BED_FRAG_GLSL = `
-    uniform float uTime;
-    uniform float uOpacity;
-    uniform float uExtinguish;
-    uniform float uMode;
-    uniform float uSeed;
-    varying vec2 vUv;
-
-    float hash21(vec2 p) {
-      p = fract(p * vec2(127.1, 311.7));
-      p += dot(p, p + 34.5);
-      return fract(p.x * p.y);
-    }
-
-    float vnoise2(vec2 p) {
-      vec2 i = floor(p);
-      vec2 f = fract(p);
-      f = f * f * (3.0 - 2.0 * f);
-      return mix(
-        mix(hash21(i), hash21(i + vec2(1.0, 0.0)), f.x),
-        mix(hash21(i + vec2(0.0, 1.0)), hash21(i + vec2(1.0, 1.0)), f.x),
-        f.y
-      );
-    }
-
-    float fbm2(vec2 p) {
-      float v = 0.0;
-      float a = 0.52;
-      for (int i = 0; i < 4; i++) {
-        v += a * vnoise2(p);
-        p = p * 2.06 + vec2(9.4, -7.1);
-        a *= 0.5;
-      }
-      return v;
-    }
-
-    void main() {
-      // PlaneGeometry rotated -PI/2 around X: d.x = local X, -d.y = local +Z!
-      vec2 d = vUv * 2.0 - 1.0;
-      float mask = 0.0;
-      float hotBand = 0.0;
-      vec2 flowP;
-
-      if (uMode < 0.5) {
-        float r = length(d);
-        if (r > 1.0) discard;
-        float ang = atan(d.y, d.x);
-        flowP = vec2(d.x * 3.2 + uSeed, d.y * 3.2 - uTime * 1.6);
-        float swirl = fbm2(vec2(ang * 2.5 + uTime * 0.8, r * 5.2 - uTime * 2.2));
-        float outerFade = 1.0 - smoothstep(0.84, 1.0, r);
-        float ring = exp(-pow((r - 0.83) * 7.2, 2.0));
-        hotBand = ring * 0.85 + smoothstep(0.85, 0.05, r) * 0.42 * swirl;
-        mask = outerFade;
-      } else {
-        float ax = abs(d.x);
-        float az = abs(d.y);
-        if (ax > 0.96 || az > 0.98) discard;
-        // Local +Z corresponds to -d.y on -PI/2 rotated plane -> subtract uTime along -d.y to flow toward +Z!
-        flowP = vec2(d.x * 3.8 + uSeed, (-d.y) * 2.8 - uTime * 3.6);
-        float latFade = 1.0 - smoothstep(0.32, 0.92, ax);
-        float endFade = 1.0 - smoothstep(0.62, 0.98, az);
-        float spine = exp(-ax * ax * 8.5);
-        hotBand = (0.38 + 0.72 * spine);
-        mask = latFade * endFade;
-      }
-
-      float n1 = fbm2(flowP);
-      float n2 = fbm2(flowP * 2.15 + vec2(n1 * 1.4, -uTime * 2.4));
-      float boil = mix(n1, n2, 0.55);
-      float cutoff = (1.0 - uExtinguish) * 0.58 + 0.16;
-      float intensity = smoothstep(cutoff, cutoff + 0.42, boil * (0.55 + 0.65 * hotBand)) * mask;
-      float alpha = intensity * uOpacity * uExtinguish;
-      if (alpha < 0.006) discard;
-
-      float temp = clamp(intensity * 0.85 + hotBand * boil * 0.55, 0.0, 1.0);
-      vec3 col = mix(vec3(0.72, 0.08, 0.01), vec3(0.98, 0.36, 0.03), smoothstep(0.0, 0.55, temp));
-      col = mix(col, vec3(1.0, 0.88, 0.46), smoothstep(0.55, 1.0, temp));
-      gl_FragColor = vec4(col, alpha);
-    }
-  `;
-
-  function createVolumetricFireShaderMaterial() {
-    return new THREE.ShaderMaterial({
-      uniforms: {
-        uTime: { value: 0 },
-        uIgnite: { value: 1 },
-        uExtinguish: { value: 1 },
-        uOpacity: { value: 0.92 },
-        uSeed: { value: 0 }
-      },
-      vertexShader: VOLUMETRIC_FIRE_VERT_GLSL,
-      fragmentShader: VOLUMETRIC_FIRE_FRAG_GLSL,
-      transparent: true,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-      side: THREE.DoubleSide,
-      toneMapped: false
-    });
-  }
-
-  function createGroundFireBedShaderMaterial() {
-    return new THREE.ShaderMaterial({
-      uniforms: {
-        uTime: { value: 0 },
-        uOpacity: { value: 0.78 },
-        uExtinguish: { value: 1 },
-        uMode: { value: 0 },
-        uSeed: { value: 0 }
-      },
-      vertexShader: `
-        varying vec2 vUv;
-        void main() {
-          vUv = uv;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: GROUND_FIRE_BED_FRAG_GLSL,
-      transparent: true,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-      toneMapped: false
-    });
-  }
-
-  function buildProceduralPlumeFlameTexture() {
-    const cv = document.createElement('canvas');
-    cv.width = 128;
-    cv.height = 256;
-    const ctx = cv.getContext('2d');
-    ctx.clearRect(0, 0, 128, 256);
-
-    const baseGlow = ctx.createRadialGradient(64, 224, 4, 64, 185, 62);
-    baseGlow.addColorStop(0.0, 'rgba(255, 237, 213, 0.92)');
-    baseGlow.addColorStop(0.32, 'rgba(249, 115, 22, 0.72)');
-    baseGlow.addColorStop(0.68, 'rgba(185, 28, 28, 0.26)');
-    baseGlow.addColorStop(1.0, 'rgba(0, 0, 0, 0)');
-    ctx.fillStyle = baseGlow;
-    ctx.fillRect(0, 0, 128, 256);
-
-    const tongues = [
-      { cx: 64, wBot: 26, topY: 18, sway: -7, alpha: 0.95 },
-      { cx: 46, wBot: 17, topY: 64, sway: -11, alpha: 0.76 },
-      { cx: 82, wBot: 16, topY: 74, sway: 10, alpha: 0.74 }
-    ];
-    for (let i = 0; i < tongues.length; i++) {
-      const tg = tongues[i];
-      const grad = ctx.createLinearGradient(tg.cx, 248, tg.cx + tg.sway, tg.topY);
-      grad.addColorStop(0.0, `rgba(255, 251, 235, ${tg.alpha})`);
-      grad.addColorStop(0.24, `rgba(251, 191, 36, ${tg.alpha * 0.92})`);
-      grad.addColorStop(0.58, `rgba(234, 88, 12, ${tg.alpha * 0.62})`);
-      grad.addColorStop(0.86, `rgba(153, 27, 27, ${tg.alpha * 0.22})`);
-      grad.addColorStop(1.0, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.moveTo(tg.cx - tg.wBot, 252);
-      ctx.quadraticCurveTo(tg.cx - tg.wBot * 0.55 + tg.sway * 0.4, (252 + tg.topY) * 0.52, tg.cx + tg.sway, tg.topY);
-      ctx.quadraticCurveTo(tg.cx + tg.wBot * 0.55 + tg.sway * 0.4, (252 + tg.topY) * 0.52, tg.cx + tg.wBot, 252);
-      ctx.closePath();
-      ctx.fill();
-    }
-
-    const tex = new THREE.CanvasTexture(cv);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    return tex;
-  }
-
-  function buildCrossedPlumeGeometry() {
-    const hw = 0.28;
-    const h = 0.88;
-    const c45 = Math.SQRT1_2 * hw;
-    const positions = new Float32Array([
-      -hw, 0, 0,   hw, 0, 0,   hw, h, 0,  -hw, h, 0,
-      -c45, 0, -c45,  c45, 0, c45,  c45, h, c45,  -c45, h, -c45
-    ]);
-    const uvs = new Float32Array([
-      0, 0,  1, 0,  1, 1,  0, 1,
-      0, 0,  1, 0,  1, 1,  0, 1
-    ]);
-    const indices = [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7];
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
-    geo.setIndex(indices);
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     return geo;
   }
 
   function getSharedFractureAssets() {
     if (sharedFractureAssets) return sharedFractureAssets;
-    const discGeo = new THREE.PlaneGeometry(2, 2);
-    discGeo.rotateX(-Math.PI / 2);
+    const craterGridGeo = buildCraterFunnelGridGeometry(isMobileDevice ? 28 : 38);
     const slabGeos = [
-      buildJaggedStoneSlabGeo(0),
-      buildJaggedStoneSlabGeo(1),
-      buildJaggedStoneSlabGeo(2)
+      buildBrokenCathedralFlagstoneGeo(0),
+      buildBrokenCathedralFlagstoneGeo(1),
+      buildBrokenCathedralFlagstoneGeo(2),
+      buildBrokenCathedralFlagstoneGeo(3)
     ];
-    const plumeGeo = buildCrossedPlumeGeometry();
-    const { fireCircleGeo, fireRoadGeo } = buildVolumetricFlameGeometries();
+
+    const circleReliefTex = buildCraterReliefDataTexture({ fissure: false });
+    const fissureReliefTex = buildCraterReliefDataTexture({ fissure: true });
 
     sharedFractureAssets = {
-      discGeo,
+      craterGridGeo,
       slabGeos,
-      plumeGeo,
-      fireCircleGeo,
-      fireRoadGeo,
-      plumeTex: buildProceduralPlumeFlameTexture(),
-      stoneTex: buildProceduralFractureTexture({ molten: false, fissure: false }),
-      moltenTex: buildProceduralFractureTexture({ molten: true, fissure: false }),
-      fissureStoneTex: buildProceduralFractureTexture({ molten: false, fissure: true }),
-      fissureMoltenTex: buildProceduralFractureTexture({ molten: true, fissure: true }),
-      circleMagmaVeinsTex: buildProceduralMagmaVeinsTexture({ fissure: false }),
-      fissureMagmaVeinsTex: buildProceduralMagmaVeinsTexture({ fissure: true }),
+      circleReliefTex,
+      fissureReliefTex,
       stoneSlabMat: new THREE.MeshStandardMaterial({
-        color: 0x475063,
-        roughness: 0.86,
-        metalness: 0.07
+        color: 0x3b3542,
+        vertexColors: true,
+        roughness: 0.89,
+        metalness: 0.05
       }),
       moltenSlabMat: new THREE.MeshStandardMaterial({
-        color: 0x221a18,
+        color: 0x241a18,
+        vertexColors: true,
         emissive: 0xc2410c,
-        emissiveIntensity: 0.42,
-        roughness: 0.80,
-        metalness: 0.12
+        emissiveIntensity: 0.45,
+        roughness: 0.82,
+        metalness: 0.10
       })
     };
     return sharedFractureAssets;
@@ -2779,57 +2869,40 @@ export function createArenaWorld(canvas) {
 
   function createGroundFracturePoolEntry(assets) {
     const group = new THREE.Group();
-    const craterMat = new THREE.MeshBasicMaterial({
-      map: assets.stoneTex,
-      transparent: true,
-      opacity: 0.98,
-      depthWrite: false,
-      polygonOffset: true,
-      polygonOffsetFactor: -2,
-      toneMapped: false
-    });
-    const craterDisc = new THREE.Mesh(assets.discGeo, craterMat);
-    craterDisc.position.y = 0.030;
+
+    const craterMat = createShatteredCraterShaderMaterial(assets.circleReliefTex);
+    const craterDisc = new THREE.Mesh(assets.craterGridGeo, craterMat);
+    craterDisc.position.y = 0.004;
     craterDisc.renderOrder = 3;
     group.add(craterDisc);
 
-    const magmaGlowMat = new THREE.MeshBasicMaterial({
-      map: assets.circleMagmaVeinsTex,
-      color: 0xff8a24,
-      transparent: true,
-      opacity: 0.0,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      toneMapped: false
-    });
-    const magmaGlowDisc = new THREE.Mesh(assets.discGeo, magmaGlowMat);
-    magmaGlowDisc.position.y = 0.035;
-    magmaGlowDisc.renderOrder = 4;
-    group.add(magmaGlowDisc);
+    // 3x Volumetric Fire Field ('circle', 1.0s blaze) & Fire Road ('fissure') from soulsFireVfx.js
+    const fireField = typeof SoulsFireVfx.createVolumetricFireFieldMesh === 'function'
+      ? SoulsFireVfx.createVolumetricFireFieldMesh({ isMobile: isMobileDevice, lowSpec: lowSpecMode })
+      : null;
+    if (fireField?.group) {
+      fireField.group.position.y = 0.014;
+      fireField.group.renderOrder = 6;
+      fireField.group.visible = false;
+      group.add(fireField.group);
+    }
 
-    const fireBedMat = createGroundFireBedShaderMaterial();
-    const fireBedDisc = new THREE.Mesh(assets.discGeo, fireBedMat);
-    fireBedDisc.position.y = 0.041;
-    fireBedDisc.renderOrder = 5;
-    fireBedDisc.visible = false;
-    group.add(fireBedDisc);
+    const fireRoad = typeof SoulsFireVfx.createVolumetricFireRoadMesh === 'function'
+      ? SoulsFireVfx.createVolumetricFireRoadMesh({ isMobile: isMobileDevice, lowSpec: lowSpecMode })
+      : null;
+    if (fireRoad?.group) {
+      fireRoad.group.position.y = 0.014;
+      fireRoad.group.renderOrder = 6;
+      fireRoad.group.visible = false;
+      group.add(fireRoad.group);
+    }
 
-    const fireVolMat = createVolumetricFireShaderMaterial();
-    const fireCircleMesh = new THREE.Mesh(assets.fireCircleGeo, fireVolMat);
-    fireCircleMesh.position.y = 0.024;
-    fireCircleMesh.renderOrder = 6;
-    fireCircleMesh.visible = false;
-    group.add(fireCircleMesh);
-
-    const fireRoadMesh = new THREE.Mesh(assets.fireRoadGeo, fireVolMat);
-    fireRoadMesh.position.y = 0.024;
-    fireRoadMesh.renderOrder = 6;
-    fireRoadMesh.visible = false;
-    group.add(fireRoadMesh);
-
-    // 18 multi-ring jagged 3D stone slabs (3 concentric rings for 'circle'; twin tectonic curb ridges for 'fissure')
+    // 24 multi-tier 3D broken cathedral flagstones:
+    //   - Tier 0 (0..5):   6 sunken inner pit slabs (pitched downward into the central crushed funnel!)
+    //   - Tier 1 (6..15): 10 buckled rim flagstone wedges (inner edge dipped into pit, outer edge heaved 0.09..0.22m!)
+    //   - Tier 2 (16..23): 8 outer fractured spall plates transitioning back into the flat stone floor!
     const slabs = [];
-    const slabCount = 18;
+    const slabCount = 24;
     for (let i = 0; i < slabCount; i++) {
       const sm = new THREE.Mesh(assets.slabGeos[i % assets.slabGeos.length], assets.stoneSlabMat);
       sm.rotation.order = 'YXZ';
@@ -2841,32 +2914,41 @@ export function createArenaWorld(canvas) {
       let distFrac;
       let circlePitch;
       let circleLift;
-      if (i < 5) {
-        ringAng = (i / 5) * Math.PI * 2 + 0.19;
-        distFrac = 0.30 + (i % 2) * 0.06;
-        circlePitch = 0.48 + (i % 3) * 0.06;
-        circleLift = 0.14 + (i % 2) * 0.035;
-      } else if (i < 11) {
-        const k = i - 5;
-        ringAng = (k / 6) * Math.PI * 2 + 0.52;
-        distFrac = 0.56 + (k % 2) * 0.07;
-        circlePitch = 0.36 + (k % 3) * 0.05;
-        circleLift = 0.105 + (k % 3) * 0.022;
+      let tier;
+      if (i < 6) {
+        // Sunken inner pit slabs: tilted inward (-pitch along radial +Z) lining the caved-in funnel throat!
+        tier = 0;
+        ringAng = (i / 6) * Math.PI * 2 + 0.21;
+        distFrac = 0.20 + (i % 2) * 0.07;
+        circlePitch = -(0.42 + (i % 3) * 0.07);
+        circleLift = 0.022 + (i % 2) * 0.016;
+      } else if (i < 16) {
+        // Primary buckled crater-rim flagstone wedges: inner edge dipped in pit, outer edge heaved 0.09..0.22m!
+        tier = 1;
+        const k = i - 6;
+        ringAng = (k / 10) * Math.PI * 2 + 0.09 + ((k % 2) - 0.5) * 0.06;
+        distFrac = 0.47 + (k % 3) * 0.055;
+        circlePitch = 0.30 + (k % 4) * 0.052;
+        circleLift = 0.095 + (k % 4) * 0.038; // 0.095m .. 0.209m!
       } else {
-        const k = i - 11;
-        ringAng = (k / 7) * Math.PI * 2 + 0.11;
-        distFrac = 0.82 + (k % 2) * 0.06;
-        circlePitch = 0.26 + (k % 3) * 0.045;
-        circleLift = 0.08 + (k % 2) * 0.024;
+        // Outer perimeter spall plates & upturned stone teeth
+        tier = 2;
+        const k = i - 16;
+        ringAng = (k / 8) * Math.PI * 2 + 0.34;
+        distFrac = 0.72 + (k % 2) * 0.08;
+        circlePitch = 0.16 + (k % 3) * 0.045;
+        circleLift = 0.055 + (k % 3) * 0.022;
       }
 
-      const side = i < 9 ? -1 : 1;
-      const idxSide = i % 9;
-      const zFrac = -0.86 + (idxSide / 8) * 1.72;
-      const xFrac = side * (0.34 + (idxSide % 3) * 0.12);
+      const side = i < 12 ? -1 : 1;
+      const idxSide = i % 12;
+      const zFrac = -0.88 + (idxSide / 11) * 1.76;
+      const isInnerTrenchSlab = idxSide % 4 === 0;
+      const xFrac = side * (isInnerTrenchSlab ? 0.20 : 0.38 + (idxSide % 3) * 0.11);
 
       slabs.push({
         mesh: sm,
+        tier,
         circleX: Math.cos(ringAng) * distFrac,
         circleZ: Math.sin(ringAng) * distFrac,
         circleYaw: Math.atan2(Math.cos(ringAng), Math.sin(ringAng)),
@@ -2874,37 +2956,13 @@ export function createArenaWorld(canvas) {
         circleLift,
         fissureX: xFrac,
         fissureZ: zFrac,
-        fissureYaw: (side > 0 ? Math.PI * 0.5 : -Math.PI * 0.5) + ((idxSide % 3) - 1) * 0.22,
-        fissurePitch: 0.34 + (idxSide % 3) * 0.07,
-        fissureLift: 0.10 + (idxSide % 3) * 0.03,
+        fissureYaw: (side > 0 ? Math.PI * 0.5 : -Math.PI * 0.5) + ((idxSide % 3) - 1) * 0.20,
+        fissurePitch: isInnerTrenchSlab ? -0.36 : 0.32 + (idxSide % 3) * 0.07,
+        fissureLift: isInnerTrenchSlab ? 0.025 : 0.095 + (idxSide % 3) * 0.035,
         tiltPitch: circlePitch,
-        tiltRoll: ((i % 2) * 2 - 1) * (0.12 + (i % 3) * 0.05),
-        scaleW: 0.86 + (i % 4) * 0.20,
+        tiltRoll: ((i % 2) * 2 - 1) * (0.09 + (i % 3) * 0.045),
+        scaleW: tier === 1 ? (0.96 + (i % 3) * 0.22) : (0.82 + (i % 4) * 0.18),
         maxLiftY: circleLift
-      });
-    }
-
-    const plumes = [];
-    for (let i = 0; i < 6; i++) {
-      const pmMat = new THREE.MeshBasicMaterial({
-        map: assets.plumeTex,
-        color: i % 2 === 0 ? 0xffedd5 : 0xfdba74,
-        transparent: true,
-        opacity: 0.0,
-        blending: THREE.AdditiveBlending,
-        side: THREE.DoubleSide,
-        depthWrite: false,
-        toneMapped: false
-      });
-      const pm = new THREE.Mesh(assets.plumeGeo, pmMat);
-      pm.renderOrder = 5;
-      group.add(pm);
-      plumes.push({
-        mesh: pm,
-        mat: pmMat,
-        ang: (i / 6) * Math.PI * 2 + 0.28,
-        distFrac: i % 2 === 0 ? 0.36 : 0.68,
-        phase: i * 1.17
       });
     }
 
@@ -2913,15 +2971,9 @@ export function createArenaWorld(canvas) {
       group,
       craterMat,
       craterDisc,
-      magmaGlowMat,
-      magmaGlowDisc,
-      fireBedMat,
-      fireBedDisc,
-      fireVolMat,
-      fireCircleMesh,
-      fireRoadMesh,
+      fireField,
+      fireRoad,
       slabs,
-      plumes,
       x: 0,
       z: 0,
       groundY: 0,
@@ -2929,13 +2981,37 @@ export function createArenaWorld(canvas) {
       dirZ: 1,
       kind: 'circle',
       age: 0,
-      duration: 2.2,
+      duration: 2.4,
+      fireDuration: 1.0,
       radius: 4.2,
       molten: false,
       burning: false,
       emberTick: 0,
-      seed: 0
+      seed: 0,
+      wrenchImpulse: 0
     };
+  }
+
+  function ensurePoolEntryFireMeshes(entry) {
+    if (!entry) return;
+    if (!entry.fireField && typeof SoulsFireVfx.createVolumetricFireFieldMesh === 'function') {
+      entry.fireField = SoulsFireVfx.createVolumetricFireFieldMesh({ isMobile: isMobileDevice, lowSpec: lowSpecMode });
+      if (entry.fireField?.group) {
+        entry.fireField.group.position.y = 0.014;
+        entry.fireField.group.renderOrder = 6;
+        entry.fireField.group.visible = false;
+        entry.group.add(entry.fireField.group);
+      }
+    }
+    if (!entry.fireRoad && typeof SoulsFireVfx.createVolumetricFireRoadMesh === 'function') {
+      entry.fireRoad = SoulsFireVfx.createVolumetricFireRoadMesh({ isMobile: isMobileDevice, lowSpec: lowSpecMode });
+      if (entry.fireRoad?.group) {
+        entry.fireRoad.group.position.y = 0.014;
+        entry.fireRoad.group.renderOrder = 6;
+        entry.fireRoad.group.visible = false;
+        entry.group.add(entry.fireRoad.group);
+      }
+    }
   }
 
   function spawnBossGroundFracture({
@@ -2944,18 +3020,32 @@ export function createArenaWorld(canvas) {
     radius = 4.2,
     molten = false,
     burning = false,
+    fissure = undefined,
     kind = 'circle',
+    shape = undefined,
     dirX = 0,
     dirZ = 1,
-    duration = 2.2
+    duration = 2.4
   } = {}) {
     const assets = getSharedFractureAssets();
     const safeR = Math.max(1.2, Math.min(7.8, Number(radius) || 4.2));
+    const isFissure = Boolean(fissure) || kind === 'fissure' || kind === 'line' || shape === 'fissure' || shape === 'line';
+    const normKind = isFissure ? 'fissure' : 'circle';
+    const isMolten = Boolean(molten) || Boolean(burning);
+    const isBurning = isMolten && (Boolean(burning) || isFissure || Number(duration) <= 1.25);
+
     const rawDur = Number(duration);
-    const safeDur = Math.max(0.8, Math.min(8.5, Number.isFinite(rawDur) && rawDur > 0 ? rawDur : (burning ? 3.8 : 2.2)));
-    const isBurning = Boolean(burning) || (Boolean(molten) && safeDur >= 3.0);
-    const isMolten = Boolean(molten) || isBurning;
-    const normKind = kind === 'fissure' ? 'fissure' : 'circle';
+    let safeDur = Math.max(
+      0.5,
+      Math.min(8.5, Number.isFinite(rawDur) && rawDur > 0 ? rawDur : (isFissure && isMolten ? 3.8 : (isBurning ? 1.0 : 2.6)))
+    );
+    // Section 4.5 & 5.0: Phase-2 circular burning fire fields strictly extinguish by <= 1.0s!
+    if (isMolten && !isFissure && Boolean(burning)) {
+      safeDur = Math.min(safeDur, 1.0);
+    }
+    const fireDuration = isMolten
+      ? (isFissure ? safeDur : Math.min(safeDur, 1.0))
+      : 0.0;
 
     let ndx = Number(dirX) || 0;
     let ndz = Number(dirZ) || 0;
@@ -2976,6 +3066,7 @@ export function createArenaWorld(canvas) {
         entry = createGroundFracturePoolEntry(assets);
       }
     }
+    ensurePoolEntryFireMeshes(entry);
 
     const groundY = getGroundHeight(x, z);
     entry.x = x;
@@ -2986,114 +3077,269 @@ export function createArenaWorld(canvas) {
     entry.kind = normKind;
     entry.age = 0;
     entry.duration = safeDur;
+    entry.fireDuration = fireDuration;
     entry.radius = safeR;
     entry.molten = isMolten;
     entry.burning = isBurning;
-    entry.emberTick = Math.random() * 0.08;
+    entry.emberTick = Math.random() * 0.06;
     entry.seed = Math.random() * 12.56;
+    entry.wrenchImpulse = 0;
 
     entry.group.position.set(x, groundY, z);
-    entry.group.rotation.y = normKind === 'fissure' ? Math.atan2(ndx, ndz) : Math.random() * Math.PI * 2;
+    entry.group.rotation.y = isFissure ? Math.atan2(ndx, ndz) : Math.random() * Math.PI * 2;
 
-    const isFissure = normKind === 'fissure';
-    entry.craterMat.map = isFissure
-      ? (isMolten ? assets.fissureMoltenTex : assets.fissureStoneTex)
-      : (isMolten ? assets.moltenTex : assets.stoneTex);
-    entry.craterMat.opacity = 0.98;
-    entry.craterDisc.scale.set(isFissure ? safeR * 0.86 : safeR, 1, isFissure ? safeR * 1.18 : safeR);
-
-    entry.magmaGlowDisc.visible = isMolten;
-    entry.magmaGlowMat.map = isFissure ? assets.fissureMagmaVeinsTex : assets.circleMagmaVeinsTex;
-    entry.magmaGlowDisc.scale.set(
-      isFissure ? safeR * 0.90 : safeR * 1.03,
+    const cu = entry.craterMat.uniforms;
+    cu.uReliefMap.value = isFissure ? assets.fissureReliefTex : assets.circleReliefTex;
+    cu.uOpacity.value = 1.0;
+    cu.uCollapse.value = 0.25;
+    cu.uHeave.value = 0.25;
+    cu.uMolten.value = isMolten ? 1.0 : 0.0;
+    cu.uFissure.value = isFissure ? 1.0 : 0.0;
+    cu.uTime.value = 0.0;
+    cu.uSeed.value = entry.seed;
+    cu.uWrenchPulse.value = 0.0;
+    entry.craterDisc.scale.set(
+      isFissure ? safeR * 0.90 : safeR * 1.04,
       1,
-      isFissure ? safeR * 1.20 : safeR * 1.03
+      isFissure ? safeR * 1.20 : safeR * 1.04
     );
-    entry.magmaGlowMat.opacity = isMolten ? (isBurning ? 0.96 : 0.88) : 0.0;
 
-    entry.fireBedDisc.visible = isBurning;
-    entry.fireCircleMesh.visible = isBurning && !isFissure;
-    entry.fireRoadMesh.visible = isBurning && isFissure;
-    if (isBurning) {
-      entry.fireBedDisc.scale.set(
-        isFissure ? safeR * 0.82 : safeR * 0.98,
-        1,
-        isFissure ? safeR * 1.16 : safeR * 0.98
-      );
-      entry.fireBedMat.uniforms.uMode.value = isFissure ? 1.0 : 0.0;
-      entry.fireBedMat.uniforms.uSeed.value = entry.seed;
-      entry.fireBedMat.uniforms.uTime.value = 0;
-      entry.fireBedMat.uniforms.uExtinguish.value = 1.0;
-      entry.fireBedMat.uniforms.uOpacity.value = lowSpecMode ? 0.62 : 0.82;
-
-      const flameH = isFissure
-        ? Math.max(0.95, Math.min(1.65, safeR * 0.48))
-        : Math.max(1.05, Math.min(1.80, safeR * 0.30));
-      entry.fireCircleMesh.scale.set(safeR, flameH, safeR);
-      entry.fireRoadMesh.scale.set(safeR * 0.86, flameH, safeR * 1.08);
-      entry.fireVolMat.uniforms.uSeed.value = entry.seed;
-      entry.fireVolMat.uniforms.uTime.value = 0;
-      entry.fireVolMat.uniforms.uIgnite.value = 0.05;
-      entry.fireVolMat.uniforms.uExtinguish.value = 1.0;
-      entry.fireVolMat.uniforms.uOpacity.value = lowSpecMode ? 0.72 : 0.94;
+    // Wire 3x Volumetric Fire Field ('circle') & Fire Road ('fissure') when molten === true
+    if (entry.fireField?.group) {
+      const showField = isMolten && !isFissure;
+      entry.fireField.group.visible = showField;
+      if (showField) {
+        entry.fireField.group.scale.set(safeR, 1.0, safeR);
+        entry.fireField.reset?.({ radius: safeR, seed: entry.seed });
+        entry.fireField.update?.(entry, 0, 0, 1.0);
+      }
+    }
+    if (entry.fireRoad?.group) {
+      const showRoad = isMolten && isFissure;
+      entry.fireRoad.group.visible = showRoad;
+      if (showRoad) {
+        entry.fireRoad.group.scale.set(safeR * 0.88, 1.0, safeR * 1.16);
+        entry.fireRoad.reset?.({ radius: safeR, seed: entry.seed });
+        entry.fireRoad.update?.(entry, 0, 0, 1.0, 0.0);
+      }
     }
 
-    const slabScale = Math.max(0.62, Math.min(1.52, safeR / (isFissure ? 2.65 : 3.85)));
+    const slabScale = Math.max(0.64, Math.min(1.56, safeR / (isFissure ? 2.65 : 3.80)));
     for (let i = 0; i < entry.slabs.length; i++) {
       const sl = entry.slabs[i];
       const lx = (isFissure ? sl.fissureX : sl.circleX) * safeR;
       const lz = (isFissure ? sl.fissureZ : sl.circleZ) * safeR;
       const yaw = isFissure ? sl.fissureYaw : sl.circleYaw;
       sl.tiltPitch = isFissure ? sl.fissurePitch : sl.circlePitch;
-      sl.maxLiftY = (isFissure ? sl.fissureLift : sl.circleLift) * (isBurning ? 1.15 : 1.0);
+      sl.maxLiftY = (isFissure ? sl.fissureLift : sl.circleLift) * (isMolten ? 1.12 : 1.0);
       sl.mesh.material = isMolten ? assets.moltenSlabMat : assets.stoneSlabMat;
       sl.mesh.position.set(lx, 0.01, lz);
       sl.mesh.rotation.set(0, yaw, 0);
-      sl.mesh.scale.set(sl.scaleW * slabScale, slabScale * 1.08, slabScale);
+      sl.mesh.scale.set(sl.scaleW * slabScale, slabScale * 1.12, slabScale);
       sl.mesh.visible = !lowSpecMode || i % 2 === 0;
-    }
-
-    for (let i = 0; i < entry.plumes.length; i++) {
-      const pl = entry.plumes[i];
-      // Non-burning molten fractures still get subtle hot plumes; burning zones use true 3D FBM shader flames!
-      pl.mesh.visible = isMolten && !isBurning && !lowSpecMode;
-      const pr = safeR * pl.distFrac;
-      pl.mesh.position.set(Math.cos(pl.ang) * pr, 0.02, Math.sin(pl.ang) * pr);
-      pl.mesh.scale.set(slabScale, slabScale * 1.15, slabScale);
-      pl.mat.opacity = isMolten && !isBurning ? 0.72 : 0.0;
     }
 
     entry.group.visible = true;
     activeGroundFractures.push(entry);
 
-    // 3D fractured basalt/magma rock chunks arcing outward with gravity & floor bounce!
+    // 3D jagged dark stone & flagstone rubble chunks arcing outward with gravity, single floor bounce & dust puffs!
     spawnFractureRockChunks(x, groundY, z, safeR, isMolten, isBurning, isFissure, ndx, ndz);
 
+    // Low radial billowing dark-stone dust ring hugging the shattered flagstones (zero white lines/dots!)
+    const dustCount = lowSpecMode ? 3 : (isFissure ? 5 : 7);
+    for (let di = 0; di < dustCount; di++) {
+      let dx;
+      let dz;
+      let dvx;
+      let dvz;
+      if (isFissure) {
+        const side = di % 2 === 0 ? 1 : -1;
+        const along = ((di / Math.max(1, dustCount - 1)) - 0.5) * safeR * 1.5;
+        dx = ndx * along - ndz * side * 0.35;
+        dz = ndz * along + ndx * side * 0.35;
+        dvx = -ndz * side * (1.2 + Math.random() * 1.4) + ndx * 0.8;
+        dvz = ndx * side * (1.2 + Math.random() * 1.4) + ndz * 0.8;
+      } else {
+        const a = (di / dustCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.4;
+        const rOff = safeR * (0.18 + Math.random() * 0.32);
+        dx = Math.cos(a) * rOff;
+        dz = Math.sin(a) * rOff;
+        const outSpd = 1.6 + Math.random() * 2.1;
+        dvx = Math.cos(a) * outSpd;
+        dvz = Math.sin(a) * outSpd;
+      }
+      spawnStoneDustPuff({
+        x: x + dx,
+        y: groundY + 0.16 + Math.random() * 0.12,
+        z: z + dz,
+        vx: dvx,
+        vy: 0.32 + Math.random() * 0.42,
+        vz: dvz,
+        startScale: 0.65 + safeR * 0.12,
+        endScale: 1.75 + safeR * 0.28,
+        opacity: isMolten ? 0.34 : 0.42,
+        duration: 0.62 + Math.random() * 0.24,
+        color: isMolten ? 0x3b261d : (di % 2 === 0 ? 0x332e38 : 0x3e3843)
+      });
+    }
+
+    // Fine dark basalt grit splinters (dark charcoal 0x2c2832 — never bright gray/white!)
     spawnParticles({
       x,
-      y: groundY + 0.18,
+      y: groundY + 0.16,
       z,
-      color: isMolten ? 0x44403c : 0x64748b,
+      color: isMolten ? 0x3a251c : 0x2c2832,
       count: lowSpecMode ? 6 : 14,
-      speed: 6.2 + safeR * 0.68,
-      size: 0.19,
-      life: 0.76,
-      gravity: 19.5
+      speed: 5.8 + safeR * 0.62,
+      size: 0.13,
+      life: 0.72,
+      gravity: 21.0
     });
     if (isMolten) {
       spawnParticles({
         x,
-        y: groundY + 0.26,
+        y: groundY + 0.24,
         z,
         color: isBurning ? 0xfb923c : 0xf97316,
-        count: lowSpecMode ? 8 : (isBurning ? 20 : 15),
-        speed: 7.2 + safeR * 0.58,
-        size: 0.16,
-        life: 0.68,
-        gravity: 12.0
+        count: lowSpecMode ? 8 : (isBurning ? 18 : 14),
+        speed: 6.8 + safeR * 0.55,
+        size: 0.14,
+        life: 0.62,
+        gravity: 12.5
       });
     }
     return entry;
+  }
+
+  // Section 5.1 & 4.3: Stuck-Hammer 4-Heave Extraction Dust, Trembling Pebble Chips & Pull-4 Release Eruption!
+  function spawnBossHammerWrenchDust(x = 0, z = 0, pullIndex = 1) {
+    let moltenHint = false;
+    if (x && typeof x === 'object') {
+      const opts = x;
+      x = Number(opts.x) || 0;
+      z = Number(opts.z) || 0;
+      pullIndex = opts.pullIndex ?? opts.pullIdx ?? 1;
+      moltenHint = Boolean(opts.molten);
+    }
+    const px = Number.isFinite(Number(x)) ? Number(x) : 0;
+    const pz = Number.isFinite(Number(z)) ? Number(z) : 0;
+    const pullIdx = Math.max(1, Math.min(4, Math.round(Number(pullIndex) || 1)));
+    const isFinalRip = pullIdx >= 4;
+    const groundY = getGroundHeight(px, pz);
+
+    // Find nearest active crater under the stuck warhammer so its 3D flagstones & funnel shudder with every tug!
+    let nearestGf = null;
+    let bestDistSq = 42.25; // <= 6.5m (covers +30% 5.53m Leap_Slam crater radius)
+    for (let i = 0; i < activeGroundFractures.length; i++) {
+      const gf = activeGroundFractures[i];
+      const dx = gf.x - px;
+      const dz = gf.z - pz;
+      const dSq = dx * dx + dz * dz;
+      if (dSq < bestDistSq) {
+        bestDistSq = dSq;
+        nearestGf = gf;
+      }
+    }
+
+    let isMolten = moltenHint;
+    if (nearestGf) {
+      isMolten = isMolten || nearestGf.molten;
+      nearestGf.wrenchImpulse = isFinalRip ? 1.45 : (0.68 + pullIdx * 0.18);
+      // Keep the physical stone crater intact underneath the Boss's pinned warhammer across all 4 tugs
+      // (while nearestGf.fireDuration stays strictly <= 1.0s so flames still extinguish on time!)
+      if (nearestGf.kind !== 'fissure') {
+        nearestGf.duration = Math.max(nearestGf.duration, nearestGf.age + (isFinalRip ? 1.40 : 1.15));
+      }
+    }
+
+    // 1. Fresh dark-gothic crushed-stone dust puffs billowing out of the crater mouth
+    const puffCount = lowSpecMode ? (isFinalRip ? 4 : 2) : (isFinalRip ? 8 : 3 + (pullIdx >= 3 ? 1 : 0));
+    for (let i = 0; i < puffCount; i++) {
+      const ang = (i / puffCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.55;
+      const rOff = (0.15 + Math.random() * 0.55) * (isFinalRip ? 1.35 : 0.9);
+      const outSpd = (isFinalRip ? 2.2 : 0.95 + pullIdx * 0.22) * (0.75 + Math.random() * 0.55);
+      spawnStoneDustPuff({
+        x: px + Math.cos(ang) * rOff,
+        y: groundY + 0.14 + Math.random() * 0.16,
+        z: pz + Math.sin(ang) * rOff,
+        vx: Math.cos(ang) * outSpd,
+        vy: (isFinalRip ? 0.85 : 0.36 + pullIdx * 0.08) + Math.random() * 0.35,
+        vz: Math.sin(ang) * outSpd,
+        startScale: isFinalRip ? 0.72 : 0.46 + pullIdx * 0.06,
+        endScale: isFinalRip ? 2.15 : 1.22 + pullIdx * 0.16,
+        opacity: isFinalRip ? 0.46 : 0.34 + pullIdx * 0.025,
+        duration: isFinalRip ? 0.78 : 0.52 + Math.random() * 0.16,
+        color: isMolten ? 0x3d261c : (i % 2 === 0 ? 0x332e38 : 0x3f3945)
+      });
+    }
+
+    // 2. Trembling stone pebble chips on tugs 1..3 -> dramatic shattered flagstone release burst on pullIndex === 4!
+    if (activeDebris.length <= 116) {
+      const chipCount = lowSpecMode
+        ? (isFinalRip ? 6 : 2)
+        : (isFinalRip ? 12 : 3 + pullIdx);
+      for (let i = 0; i < chipCount; i++) {
+        const kind = isMolten
+          ? 'molten_chunk'
+          : (i % 3 === 0 ? 'flagstone_chip' : 'rock_chunk');
+        const d = acquireDebrisPiece(kind);
+        const ang = (i / chipCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.6;
+        const rOff = 0.14 + Math.random() * (isFinalRip ? 0.72 : 0.42);
+        const horizSpd = isFinalRip
+          ? (2.6 + Math.random() * 4.2)
+          : (1.05 + pullIdx * 0.32 + Math.random() * 1.35);
+
+        d.x = px + Math.cos(ang) * rOff;
+        d.y = groundY + 0.10 + Math.random() * 0.14;
+        d.z = pz + Math.sin(ang) * rOff;
+        d.vx = Math.cos(ang) * horizSpd;
+        d.vz = Math.sin(ang) * horizSpd;
+        d.vy = isFinalRip
+          ? (4.8 + Math.random() * 3.8)
+          : (2.1 + pullIdx * 0.48 + Math.random() * 1.45);
+        d.vrx = (Math.random() - 0.5) * (isFinalRip ? 21 : 14);
+        d.vry = (Math.random() - 0.5) * (isFinalRip ? 21 : 14);
+        d.vrz = (Math.random() - 0.5) * (isFinalRip ? 21 : 14);
+        d.age = 0;
+        d.life = isFinalRip ? (1.15 + Math.random() * 0.40) : (0.76 + Math.random() * 0.26);
+        d.baseScale = isFinalRip
+          ? (0.72 + Math.random() * 0.68)
+          : (0.42 + Math.random() * 0.36);
+        d.bounces = 0;
+        d.emitBounceDust = isFinalRip || i % 2 === 0;
+        d.mesh.position.set(d.x, d.y, d.z);
+        d.mesh.rotation.set(Math.random() * 6.28, Math.random() * 6.28, Math.random() * 6.28);
+        d.mesh.scale.setScalar(d.baseScale);
+        activeDebris.push(d);
+      }
+    }
+
+    // 3. Fine dark stone grit & screen micro-tremor (heavier jolt on pull 4 release!)
+    spawnParticles({
+      x: px,
+      y: groundY + 0.14,
+      z: pz,
+      color: isMolten ? 0x3b251c : 0x2d2833,
+      count: lowSpecMode ? (isFinalRip ? 5 : 2) : (isFinalRip ? 12 : 4 + pullIdx),
+      speed: isFinalRip ? 5.8 : 2.6 + pullIdx * 0.5,
+      size: isFinalRip ? 0.125 : 0.095,
+      life: isFinalRip ? 0.68 : 0.46,
+      gravity: 20.5
+    });
+    if (isMolten) {
+      spawnParticles({
+        x: px,
+        y: groundY + 0.20,
+        z: pz,
+        color: isFinalRip ? 0xfbbf24 : 0xf97316,
+        count: lowSpecMode ? 3 : (isFinalRip ? 12 : 5),
+        speed: isFinalRip ? 6.4 : 3.4,
+        size: 0.12,
+        life: 0.54,
+        gravity: 11.5
+      });
+    }
+    addScreenShake(isFinalRip ? 0.24 : 0.055 + pullIdx * 0.02);
   }
 
   // Sleek Projectile Geometries (Oriented so +Z is forward flight direction!)
@@ -3278,15 +3524,28 @@ export function createArenaWorld(canvas) {
     return g;
   })();
   const debrisRockGeo = (() => {
-    const g = new THREE.DodecahedronGeometry(0.115, 0);
-    g.scale(1.32, 0.68, 0.96);
+    const g = new THREE.DodecahedronGeometry(0.118, 0);
+    g.scale(1.36, 0.66, 0.98);
+    g.computeVertexNormals();
+    return g;
+  })();
+  const debrisFlagstoneChipGeo = (() => {
+    const g = new THREE.CylinderGeometry(0.145, 0.175, 0.052, 5, 1, false);
+    const pos = g.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const vx = pos.getX(i);
+      const vz = pos.getZ(i);
+      pos.setX(i, vx * (vx > 0 ? 1.24 : 0.86));
+      pos.setZ(i, vz * (vz > 0 ? 0.88 : 1.18));
+    }
     g.computeVertexNormals();
     return g;
   })();
   const debrisBoneMat = new THREE.MeshStandardMaterial({ color: 0xe7e0d0, roughness: 0.55, metalness: 0.05 });
   const debrisHelmMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.35, metalness: 0.75 });
   const debrisShieldMat = new THREE.MeshStandardMaterial({ color: 0x784828, roughness: 0.72, metalness: 0.22 });
-  const debrisRockMat = new THREE.MeshStandardMaterial({ color: 0x4b5563, roughness: 0.86, metalness: 0.08 });
+  const debrisRockMat = new THREE.MeshStandardMaterial({ color: 0x2f2a35, roughness: 0.90, metalness: 0.05 });
+  const debrisFlagstoneChipMat = new THREE.MeshStandardMaterial({ color: 0x393441, roughness: 0.88, metalness: 0.05 });
   const debrisMoltenRockMat = new THREE.MeshStandardMaterial({
     color: 0x231917,
     emissive: 0xea580c,
@@ -3302,6 +3561,7 @@ export function createArenaWorld(canvas) {
     helmet: [],
     shield: [],
     rock_chunk: [],
+    flagstone_chip: [],
     molten_chunk: []
   };
 
@@ -3319,46 +3579,70 @@ export function createArenaWorld(canvas) {
         mesh = new THREE.Mesh(debrisShieldGeo, debrisShieldMat);
       } else if (kind === 'rock_chunk') {
         mesh = new THREE.Mesh(debrisRockGeo, debrisRockMat);
+      } else if (kind === 'flagstone_chip') {
+        mesh = new THREE.Mesh(debrisFlagstoneChipGeo, debrisFlagstoneChipMat);
       } else if (kind === 'molten_chunk') {
         mesh = new THREE.Mesh(debrisRockGeo, debrisMoltenRockMat);
       } else {
         mesh = new THREE.Mesh(debrisBoneGeo, debrisBoneMat);
       }
       scene.add(mesh);
-      d = { kind, mesh, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, vrx: 0, vry: 0, vrz: 0, age: 0, life: 0.9, baseScale: 1 };
+      d = {
+        kind,
+        mesh,
+        x: 0,
+        y: 0,
+        z: 0,
+        vx: 0,
+        vy: 0,
+        vz: 0,
+        vrx: 0,
+        vry: 0,
+        vrz: 0,
+        age: 0,
+        life: 0.9,
+        baseScale: 1,
+        bounces: 0,
+        emitBounceDust: false
+      };
     }
+    d.bounces = 0;
+    d.emitBounceDust = false;
     d.mesh.visible = true;
     return d;
   }
 
   function spawnFractureRockChunks(x, groundY, z, radius, isMolten, isBurning, isFissure, dirX, dirZ) {
     if (activeDebris.length > 108) return;
-    const count = lowSpecMode ? 4 : (isBurning ? 10 : 8);
-    const kind = isMolten ? 'molten_chunk' : 'rock_chunk';
+    const count = lowSpecMode ? 6 : (isFissure ? 11 : 15);
     const perpX = -dirZ;
     const perpZ = dirX;
 
     for (let i = 0; i < count; i++) {
+      const isFlatChip = !isMolten && i % 3 === 1;
+      const kind = isMolten ? 'molten_chunk' : (isFlatChip ? 'flagstone_chip' : 'rock_chunk');
       const d = acquireDebrisPiece(kind);
+      // Heavy big chunks fly slower & land closer; small jagged chips launch faster & bounce further!
+      const isHeavyBlock = i % 4 === 0;
       let vx;
       let vz;
       let ox;
       let oz;
-      const spd = (3.4 + Math.random() * 3.8) * (0.85 + Math.min(0.45, radius * 0.08));
+      const spd = (isHeavyBlock ? 2.4 + Math.random() * 2.2 : 3.6 + Math.random() * 4.2) * (0.85 + Math.min(0.45, radius * 0.08));
 
       if (isFissure) {
         const side = i % 2 === 0 ? 1 : -1;
-        const along = ((i / Math.max(1, count - 1)) - 0.5) * radius * 1.4;
-        ox = dirX * along + perpX * side * (0.18 + Math.random() * 0.25);
-        oz = dirZ * along + perpZ * side * (0.18 + Math.random() * 0.25);
+        const along = ((i / Math.max(1, count - 1)) - 0.5) * radius * 1.45;
+        ox = dirX * along + perpX * side * (0.16 + Math.random() * 0.26);
+        oz = dirZ * along + perpZ * side * (0.16 + Math.random() * 0.26);
         const fwdMix = 0.35 + Math.random() * 0.55;
         const latMix = side * (0.55 + Math.random() * 0.45);
         const inv = 1 / Math.max(0.001, Math.hypot(fwdMix, latMix));
         vx = (dirX * fwdMix + perpX * latMix) * inv * spd;
         vz = (dirZ * fwdMix + perpZ * latMix) * inv * spd;
       } else {
-        const ang = (i / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.45;
-        const rOff = radius * (0.18 + Math.random() * 0.42);
+        const ang = (i / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.38;
+        const rOff = radius * (0.14 + Math.random() * 0.38);
         ox = Math.cos(ang) * rOff;
         oz = Math.sin(ang) * rOff;
         vx = Math.cos(ang) * spd;
@@ -3366,17 +3650,19 @@ export function createArenaWorld(canvas) {
       }
 
       d.x = x + ox;
-      d.y = groundY + 0.14 + Math.random() * 0.18;
+      d.y = groundY + 0.12 + Math.random() * 0.16;
       d.z = z + oz;
       d.vx = vx;
       d.vz = vz;
-      d.vy = 4.6 + Math.random() * 3.8;
-      d.vrx = (Math.random() - 0.5) * 19;
-      d.vry = (Math.random() - 0.5) * 19;
-      d.vrz = (Math.random() - 0.5) * 19;
+      d.vy = isHeavyBlock ? (3.8 + Math.random() * 2.6) : (4.8 + Math.random() * 4.1);
+      d.vrx = (Math.random() - 0.5) * (isHeavyBlock ? 11 : 19);
+      d.vry = (Math.random() - 0.5) * (isHeavyBlock ? 12 : 20);
+      d.vrz = (Math.random() - 0.5) * (isHeavyBlock ? 11 : 19);
       d.age = 0;
-      d.life = 0.92 + Math.random() * 0.34;
-      d.baseScale = 0.78 + Math.random() * 0.68;
+      d.life = 1.32 + Math.random() * 0.48;
+      d.baseScale = isHeavyBlock ? (1.12 + Math.random() * 0.52) : (0.66 + Math.random() * 0.56);
+      d.bounces = 0;
+      d.emitBounceDust = !lowSpecMode && (isHeavyBlock || i % 2 === 0);
       d.mesh.position.set(d.x, d.y, d.z);
       d.mesh.rotation.set(Math.random() * 6.28, Math.random() * 6.28, Math.random() * 6.28);
       d.mesh.scale.setScalar(d.baseScale);
@@ -5044,6 +5330,7 @@ export function createArenaWorld(canvas) {
       const sa = ensureSoulsArena();
       sa.group.visible = true;
       sa.setFogGateSealed(false);
+      phase2ArenaFireRingCtrl?.reset?.();
       obstacles.length = 0;
       const cols = sa.getColliders();
       for (let i = 0; i < cols.length; i++) obstacles.push(cols[i]);
@@ -5162,9 +5449,9 @@ export function createArenaWorld(canvas) {
     const sa = ensureSoulsArena();
     if (!sa || !sa.group) return false;
 
-      // Pre-seed pooled debris, wood shield splinters & ground fracture FBM fire shaders so 1st hit/slam has 0ms compile hitch!
+      // Pre-seed pooled debris, wood shield splinters, stone dust & ground fracture FBM fire shaders so 1st hit/slam has 0ms compile hitch!
       if (activeDebris.length === 0) {
-        const seedKinds = ['bone', 'helmet', 'shield', 'rock_chunk', 'molten_chunk'];
+        const seedKinds = ['bone', 'helmet', 'shield', 'rock_chunk', 'flagstone_chip', 'molten_chunk'];
         for (let i = 0; i < seedKinds.length; i++) {
           const k = seedKinds[i];
           if (freeDebrisByKind[k] && freeDebrisByKind[k].length === 0) {
@@ -5173,6 +5460,14 @@ export function createArenaWorld(canvas) {
             piece.mesh.visible = false;
             freeDebrisByKind[k].push(piece);
           }
+        }
+      }
+      if (activeStoneDustPuffs.length === 0 && freeStoneDustPuffs.length === 0) {
+        spawnStoneDustPuff({ x: 0, y: -100, z: 0, opacity: 0.01, duration: 0.2 });
+        const dp0 = activeStoneDustPuffs.pop();
+        if (dp0) {
+          dp0.sprite.visible = false;
+          freeStoneDustPuffs.push(dp0);
         }
       }
       if (activeWoodSplinters.length === 0 && freeWoodSplinters.length < 3) {
@@ -5193,6 +5488,8 @@ export function createArenaWorld(canvas) {
         }
         freeGroundFractures.push(gfEntry);
       }
+      ensurePoolEntryFireMeshes(freeGroundFractures[0]);
+      const p2FireRing = ensurePhase2ArenaFireRing();
 
       // Prewarm elden_dissolve_v2 shader program once during load (eliminates 80-300ms freeze on first mob/boss kill!)
       let dissolveWarmupGroup = null;
@@ -5237,13 +5534,18 @@ export function createArenaWorld(canvas) {
       for (let i = 0; i < Math.min(3, freeWoodSplinters.length); i++) {
         setTempVisible(freeWoodSplinters[i].mesh, true);
       }
+      if (freeStoneDustPuffs.length > 0) {
+        setTempVisible(freeStoneDustPuffs[0].sprite, true);
+      }
       if (freeGroundFractures.length > 0) {
         const gf0 = freeGroundFractures[0];
         setTempVisible(gf0.group, true);
-        setTempVisible(gf0.magmaGlowDisc, true);
-        setTempVisible(gf0.fireBedDisc, true);
-        setTempVisible(gf0.fireCircleMesh, true);
-        setTempVisible(gf0.fireRoadMesh, true);
+        setTempVisible(gf0.craterDisc, true);
+        if (gf0.fireField?.group) setTempVisible(gf0.fireField.group, true);
+        if (gf0.fireRoad?.group) setTempVisible(gf0.fireRoad.group, true);
+      }
+      if (p2FireRing?.group && !p2FireRing.isActive?.()) {
+        setTempVisible(p2FireRing.group, true);
       }
 
       if (!scene.environment) {
@@ -5436,7 +5738,7 @@ export function createArenaWorld(canvas) {
     if (devEditors) return Promise.resolve(devEditors);
     if (!isDevModeEnabled()) return Promise.resolve(null);
     if (!devEditorsPromise) {
-      devEditorsPromise = import('./world/devEditors.js?v=20261124z84')
+      devEditorsPromise = import('./world/devEditors.js?v=20261124z85')
         .then((mod) => {
           devEditors = mod.createWorldDevEditors({
             scene,
@@ -6239,7 +6541,7 @@ export function createArenaWorld(canvas) {
       }
     }
 
-    // Animate Chapter 26 Dark Souls castle bonfire, braziers, fog wall, dynamic light pool, roof & cutscene doors
+    // Animate Chapter 26 Dark Souls castle bonfire, braziers, fog wall, dynamic light pool, roof, cutscene doors & Phase-2 fire ring
     if (isSouls && soulsArena) {
       _soulsUpdateOpts.playerX = lastHeroX;
       _soulsUpdateOpts.playerZ = lastHeroZ;
@@ -6248,6 +6550,9 @@ export function createArenaWorld(canvas) {
       _soulsUpdateOpts.camZ = camera.position.z;
       _soulsUpdateOpts.cutsceneState = isBossDoorCutsceneActive() ? _cutsceneState : null;
       soulsArena.update(safeDt, t, _soulsUpdateOpts);
+      if (phase2ArenaFireRingCtrl && phase2ArenaFireRingCtrl.isActive?.()) {
+        phase2ArenaFireRingCtrl.update(safeDt, t);
+      }
     } else if (cameraMode !== 'hub' && isMistyBiome(currentBiome) && mistyArena?.isLoaded()) {
       // Animate Misty Forest / Frost Ruins / Ash Citadel mist, glowing portal sigil, campfire & lanterns
       mistyArena.update(safeDt, t);
@@ -6569,7 +6874,7 @@ export function createArenaWorld(canvas) {
       }
     }
 
-    // Update 3D Shattered Basalt Floor Fractures, Burning Fire Circle & Fire Road + Pooled Ground Light
+    // Update 3D Shattered Cathedral Stone Craters, 3x Volumetric Fire Field & Fire Road + Pooled Ground Light
     let burnLightWeightSum = 0;
     let burnLightWx = 0;
     let burnLightWy = 0;
@@ -6577,12 +6882,14 @@ export function createArenaWorld(canvas) {
     let burnLightPeak = 0;
     let burnLightMaxR = 4.0;
     let anyBurningZone = false;
-    const emberInterval = lowSpecMode ? 0.20 : (isMobileDevice ? 0.12 : 0.075);
+    const emberInterval = lowSpecMode ? 0.22 : (isMobileDevice ? 0.14 : 0.085);
 
     for (let i = activeGroundFractures.length - 1; i >= 0; i--) {
       const gf = activeGroundFractures[i];
       gf.age += safeDt;
       if (gf.age >= gf.duration) {
+        if (gf.fireField?.group) gf.fireField.group.visible = false;
+        if (gf.fireRoad?.group) gf.fireRoad.group.visible = false;
         gf.group.visible = false;
         activeGroundFractures.splice(i, 1);
         freeGroundFractures.push(gf);
@@ -6590,6 +6897,12 @@ export function createArenaWorld(canvas) {
       }
       const u = gf.age / gf.duration;
       const remSec = Math.max(0, gf.duration - gf.age);
+      const isFissure = gf.kind === 'fissure';
+
+      // Decay any stuck-hammer extraction tug impulse smoothly
+      if (gf.wrenchImpulse > 0) {
+        gf.wrenchImpulse = Math.max(0, gf.wrenchImpulse - safeDt * 5.4);
+      }
 
       // Violent upward stone shock-heave in 0.065s (1.28x overshoot) -> elastic settle by 0.19s -> smooth sink at end!
       let heaveFactor;
@@ -6603,39 +6916,70 @@ export function createArenaWorld(canvas) {
         heaveFactor = 1.0;
       }
 
+      // Fast sunken collapse of central warhammer funnel (0 -> 1 in 0.055s)
+      const collapseIn = gf.age < 0.055 ? (0.35 + 0.65 * (gf.age / 0.055)) : 1.0;
+
       let healSmooth;
       if (gf.burning) {
-        const extWin = Math.min(0.55, gf.duration * 0.35);
+        const extWin = Math.min(0.45, gf.duration * 0.35);
         const ext01 = remSec < extWin ? remSec / Math.max(0.05, extWin) : 1.0;
         healSmooth = ext01 * ext01 * (3 - 2 * ext01);
       } else {
-        const healOut = u > 0.74 ? 1 - (u - 0.74) / 0.26 : 1.0;
+        const healOut = u > 0.76 ? 1 - (u - 0.76) / 0.24 : 1.0;
         healSmooth = healOut * healOut * (3 - 2 * healOut);
       }
-      const amp = heaveFactor * healSmooth;
 
-      gf.craterMat.opacity = 0.98 * healSmooth;
+      const wrenchJolt = gf.wrenchImpulse > 0
+        ? Math.sin(gf.wrenchImpulse * 9.5) * 0.16 * gf.wrenchImpulse + gf.wrenchImpulse * 0.22
+        : 0;
+      const amp = (heaveFactor + wrenchJolt) * healSmooth;
+
+      const cu = gf.craterMat.uniforms;
+      cu.uOpacity.value = healSmooth;
+      cu.uCollapse.value = collapseIn * healSmooth;
+      cu.uHeave.value = amp;
+      cu.uTime.value = gf.age;
+      cu.uWrenchPulse.value = Math.min(1.5, gf.wrenchImpulse);
+
       if (gf.molten) {
-        const pulse = 0.80 + 0.20 * Math.sin(gf.age * 12.5 + gf.seed);
-        gf.magmaGlowMat.opacity = (gf.burning ? 0.96 : 0.86) * pulse * healSmooth;
+        const fireDur = isFissure ? gf.duration : (gf.fireDuration || Math.min(gf.duration, 1.0));
+        const fireActiveNow = gf.age < fireDur;
 
-        if (gf.burning) {
+        if (!isFissure) {
+          if (gf.fireField?.group) {
+            if (fireActiveNow) {
+              const life01 = Math.min(1.0, gf.age / Math.max(0.05, fireDur));
+              gf.fireField.group.visible = true;
+              gf.fireField.update?.(gf, gf.age, life01, 1.0);
+            } else {
+              gf.fireField.group.visible = false;
+            }
+          }
+          if (gf.fireRoad?.group) gf.fireRoad.group.visible = false;
+        } else {
+          if (gf.fireRoad?.group) {
+            const life01 = Math.min(1.0, gf.age / Math.max(0.05, fireDur));
+            gf.fireRoad.group.visible = true;
+            gf.fireRoad.update?.(gf, gf.age, life01, 1.0);
+          }
+          if (gf.fireField?.group) gf.fireField.group.visible = false;
+        }
+
+        if (fireActiveNow) {
           anyBurningZone = true;
-          const ignite01 = Math.min(1.0, gf.age / 0.14);
-          gf.fireVolMat.uniforms.uTime.value = gf.age;
-          gf.fireVolMat.uniforms.uIgnite.value = ignite01;
-          gf.fireVolMat.uniforms.uExtinguish.value = healSmooth;
+          const fireLife01 = Math.min(1.0, gf.age / Math.max(0.05, fireDur));
+          const ignite01 = Math.min(1.0, fireLife01 / 0.15);
+          const burnDown01 = fireLife01 > 0.65 ? Math.max(0.0, (1.0 - fireLife01) / 0.35) : 1.0;
+          const fireEnv = ignite01 * (burnDown01 * burnDown01 * (3 - 2 * burnDown01));
+          cu.uMolten.value = Math.max(0.28 * healSmooth, fireEnv);
 
-          gf.fireBedMat.uniforms.uTime.value = gf.age;
-          gf.fireBedMat.uniforms.uExtinguish.value = healSmooth;
-
-          // Rising glowing ember sparks across perimeter/interior ('circle') or along (dirX, dirZ) spine ('fissure')
+          // Supplemental rising dynamic ember shards in world particle pool
           gf.emberTick += safeDt;
-          if (gf.emberTick >= emberInterval && remSec > 0.30) {
+          if (gf.emberTick >= emberInterval && fireLife01 < 0.76) {
             gf.emberTick = 0;
             let ex;
             let ez;
-            if (gf.kind === 'fissure') {
+            if (isFissure) {
               const along = (Math.random() - 0.5) * gf.radius * 1.85;
               const lat = (Math.random() - 0.5) * gf.radius * 0.85;
               ex = gf.x + gf.dirX * along - gf.dirZ * lat;
@@ -6643,8 +6987,8 @@ export function createArenaWorld(canvas) {
             } else {
               const ang = Math.random() * Math.PI * 2;
               const rPick = Math.random() < 0.68
-                ? gf.radius * (0.76 + Math.random() * 0.18)
-                : gf.radius * Math.sqrt(Math.random()) * 0.74;
+                ? gf.radius * (0.72 + Math.random() * 0.20)
+                : gf.radius * Math.sqrt(Math.random()) * 0.72;
               ex = gf.x + Math.cos(ang) * rPick;
               ez = gf.z + Math.sin(ang) * rPick;
             }
@@ -6656,59 +7000,100 @@ export function createArenaWorld(canvas) {
               color: sparkCol,
               count: lowSpecMode ? 1 : 2,
               speed: 1.85 + Math.random() * 1.25,
-              size: 0.115,
-              life: 0.48 + Math.random() * 0.22,
+              size: 0.11,
+              life: 0.42 + Math.random() * 0.20,
               gravity: -4.4
             });
           }
 
-          // Weight burning light toward nearest active zone around camera focus so multi-segment Fire Road illuminates smoothly
+          // Warm floor light pulse weighted toward nearest active fire zone
           const distToHero = Math.hypot(gf.x - lastHeroX, gf.z - lastHeroZ);
           const proxW = 1 / (1 + distToHero * 0.18);
-          const w = healSmooth * ignite01 * proxW;
+          const w = fireEnv * proxW;
           burnLightWeightSum += w;
           burnLightWx += gf.x * w;
-          burnLightWy += (gf.groundY + 0.62) * w;
+          burnLightWy += (gf.groundY + 0.65) * w;
           burnLightWz += gf.z * w;
-          if (healSmooth * ignite01 > burnLightPeak) burnLightPeak = healSmooth * ignite01;
+          if (fireEnv > burnLightPeak) burnLightPeak = fireEnv;
           if (gf.radius > burnLightMaxR) burnLightMaxR = gf.radius;
         } else {
-          for (let k = 0; k < gf.plumes.length; k++) {
-            const pl = gf.plumes[k];
-            if (!pl.mesh.visible) continue;
-            const flk = 0.72 + 0.28 * Math.sin(gf.age * 15.0 + pl.phase);
-            pl.mat.opacity = 0.66 * flk * healSmooth;
-            pl.mesh.scale.y = Math.max(0.05, (0.55 + 0.65 * flk) * amp);
-          }
-
-          const w = healSmooth * 0.35;
-          burnLightWeightSum += w;
-          burnLightWx += gf.x * w;
-          burnLightWy += (gf.groundY + 0.45) * w;
-          burnLightWz += gf.z * w;
-          if (healSmooth * 0.42 > burnLightPeak) burnLightPeak = healSmooth * 0.42;
-          if (gf.radius > burnLightMaxR) burnLightMaxR = gf.radius;
+          cu.uMolten.value = 0.28 * healSmooth;
         }
       }
 
-      const tremor = gf.burning ? Math.sin(gf.age * 24.0 + gf.seed) * 0.008 * healSmooth : 0;
+      const tremor = (gf.burning ? Math.sin(gf.age * 24.0 + gf.seed) * 0.007 : 0) +
+        (gf.wrenchImpulse > 0 ? Math.sin(gf.age * 52.0 + gf.seed) * 0.014 * gf.wrenchImpulse : 0);
       for (let k = 0; k < gf.slabs.length; k++) {
         const sl = gf.slabs[k];
         if (!sl.mesh.visible) continue;
-        sl.mesh.position.y = -0.065 * (1 - Math.min(1, amp)) + sl.maxLiftY * amp + tremor * ((k % 2) * 2 - 1);
+        const wrenchSlabBoost = sl.tier <= 1 ? wrenchJolt * 0.035 : 0;
+        sl.mesh.position.y =
+          -0.062 * (1 - Math.min(1, healSmooth)) +
+          sl.maxLiftY * amp +
+          wrenchSlabBoost +
+          tremor * ((k % 2) * 2 - 1) * healSmooth;
         sl.mesh.rotation.x = sl.tiltPitch * amp;
         sl.mesh.rotation.z = sl.tiltRoll * amp;
+      }
+    }
+
+    // Blend Phase-2 Arena Perimeter Fire Awakening light hint if active (0 extra PointLights -> 0 shader recompile!)
+    if (isSouls && phase2ArenaFireRingCtrl && phase2ArenaFireRingCtrl.isActive?.()) {
+      const ringHint = phase2ArenaFireRingCtrl.getLightHint?.();
+      const hintInt = Number(ringHint?.intensity) || 0;
+      if (hintInt > 0.01) {
+        const hw = Math.min(1.25, hintInt * 0.35);
+        const hx = Number.isFinite(ringHint.x) ? ringHint.x : 0;
+        const hy = Number.isFinite(ringHint.y) ? ringHint.y : 0.75;
+        const hz = Number.isFinite(ringHint.z) ? ringHint.z : -44;
+        burnLightWeightSum += hw;
+        burnLightWx += hx * hw;
+        burnLightWy += hy * hw;
+        burnLightWz += hz * hw;
+        anyBurningZone = true;
+        const normHintPeak = Math.min(1.15, hintInt * 0.32);
+        if (normHintPeak > burnLightPeak) burnLightPeak = normHintPeak;
+        const hr = Number(ringHint.radius) || 6.5;
+        if (hr > burnLightMaxR) burnLightMaxR = hr;
       }
     }
 
     if (!lowSpecMode && cameraMode !== 'hub' && burnLightWeightSum > 0.001 && burnLightPeak > 0.01) {
       const invW = 1 / burnLightWeightSum;
       burningGroundLight.position.set(burnLightWx * invW, burnLightWy * invW, burnLightWz * invW);
-      burningGroundLight.distance = Math.max(9.5, Math.min(18.0, burnLightMaxR * 2.65));
+      burningGroundLight.distance = Math.max(9.5, Math.min(19.5, burnLightMaxR * 2.65));
       const flicker = 0.85 + 0.09 * Math.sin(t * 17.3) + 0.06 * Math.cos(t * 29.7);
       burningGroundLight.intensity = burnLightPeak * (anyBurningZone ? 3.85 : 1.55) * flicker;
     } else if (burningGroundLight.intensity !== 0) {
       burningGroundLight.intensity = 0;
+    }
+
+    // Update Pooled Soft Dark-Stone Floor Dust Puffs
+    for (let i = activeStoneDustPuffs.length - 1; i >= 0; i--) {
+      const dp = activeStoneDustPuffs[i];
+      dp.age += safeDt;
+      if (dp.age >= dp.duration) {
+        dp.sprite.visible = false;
+        activeStoneDustPuffs.splice(i, 1);
+        freeStoneDustPuffs.push(dp);
+        continue;
+      }
+      const p = dp.age / dp.duration;
+      const drag = Math.max(0, 1 - safeDt * 3.8);
+      dp.vx *= drag;
+      dp.vz *= drag;
+      dp.vy *= Math.max(0, 1 - safeDt * 2.2);
+      dp.x += dp.vx * safeDt;
+      dp.y += dp.vy * safeDt;
+      dp.z += dp.vz * safeDt;
+
+      const ease = 1 - (1 - p) * (1 - p);
+      const sc = dp.startScale + (dp.endScale - dp.startScale) * ease;
+      const fadeIn = p < 0.16 ? p / 0.16 : 1.0;
+      const fadeOut = (1 - p) * (1 - p * 0.45);
+      dp.sprite.position.set(dp.x, dp.y, dp.z);
+      dp.sprite.scale.set(sc, sc * 0.66, 1);
+      dp.mat.opacity = dp.baseOpacity * fadeIn * fadeOut;
     }
 
     // Update 3D Chain-Lightning Arcs
@@ -6726,7 +7111,7 @@ export function createArenaWorld(canvas) {
       la.innerMat.opacity = p;
     }
 
-    // Update 3D Physics Debris (Skulls, Bones, Shields, Helmets, Fractured Rock & Magma Chunks)
+    // Update 3D Physics Debris (Skulls, Bones, Shields, Helmets, Fractured Stone, Flagstone Chips & Magma Chunks)
     for (let i = activeDebris.length - 1; i >= 0; i--) {
       const d = activeDebris[i];
       d.age += safeDt;
@@ -6736,26 +7121,89 @@ export function createArenaWorld(canvas) {
         (freeDebrisByKind[d.kind] || freeDebrisByKind.bone).push(d);
         continue;
       }
-      d.vy -= 22 * safeDt;
-      d.x += d.vx * safeDt;
-      d.y += d.vy * safeDt;
-      d.z += d.vz * safeDt;
-      const floorY = getGroundHeight(d.x, d.z) + (d.kind === 'rock_chunk' || d.kind === 'molten_chunk' ? 0.065 : 0.09);
-      if (d.y < floorY) {
-        d.y = floorY;
-        d.vy = Math.abs(d.vy) * 0.42;
-        d.vx *= 0.72;
-        d.vz *= 0.72;
-        d.vrx *= 0.78;
-        d.vrz *= 0.78;
+
+      const isStoneRubble = d.kind === 'rock_chunk' || d.kind === 'flagstone_chip' || d.kind === 'molten_chunk';
+      if (isStoneRubble) {
+        if (d.bounces < 2) {
+          d.vy -= 23.5 * safeDt;
+          d.x += d.vx * safeDt;
+          d.y += d.vy * safeDt;
+          d.z += d.vz * safeDt;
+        } else {
+          const slideDrag = Math.exp(-15.0 * safeDt);
+          d.vx *= slideDrag;
+          d.vz *= slideDrag;
+          d.x += d.vx * safeDt;
+          d.z += d.vz * safeDt;
+          d.vry *= slideDrag;
+        }
+
+        const restHalfH = (d.kind === 'flagstone_chip' ? 0.028 : 0.068) * d.baseScale;
+        const floorY = getGroundHeight(d.x, d.z) + restHalfH;
+        if (d.y <= floorY) {
+          d.y = floorY;
+          if (d.bounces === 0) {
+            // Single crisp stone-on-flagstone bounce + tiny dust puff right at impact point!
+            const hitSpeed = Math.abs(d.vy);
+            d.bounces = 1;
+            d.vy = Math.max(1.25, hitSpeed * 0.36);
+            d.vx *= 0.60;
+            d.vz *= 0.60;
+            d.vrx *= 0.46;
+            d.vry *= 0.62;
+            d.vrz *= 0.46;
+            if (d.emitBounceDust && hitSpeed > 2.2) {
+              d.emitBounceDust = false;
+              spawnStoneDustPuff({
+                x: d.x,
+                y: floorY + 0.05,
+                z: d.z,
+                vx: d.vx * 0.22,
+                vy: 0.22 + Math.random() * 0.18,
+                vz: d.vz * 0.22,
+                startScale: 0.26 * d.baseScale,
+                endScale: 0.78 * d.baseScale,
+                opacity: d.kind === 'molten_chunk' ? 0.30 : 0.34,
+                duration: 0.38 + Math.random() * 0.14,
+                color: d.kind === 'molten_chunk' ? 0x3d261c : 0x36313c
+              });
+            }
+          } else {
+            // Second contact: stone settles cleanly onto the cathedral floor before fading!
+            d.bounces = 2;
+            d.vy = 0;
+            d.vrx = 0;
+            d.vrz = 0;
+            if (d.kind === 'flagstone_chip') {
+              d.mesh.rotation.x *= 0.55;
+              d.mesh.rotation.z *= 0.55;
+            }
+          }
+        }
+      } else {
+        d.vy -= 22 * safeDt;
+        d.x += d.vx * safeDt;
+        d.y += d.vy * safeDt;
+        d.z += d.vz * safeDt;
+        const floorY = getGroundHeight(d.x, d.z) + 0.09;
+        if (d.y < floorY) {
+          d.y = floorY;
+          d.vy = Math.abs(d.vy) * 0.42;
+          d.vx *= 0.72;
+          d.vz *= 0.72;
+          d.vrx *= 0.78;
+          d.vrz *= 0.78;
+        }
       }
-      d.mesh.position.set(d.x, d.y, d.z);
+
+      const rem = 1 - d.age / d.life;
+      const fade01 = rem < 0.22 ? rem / 0.22 : 1.0;
+      const sinkY = isStoneRubble && rem < 0.22 ? (1 - fade01) * 0.045 * d.baseScale : 0;
+      d.mesh.position.set(d.x, d.y - sinkY, d.z);
       d.mesh.rotation.x += d.vrx * safeDt;
       d.mesh.rotation.y += d.vry * safeDt;
       d.mesh.rotation.z += d.vrz * safeDt;
-      const rem = 1 - d.age / d.life;
-      const sc = d.baseScale * (rem < 0.25 ? rem / 0.25 : 1.0);
-      d.mesh.scale.setScalar(sc);
+      d.mesh.scale.setScalar(d.baseScale * (isStoneRubble ? (0.45 + 0.55 * fade01) : fade01));
     }
 
     // Update Pooled 3D Oak Wood Shield-Scrape Splinters (spin outward + single realistic bounce on stone floor)
@@ -7108,6 +7556,15 @@ export function createArenaWorld(canvas) {
     syncBiomeWeatherVisibility();
     mistyArena?.setLowSpecMode?.(lowSpecMode);
     soulsArena?.setLowSpecMode?.(lowSpecMode);
+    phase2ArenaFireRingCtrl?.setLowSpec?.(lowSpecMode);
+    for (let i = 0; i < activeGroundFractures.length; i++) {
+      activeGroundFractures[i].fireField?.setLowSpec?.(lowSpecMode);
+      activeGroundFractures[i].fireRoad?.setLowSpec?.(lowSpecMode);
+    }
+    for (let i = 0; i < freeGroundFractures.length; i++) {
+      freeGroundFractures[i].fireField?.setLowSpec?.(lowSpecMode);
+      freeGroundFractures[i].fireRoad?.setLowSpec?.(lowSpecMode);
+    }
   }
 
   function resize() {
@@ -7181,10 +7638,18 @@ export function createArenaWorld(canvas) {
     }
     burningGroundLight.intensity = 0;
     burningGroundLight.position.set(0, -80, 0);
+    phase2ArenaFireRingCtrl?.reset?.();
     while (activeGroundFractures.length > 0) {
       const gf = activeGroundFractures.pop();
+      if (gf.fireField?.group) gf.fireField.group.visible = false;
+      if (gf.fireRoad?.group) gf.fireRoad.group.visible = false;
       gf.group.visible = false;
       freeGroundFractures.push(gf);
+    }
+    while (activeStoneDustPuffs.length > 0) {
+      const dp = activeStoneDustPuffs.pop();
+      dp.sprite.visible = false;
+      freeStoneDustPuffs.push(dp);
     }
     while (activeWoodSplinters.length > 0) {
       const sp = activeWoodSplinters.pop();
@@ -7289,11 +7754,20 @@ export function createArenaWorld(canvas) {
       if (z >= -10.5) return 'stone_bridge';
       return 'cathedral_stone';
     },
-    setSoulsFogGate: (sealed) => soulsArena?.setFogGateSealed?.(Boolean(sealed)),
+    setSoulsFogGate: (sealed) => {
+      const isSealed = Boolean(sealed);
+      if (!isSealed) {
+        phase2ArenaFireRingCtrl?.reset?.();
+      }
+      return soulsArena?.setFogGateSealed?.(isSealed);
+    },
     getBossDoorState: () => soulsArena?.getBossDoorState?.() || 'closed',
     openBossDoors: () => soulsArena?.openBossDoors?.() ?? false,
     sealBossDoors: () => soulsArena?.sealBossDoors?.() ?? false,
-    resetBossDoors: (keepOpen = false) => soulsArena?.resetBossDoors?.(Boolean(keepOpen)),
+    resetBossDoors: (keepOpen = false) => {
+      phase2ArenaFireRingCtrl?.reset?.();
+      return soulsArena?.resetBossDoors?.(Boolean(keepOpen));
+    },
     tryBreakCandlesNear: (x, z, r = 0.72) => soulsArena?.tryBreakCandlesNear?.(x, z, r) || [],
     resetCandles: () => soulsArena?.resetCandles?.(),
     setShrineClaimed: (id, claimed = true) => soulsArena?.setShrineClaimed?.(id, claimed),
@@ -7317,6 +7791,8 @@ export function createArenaWorld(canvas) {
     spawnSlashArc,
     spawnShockwaveRing,
     spawnBossGroundFracture,
+    spawnBossHammerWrenchDust,
+    triggerPhase2ArenaFireWave,
     getActiveGroundFracturesCount: () => activeGroundFractures.length,
     spawnWoodShieldSplinters,
     spawnBloomFlash,
