@@ -26,7 +26,7 @@
 
 import * as THREE from '../../vendor/three.module.js';
 import { mergeGeometries } from '../../vendor/BufferGeometryUtils.js';
-import * as CASTLE_LAYOUT from './soulsCastleLayout.js?v=20261124z85';
+import * as CASTLE_LAYOUT from './soulsCastleLayout.js?v=20261124z86';
 
 const DUST_COUNT_PC = 120;
 const DUST_COUNT_MOBILE = 55;

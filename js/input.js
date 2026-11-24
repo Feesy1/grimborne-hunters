@@ -48,6 +48,7 @@ export function createInputController({
   let rmbBlockingSouls = false;
   let mouse4BlockingSouls = false;
   let lastAttackHeld = false;
+  let consumedTouchAttackSeq = 0;
 
   const setInputSource = (nextSrc) => {
     if (nextSrc === 'touch' || nextSrc === 'mouse_kb') {
@@ -113,14 +114,9 @@ export function createInputController({
       dashRequested = true;
     }
     if (e.code === 'KeyF' && playing) {
-      e.preventDefault();
-      audio?.unlock?.();
-      if (soulsActive) {
-        if (!e.repeat) {
-          heavyRequested = true;
-        }
-        heavyKeyHeld = true;
-      } else if (!e.repeat) {
+      if (!soulsActive && !e.repeat) {
+        e.preventDefault();
+        audio?.unlock?.();
         ultRequested = true;
       }
     }
@@ -357,14 +353,8 @@ export function createInputController({
       if (e.button === 0 && playing && !world.isArenaEditMode?.() && !world.isWeaponEditMode?.()) {
         pointerClientX = e.clientX;
         pointerClientY = e.clientY;
-        const shiftHeavy = inSoulsCombat && (e.shiftKey || keysDown.has('ShiftLeft') || keysDown.has('ShiftRight'));
-        if (shiftHeavy) {
-          heavyRequested = true;
-          heavyMouseHeld = true;
-        } else {
-          pointerFiring = true;
-          pointerClickQueued = true;
-        }
+        pointerFiring = true;
+        pointerClickQueued = true;
       }
     });
   }
@@ -521,19 +511,27 @@ export function createInputController({
     let hasManualAim = false;
     let firing = false;
 
-    const touchAttackTrigger = Boolean(touch?.attackTrigger);
+    const touchAttackSeq = Number(touch?.attackSeq) || 0;
+    let touchNewAttackTap = false;
+    if (touchAttackSeq > consumedTouchAttackSeq) {
+      consumedTouchAttackSeq = touchAttackSeq;
+      touchNewAttackTap = true;
+    } else if (touchAttackSeq < consumedTouchAttackSeq) {
+      consumedTouchAttackSeq = touchAttackSeq;
+    }
+
+    const touchAttackTrigger = Boolean(touch?.attackTrigger) || touchNewAttackTap;
     const touchAttackHeld = Boolean(touch?.attackHeld);
     if (touch && touch.attackTrigger) touch.attackTrigger = false;
     if (touchAttackTrigger || touchAttackHeld) setInputSource('touch');
 
-    const touchHeavyTrigger = Boolean(touch?.heavyTrigger);
-    const touchHeavyHeld = Boolean(touch?.heavyHeld);
     if (touch && touch.heavyTrigger) touch.heavyTrigger = false;
-    if (touchHeavyTrigger || touchHeavyHeld) setInputSource('touch');
 
+    const lmbClickEdge = !touch?.moveActive && pointerClickQueued;
     const explicitLmb = !touch?.moveActive && (pointerFiring || pointerClickQueued);
     pointerClickQueued = false;
 
+    const attackEdge = soulsActive ? Boolean(lmbClickEdge || touchAttackTrigger) : Boolean(lmbClickEdge);
     const manualTrigger = soulsActive
       ? Boolean(explicitLmb || touchAttackTrigger || touchAttackHeld)
       : Boolean(explicitLmb);
@@ -554,9 +552,9 @@ export function createInputController({
       firing = explicitLmb || !combat.getAutoAim();
     }
 
-    const heavyTrigger = soulsActive ? Boolean(heavyRequested || touchHeavyTrigger) : false;
+    const heavyTrigger = false;
     heavyRequested = false;
-    const heavyHeld = soulsActive ? Boolean(heavyKeyHeld || heavyMouseHeld || touchHeavyHeld) : false;
+    const heavyHeld = false;
 
     const reload = reloadRequested;
     reloadRequested = false;
@@ -601,6 +599,7 @@ export function createInputController({
       hasManualAim,
       firing,
       manualTrigger,
+      attackEdge,
       heavyTrigger,
       heavyHeld,
       sprint,
@@ -618,6 +617,7 @@ export function createInputController({
   function clearSubStepEdgeTriggers(frameInput) {
     if (!frameInput) return;
     frameInput.dash = false;
+    frameInput.attackEdge = false;
     frameInput.heavyTrigger = false;
     frameInput.reload = false;
     frameInput.ult = false;

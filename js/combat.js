@@ -9,7 +9,7 @@ import {
   LEVELS,
   getLevelDef,
   RUN_UPGRADES
-} from './config.js?v=20261124z85';
+} from './config.js?v=20261124z86';
 import {
   TWO_PI,
   ARENA_PLAYER_LIMIT,
@@ -21,7 +21,7 @@ import {
   lerpAngle,
   resolveArenaBiomeForLevel,
   createCombatBridge
-} from './combat/bridge.js?v=20261124z85';
+} from './combat/bridge.js?v=20261124z86';
 import {
   updateBossAI,
   updateSoulsBossAI,
@@ -31,7 +31,7 @@ import {
   cancelSoulsBossTelegraph,
   applySoulsBossParry,
   SOULS_BOSS_MULTI_PARRY
-} from './combat/bossAi.js?v=20261124z85';
+} from './combat/bossAi.js?v=20261124z86';
 import {
   createPoiseController,
   STANCE_DAMAGE_TABLE,
@@ -40,26 +40,26 @@ import {
   getPlayerHitstunSpec,
   SOULS_GUARD_CFG,
   computeBlockedStaminaCost
-} from './combat/poiseSystem.js?v=20261124z85';
+} from './combat/poiseSystem.js?v=20261124z86';
 import {
   SOULS_ROLL_CFG,
   getSoulsRollIframes,
   sampleSoulsRollStepDist,
   sampleAttackLungeStep,
   createAliveStanceSmoother
-} from './souls/soulsLocomotion.js?v=20261124z85';
+} from './souls/soulsLocomotion.js?v=20261124z86';
 import {
   SOULS_STAMINA_CFG,
   createSoulsStaminaController,
   createSoulsActionBuffer
-} from './souls/soulsStaminaBuffer.js?v=20261124z85';
+} from './souls/soulsStaminaBuffer.js?v=20261124z86';
 import {
   SOULS_ATTACK_SPECS,
   getSoulsAttackSpec,
   computeSoulsDamage,
   testSweptBladeHits
-} from './souls/soulsHitboxDamage.js?v=20261124z85';
-import * as SOULS_MOB_AI from './souls/soulsMobAi.js?v=20261124z85';
+} from './souls/soulsHitboxDamage.js?v=20261124z86';
+import * as SOULS_MOB_AI from './souls/soulsMobAi.js?v=20261124z86';
 import {
   initSoulsMobState,
   stepSoulsMobAi,
@@ -67,7 +67,7 @@ import {
   onSoulsMobInterrupted,
   resetSoulsPackCoordinator,
   releaseSoulsAttackToken
-} from './souls/soulsMobAi.js?v=20261124z85';
+} from './souls/soulsMobAi.js?v=20261124z86';
 import {
   SOULS_CASTLE_CONSTANTS,
   SOULS_CASTLE_BONFIRE,
@@ -86,32 +86,32 @@ import {
   canInteractWithBossDoor,
   findInteractableRelic,
   clampCastlePosition
-} from './souls/soulsCastleLayout.js?v=20261124z85';
+} from './souls/soulsCastleLayout.js?v=20261124z86';
 import {
   createDissolveAshSystem
-} from './souls/soulsDissolveVfx.js?v=20261124z85';
+} from './souls/soulsDissolveVfx.js?v=20261124z86';
 import {
   enhanceSoulsBossModel,
   updateSoulsBossVisuals,
   triggerSoulsBossHitFlash,
   disposeSoulsBossVisuals
-} from './souls/soulsBossVisuals.js?v=20261124z85';
+} from './souls/soulsBossVisuals.js?v=20261124z86';
 import {
   createSoulsGameFeel,
   getImpactSparkBurst
-} from './souls/soulsGameFeel.js?v=20261124z85';
+} from './souls/soulsGameFeel.js?v=20261124z86';
 import {
   BOSS_DOOR_CUTSCENE_DURATION,
   BOSS_DOOR_CUTSCENE_ACTS
-} from './souls/soulsCutsceneChoreography.js?v=20261124z85';
+} from './souls/soulsCutsceneChoreography.js?v=20261124z86';
 import {
   resetActorPhysics,
   applyKnockbackImpulse,
   stepActorPhysicsBody
-} from './souls/soulsPhysicsFeel.js?v=20261124z85';
+} from './souls/soulsPhysicsFeel.js?v=20261124z86';
 import {
   createWeaponTrailSystem
-} from './souls/soulsWeaponTrails.js?v=20261124z85';
+} from './souls/soulsWeaponTrails.js?v=20261124z86';
 
 export function createCombatController({
   world,
@@ -6511,61 +6511,32 @@ export function createCombatController({
       if (souls.mobileManualUnlockTimer > 0) souls.mobileManualUnlockTimer = Math.max(0, souls.mobileManualUnlockTimer - dt);
       if (souls.mobileThreatCheckCd > 0) souls.mobileThreatCheckCd = Math.max(0, souls.mobileThreatCheckCd - dt);
 
-      // Mobile-Only Smart Target Lock-On & Camera Assist Director (PC remains 100% untouched!)
+      // Mobile-Only Smart Target Lock-On Director (PC remains 100% untouched!
+      // NEVER auto-rotate camYaw when running backward — touch joystick is camera-relative!)
       if (isTouchFrame && !soulsDoorCutsceneActive && !souls.activeRiposte && !playerDying && !runEnded) {
-        let retreatingFromLock = false;
-        if (Boolean(input?.sprint) && moveMag > 0.35 && !souls.isBlocking && !souls.activeAttack) {
-          const refTarget = activeLocked || (souls.mobileRetreatSprintSec >= 0.28 ? findBestMobileSmartTarget(null) : null);
-          if (refTarget) {
-            const toLockX = refTarget.x - player.x;
-            const toLockZ = refTarget.z - player.z;
-            const toLockLen = Math.hypot(toLockX, toLockZ) || 1;
-            const moveNormX = mx / Math.max(0.001, moveMag);
-            const moveNormZ = mz / Math.max(0.001, moveMag);
-            const retreatDot = (moveNormX * toLockX + moveNormZ * toLockZ) / toLockLen;
-            const dotCutoff = souls.mobileRetreatSprintSec >= 0.28 ? -0.22 : -0.42;
-            if (retreatDot < dotCutoff) {
-              retreatingFromLock = true;
-              souls.mobileRetreatSprintSec = (souls.mobileRetreatSprintSec || 0) + dt;
-              if (souls.mobileRetreatSprintSec >= 0.28) {
-                if (lockedEnemy) {
-                  lockedEnemy = null;
-                  activeLocked = null;
-                  angToLocked = null;
-                  syncWorldLockOn();
-                }
-                const sprintCamYaw = Math.atan2(-moveNormX, -moveNormZ);
-                const yawDiff = normalizeAngle(sprintCamYaw - liveCamYaw);
-                world?.adjustCombatOrbit?.(yawDiff * Math.min(1, dt * 4.2), 0);
-              }
+        souls.mobileRetreatSprintSec = 0;
+        if (mobileSmartLockEnabled && (souls.mobileManualUnlockTimer || 0) <= 0) {
+          if (!activeLocked) {
+            const autoCand = findBestMobileSmartTarget(null);
+            if (autoCand) {
+              lockedEnemy = autoCand;
+              activeLocked = autoCand;
+              angToLocked = Math.atan2(autoCand.x - player.x, autoCand.z - player.z);
+              cancelPlayerTurn180(0.20);
+              syncWorldLockOn();
             }
-          }
-        }
-        if (!retreatingFromLock) {
-          souls.mobileRetreatSprintSec = 0;
-          if (mobileSmartLockEnabled && (souls.mobileManualUnlockTimer || 0) <= 0) {
-            if (!activeLocked) {
-              const autoCand = findBestMobileSmartTarget(null);
-              if (autoCand) {
-                lockedEnemy = autoCand;
-                activeLocked = autoCand;
-                angToLocked = Math.atan2(autoCand.x - player.x, autoCand.z - player.z);
-                cancelPlayerTurn180(0.20);
+          } else if (!activeLocked.isSoulsBoss && (souls.mobileThreatCheckCd || 0) <= 0) {
+            souls.mobileThreatCheckCd = 0.26;
+            const curDist = Math.hypot(activeLocked.x - player.x, activeLocked.z - player.z);
+            const closerThreat = findBestMobileSmartTarget(null);
+            if (closerThreat && closerThreat !== activeLocked) {
+              const closerDist = Math.hypot(closerThreat.x - player.x, closerThreat.z - player.z);
+              if (closerDist <= 3.9 && closerDist + 2.2 < curDist) {
+                lockedEnemy = closerThreat;
+                activeLocked = closerThreat;
+                angToLocked = Math.atan2(closerThreat.x - player.x, closerThreat.z - player.z);
+                cancelPlayerTurn180(0.18);
                 syncWorldLockOn();
-              }
-            } else if (!activeLocked.isSoulsBoss && (souls.mobileThreatCheckCd || 0) <= 0) {
-              souls.mobileThreatCheckCd = 0.26;
-              const curDist = Math.hypot(activeLocked.x - player.x, activeLocked.z - player.z);
-              const closerThreat = findBestMobileSmartTarget(null);
-              if (closerThreat && closerThreat !== activeLocked) {
-                const closerDist = Math.hypot(closerThreat.x - player.x, closerThreat.z - player.z);
-                if (closerDist <= 3.9 && closerDist + 2.2 < curDist) {
-                  lockedEnemy = closerThreat;
-                  activeLocked = closerThreat;
-                  angToLocked = Math.atan2(closerThreat.x - player.x, closerThreat.z - player.z);
-                  cancelPlayerTurn180(0.18);
-                  syncWorldLockOn();
-                }
               }
             }
           }
@@ -7133,26 +7104,23 @@ export function createCombatController({
         }
       }
 
-      // 1-Slot Smart Input Buffer capture (200ms PC / 240ms Touch, rising-edge push; paused during Door Cutscene & Riposte)
+      // 1-Slot Smart Input Buffer capture (rising-edge + guaranteed discrete touch tap counter; heavy attack disabled)
       const soulsLockControls = soulsDoorCutsceneActive || Boolean(souls.activeRiposte);
       const rawDashIn = !soulsLockControls && Boolean(input?.dash);
-      const rawHeavyIn = !soulsLockControls && Boolean(input?.heavyTrigger);
       const rawAttackIn = !soulsLockControls && Boolean(input?.manualTrigger);
+      const rawAttackEdge = !soulsLockControls && (Boolean(input?.attackEdge) || (rawAttackIn && !souls.prevManualTrigger));
       const rawFlaskIn = !soulsLockControls && Boolean(input?.flask || input?.useFlask);
       if (rawDashIn && !souls.prevDashInput) {
         soulsActionBuffer.push('roll', elapsedRunTime, { inputSource: frameInputSource });
       }
-      if (rawHeavyIn && !souls.prevHeavyTrigger) {
-        soulsActionBuffer.push('heavy', elapsedRunTime, { inputSource: frameInputSource });
-      }
-      if (rawAttackIn && !souls.prevManualTrigger) {
+      if (rawAttackEdge) {
         soulsActionBuffer.push('attack', elapsedRunTime, { inputSource: frameInputSource });
       }
       if (rawFlaskIn && !souls.prevFlaskInput) {
         soulsActionBuffer.push('flask', elapsedRunTime, { inputSource: frameInputSource });
       }
       souls.prevDashInput = rawDashIn;
-      souls.prevHeavyTrigger = rawHeavyIn;
+      souls.prevHeavyTrigger = false;
       souls.prevManualTrigger = rawAttackIn;
       souls.prevFlaskInput = rawFlaskIn;
 
@@ -7221,7 +7189,7 @@ export function createCombatController({
       } else if (player.dashTimer > 0) {
         const curRollU = clamp(1 - player.dashTimer / SOULS_ROLL_DUR, 0, 1);
         if (curRollU >= SOULS_ROLL_CFG.rollingAttackCancelU && souls.guardBreakTimer <= 0 && souls.flaskDrinkTimer <= 0 && soulsStaminaCtrl.canSpend()) {
-          const rollFollow = soulsActionBuffer.consume(['attack', 'heavy'], elapsedRunTime);
+          const rollFollow = soulsActionBuffer.consume(['attack'], elapsedRunTime);
           if (rollFollow) {
             player.dashTimer = 0;
             player.dashCooldown = 0;
@@ -7229,7 +7197,7 @@ export function createCombatController({
             const rollAim = computeSoulsAimAngle();
             player.facing = rollAim;
             const ok = performHeroAttack(rollAim, true, {
-              attackKey: rollFollow.action === 'heavy' ? 'r2' : 'rolling_r1'
+              attackKey: 'rolling_r1'
             });
             if (ok) soulsEarlyRollingR1Fired = true;
           }
@@ -7254,7 +7222,6 @@ export function createCombatController({
           (activeSpec ? true : player.attackCooldown <= 0) &&
           soulsStaminaCtrl.canSpend()
         ) {
-          allowedNow.add('heavy');
           allowedNow.add('attack');
         }
         if (
@@ -7848,15 +7815,13 @@ export function createCombatController({
         if (!souls.activeRiposte && !isDashingNow && !soulsEarlyRollingR1Fired && souls.guardBreakTimer <= 0 && souls.flaskDrinkTimer <= 0) {
           const atkCanChain = !souls.activeAttack || souls.activeAttack.elapsed >= souls.activeAttack.spec.cancelChainAt;
           const canTriggerSoulsAtk = atkCanChain && (souls.activeAttack ? true : player.attackCooldown <= 0);
-          const wantHeavy = soulsBufferedHeavy;
-          const wantLight = soulsBufferedAttack || (Boolean(input?.firing) && canTriggerSoulsAtk && !souls.activeAttack);
-          if ((wantHeavy || wantLight) && canTriggerSoulsAtk) {
+          const wantLight = soulsBufferedAttack || (Boolean(input?.firing) && canTriggerSoulsAtk);
+          if (wantLight && canTriggerSoulsAtk) {
             engagedAimAngle = computeSoulsAimAngle();
             if (Number.isFinite(engagedAimAngle)) {
               player.facing = engagedAimAngle;
             }
-            const reqKey = wantHeavy ? 'r2' : null;
-            performHeroAttack(engagedAimAngle, true, reqKey ? { attackKey: reqKey } : null);
+            performHeroAttack(engagedAimAngle, true, null);
           }
         }
       } else {
@@ -7920,6 +7885,7 @@ export function createCombatController({
     const isBlockingNow = Boolean(isSoulslike && souls.isBlocking);
     const canDetectTurn180 =
       currentClassId === 'warrior' &&
+      !isTouchFrame &&
       !activeLocked &&
       angToLocked === null &&
       !isAttackingNow &&

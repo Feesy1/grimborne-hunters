@@ -6,12 +6,12 @@
 // - Mobile Landscape Touch Controls (Floating Left Joystick + Right Camera Swipe + 6 Obsidian+Gold SVG Buttons)
 // - Cinematic Boss Cutscene Letterbox, Subtitles, Title Card, Interact/Riposte Prompts & Victory/Defeat Overlays
 
-import { WEAPONS } from './config.js?v=20261124z85';
-import { el } from './ui/resolvers.js?v=20261124z85';
-import { makeSvgNode, createWeaponSvg } from './ui/svgIcons.js?v=20261124z85';
-import { createModalsController } from './ui/modals.js?v=20261124z85';
+import { WEAPONS } from './config.js?v=20261124z86';
+import { el } from './ui/resolvers.js?v=20261124z86';
+import { makeSvgNode, createWeaponSvg } from './ui/svgIcons.js?v=20261124z86';
+import { createModalsController } from './ui/modals.js?v=20261124z86';
 
-export { createWeaponSvg } from './ui/svgIcons.js?v=20261124z85';
+export { createWeaponSvg } from './ui/svgIcons.js?v=20261124z86';
 
 const DIFFICULTY_OPTIONS = [
   { id: 'easy', labelRu: 'Странник', noteRu: 'Мягкий режим (в разработке)' },
@@ -29,6 +29,7 @@ export function createUIManager(initialCallbacks = {}) {
   let voiceVolume = 1.0;
   let lowSpecEnabled = false;
   let showFpsEnabled = true;
+  let showUncappedFpsEnabled = true;
   let selectedDifficulty = 'normal';
   let difficultyDrawerOpen = false;
   let hasSoulsSave = false;
@@ -264,18 +265,6 @@ export function createUIManager(initialCallbacks = {}) {
   const touchAttackLbl = el('span', 'touch-souls-lbl', 'УДАР');
   touchAttackBtn.append(touchAttackIco, touchAttackLbl);
 
-  const touchHeavyBtn = el('button', 'touch-souls-btn touch-souls-r2');
-  touchHeavyBtn.type = 'button';
-  touchHeavyBtn.setAttribute('aria-label', 'Мощный удар');
-  const touchHeavyIco = el('span', 'touch-souls-ico');
-  touchHeavyIco.appendChild(
-    makeSoulsBtnSvg(
-      '<path d="M5 17.5 C7.5 11.5 12.5 7 19.5 5.5 C16.5 10.5 13 14.5 8 19 Z" fill="#d98b3c" stroke="#f5d89a" stroke-width="1.2" stroke-linejoin="round"/><path d="M4.5 19.5 L8.2 15.8 M13.5 4.2 L15 6.8 M18.8 9.2 L16.2 10.5" stroke="#fde68a" stroke-width="1.5" stroke-linecap="round"/>',
-      22
-    )
-  );
-  touchHeavyBtn.append(touchHeavyIco, el('span', 'touch-souls-lbl', 'МОЩНЫЙ'));
-
   const touchBlockBtn = el('button', 'touch-souls-btn touch-souls-block');
   touchBlockBtn.type = 'button';
   touchBlockBtn.setAttribute('aria-label', 'Щит: удержание — блок, в такт удара — парирование');
@@ -323,9 +312,16 @@ export function createUIManager(initialCallbacks = {}) {
   const touchLockLbl = el('span', 'touch-souls-lbl', 'АВТО');
   touchLockBtn.append(touchLockIco, touchLockLbl);
 
+  leftBase.dataset.touchId = 'joystick';
+  touchAttackBtn.dataset.touchId = 'attack';
+  touchDashBtn.dataset.touchId = 'dash';
+  touchBlockBtn.dataset.touchId = 'block';
+  touchFlaskBtn.dataset.touchId = 'flask';
+  touchAutoFlaskBtn.dataset.touchId = 'auto_flask';
+  touchLockBtn.dataset.touchId = 'lock';
+
   touchSoulsCluster.append(
     touchAttackBtn,
-    touchHeavyBtn,
     touchBlockBtn,
     touchFlaskBtn,
     touchAutoFlaskBtn,
@@ -334,7 +330,7 @@ export function createUIManager(initialCallbacks = {}) {
   touchLayer.append(leftZone, rightCamZone, leftBase, touchDashBtn, touchSoulsCluster);
 
   // =========================================================================
-  // 4. BOTTOM COMBAT HUD DOCK (Desktop Gothic Action Pills)
+  // 4. BOTTOM COMBAT HUD DOCK (Desktop Gothic Action Pills — Heavy Attack Removed)
   // =========================================================================
   const hudBottomDock = el('div', 'hud-bottom-dock');
   const hudWeaponRow = el('div', 'hud-weapon-row');
@@ -348,19 +344,6 @@ export function createUIManager(initialCallbacks = {}) {
   weaponHudMain.appendChild(weaponHudName);
   weaponHudCol.appendChild(weaponHudMain);
   weaponHudBadge.append(weaponHudIcon, weaponHudCol);
-
-  const hudHeavyBtn = el('button', 'hud-souls-heavy-btn');
-  hudHeavyBtn.type = 'button';
-  hudHeavyBtn.title = 'Тяжёлый удар / Заряженный выпад [F или Shift+ЛКМ]';
-  const hudHeavyIcon = makeSvgNode(
-    `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <path d="M5 17.5 C7.5 11.5 12.5 7 19.5 5.5 C16.5 10.5 13 14.5 8 19 Z" fill="#c27832" stroke="#e8c884" stroke-width="1.2" stroke-linejoin="round"/>
-      <path d="M4.5 19.5 L8.2 15.8" stroke="#e8c884" stroke-width="1.6" stroke-linecap="round"/>
-    </svg>`
-  );
-  const hudHeavyMeta = el('span', 'hud-souls-meta');
-  hudHeavyMeta.append(el('span', 'hud-souls-state', 'МОЩНЫЙ'), el('span', 'hud-souls-key', '[F]'));
-  hudHeavyBtn.append(hudHeavyIcon, hudHeavyMeta);
 
   const HUD_DASH_RING_CIRC = 87.96;
   const hudDashBtn = el('button', 'hud-dash-btn is-ready');
@@ -433,14 +416,362 @@ export function createUIManager(initialCallbacks = {}) {
   hudLockMeta.append(el('span', 'hud-souls-state hud-lock-state', 'ЦЕЛЬ'), el('span', 'hud-souls-key', '[Q]'));
   hudLockBtn.append(hudLockGlyph, hudLockMeta);
 
-  hudWeaponRow.append(weaponHudBadge, hudHeavyBtn, hudDashBtn, hudBlockBtn, hudFlaskBtn, hudLockBtn);
+  hudWeaponRow.append(weaponHudBadge, hudDashBtn, hudBlockBtn, hudFlaskBtn, hudLockBtn);
   hudBottomDock.appendChild(hudWeaponRow);
   hudScreen.append(hudTopRow, touchLayer, hudBottomDock);
   root.appendChild(hudScreen);
 
   // =========================================================================
-  // TOUCH & ACTION BUTTON INPUT CONTROLLER
+  // TOUCH & ACTION BUTTON INPUT CONTROLLER + INTERACTIVE LAYOUT CUSTOMIZER
   // =========================================================================
+  const TOUCH_LAYOUT_STORAGE_KEY = 'grimborne_touch_layout_v1';
+  const TOUCH_EDITABLE_ITEMS = [
+    { id: 'attack', el: touchAttackBtn, labelRu: 'Удар' },
+    { id: 'dash', el: touchDashBtn, labelRu: 'Перекат' },
+    { id: 'block', el: touchBlockBtn, labelRu: 'Щит / Парир.' },
+    { id: 'flask', el: touchFlaskBtn, labelRu: 'Фляга' },
+    { id: 'auto_flask', el: touchAutoFlaskBtn, labelRu: 'Авто-хил' },
+    { id: 'lock', el: touchLockBtn, labelRu: 'Прицел' },
+    { id: 'joystick', el: leftBase, labelRu: 'Джойстик' }
+  ];
+  const TOUCH_ITEM_BY_ID = new Map(TOUCH_EDITABLE_ITEMS.map((it) => [it.id, it]));
+
+  function clampNum(v, lo, hi) {
+    return v < lo ? lo : v > hi ? hi : v;
+  }
+
+  function sanitizeTouchLayoutMap(raw) {
+    const clean = {};
+    if (!raw || typeof raw !== 'object') return clean;
+    for (const item of TOUCH_EDITABLE_ITEMS) {
+      const entry = raw[item.id];
+      if (!entry || typeof entry !== 'object') continue;
+      const out = {};
+      if (Number.isFinite(Number(entry.xPct)) && Number.isFinite(Number(entry.yPct))) {
+        out.xPct = Number(clampNum(Number(entry.xPct), item.id === 'joystick' ? 6 : 4, item.id === 'joystick' ? 65 : 96).toFixed(2));
+        out.yPct = Number(clampNum(Number(entry.yPct), 7, 93).toFixed(2));
+      }
+      if (Number.isFinite(Number(entry.scale))) {
+        out.scale = Number(clampNum(Number(entry.scale), 0.60, 1.75).toFixed(2));
+      }
+      if (out.xPct !== undefined || (out.scale !== undefined && Math.abs(out.scale - 1) > 0.01)) {
+        clean[item.id] = out;
+      }
+    }
+    return clean;
+  }
+
+  function readSavedTouchLayout() {
+    try {
+      const raw = localStorage.getItem(TOUCH_LAYOUT_STORAGE_KEY);
+      if (!raw) return {};
+      return sanitizeTouchLayoutMap(JSON.parse(raw));
+    } catch {
+      return {};
+    }
+  }
+
+  function writeSavedTouchLayout(mapObj) {
+    try {
+      const clean = sanitizeTouchLayoutMap(mapObj);
+      if (Object.keys(clean).length === 0) {
+        localStorage.removeItem(TOUCH_LAYOUT_STORAGE_KEY);
+      } else {
+        localStorage.setItem(TOUCH_LAYOUT_STORAGE_KEY, JSON.stringify(clean));
+      }
+    } catch {}
+  }
+
+  let customTouchLayout = readSavedTouchLayout();
+  let editDraftLayout = null;
+  let isTouchEditMode = false;
+  let touchEditSelectedId = 'attack';
+  let touchEditFinishCb = null;
+
+  function getActiveTouchLayout() {
+    return isTouchEditMode && editDraftLayout ? editDraftLayout : customTouchLayout;
+  }
+
+  function hasCustomTouchLayout() {
+    return Object.keys(customTouchLayout || {}).length > 0;
+  }
+
+  function getJoystickCustomCfg() {
+    const map = getActiveTouchLayout();
+    return map?.joystick || null;
+  }
+
+  function applyTouchCustomLayout() {
+    const map = getActiveTouchLayout();
+    for (const item of TOUCH_EDITABLE_ITEMS) {
+      const cfg = map?.[item.id] || null;
+      const scale = clampNum(Number(cfg?.scale) || 1, 0.60, 1.75);
+      item.el.style.setProperty('--touch-scale', scale.toFixed(3));
+      const hasPos = Number.isFinite(cfg?.xPct) && Number.isFinite(cfg?.yPct);
+      if (item.id === 'joystick') {
+        if (!leftBase.classList.contains('is-active')) {
+          if (hasPos) {
+            leftBase.classList.add('has-custom-pos');
+            leftBase.style.left = `${cfg.xPct.toFixed(2)}%`;
+            leftBase.style.top = `${cfg.yPct.toFixed(2)}%`;
+            leftBase.style.bottom = 'auto';
+            leftBase.style.transform = '';
+            leftZone.style.width = `${Math.round(clampNum(Math.max(50, cfg.xPct + 14), 50, 68))}%`;
+          } else {
+            leftBase.classList.remove('has-custom-pos');
+            leftBase.style.left = '';
+            leftBase.style.top = '';
+            leftBase.style.bottom = '';
+            leftBase.style.transform = '';
+            leftZone.style.width = '';
+          }
+        }
+      } else if (hasPos) {
+        item.el.classList.add('has-custom-pos');
+        item.el.style.left = `${cfg.xPct.toFixed(2)}%`;
+        item.el.style.top = `${cfg.yPct.toFixed(2)}%`;
+        item.el.style.right = 'auto';
+        item.el.style.bottom = 'auto';
+      } else {
+        item.el.classList.remove('has-custom-pos');
+        item.el.style.left = '';
+        item.el.style.top = '';
+        item.el.style.right = '';
+        item.el.style.bottom = '';
+      }
+      item.el.classList.toggle('is-edit-selected', isTouchEditMode && touchEditSelectedId === item.id);
+    }
+  }
+  applyTouchCustomLayout();
+
+  // Interactive Touch Layout Editor Toolbar (top-center inside HUD)
+  const touchEditToolbar = el('div', 'touch-edit-toolbar hidden');
+  const touchEditHead = el('div', 'touch-edit-head');
+  const touchEditTitle = el('span', 'touch-edit-title', 'НАСТРОЙКА КНОПОК');
+  const touchEditTargetBadge = el('span', 'touch-edit-target', 'Удар • 100%');
+  touchEditHead.append(touchEditTitle, touchEditTargetBadge);
+  const touchEditHint = el('div', 'touch-edit-hint', 'Перетащите любую кнопку или джойстик пальцем по экрану');
+
+  const touchEditScaleRow = el('div', 'touch-edit-scale-row');
+  const touchEditScaleLbl = el('span', 'touch-edit-scale-lbl', 'Размер');
+  const touchEditMinusBtn = el('button', 'touch-edit-step-btn', '−');
+  touchEditMinusBtn.type = 'button';
+  const touchEditScaleSlider = document.createElement('input');
+  touchEditScaleSlider.type = 'range';
+  touchEditScaleSlider.className = 'sound-volume-slider touch-edit-slider';
+  touchEditScaleSlider.min = '60';
+  touchEditScaleSlider.max = '175';
+  touchEditScaleSlider.step = '5';
+  touchEditScaleSlider.value = '100';
+  const touchEditPlusBtn = el('button', 'touch-edit-step-btn', '+');
+  touchEditPlusBtn.type = 'button';
+  touchEditScaleRow.append(touchEditScaleLbl, touchEditMinusBtn, touchEditScaleSlider, touchEditPlusBtn);
+
+  const touchEditActions = el('div', 'touch-edit-actions');
+  const touchEditResetBtn = el('button', 'souls-settings-danger-btn touch-edit-btn', 'Сбросить');
+  touchEditResetBtn.type = 'button';
+  const touchEditCancelBtn = el('button', 'souls-settings-pill-btn touch-edit-btn', 'Отмена');
+  touchEditCancelBtn.type = 'button';
+  const touchEditSaveBtn = el('button', 'souls-settings-primary-btn touch-edit-btn', 'Сохранить');
+  touchEditSaveBtn.type = 'button';
+  touchEditActions.append(touchEditResetBtn, touchEditCancelBtn, touchEditSaveBtn);
+
+  touchEditToolbar.append(touchEditHead, touchEditHint, touchEditScaleRow, touchEditActions);
+  hudScreen.appendChild(touchEditToolbar);
+
+  function syncTouchEditToolbar() {
+    if (!isTouchEditMode) return;
+    const item = TOUCH_ITEM_BY_ID.get(touchEditSelectedId) || TOUCH_EDITABLE_ITEMS[0];
+    const cfg = editDraftLayout?.[item.id] || {};
+    const pct = Math.round(clampNum(Number(cfg.scale) || 1, 0.60, 1.75) * 100);
+    touchEditTargetBadge.textContent = `${item.labelRu} • ${pct}%`;
+    touchEditScaleSlider.value = String(pct);
+    const fillPct = Math.round(((pct - 60) / (175 - 60)) * 100);
+    touchEditScaleSlider.style.setProperty('--vol-pct', `${fillPct}%`);
+    for (const it of TOUCH_EDITABLE_ITEMS) {
+      it.el.classList.toggle('is-edit-selected', it.id === item.id);
+    }
+  }
+
+  function setSelectedTouchItemScalePct(rawPct) {
+    if (!isTouchEditMode || !editDraftLayout) return;
+    const item = TOUCH_ITEM_BY_ID.get(touchEditSelectedId) || TOUCH_EDITABLE_ITEMS[0];
+    const pct = Math.round(clampNum(Number(rawPct) || 100, 60, 175));
+    const prev = editDraftLayout[item.id] || {};
+    editDraftLayout[item.id] = {
+      ...prev,
+      scale: Number((pct / 100).toFixed(2))
+    };
+    applyTouchCustomLayout();
+    syncTouchEditToolbar();
+  }
+
+  touchEditScaleSlider.addEventListener('input', () => {
+    setSelectedTouchItemScalePct(touchEditScaleSlider.value);
+  });
+  touchEditMinusBtn.addEventListener('click', () => {
+    setSelectedTouchItemScalePct((Number(touchEditScaleSlider.value) || 100) - 10);
+  });
+  touchEditPlusBtn.addEventListener('click', () => {
+    setSelectedTouchItemScalePct((Number(touchEditScaleSlider.value) || 100) + 10);
+  });
+  touchEditResetBtn.addEventListener('click', () => {
+    if (!isTouchEditMode) return;
+    editDraftLayout = {};
+    applyTouchCustomLayout();
+    syncTouchEditToolbar();
+  });
+  touchEditCancelBtn.addEventListener('click', () => {
+    closeTouchEditMode(false);
+  });
+  touchEditSaveBtn.addEventListener('click', () => {
+    closeTouchEditMode(true);
+  });
+
+  // Capture-phase drag & tap-select on touchLayer while in Edit Mode (blocks accidental attacks/actions!)
+  let editDragPid = null;
+  let editDragItemId = null;
+  let editGrabOffX = 0;
+  let editGrabOffY = 0;
+
+  const getEditVp = () => {
+    const vp = window.__getGameViewportSize?.();
+    return { w: Math.max(1, vp?.w || window.innerWidth || 960), h: Math.max(1, vp?.h || window.innerHeight || 540) };
+  };
+  const mapEditPt = (cx, cy) => (window.__toGameCoords ? window.__toGameCoords(cx, cy) : { x: cx, y: cy });
+
+  touchLayer.addEventListener(
+    'pointerdown',
+    (e) => {
+      if (!isTouchEditMode) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const hitEl = e.target?.closest?.('[data-touch-id]');
+      if (!hitEl) return;
+      const id = hitEl.dataset.touchId;
+      const item = TOUCH_ITEM_BY_ID.get(id);
+      if (!item || !editDraftLayout) return;
+
+      touchEditSelectedId = id;
+      const rect = item.el.getBoundingClientRect();
+      const centerPt = mapEditPt(rect.left + rect.width * 0.5, rect.top + rect.height * 0.5);
+      const fingerPt = mapEditPt(e.clientX, e.clientY);
+      editGrabOffX = centerPt.x - fingerPt.x;
+      editGrabOffY = centerPt.y - fingerPt.y;
+      editDragPid = e.pointerId;
+      editDragItemId = id;
+      try { touchLayer.setPointerCapture(e.pointerId); } catch {}
+
+      const { w, h } = getEditVp();
+      const prev = editDraftLayout[id] || {};
+      if (!Number.isFinite(prev.xPct) || !Number.isFinite(prev.yPct)) {
+        editDraftLayout[id] = {
+          ...prev,
+          xPct: Number(clampNum((centerPt.x / w) * 100, id === 'joystick' ? 6 : 4, id === 'joystick' ? 65 : 96).toFixed(2)),
+          yPct: Number(clampNum((centerPt.y / h) * 100, 7, 93).toFixed(2))
+        };
+      }
+      applyTouchCustomLayout();
+      syncTouchEditToolbar();
+    },
+    { capture: true }
+  );
+
+  touchLayer.addEventListener(
+    'pointermove',
+    (e) => {
+      if (!isTouchEditMode || editDragPid === null || e.pointerId !== editDragPid || !editDragItemId || !editDraftLayout) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const fingerPt = mapEditPt(e.clientX, e.clientY);
+      const { w, h } = getEditVp();
+      const cx = fingerPt.x + editGrabOffX;
+      const cy = fingerPt.y + editGrabOffY;
+      const minX = editDragItemId === 'joystick' ? 6 : 4;
+      const maxX = editDragItemId === 'joystick' ? 65 : 96;
+      const prev = editDraftLayout[editDragItemId] || {};
+      editDraftLayout[editDragItemId] = {
+        ...prev,
+        xPct: Number(clampNum((cx / w) * 100, minX, maxX).toFixed(2)),
+        yPct: Number(clampNum((cy / h) * 100, 7, 93).toFixed(2))
+      };
+      applyTouchCustomLayout();
+    },
+    { capture: true }
+  );
+
+  const finishEditDrag = (e) => {
+    if (!isTouchEditMode) return;
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    if (editDragPid !== null && (!e || e.pointerId === undefined || e.pointerId === editDragPid)) {
+      try {
+        if (touchLayer.hasPointerCapture?.(editDragPid)) touchLayer.releasePointerCapture(editDragPid);
+      } catch {}
+      editDragPid = null;
+      editDragItemId = null;
+    }
+  };
+  touchLayer.addEventListener('pointerup', finishEditDrag, { capture: true });
+  touchLayer.addEventListener('pointercancel', finishEditDrag, { capture: true });
+
+  function openTouchEditMode({ fromHub = false, onFinish = null } = {}) {
+    releaseLeftStick();
+    clearAllTouchActions();
+    editDraftLayout = JSON.parse(JSON.stringify(customTouchLayout || {}));
+    isTouchEditMode = true;
+    touchEditFinishCb = typeof onFinish === 'function' ? onFinish : null;
+    if (!TOUCH_ITEM_BY_ID.has(touchEditSelectedId)) touchEditSelectedId = 'attack';
+    if (fromHub) {
+      hubScreen.classList.add('hidden');
+    }
+    hudScreen.classList.remove('hidden');
+    hudScreen.classList.add('is-touch-editing');
+    soulsModeActive = true;
+    touchLayer.classList.remove('hidden');
+    syncSoulsTouchLayout();
+    touchEditToolbar.classList.remove('hidden');
+    applyTouchCustomLayout();
+    syncTouchEditToolbar();
+  }
+
+  function closeTouchEditMode(saveChanges = true) {
+    if (!isTouchEditMode) return;
+    if (saveChanges && editDraftLayout) {
+      customTouchLayout = sanitizeTouchLayoutMap(editDraftLayout);
+      writeSavedTouchLayout(customTouchLayout);
+    }
+    editDraftLayout = null;
+    editDragPid = null;
+    editDragItemId = null;
+    isTouchEditMode = false;
+    touchEditToolbar.classList.add('hidden');
+    hudScreen.classList.remove('is-touch-editing');
+    if (!isTouchCapable) {
+      touchLayer.classList.add('hidden');
+    }
+    applyTouchCustomLayout();
+    syncSoulsTouchLayout();
+    syncMuteButtons();
+    if (saveChanges) {
+      showToast('Сенсорное управление сохранено');
+    }
+    const cb = touchEditFinishCb;
+    touchEditFinishCb = null;
+    cb?.();
+  }
+
+  function resetTouchCustomLayout() {
+    customTouchLayout = {};
+    writeSavedTouchLayout({});
+    if (editDraftLayout) editDraftLayout = {};
+    applyTouchCustomLayout();
+    syncTouchEditToolbar();
+    syncMuteButtons();
+  }
+
   const touchState = {
     moveX: 0,
     moveZ: 0,
@@ -450,6 +781,7 @@ export function createUIManager(initialCallbacks = {}) {
     moveActive: false,
     aimActive: false,
     sprint: false,
+    attackSeq: 0,
     attackTrigger: false,
     attackHeld: false,
     heavyTrigger: false,
@@ -469,10 +801,11 @@ export function createUIManager(initialCallbacks = {}) {
   const DEADZONE = 0.07;
 
   function syncSoulsTouchLayout() {
-    touchLayer.classList.toggle('is-souls-touch', soulsModeActive);
-    rightCamZone.classList.toggle('hidden', !soulsModeActive);
-    touchSoulsCluster.classList.toggle('hidden', !soulsModeActive);
-    const soulsTouchVisible = soulsModeActive && !touchLayer.classList.contains('hidden');
+    const showCluster = soulsModeActive || isTouchEditMode;
+    touchLayer.classList.toggle('is-souls-touch', showCluster);
+    rightCamZone.classList.toggle('hidden', !showCluster || isTouchEditMode);
+    touchSoulsCluster.classList.toggle('hidden', !showCluster);
+    const soulsTouchVisible = showCluster && !touchLayer.classList.contains('hidden');
     hudScreen.classList.toggle('is-souls-touch-active', soulsTouchVisible);
   }
 
@@ -491,7 +824,6 @@ export function createUIManager(initialCallbacks = {}) {
     touchState.interact = false;
     leftBase.classList.remove('is-sprinting');
     touchAttackBtn.classList.remove('is-pressed');
-    touchHeavyBtn.classList.remove('is-pressed');
     touchBlockBtn.classList.remove('is-pressed');
   }
 
@@ -508,6 +840,7 @@ export function createUIManager(initialCallbacks = {}) {
       const vp = window.__getGameViewportSize?.();
       return { w: vp?.w || window.innerWidth || 960, h: vp?.h || window.innerHeight || 540 };
     };
+    const getStickScale = () => clampNum(Number(getJoystickCustomCfg()?.scale) || 1, 0.60, 1.75);
 
     const placeBaseAtFinger = (rawClientX, rawClientY) => {
       if (returnTimer) {
@@ -517,12 +850,14 @@ export function createUIManager(initialCallbacks = {}) {
       baseEl.classList.remove('is-returning');
       const pt = mapPt(rawClientX, rawClientY);
       const { w, h } = getVpSize();
-      originX = Math.max(58, Math.min(w * 0.50, pt.x));
-      originY = Math.max(80, Math.min(h - 58, pt.y));
+      const jCfg = getJoystickCustomCfg();
+      const maxOriginFrac = Number.isFinite(jCfg?.xPct) ? clampNum(Math.max(0.50, (jCfg.xPct + 12) / 100), 0.50, 0.68) : 0.50;
+      originX = Math.max(54, Math.min(w * maxOriginFrac, pt.x));
+      originY = Math.max(72, Math.min(h - 54, pt.y));
       baseEl.style.left = `${Math.round(originX)}px`;
       baseEl.style.top = `${Math.round(originY)}px`;
       baseEl.style.bottom = 'auto';
-      baseEl.style.transform = 'translate3d(-50%, -50%, 0)';
+      baseEl.style.transform = 'translate3d(-50%, -50%, 0) scale(var(--touch-scale, 1))';
       baseEl.classList.add('is-active');
     };
 
@@ -531,23 +866,42 @@ export function createUIManager(initialCallbacks = {}) {
       const dx = pt.x - originX;
       const dy = pt.y - originY;
       const dist = Math.hypot(dx, dy);
-      const clamped = Math.min(dist, MAX_STICK_RADIUS);
+      const effRadius = MAX_STICK_RADIUS * getStickScale();
+      const clamped = Math.min(dist, effRadius);
       const angle = dist > 0.0001 ? Math.atan2(dy, dx) : 0;
 
-      const kx = Math.cos(angle) * clamped;
-      const ky = Math.sin(angle) * clamped;
+      const invScale = 1 / getStickScale();
+      const kx = Math.cos(angle) * clamped * invScale;
+      const ky = Math.sin(angle) * clamped * invScale;
       knobEl.style.transform = `translate3d(${kx.toFixed(1)}px, ${ky.toFixed(1)}px, 0)`;
 
-      const norm = clamped / MAX_STICK_RADIUS;
-      touchState.moveX = norm < DEADZONE ? 0 : kx / MAX_STICK_RADIUS;
-      touchState.moveZ = norm < DEADZONE ? 0 : ky / MAX_STICK_RADIUS;
+      const norm = clamped / effRadius;
+      touchState.moveX = norm < DEADZONE ? 0 : (Math.cos(angle) * clamped) / effRadius;
+      touchState.moveZ = norm < DEADZONE ? 0 : (Math.sin(angle) * clamped) / effRadius;
 
-      if (!touchState.sprint && dist > MAX_STICK_RADIUS * SPRINT_ENTER_RATIO) {
+      if (!touchState.sprint && dist > effRadius * SPRINT_ENTER_RATIO) {
         touchState.sprint = true;
         baseEl.classList.add('is-sprinting');
-      } else if (touchState.sprint && dist < MAX_STICK_RADIUS * SPRINT_EXIT_RATIO) {
+      } else if (touchState.sprint && dist < effRadius * SPRINT_EXIT_RATIO) {
         touchState.sprint = false;
         baseEl.classList.remove('is-sprinting');
+      }
+    };
+
+    const restoreRestingBasePos = () => {
+      const jCfg = getJoystickCustomCfg();
+      if (Number.isFinite(jCfg?.xPct) && Number.isFinite(jCfg?.yPct)) {
+        baseEl.classList.add('has-custom-pos');
+        baseEl.style.left = `${jCfg.xPct.toFixed(2)}%`;
+        baseEl.style.top = `${jCfg.yPct.toFixed(2)}%`;
+        baseEl.style.bottom = 'auto';
+        baseEl.style.transform = '';
+      } else {
+        baseEl.classList.remove('has-custom-pos');
+        baseEl.style.left = '';
+        baseEl.style.top = '';
+        baseEl.style.bottom = '';
+        baseEl.style.transform = '';
       }
     };
 
@@ -569,27 +923,24 @@ export function createUIManager(initialCallbacks = {}) {
       }
       if (instant || !wasEngaged) {
         baseEl.classList.remove('is-returning');
-        baseEl.style.left = '';
-        baseEl.style.top = '';
-        baseEl.style.bottom = '';
-        baseEl.style.transform = '';
+        restoreRestingBasePos();
         return;
       }
 
-      const { h } = getVpSize();
+      const { w, h } = getVpSize();
+      const jCfg = getJoystickCustomCfg();
+      const targetX = Number.isFinite(jCfg?.xPct) ? (jCfg.xPct / 100) * w : 88;
+      const targetY = Number.isFinite(jCfg?.yPct) ? (jCfg.yPct / 100) * h : Math.max(88, h - 152);
       baseEl.classList.add('is-returning');
-      baseEl.style.left = '88px';
-      baseEl.style.top = `${Math.round(Math.max(88, h - 152))}px`;
+      baseEl.style.left = `${Math.round(targetX)}px`;
+      baseEl.style.top = `${Math.round(targetY)}px`;
       baseEl.style.bottom = 'auto';
-      baseEl.style.transform = 'translate3d(-50%, -50%, 0)';
+      baseEl.style.transform = 'translate3d(-50%, -50%, 0) scale(var(--touch-scale, 1))';
       returnTimer = setTimeout(() => {
         returnTimer = null;
         if (activePointerId === null && activeTouchId === null) {
           baseEl.classList.remove('is-returning');
-          baseEl.style.left = '';
-          baseEl.style.top = '';
-          baseEl.style.bottom = '';
-          baseEl.style.transform = '';
+          restoreRestingBasePos();
         }
       }, 210);
     };
@@ -791,7 +1142,12 @@ export function createUIManager(initialCallbacks = {}) {
     btnEl.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      if (hudScreen.classList.contains('hidden') || btnEl.classList.contains('hidden')) return;
+      if (isTouchEditMode || hudScreen.classList.contains('hidden') || btnEl.classList.contains('hidden')) return;
+      if (heldPid !== null && heldPid !== e.pointerId) {
+        try {
+          if (btnEl.hasPointerCapture?.(heldPid)) btnEl.releasePointerCapture(heldPid);
+        } catch {}
+      }
       heldPid = e.pointerId;
       try { btnEl.setPointerCapture(e.pointerId); } catch {}
       if (allowCamDrag && e.pointerType !== 'mouse') {
@@ -844,10 +1200,19 @@ export function createUIManager(initialCallbacks = {}) {
   }
 
   bindCapturedHoldBtn(hudBlockBtn, () => { touchState.block = true; }, () => { touchState.block = false; });
-  bindCapturedHoldBtn(hudHeavyBtn, () => { touchState.heavyTrigger = true; touchState.heavyHeld = true; }, () => { touchState.heavyHeld = false; });
   bindCapturedHoldBtn(touchBlockBtn, () => { touchState.block = true; }, () => { touchState.block = false; }, { allowCamDrag: true });
-  bindCapturedHoldBtn(touchAttackBtn, () => { touchState.attackTrigger = true; touchState.attackHeld = true; }, () => { touchState.attackHeld = false; }, { allowCamDrag: true });
-  bindCapturedHoldBtn(touchHeavyBtn, () => { touchState.heavyTrigger = true; touchState.heavyHeld = true; }, () => { touchState.heavyHeld = false; }, { allowCamDrag: true });
+  bindCapturedHoldBtn(
+    touchAttackBtn,
+    () => {
+      touchState.attackSeq = (touchState.attackSeq || 0) + 1;
+      touchState.attackTrigger = true;
+      touchState.attackHeld = true;
+    },
+    () => {
+      touchState.attackHeld = false;
+    },
+    { allowCamDrag: true }
+  );
 
   touchFlaskBtn.addEventListener('pointerdown', (e) => {
     e.preventDefault();
@@ -1499,7 +1864,10 @@ export function createUIManager(initialCallbacks = {}) {
     getLowSpecState: () => lowSpecEnabled,
     setLowSpecState: (v) => { lowSpecEnabled = Boolean(v); },
     getShowFpsState: () => showFpsEnabled,
-    setShowFpsState: (v) => { showFpsEnabled = Boolean(v); }
+    setShowFpsState: (v) => { showFpsEnabled = Boolean(v); },
+    getShowUncappedFpsState: () => showUncappedFpsEnabled,
+    setShowUncappedFpsState: (v) => { showUncappedFpsEnabled = Boolean(v); },
+    hasCustomTouchLayout: () => hasCustomTouchLayout()
   });
   const {
     closeSoundPopover,
@@ -1513,6 +1881,11 @@ export function createUIManager(initialCallbacks = {}) {
   } = modals;
 
   window.addEventListener('keydown', (e) => {
+    if (e.code === 'Escape' && isTouchEditMode) {
+      e.preventDefault();
+      closeTouchEditMode(true);
+      return;
+    }
     modals.handleKeydown(e);
   });
 
@@ -1881,6 +2254,17 @@ export function createUIManager(initialCallbacks = {}) {
       showFpsEnabled = Boolean(show);
       syncMuteButtons();
     },
+    setShowUncappedFpsState(show) {
+      showUncappedFpsEnabled = Boolean(show);
+      syncMuteButtons();
+    },
+    openTouchEditMode,
+    closeTouchEditMode,
+    isTouchEditModeOpen() {
+      return isTouchEditMode;
+    },
+    resetTouchCustomLayout,
+    hasCustomTouchLayout,
     spawnFloatingText,
     getTouchInput() {
       return touchState;

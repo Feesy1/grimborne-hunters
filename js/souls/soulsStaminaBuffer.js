@@ -25,6 +25,7 @@ export const SOULS_STAMINA_CFG = Object.freeze({
 export const SOULS_BUFFER_CFG = Object.freeze({
   TTL_DESKTOP_SEC: 0.440,
   TTL_MOBILE_SEC: 0.480,
+  TTL_MOBILE_ATTACK_SEC: 0.680,
   PRIORITY: Object.freeze({
     roll: 4,
     parry: 4,
@@ -248,7 +249,7 @@ export function createSoulsActionBuffer() {
     }
 
     const ttl = isMobileTouchSource(inputSource)
-      ? SOULS_BUFFER_CFG.TTL_MOBILE_SEC
+      ? (action === 'attack' ? SOULS_BUFFER_CFG.TTL_MOBILE_ATTACK_SEC : SOULS_BUFFER_CFG.TTL_MOBILE_SEC)
       : SOULS_BUFFER_CFG.TTL_DESKTOP_SEC;
 
     slot = Object.freeze({

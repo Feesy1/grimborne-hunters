@@ -8,7 +8,7 @@ import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { DRACOLoader } from '../vendor/DRACOLoader.js';
 import { clone as cloneSkinned } from '../vendor/SkeletonUtils.js';
-import { WEAPONS } from './config.js?v=20261124z85';
+import { WEAPONS } from './config.js?v=20261124z86';
 import {
   getGeo,
   getMat,
@@ -17,28 +17,28 @@ import {
   createAnimController,
   setBoneRelEuler,
   solveMixamoArmIK
-} from './models/shared.js?v=20261124z85';
+} from './models/shared.js?v=20261124z86';
 import {
   getWarriorWeaponMountConfig,
   createWarriorStanceState,
   applyWarriorWeaponStance,
   applyWarriorAttackOverlay
-} from './models/warriorStances.js?v=20261124z85';
+} from './models/warriorStances.js?v=20261124z86';
 import {
   computeFootSyncPlaybackRate,
   computeCombatPostureDynamics,
   applyCombatPostureToObject3D,
   applyCombatRecoilImpulse
-} from './souls/soulsPhysicsFeel.js?v=20261124z85';
-import { createActorContactShadowMesh } from './souls/soulsAtmosphere.js?v=20261124z85';
+} from './souls/soulsPhysicsFeel.js?v=20261124z86';
+import { createActorContactShadowMesh } from './souls/soulsAtmosphere.js?v=20261124z86';
 import {
   applyEldenDissolveToModel,
   resetEldenDissolveFromModel
-} from './souls/soulsDissolveVfx.js?v=20261124z85';
+} from './souls/soulsDissolveVfx.js?v=20261124z86';
 
 const MODEL_PATHS = {
   // Warrior Knight (Mixamo Sword & Shield Run + Diagonal Slash + Turn_180 + Combat_Roll + Heavy_Thrust + Door_Push)
-  warrior_run: './assets/models/Warrior_Run.glb?v=20261124z85',
+  warrior_run: './assets/models/Warrior_Run.glb?v=20261124z86',
 
   // All 5 Warrior Melee Weapons + Shield (preserved for in-world discovery & future equipment!)
   sword_tripo: './assets/models/Sword_Tripo.glb?v=20261120z34',
@@ -49,10 +49,10 @@ const MODEL_PATHS = {
   hammer_tripo: './assets/models/Hammer_Tripo.glb?v=20261120z34',
 
   // Castle of Ash Enemies & Boss (Boss untouched!)
-  rift_boss: './assets/models/Rift_Boss_Tripo.glb?v=20261124z85',
-  rift_executioner: './assets/models/Rift_Executioner_Tripo.glb?v=20261124z85',
-  rift_vanguard: './assets/models/Rift_Vanguard_Tripo.glb?v=20261124z85',
-  rift_acolyte: './assets/models/Rift_Acolyte_Tripo.glb?v=20261124z85'
+  rift_boss: './assets/models/Rift_Boss_Tripo.glb?v=20261124z86',
+  rift_executioner: './assets/models/Rift_Executioner_Tripo.glb?v=20261124z86',
+  rift_vanguard: './assets/models/Rift_Vanguard_Tripo.glb?v=20261124z86',
+  rift_acolyte: './assets/models/Rift_Acolyte_Tripo.glb?v=20261124z86'
 };
 
 const gltfCache = new Map();
@@ -4130,7 +4130,7 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
       const activeClip = animCtrl.getActiveAttackClipName ? animCtrl.getActiveAttackClipName() : null;
       const cleanActiveClip = activeClip ? activeClip.replace(/__Full$/, '') : null;
       const isDifferentComboClip = Boolean(cleanActiveClip && cleanActiveClip !== targetClip);
-      if (!isHeavyThrust && remSec > (isDifferentComboClip ? 0.68 : 0.10)) return;
+      if (!isHeavyThrust && remSec > (isDifferentComboClip ? 0.85 : 0.12)) return;
       if (isHeavyThrust && !isDifferentComboClip && remSec > 0.16) return;
 
       let finalSpd;

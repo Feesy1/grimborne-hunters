@@ -3,15 +3,15 @@
 // Procedural/Sampled Spatial Audio, Gothic Title Screen & HUD.
 
 import * as THREE from '../vendor/three.module.js';
-import { SOULS_LEVEL_DEF } from './config.js?v=20261124z85';
-import { createArenaWorld } from './world.js?v=20261124z85';
-import * as models from './models.js?v=20261124z85';
-import { createProgressionStore, mergeCloudState } from './progression.js?v=20261124z85';
-import { createCombatController } from './combat.js?v=20261124z85';
-import { createAudioEngine } from './audio.js?v=20261124z85';
-import { initYandexSdk } from './yandexSdk.js?v=20261124z85';
-import { createUIManager } from './ui.js?v=20261124z85';
-import { createInputController } from './input.js?v=20261124z85';
+import { SOULS_LEVEL_DEF } from './config.js?v=20261124z86';
+import { createArenaWorld } from './world.js?v=20261124z86';
+import * as models from './models.js?v=20261124z86';
+import { createProgressionStore, mergeCloudState } from './progression.js?v=20261124z86';
+import { createCombatController } from './combat.js?v=20261124z86';
+import { createAudioEngine } from './audio.js?v=20261124z86';
+import { initYandexSdk } from './yandexSdk.js?v=20261124z86';
+import { createUIManager } from './ui.js?v=20261124z86';
+import { createInputController } from './input.js?v=20261124z86';
 
 const SOULS_LOCAL_SAVE_KEY = 'grimborne_souls_save_v1';
 
@@ -48,10 +48,14 @@ async function bootstrap() {
   let thermalLowSpecApplied = false;
   let userLowSpecPref = false;
   let userShowFpsPref = true;
+  let userShowUncappedFpsPref = true;
   try {
     const savedShowFps = localStorage.getItem('grimborne_show_fps');
     if (savedShowFps === '0') userShowFpsPref = false;
     else if (savedShowFps === '1') userShowFpsPref = true;
+    const savedUncappedFps = localStorage.getItem('grimborne_show_uncapped_fps');
+    if (savedUncappedFps === '0') userShowUncappedFpsPref = false;
+    else if (savedUncappedFps === '1') userShowUncappedFpsPref = true;
   } catch {}
   let lastNow = performance.now();
   let elapsedTime = 0;
@@ -235,6 +239,8 @@ async function bootstrap() {
   // Initialize Pure Gothic Souls UI Manager
   const ui = createUIManager({});
   ui.setLang(sdk.getLang());
+  ui.setShowFpsState?.(userShowFpsPref);
+  ui.setShowUncappedFpsState?.(userShowUncappedFpsPref);
 
   const handleRunEnd = ({ victory, soulsBossReached } = {}) => {
     if (gameMode === 'result') return;
@@ -443,6 +449,10 @@ async function bootstrap() {
       });
       syncSoulsPointerLockHint();
     } else if (gameMode === 'paused') {
+      if (ui.isTouchEditModeOpen?.()) {
+        ui.closeTouchEditMode?.(true);
+        return;
+      }
       if (ui.isSettingsModalOpen?.()) {
         ui.closeSettingsModal?.();
         return;
@@ -549,6 +559,65 @@ async function bootstrap() {
       } catch {}
       ui.setShowFpsState?.(userShowFpsPref);
       syncFpsBadgeVisibility();
+      refreshFpsBadgeTextImmediate();
+    },
+    onSetShowUncappedFps: (showUncapped) => {
+      userShowUncappedFpsPref = Boolean(showUncapped);
+      try {
+        localStorage.setItem('grimborne_show_uncapped_fps', userShowUncappedFpsPref ? '1' : '0');
+      } catch {}
+      ui.setShowUncappedFpsState?.(userShowUncappedFpsPref);
+      syncFpsBadgeVisibility();
+      refreshFpsBadgeTextImmediate();
+    },
+    onOpenTouchCustomizer: ({ fromPause = false, pauseHandlers = null } = {}) => {
+      const openedFromHub = gameMode === 'hub';
+      if (gameMode === 'playing') {
+        gameMode = 'paused';
+        exitSoulsPointerLock();
+        inputCtrl.resetAllInputs();
+        sdk.GameplayAPI.stop();
+      }
+      ui.openTouchEditMode?.({
+        fromHub: openedFromHub,
+        onFinish: () => {
+          if (openedFromHub) {
+            ui.showHud(false);
+            ui.showHub(true);
+            ui.openSettingsModal?.();
+          } else {
+            const snap = combat.getHudSnapshot?.() || {};
+            const handlers = (fromPause && pauseHandlers && Object.keys(pauseHandlers).length > 0)
+              ? pauseHandlers
+              : {
+                  onResume: () => {
+                    if (gameMode === 'paused') {
+                      gameMode = 'playing';
+                      syncMusicMode(combat.getHudSnapshot?.()?.souls?.bossAwakened ? 'boss' : 'combat');
+                      sdk.GameplayAPI.start();
+                      requestSoulsPointerLock();
+                      syncSoulsPointerLockHint();
+                    }
+                  },
+                  onRestart: async () => {
+                    persistSave();
+                    await startSoulsRun({ restoreBonfireCheckpoint: soulsSave.bonfireCheckpointLit });
+                    requestSoulsPointerLock();
+                  },
+                  onExit: () => {
+                    persistSave(true);
+                    enterHub();
+                  }
+                };
+            ui.showPauseModal?.(snap, handlers);
+            ui.openSettingsModal?.();
+          }
+        }
+      });
+    },
+    onResetTouchLayout: () => {
+      ui.resetTouchCustomLayout?.();
+      ui.showToast('Расположение кнопок сброшено');
     },
     onResetProgress: async () => {
       audio.unlock();
@@ -789,6 +858,25 @@ async function bootstrap() {
   let workAccumMs = 0;
   let smoothedMaxFps = 600;
   let lastShownBadgeText = '';
+
+  function formatFpsBadgeString() {
+    const shownFps = Math.max(1, Math.round(smoothedFps));
+    if (!userShowUncappedFpsPref) {
+      return `${shownFps} FPS`;
+    }
+    const shownMax = Math.max(shownFps, Math.round(smoothedMaxFps / 5) * 5);
+    return `${shownFps} FPS • ~${shownMax} MAX`;
+  }
+
+  function refreshFpsBadgeTextImmediate() {
+    if (!fpsBadgeEl || !(userShowFpsPref || forceFpsFromUrl)) return;
+    const nextTxt = formatFpsBadgeString();
+    if (nextTxt !== lastShownBadgeText) {
+      lastShownBadgeText = nextTxt;
+      fpsBadgeEl.textContent = nextTxt;
+    }
+  }
+
   resetFrameLoopTiming();
 
   function frame(now) {
@@ -880,9 +968,7 @@ async function bootstrap() {
         smoothedFps = smoothedFps * 0.30 + instFps * 0.70;
         smoothedMaxFps = smoothedMaxFps * 0.35 + instMaxFps * 0.65;
         if (fpsBadgeEl && (userShowFpsPref || forceFpsFromUrl)) {
-          const shownFps = Math.max(1, Math.round(smoothedFps));
-          const shownMax = Math.max(shownFps, Math.round(smoothedMaxFps / 5) * 5);
-          const nextTxt = `${shownFps} FPS • ~${shownMax} MAX`;
+          const nextTxt = formatFpsBadgeString();
           if (nextTxt !== lastShownBadgeText) {
             lastShownBadgeText = nextTxt;
             fpsBadgeEl.textContent = nextTxt;

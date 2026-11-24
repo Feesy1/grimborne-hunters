@@ -10,7 +10,7 @@
 // across Hub Front, Combat Isometric, Right-Side Profile, and Running_A mid-stride views.
 
 import * as THREE from '../../vendor/three.module.js';
-import { solveMixamoArmIK } from './shared.js?v=20261124z85';
+import { solveMixamoArmIK } from './shared.js?v=20261124z86';
 
 const MOUNT_PIVOT_POS = Object.freeze({ x: -0.0235, y: 0.0415, z: -0.0086 });
 const MOUNT_PIVOT_ROT = Object.freeze({ x: -1.04, y: 0.24, z: -1.52 });

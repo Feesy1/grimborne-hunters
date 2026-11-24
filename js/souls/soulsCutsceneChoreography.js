@@ -18,11 +18,11 @@
 import {
   SOULS_CASTLE_CONSTANTS,
   SOULS_CASTLE_THRONE_CONFIG
-} from './soulsCastleLayout.js?v=20261124z85';
+} from './soulsCastleLayout.js?v=20261124z86';
 import {
   BOSS_VO_DURATIONS_SEC,
   sampleBossMouthOpen
-} from './soulsBossLipSyncData.js?v=20261124z85';
+} from './soulsBossLipSyncData.js?v=20261124z86';
 
 const DEG_TO_RAD = Math.PI / 180;
 const BOSS_SPEAKER_RU = 'РЫЦАРЬ ПЕПЛА';

@@ -4,8 +4,8 @@
 // - Save Reset Confirmation Modal
 // - In-Game Pause Modal (Resume / Restart at Bonfire / Settings / Main Menu)
 
-import { el } from './resolvers.js?v=20261124z85';
-import { createModalIconSvg, setModalButtonContent } from './svgIcons.js?v=20261124z85';
+import { el } from './resolvers.js?v=20261124z86';
+import { createModalIconSvg, setModalButtonContent } from './svgIcons.js?v=20261124z86';
 
 export function createModalsController({
   root,
@@ -17,7 +17,10 @@ export function createModalsController({
   getLowSpecState,
   setLowSpecState,
   getShowFpsState,
-  setShowFpsState
+  setShowFpsState,
+  getShowUncappedFpsState,
+  setShowUncappedFpsState,
+  hasCustomTouchLayout
 }) {
   // =========================================================================
   // 1. IN-GAME SOUND POPOVER (Zero raw OS emojis — pure gothic dark iron + gold)
@@ -199,12 +202,32 @@ export function createModalsController({
   gfxRow.append(gfxLabel, gfxToggleBtn);
 
   const fpsRow = el('div', 'souls-settings-row');
-  const fpsLabel = el('span', 'souls-settings-row-lbl', 'Показатель кадров (FPS без лимита)');
-  const fpsToggleBtn = el('button', 'souls-settings-pill-btn', 'ВКЛ (Макс. FPS)');
+  const fpsLabel = el('span', 'souls-settings-row-lbl', 'Счётчик кадров (FPS)');
+  const fpsToggleBtn = el('button', 'souls-settings-pill-btn', 'ВКЛ');
   fpsToggleBtn.type = 'button';
   fpsRow.append(fpsLabel, fpsToggleBtn);
 
-  gfxSection.append(gfxRow, fpsRow);
+  const fpsUncappedRow = el('div', 'souls-settings-row');
+  const fpsUncappedLabel = el('span', 'souls-settings-row-lbl', 'FPS без лимита (потенциал MAX)');
+  const fpsUncappedToggleBtn = el('button', 'souls-settings-pill-btn', 'ВКЛ');
+  fpsUncappedToggleBtn.type = 'button';
+  fpsUncappedRow.append(fpsUncappedLabel, fpsUncappedToggleBtn);
+
+  gfxSection.append(gfxRow, fpsRow, fpsUncappedRow);
+
+  // Touch controls customization block
+  const touchSection = el('div', 'souls-settings-section');
+  touchSection.appendChild(el('div', 'souls-settings-sec-label', 'СЕНСОРНОЕ УПРАВЛЕНИЕ'));
+  const touchCustomRow = el('div', 'souls-settings-row');
+  const touchCustomLabel = el('span', 'souls-settings-row-lbl', 'Позиция и размер кнопок');
+  const touchCustomBtnGroup = el('div', 'souls-settings-btn-pair');
+  const touchResetLayoutBtn = el('button', 'souls-settings-pill-btn is-low', 'Сброс');
+  touchResetLayoutBtn.type = 'button';
+  const touchCustomizeBtn = el('button', 'souls-settings-pill-btn is-accent', 'Настроить');
+  touchCustomizeBtn.type = 'button';
+  touchCustomBtnGroup.append(touchResetLayoutBtn, touchCustomizeBtn);
+  touchCustomRow.append(touchCustomLabel, touchCustomBtnGroup);
+  touchSection.appendChild(touchCustomRow);
 
   // Controls reference block
   const ctrlSection = el('div', 'souls-settings-section');
@@ -212,8 +235,8 @@ export function createModalsController({
   const ctrlGrid = el('div', 'souls-controls-grid');
   const controlBindings = [
     ['WASD', 'Движение'],
-    ['ЛКМ', 'Быстрый удар'],
-    ['F / Shift+ЛКМ', 'Мощный удар'],
+    ['Shift', 'Бег (спринт)'],
+    ['ЛКМ', 'Удар мечом / Казнь'],
     ['ПКМ', 'Блок / Парирование'],
     ['Space', 'Перекат'],
     ['R', 'Фляга Эстуса'],
@@ -235,7 +258,7 @@ export function createModalsController({
   settingsDoneBtn.type = 'button';
   saveSection.append(resetSaveBtn, settingsDoneBtn);
 
-  settingsBody.append(audioSection, gfxSection, ctrlSection, saveSection);
+  settingsBody.append(audioSection, gfxSection, touchSection, ctrlSection, saveSection);
   settingsPanel.append(settingsHead, settingsBody);
   settingsModal.appendChild(settingsPanel);
   root.appendChild(settingsModal);
@@ -245,8 +268,15 @@ export function createModalsController({
     gfxToggleBtn.textContent = isLow ? 'Низкое (FPS)' : 'Высокое';
     gfxToggleBtn.classList.toggle('is-low', isLow);
     const showFps = Boolean(getShowFpsState ? getShowFpsState() : true);
-    fpsToggleBtn.textContent = showFps ? 'ВКЛ (Без лимита)' : 'ВЫКЛ';
+    fpsToggleBtn.textContent = showFps ? 'ВКЛ' : 'ВЫКЛ';
     fpsToggleBtn.classList.toggle('is-low', !showFps);
+    const showUncapped = Boolean(getShowUncappedFpsState ? getShowUncappedFpsState() : true);
+    fpsUncappedToggleBtn.textContent = showUncapped ? 'ВКЛ' : 'ВЫКЛ';
+    fpsUncappedToggleBtn.classList.toggle('is-low', !showUncapped);
+    fpsUncappedRow.style.opacity = showFps ? '1' : '0.52';
+    const hasCustom = Boolean(hasCustomTouchLayout?.());
+    touchResetLayoutBtn.disabled = !hasCustom;
+    touchResetLayoutBtn.style.opacity = hasCustom ? '1' : '0.45';
   }
 
   function syncMuteButtons() {
@@ -404,6 +434,31 @@ export function createModalsController({
     const nextShow = !Boolean(getShowFpsState ? getShowFpsState() : true);
     setShowFpsState?.(nextShow);
     getCallbacks().onSetShowFps?.(nextShow);
+    syncGraphicsButton();
+  });
+
+  fpsUncappedToggleBtn.addEventListener('click', () => {
+    const nextUncapped = !Boolean(getShowUncappedFpsState ? getShowUncappedFpsState() : true);
+    setShowUncappedFpsState?.(nextUncapped);
+    if (nextUncapped && !Boolean(getShowFpsState ? getShowFpsState() : true)) {
+      setShowFpsState?.(true);
+      getCallbacks().onSetShowFps?.(true);
+    }
+    getCallbacks().onSetShowUncappedFps?.(nextUncapped);
+    syncGraphicsButton();
+  });
+
+  touchCustomizeBtn.addEventListener('click', () => {
+    const wasPaused = !pauseModal.classList.contains('hidden');
+    const savedPauseHandlers = { ...activePauseHandlers };
+    closeSoundPopover();
+    closeSettingsModal();
+    pauseModal.classList.add('hidden');
+    getCallbacks().onOpenTouchCustomizer?.({ fromPause: wasPaused, pauseHandlers: savedPauseHandlers });
+  });
+
+  touchResetLayoutBtn.addEventListener('click', () => {
+    getCallbacks().onResetTouchLayout?.();
     syncGraphicsButton();
   });
 
