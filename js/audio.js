@@ -1,11 +1,12 @@
 // Procedural Web Audio API Dark-Fantasy Synthesizer + Abandoned Knight Rift Studio Audio Router
 // Instant startup, crisp dynamics, full suspend/mute compliance.
 
-import { createSoulsEnvAudio } from './souls/soulsEnvAudio.js?v=20261124z90';
-import { createSoulsHeroAudio } from './souls/soulsHeroAudio.js?v=20261124z90';
-import { createSoulsEnemyAudio } from './souls/soulsEnemyAudio.js?v=20261124z90';
-import { createSoulsMusicManager } from './souls/soulsMusicManager.js?v=20261124z90';
-import { createSoulsSpatialAudio } from './souls/soulsSpatialAudio.js?v=20261124z90';
+import { createSoulsEnvAudio } from './souls/soulsEnvAudio.js?v=20261124z91';
+import { createSoulsHeroAudio } from './souls/soulsHeroAudio.js?v=20261124z91';
+import { createSoulsEnemyAudio } from './souls/soulsEnemyAudio.js?v=20261124z91';
+import { createSoulsMusicManager } from './souls/soulsMusicManager.js?v=20261124z91';
+import { createSoulsSpatialAudio } from './souls/soulsSpatialAudio.js?v=20261124z91';
+import { createSoulsEscapeAudio } from './souls/soulsEscapeAudio.js?v=20261124z91';
 
 export function createAudioEngine() {
   let ctx = null;
@@ -25,7 +26,7 @@ export function createAudioEngine() {
 
   function preloadExternalSamples(audioCtx) {
     if (!audioCtx || typeof fetch === 'undefined') return;
-    const stepVer = '20261124z90';
+    const stepVer = '20261124z91';
     const files = [
       ['step_warrior_1', `./assets/audio/step_warrior_1.wav?v=${stepVer}`],
       ['step_warrior_2', `./assets/audio/step_warrior_2.wav?v=${stepVer}`],
@@ -253,12 +254,24 @@ export function createAudioEngine() {
   soulsSpatial.setVolume(Math.max(0, Math.min(1, sfxVolume * 0.92)));
   soulsSpatial.setVoiceVolume?.(Math.max(0, Math.min(1.6, cutsceneVoiceVolume * 1.08)));
 
+  const soulsEscape = createSoulsEscapeAudio({
+    getCtx: () => ctx,
+    getMasterGain: () => masterGain || sfxGain || compressor,
+    getSfxVolume: () => sfxVolume,
+    getVoiceVolume: () => cutsceneVoiceVolume,
+    getStoneReverbDest: () => getOrCreateStoneReverbSend(),
+    duckMusic: (db, holdSec, relSec) => soulsMusic?.duck?.(db, holdSec, relSec),
+    assetVer: '20261124z91'
+  });
+  soulsEscape.setMuted?.(muted);
+  soulsEscape.setVoiceVolume?.(Math.max(0, Math.min(1.6, cutsceneVoiceVolume * 1.08)));
+
   // Dedicated studio soundtracks for Abandoned Knight Rift:
   // - rift_explore: Elden Castle Drone (Bonfire / Castle Corridor / East Alcove)
   // - boss_phase1/boss_phase2: unified Epic Boss Battle (God of War Style)
   // Routed directly to masterGain (bypassing retro 980Hz musicFilter lowpass!) with own musicVolume scaling
-  const SOULS_EXPLORE_TRACK_URL = './assets/audio/music_rift_explore.mp3?v=20261124z90';
-  const SOULS_BOSS_TRACK_URL = './assets/audio/music_boss_rift.mp3?v=20261124z90';
+  const SOULS_EXPLORE_TRACK_URL = './assets/audio/music_rift_explore.mp3?v=20261124z91';
+  const SOULS_BOSS_TRACK_URL = './assets/audio/music_boss_rift.mp3?v=20261124z91';
   let soulsAmbientActive = false;
   const soulsMusic = createSoulsMusicManager({
     getCtx: () => ctx,
@@ -312,6 +325,7 @@ export function createAudioEngine() {
       soulsSpatial.attachContext?.(audioCtx, masterGain || sfxGain || compressor);
       soulsSpatial.preload?.(audioCtx);
     } catch {}
+    try { soulsEscape.preload?.(audioCtx); } catch {}
     if (soulsAmbientActive) {
       try { soulsMusic.preload?.(audioCtx); } catch {}
     }
@@ -2393,6 +2407,101 @@ export function createAudioEngine() {
       }
     },
 
+    // === Boss Escape Cutscene Voiceover, Procedural SFX & Exterior River Shore Ambient ===
+    playEscapeVoiceLine(cueIndex, opts = {}) {
+      if (!readyToPlay()) return false;
+      preloadSoulsAudio(ctx);
+      try {
+        return Boolean(soulsEscape?.playEscapeVoiceLine?.(cueIndex, opts));
+      } catch {
+        return false;
+      }
+    },
+
+    stopEscapeVoice(fadeSec = 0.08) {
+      try {
+        return Boolean(soulsEscape?.stopEscapeVoice?.(fadeSec));
+      } catch {
+        return false;
+      }
+    },
+
+    stopEscapeAudio(fadeSec = 0.2) {
+      try {
+        soulsEscape?.stopAll?.(fadeSec);
+      } catch {}
+    },
+
+    playSwordParryClash(intensity = 1.0) {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      try { soulsEscape?.playSwordParryClash?.(intensity); } catch {}
+    },
+
+    playSwordDisarmClatter() {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      try { soulsEscape?.playSwordDisarmClatter?.(); } catch {}
+    },
+
+    playHeroKnockdownThud() {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      try { soulsEscape?.playHeroKnockdownThud?.(); } catch {}
+    },
+
+    playArmorScootScrape() {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      try { soulsEscape?.playArmorScootScrape?.(); } catch {}
+    },
+
+    playSlowMoPulse() {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      try { soulsEscape?.playSlowMoPulse?.(); } catch {}
+    },
+
+    playFloorCollapseSmash() {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      try { soulsEscape?.playFloorCollapseSmash?.(); } catch {}
+    },
+
+    playChasmWindFall(active) {
+      if (active && !readyToPlay()) return;
+      if (active) preloadSoulsAudio(ctx);
+      try { soulsEscape?.playChasmWindFall?.(Boolean(active)); } catch {}
+    },
+
+    playRiverSplashUnderwater() {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      try { soulsEscape?.playRiverSplashUnderwater?.(); } catch {}
+    },
+
+    playIronGrateBreak() {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      try { soulsEscape?.playIronGrateBreak?.(); } catch {}
+    },
+
+    playSwordPickupChime() {
+      if (!readyToPlay()) return;
+      preloadSoulsAudio(ctx);
+      try { soulsEscape?.playSwordPickupChime?.(); } catch {}
+    },
+
+    setExteriorShoreAmbient(active) {
+      const want = Boolean(active);
+      if (want && (!readyToPlay() || muted || suspendedBySystem)) {
+        try { soulsEscape?.setExteriorShoreAmbient?.(false); } catch {}
+        return;
+      }
+      if (want) preloadSoulsAudio(ctx);
+      try { soulsEscape?.setExteriorShoreAmbient?.(want); } catch {}
+    },
+
     playHeroRoll(heavy = false) {
       if (!readyToPlay()) return;
       preloadSoulsAudio(ctx);
@@ -2460,6 +2569,7 @@ export function createAudioEngine() {
           if (!soulsAmbientActive) {
             soulsSpatial.stopCinematicSequence?.(0.08);
             soulsEnemy.stopBossRoar?.(0.08);
+            soulsEscape.stopAll?.(0.15);
           }
         } catch {}
         syncSoulsBossMusic();
@@ -3088,6 +3198,7 @@ export function createAudioEngine() {
       if (Number.isFinite(num)) {
         cutsceneVoiceVolume = Math.max(0, Math.min(1.5, num));
         soulsSpatial.setVoiceVolume?.(Math.max(0, Math.min(1.6, cutsceneVoiceVolume * 1.08)));
+        soulsEscape.setVoiceVolume?.(Math.max(0, Math.min(1.6, cutsceneVoiceVolume * 1.08)));
         try {
           localStorage.setItem('grimborne_voice_volume', String(cutsceneVoiceVolume));
         } catch {}
@@ -3132,9 +3243,11 @@ export function createAudioEngine() {
       syncGain();
       soulsMusic.setMuted(muted);
       soulsSpatial.setMuted(muted);
+      soulsEscape.setMuted?.(muted);
       if (muted) {
         stopMusicLoop();
         soulsEnv.setAmbientActive(false);
+        try { soulsEscape.stopAll?.(0.10); } catch {}
       } else {
         syncSoulsBossMusic();
         startMusicLoop();
@@ -3150,9 +3263,11 @@ export function createAudioEngine() {
       syncGain();
       soulsMusic.setMuted(muted);
       soulsSpatial.setMuted(muted);
+      soulsEscape.setMuted?.(muted);
       if (muted) {
         stopMusicLoop();
         soulsEnv.setAmbientActive(false);
+        try { soulsEscape.stopAll?.(0.10); } catch {}
       } else {
         syncSoulsBossMusic();
         startMusicLoop();
@@ -3170,6 +3285,7 @@ export function createAudioEngine() {
       soulsEnv.setAmbientActive(false);
       soulsMusic.setSuspended(true);
       try { soulsSpatial.suspend?.(); } catch {}
+      try { soulsEscape.stopAll?.(0.10); } catch {}
       syncGain();
       if (ctx && ctx.state === 'running') {
         ctx.suspend().catch(() => {});

@@ -3,15 +3,15 @@
 // Procedural/Sampled Spatial Audio, Gothic Title Screen & HUD.
 
 import * as THREE from '../vendor/three.module.js';
-import { SOULS_LEVEL_DEF } from './config.js?v=20261124z90';
-import { createArenaWorld } from './world.js?v=20261124z90';
-import * as models from './models.js?v=20261124z90';
-import { createProgressionStore, mergeCloudState } from './progression.js?v=20261124z90';
-import { createCombatController } from './combat.js?v=20261124z90';
-import { createAudioEngine } from './audio.js?v=20261124z90';
-import { initYandexSdk } from './yandexSdk.js?v=20261124z90';
-import { createUIManager } from './ui.js?v=20261124z90';
-import { createInputController } from './input.js?v=20261124z90';
+import { SOULS_LEVEL_DEF } from './config.js?v=20261124z91';
+import { createArenaWorld } from './world.js?v=20261124z91';
+import * as models from './models.js?v=20261124z91';
+import { createProgressionStore, mergeCloudState } from './progression.js?v=20261124z91';
+import { createCombatController } from './combat.js?v=20261124z91';
+import { createAudioEngine } from './audio.js?v=20261124z91';
+import { initYandexSdk } from './yandexSdk.js?v=20261124z91';
+import { createUIManager } from './ui.js?v=20261124z91';
+import { createInputController } from './input.js?v=20261124z91';
 
 const SOULS_LOCAL_SAVE_KEY = 'grimborne_souls_save_v1';
 
@@ -69,6 +69,9 @@ async function bootstrap() {
     hasRun: false,
     bonfireCheckpointLit: false,
     bossDefeated: false,
+    escapedCastle: false,
+    shoreSwordPickedUp: false,
+    shoreBonfireLit: false,
     difficultyMode: 'normal',
     lowSpec: false
   };
@@ -108,6 +111,9 @@ async function bootstrap() {
       hasRun: Boolean(storedSouls.hasRun),
       bonfireCheckpointLit: Boolean(storedSouls.bonfireCheckpointLit),
       bossDefeated: Boolean(storedSouls.bossDefeated),
+      escapedCastle: Boolean(storedSouls.escapedCastle),
+      shoreSwordPickedUp: Boolean(storedSouls.shoreSwordPickedUp),
+      shoreBonfireLit: Boolean(storedSouls.shoreBonfireLit),
       difficultyMode: ['easy', 'normal', 'hard'].includes(storedSouls.difficultyMode)
         ? storedSouls.difficultyMode
         : (progression.getState().difficultyMode || 'normal'),
@@ -300,6 +306,58 @@ async function bootstrap() {
       onLevelUpReady: () => {},
       onRunEnd: handleRunEnd,
       onBattleEnd: handleRunEnd,
+      onSoulsCue: (text, kind) => ui.showSoulsBannerCue?.(text, kind),
+      onEscapeCastleCompleted: ({ shoreSwordPickedUp, shoreBonfireLit } = {}) => {
+        soulsSave.escapedCastle = true;
+        soulsSave.bossDefeated = true;
+        if (typeof shoreSwordPickedUp === 'boolean') soulsSave.shoreSwordPickedUp = shoreSwordPickedUp;
+        if (typeof shoreBonfireLit === 'boolean') soulsSave.shoreBonfireLit = shoreBonfireLit;
+        persistSave(true);
+      },
+      onShoreSwordPickedUp: () => {
+        soulsSave.shoreSwordPickedUp = true;
+        persistSave(true);
+      },
+      onShoreBonfireLit: () => {
+        soulsSave.escapedCastle = true;
+        soulsSave.bonfireCheckpointLit = true;
+        soulsSave.shoreBonfireLit = true;
+        persistSave(true);
+      },
+      onShorePrologueGateInteract: () => {
+        if (gameMode !== 'playing' || ui.isSoulsPrologueCompleteOpen?.()) return;
+        gameMode = 'paused';
+        exitSoulsPointerLock();
+        inputCtrl.resetAllInputs();
+        sdk.GameplayAPI.stop();
+        soulsSave.escapedCastle = true;
+        persistSave(true);
+        ui.showSoulsPrologueCompleteOverlay?.({
+          onExploreShore: () => {
+            if (gameMode === 'paused') {
+              gameMode = 'playing';
+              sdk.GameplayAPI.start();
+              requestSoulsPointerLock();
+              syncSoulsPointerLockHint();
+            }
+          },
+          onBossRematch: async () => {
+            await startSoulsRun({ startAtBossArena: true });
+            requestSoulsPointerLock();
+          },
+          onReplayEscape: async () => {
+            gameMode = 'playing';
+            sdk.GameplayAPI.start();
+            combat.startBossEscapeCutscene?.();
+            syncSoulsPointerLockHint();
+          },
+          onHub: () => {
+            persistSave(true);
+            enterHub();
+          }
+        });
+        syncSoulsPointerLockHint();
+      },
       onToast: (msg) => ui.showToast(msg)
     }
   });
@@ -346,7 +404,8 @@ async function bootstrap() {
       !isTouchOnlyDevice() &&
       !isSoulsPointerLocked() &&
       !ui.isPauseModalOpen?.() &&
-      !ui.isSoulsDefeatOpen?.();
+      !ui.isSoulsDefeatOpen?.() &&
+      !ui.isSoulsPrologueCompleteOpen?.();
     ui.setSoulsPointerLockHintVisible?.(showHint);
   }
 
@@ -457,6 +516,13 @@ async function bootstrap() {
         ui.closeSettingsModal?.();
         return;
       }
+      if (ui.isSoulsPrologueCompleteOpen?.()) {
+        ui.hideSoulsPrologueCompleteOverlay?.();
+        gameMode = 'playing';
+        sdk.GameplayAPI.start();
+        syncSoulsPointerLockHint();
+        return;
+      }
       ui.hidePauseModal?.();
       gameMode = 'playing';
       syncMusicMode(combat.getHudSnapshot?.()?.souls?.bossAwakened ? 'boss' : 'combat');
@@ -468,6 +534,9 @@ async function bootstrap() {
   let battleLaunchLock = false;
   async function startSoulsRun({
     startAtBossArena = false,
+    startAtExteriorShore = false,
+    restoreShoreSword = false,
+    restoreShoreBonfire = false,
     resetCheckpoint = false,
     restoreBonfireCheckpoint = false
   } = {}) {
@@ -491,6 +560,9 @@ async function bootstrap() {
       soulsBossCheckpointUnlocked = false;
       soulsSave.bonfireCheckpointLit = false;
       soulsSave.bossDefeated = false;
+      soulsSave.escapedCastle = false;
+      soulsSave.shoreSwordPickedUp = false;
+      soulsSave.shoreBonfireLit = false;
     } else if (!startAtBossArena) {
       soulsBossCheckpointUnlocked = false;
     }
@@ -506,13 +578,16 @@ async function bootstrap() {
     ui.showHud(true);
     combat.setAttackEnabled?.(false);
     world.setCameraLock?.(false);
-    syncMusicMode('combat');
+    syncMusicMode(startAtExteriorShore ? 'off' : 'combat');
 
     combat.startRun({
       classId: 'warrior',
       levelNumber: 26,
       difficultyMode: soulsSave.difficultyMode || 'normal',
       startAtBossArena,
+      startAtExteriorShore,
+      restoreShoreSword,
+      restoreShoreBonfire,
       resetCheckpoint,
       restoreBonfireCheckpoint
     });
@@ -528,13 +603,25 @@ async function bootstrap() {
   // Wire Pure Gothic Souls UI callbacks
   ui.setCallbacks({
     onContinueGame: async () => {
-      await startSoulsRun({
-        restoreBonfireCheckpoint: Boolean(soulsSave.bonfireCheckpointLit)
-      });
+      if (soulsSave.escapedCastle) {
+        await startSoulsRun({
+          startAtExteriorShore: true,
+          restoreShoreSword: Boolean(soulsSave.shoreSwordPickedUp),
+          restoreShoreBonfire: Boolean(soulsSave.shoreBonfireLit)
+        });
+      } else {
+        await startSoulsRun({
+          restoreBonfireCheckpoint: Boolean(soulsSave.bonfireCheckpointLit)
+        });
+      }
       requestSoulsPointerLock();
     },
     onNewGame: async () => {
       await startSoulsRun({ resetCheckpoint: true });
+      requestSoulsPointerLock();
+    },
+    onBossRematch: async () => {
+      await startSoulsRun({ startAtBossArena: true });
       requestSoulsPointerLock();
     },
     onSetDifficulty: (mode) => {
@@ -627,6 +714,9 @@ async function bootstrap() {
         hasRun: false,
         bonfireCheckpointLit: false,
         bossDefeated: false,
+        escapedCastle: false,
+        shoreSwordPickedUp: false,
+        shoreBonfireLit: false,
         difficultyMode: 'normal',
         lowSpec: userLowSpecPref
       };
@@ -794,6 +884,25 @@ async function bootstrap() {
     enterHub,
     startSoulsLevel: () => startSoulsRun({ resetCheckpoint: false }),
     startSoulsBossRematch: () => startSoulsRun({ startAtBossArena: true }),
+    triggerBossEscapeCutscene: async () => {
+      if (gameMode !== 'playing') {
+        await startSoulsRun({ startAtBossArena: true });
+      }
+      return Boolean(combat.startBossEscapeCutscene?.());
+    },
+    seekBossEscapeCutscene: (tSec = 0) => combat.seekBossEscapeCutscene?.(tSec),
+    skipBossEscapeCutscene: (force = true) => combat.skipBossEscapeCutscene?.(force),
+    teleportToExteriorShore: async (opts = {}) => {
+      if (gameMode !== 'playing') {
+        await startSoulsRun({
+          startAtExteriorShore: true,
+          restoreShoreSword: Boolean(opts?.withSword),
+          restoreShoreBonfire: Boolean(opts?.bonfireLit)
+        });
+        return true;
+      }
+      return Boolean(combat.teleportToExteriorShore?.(opts));
+    },
     toggleTargetLock,
     cycleTargetLock,
     getLockedTarget: () => combat.getLockedTarget?.() || null,
@@ -923,15 +1032,26 @@ async function bootstrap() {
           Boolean(snap?.souls?.canOpenBossDoors || snap?.souls?.canInteract),
           snap?.souls?.interactLabel || 'Открыть врата'
         );
-        // Auto-persist Bonfire checkpoint as soon as player lights/rests at it!
+        // Auto-persist Bonfire & Escape checkpoints as soon as player lights/reaches them!
         if (snap?.souls?.bonfireCheckpointLit && !soulsSave.bonfireCheckpointLit) {
           soulsSave.bonfireCheckpointLit = true;
           persistSave(true);
         }
-        const wantBossMusic = Boolean(
-          snap?.souls?.bossAwakened && !snap?.souls?.bossDefeated && !snap?.souls?.doorCutsceneActive
-        );
-        syncMusicMode(wantBossMusic ? 'boss' : 'combat');
+        if (snap?.souls?.escapedCastle && !soulsSave.escapedCastle) {
+          soulsSave.escapedCastle = true;
+          persistSave(true);
+        }
+        if (snap?.souls?.zoneMode === 'exterior_shore' && !snap?.souls?.escapeCutsceneActive) {
+          syncMusicMode('off');
+        } else {
+          const wantBossMusic = Boolean(
+            snap?.souls?.bossAwakened &&
+            !snap?.souls?.bossDefeated &&
+            !snap?.souls?.doorCutsceneActive &&
+            !snap?.souls?.escapeCutsceneActive
+          );
+          syncMusicMode(wantBossMusic ? 'boss' : 'combat');
+        }
       }
     } else if (gameMode === 'hub') {
       elapsedTime += dt;

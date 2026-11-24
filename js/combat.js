@@ -9,7 +9,7 @@ import {
   LEVELS,
   getLevelDef,
   RUN_UPGRADES
-} from './config.js?v=20261124z90';
+} from './config.js?v=20261124z91';
 import {
   TWO_PI,
   ARENA_PLAYER_LIMIT,
@@ -21,7 +21,7 @@ import {
   lerpAngle,
   resolveArenaBiomeForLevel,
   createCombatBridge
-} from './combat/bridge.js?v=20261124z90';
+} from './combat/bridge.js?v=20261124z91';
 import {
   updateBossAI,
   updateSoulsBossAI,
@@ -31,7 +31,7 @@ import {
   cancelSoulsBossTelegraph,
   applySoulsBossParry,
   SOULS_BOSS_MULTI_PARRY
-} from './combat/bossAi.js?v=20261124z90';
+} from './combat/bossAi.js?v=20261124z91';
 import {
   createPoiseController,
   STANCE_DAMAGE_TABLE,
@@ -40,26 +40,26 @@ import {
   getPlayerHitstunSpec,
   SOULS_GUARD_CFG,
   computeBlockedStaminaCost
-} from './combat/poiseSystem.js?v=20261124z90';
+} from './combat/poiseSystem.js?v=20261124z91';
 import {
   SOULS_ROLL_CFG,
   getSoulsRollIframes,
   sampleSoulsRollStepDist,
   sampleAttackLungeStep,
   createAliveStanceSmoother
-} from './souls/soulsLocomotion.js?v=20261124z90';
+} from './souls/soulsLocomotion.js?v=20261124z91';
 import {
   SOULS_STAMINA_CFG,
   createSoulsStaminaController,
   createSoulsActionBuffer
-} from './souls/soulsStaminaBuffer.js?v=20261124z90';
+} from './souls/soulsStaminaBuffer.js?v=20261124z91';
 import {
   SOULS_ATTACK_SPECS,
   getSoulsAttackSpec,
   computeSoulsDamage,
   testSweptBladeHits
-} from './souls/soulsHitboxDamage.js?v=20261124z90';
-import * as SOULS_MOB_AI from './souls/soulsMobAi.js?v=20261124z90';
+} from './souls/soulsHitboxDamage.js?v=20261124z91';
+import * as SOULS_MOB_AI from './souls/soulsMobAi.js?v=20261124z91';
 import {
   initSoulsMobState,
   stepSoulsMobAi,
@@ -67,7 +67,7 @@ import {
   onSoulsMobInterrupted,
   resetSoulsPackCoordinator,
   releaseSoulsAttackToken
-} from './souls/soulsMobAi.js?v=20261124z90';
+} from './souls/soulsMobAi.js?v=20261124z91';
 import {
   SOULS_CASTLE_CONSTANTS,
   SOULS_CASTLE_BONFIRE,
@@ -86,32 +86,36 @@ import {
   canInteractWithBossDoor,
   findInteractableRelic,
   clampCastlePosition
-} from './souls/soulsCastleLayout.js?v=20261124z90';
+} from './souls/soulsCastleLayout.js?v=20261124z91';
 import {
   createDissolveAshSystem
-} from './souls/soulsDissolveVfx.js?v=20261124z90';
+} from './souls/soulsDissolveVfx.js?v=20261124z91';
 import {
   enhanceSoulsBossModel,
   updateSoulsBossVisuals,
   triggerSoulsBossHitFlash,
   disposeSoulsBossVisuals
-} from './souls/soulsBossVisuals.js?v=20261124z90';
+} from './souls/soulsBossVisuals.js?v=20261124z91';
 import {
   createSoulsGameFeel,
   getImpactSparkBurst
-} from './souls/soulsGameFeel.js?v=20261124z90';
+} from './souls/soulsGameFeel.js?v=20261124z91';
 import {
   BOSS_DOOR_CUTSCENE_DURATION,
   BOSS_DOOR_CUTSCENE_ACTS
-} from './souls/soulsCutsceneChoreography.js?v=20261124z90';
+} from './souls/soulsCutsceneChoreography.js?v=20261124z91';
+import {
+  BOSS_ESCAPE_CUTSCENE_DURATION,
+  BOSS_ESCAPE_ACTS
+} from './souls/soulsEscapeCutscene.js?v=20261124z91';
 import {
   resetActorPhysics,
   applyKnockbackImpulse,
   stepActorPhysicsBody
-} from './souls/soulsPhysicsFeel.js?v=20261124z90';
+} from './souls/soulsPhysicsFeel.js?v=20261124z91';
 import {
   createWeaponTrailSystem
-} from './souls/soulsWeaponTrails.js?v=20261124z90';
+} from './souls/soulsWeaponTrails.js?v=20261124z91';
 
 export function createCombatController({
   world,
@@ -277,7 +281,9 @@ export function createCombatController({
     if (!boss || !boss.isSoulsBoss) return false;
     return Boolean(
       souls.doorCutsceneActive ||
+      souls.escapeCutsceneActive ||
       world?.isBossDoorCutsceneActive?.() ||
+      world?.isBossEscapeCutsceneActive?.() ||
       boss.soulsThronePhase === 'sitting' ||
       boss.soulsThronePhase === 'pause' ||
       boss.soulsThronePhase === 'standing' ||
@@ -301,6 +307,16 @@ export function createCombatController({
   }
 
   function clampPlayerCastlePos(x, z, r, out) {
+    if (souls.zoneMode === 'exterior_shore' && typeof world?.clampSoulsPosition === 'function') {
+      const res = world.clampSoulsPosition(x, z, r);
+      if (out && typeof out === 'object') {
+        out.x = res.x;
+        out.z = res.z;
+        out.hitWall = Math.hypot(res.x - x, res.z - z) > 1e-4;
+        return out;
+      }
+      return res;
+    }
     return clampCastlePosition(x, z, r, {
       bossDoorState: world?.getBossDoorState?.() || 'closed',
       allowBossHall: Boolean(souls.bossAwakened || z < SOULS_CASTLE_CONSTANTS.BOSS_DOOR_Z - 0.5),
@@ -435,6 +451,12 @@ export function createCombatController({
       bossIntroPlayed: false,
       bossAwakened: false,
       bossDefeated: false,
+      bossEscaped: false,
+      escapedCastle: false,
+      zoneMode: 'castle',
+      shoreSwordPickedUp: false,
+      shoreBonfireLit: false,
+      shoreNoSwordHintCd: 0,
       zoneTitleRu: 'Зал Костра',
       activeAttack: null,
       justLandedTimer: 0,
@@ -449,6 +471,18 @@ export function createCombatController({
       activeRiposte: null,
       doorCutsceneActive: false,
       doorCutsceneTimer: 0,
+      escapeCutsceneActive: false,
+      escapeCutsceneLastVoiceCue: 0,
+      escapeCutsceneLastClashCue: 0,
+      escapeCutsceneLastDisarmCue: 0,
+      escapeCutsceneLastKnockdownCue: 0,
+      escapeCutsceneLastScootCue: 0,
+      escapeCutsceneLastSlowMoCue: 0,
+      escapeCutsceneLastFloorSmashCue: 0,
+      escapeCutsceneLastWaterSplashCue: 0,
+      escapeCutsceneLastGrateBreakCue: 0,
+      escapeCutsceneLastShoreWakeCue: 0,
+      escapeChasmWindActive: false,
       cutsceneLastVoiceCue: 0,
       cutsceneLastArmorCue: 0,
       cutsceneLastHeroStep: 0,
@@ -461,6 +495,11 @@ export function createCombatController({
       cutsceneSubtitleSpeaker: '',
       cutsceneSubtitleText: '',
       cutsceneShowBossTitleCard: false,
+      cutsceneShowLocationCard: false,
+      cutsceneLocationTitleRu: '',
+      cutsceneLocationSubtitleRu: '',
+      cutsceneFadeToBlack01: 0,
+      cutsceneUnderwater01: 0,
       cutsceneCanSkip: false,
       cutsceneBossTitleRu: BOSS_DOOR_CUTSCENE_ACTS.BOSS_TITLE_RU,
       cutsceneBossSubtitleRu: BOSS_DOOR_CUTSCENE_ACTS.BOSS_SUBTITLE_RU,
@@ -481,6 +520,30 @@ export function createCombatController({
   }
 
   let souls = makeInitialSoulsState();
+  let droppedSwordProp = null;
+
+  function ensureDroppedSwordProp() {
+    if (!droppedSwordProp && typeof models?.createDroppedSwordMesh === 'function') {
+      droppedSwordProp = models.createDroppedSwordMesh();
+      if (droppedSwordProp?.obj && world?.scene) {
+        world.scene.add(droppedSwordProp.obj);
+      }
+    }
+    return droppedSwordProp;
+  }
+
+  function hideDroppedSwordProp() {
+    if (droppedSwordProp?.obj) {
+      droppedSwordProp.obj.visible = false;
+    }
+  }
+
+  function disposeDroppedSwordProp() {
+    if (droppedSwordProp) {
+      droppedSwordProp.dispose?.();
+      droppedSwordProp = null;
+    }
+  }
 
   function syncSoulsStaminaMirror() {
     souls.stamina = soulsStaminaCtrl.getDisplayStamina();
@@ -493,10 +556,17 @@ export function createCombatController({
   function clearSoulsCutsceneUiMirror() {
     souls.doorCutsceneActive = false;
     souls.doorCutsceneTimer = 0;
+    souls.escapeCutsceneActive = false;
+    souls.escapeChasmWindActive = false;
     souls.cutsceneHeroWalkAnim = false;
     souls.cutsceneSubtitleSpeaker = '';
     souls.cutsceneSubtitleText = '';
     souls.cutsceneShowBossTitleCard = false;
+    souls.cutsceneShowLocationCard = false;
+    souls.cutsceneLocationTitleRu = '';
+    souls.cutsceneLocationSubtitleRu = '';
+    souls.cutsceneFadeToBlack01 = 0;
+    souls.cutsceneUnderwater01 = 0;
     souls.cutsceneCanSkip = false;
     souls.cutsceneLetterbox01 = 0;
   }
@@ -512,6 +582,9 @@ export function createCombatController({
     heroTrailRecording = false;
     heroModel?.handle?.cancelFlaskDrinkAnim?.();
     heroModel?.handle?.setDoorPushMode?.(false);
+    heroModel?.handle?.clearCutsceneClip?.(0);
+    heroModel?.handle?.setWeaponDisarmed?.(false, false);
+    hideDroppedSwordProp();
     soulsStaminaEmptyHintCd = 0;
     if (resetAll) {
       souls = makeInitialSoulsState();
@@ -621,8 +694,461 @@ export function createCombatController({
     }
   }
 
+  function clearAllCastleEnemiesForShore() {
+    clearTargetLock();
+    bossHazards.length = 0;
+    activeBurningZones.length = 0;
+    bomberHazards.length = 0;
+    for (let i = enemies.length - 1; i >= 0; i--) {
+      const e = enemies[i];
+      if (!e) continue;
+      if (e.isSoulsBoss) {
+        cancelSoulsBossTelegraph(e, elapsedRunTime);
+        if (e.model?.obj) disposeSoulsBossVisuals(e.model.obj);
+      }
+      if (e.model?.obj) {
+        removeSceneObject(e.model.obj, e.model.handle);
+      }
+    }
+    enemies.length = 0;
+    bossEntity = null;
+  }
+
+  function finishBossEscapeCutsceneToShore(skipped = false, opts = null) {
+    const withSword = Boolean(opts?.withSword);
+    const bonfireLit = Boolean(opts?.bonfireLit);
+
+    clearSoulsCutsceneUiMirror();
+    hideDroppedSwordProp();
+    soulsActionBuffer.clear();
+    souls.activeAttack = null;
+    souls.activeRiposte = null;
+    souls.canRiposte = false;
+    souls.riposteTarget = null;
+    souls.isBlocking = false;
+    souls.flaskDrinkTimer = 0;
+    souls.flaskHealTimer = 0;
+    souls.guardBreakTimer = 0;
+    meleeStepLunge = null;
+    pendingMeleeStrikes.length = 0;
+    player.dashTimer = 0;
+    player.hasHyperArmor = false;
+    player.moveVelX = 0;
+    player.moveVelZ = 0;
+    resetActorPhysics(player);
+    weaponTrails?.clearAll?.();
+    soulsGameFeel.setDoorRumble(0);
+    setModelBlocking(heroModel, false);
+    heroModel?.handle?.cancelFlaskDrinkAnim?.();
+    heroModel?.handle?.setDoorPushMode?.(false);
+    heroModel?.handle?.clearCutsceneClip?.(skipped ? 0.05 : 0.25);
+    heroModel?.handle?.setWeaponDisarmed?.(!withSword, false);
+
+    if (world?.isBossEscapeCutsceneActive?.()) {
+      world.skipBossEscapeCutscene(true);
+    }
+    world?.setSoulsZoneMode?.('exterior_shore');
+    world?.setShoreGrateBroken?.(true);
+    world?.setShoreSwordPickedUp?.(withSword);
+    world?.setShoreBonfireLit?.(bonfireLit);
+    world?.setBossAtmosphere?.(false);
+    world?.setSoulsFogGate?.(false);
+
+    clearAllCastleEnemiesForShore();
+
+    const anchors = world?.getExteriorShoreAnchors?.() || {};
+    const wakePos = anchors.wakePos || { x: 0, y: 0, z: 2.5 };
+    player.x = Number.isFinite(wakePos.x) ? wakePos.x : 0;
+    player.z = Number.isFinite(wakePos.z) ? wakePos.z : 2.5;
+    player.facing = Math.PI;
+    player.hp = player.maxHp;
+    souls.flasks = souls.flasksMax;
+    soulsStaminaCtrl.reset(SOULS_STAMINA_CFG.MAX_STAMINA);
+    syncSoulsStaminaMirror();
+
+    if (heroModel?.obj) {
+      const shoreGroundY = sampleSmoothGroundY(player, player.x, player.z, 0, true);
+      heroModel.obj.position.set(player.x, shoreGroundY, player.z);
+      heroModel.obj.rotation.set(0, player.facing, 0);
+    }
+
+    souls.zoneMode = 'exterior_shore';
+    souls.zoneTitleRu = 'Берег Пепельного Стока';
+    souls.bossIntroPlayed = true;
+    souls.bossAwakened = false;
+    souls.bossDefeated = true;
+    souls.bossEscaped = true;
+    souls.escapedCastle = true;
+    souls.shoreSwordPickedUp = withSword;
+    souls.shoreBonfireLit = bonfireLit;
+
+    audio?.stopEscapeVoice?.(0.08);
+    audio?.playChasmWindFall?.(false);
+    audio?.stopBossRoar?.(0.08);
+    audio?.setSoulsAmbientActive?.(false, { nearBonfire: false });
+    audio?.setExteriorShoreAmbient?.(true);
+    audio?.setMusicMode?.('off');
+
+    syncFollowTarget(player.x, player.z, heroModel?.obj, 0);
+    callbacks?.onEscapeCastleCompleted?.({
+      escapedCastle: true,
+      shoreSwordPickedUp: withSword,
+      shoreBonfireLit: bonfireLit
+    });
+    if (!withSword) {
+      floatText('БЕРЕГ ПЕПЕЛЬНОГО СТОКА • Подберите Меч Клятвы!', player.x, player.z - 1.2, '#e2e8f0');
+    }
+  }
+
+  function applyBossEscapeCutsceneState(escState, stepDt = 0.016, elapsed = 0, silentCues = false) {
+    if (!escState) return;
+    souls.zoneMode = escState.stageMode || 'castle';
+    souls.zoneTitleRu =
+      souls.zoneMode === 'exterior_shore'
+        ? 'Берег Пепельного Стока'
+        : souls.zoneMode === 'shaft_river'
+          ? 'Подземный Сток'
+          : 'Тронный Зал';
+    souls.cutsceneSubtitleSpeaker = escState.subtitleSpeaker || '';
+    souls.cutsceneSubtitleText = escState.subtitleText || '';
+    souls.cutsceneShowBossTitleCard = false;
+    souls.cutsceneShowLocationCard = Boolean(escState.showLocationCard);
+    souls.cutsceneLocationTitleRu = escState.locationTitleRu || 'БЕРЕГ ПЕПЕЛЬНОГО СТОКА';
+    souls.cutsceneLocationSubtitleRu = escState.locationSubtitleRu || 'ЗА СТЕНАМИ ЗАМКА ПЕПЛА';
+    souls.cutsceneCanSkip = Boolean(escState.canSkip);
+    souls.cutsceneLetterbox01 = Number(escState.letterbox01) || 0;
+    souls.cutsceneFadeToBlack01 = Number(escState.fadeToBlack01) || 0;
+    souls.cutsceneUnderwater01 = Number(escState.underwater01) || 0;
+
+    // 1. Hero Pose, Position (including vertical chasm fall Y!), Clip & Disarm
+    player.x = Number.isFinite(escState.heroX) ? escState.heroX : player.x;
+    player.z = Number.isFinite(escState.heroZ) ? escState.heroZ : player.z;
+    player.facing = Number.isFinite(escState.heroFacing) ? escState.heroFacing : player.facing;
+    player.moveVelX = 0;
+    player.moveVelZ = 0;
+    const heroY = Number.isFinite(escState.heroY) ? escState.heroY : 0;
+    player.visualGroundY = heroY;
+    if (heroModel?.obj) {
+      heroModel.obj.visible = true;
+      heroModel.obj.position.set(player.x, heroY, player.z);
+      heroModel.obj.rotation.set(0, player.facing, 0);
+    }
+    heroModel?.handle?.setWeaponDisarmed?.(Boolean(escState.swordDisarmed), Boolean(escState.shieldDisarmed));
+    const clipBlend = silentCues ? 0 : 0.16;
+    if (escState.heroAnimName) {
+      heroModel?.handle?.setCutsceneClipNormalized?.(escState.heroAnimName, escState.heroAnimU ?? 0, clipBlend);
+    }
+
+    // 2. Boss Pose, 30-FPS Lip-Sync & Enraged Warhammer Fire
+    const cutBoss = enemies.find((en) => en && en.isSoulsBoss);
+    if (cutBoss) {
+      bossEntity = cutBoss;
+      cutBoss.x = Number.isFinite(escState.bossX) ? escState.bossX : cutBoss.x;
+      cutBoss.z = Number.isFinite(escState.bossZ) ? escState.bossZ : cutBoss.z;
+      cutBoss.facing = Number.isFinite(escState.bossFacing) ? escState.bossFacing : 0;
+      cutBoss.vx = 0;
+      cutBoss.vz = 0;
+      const bossY = Number.isFinite(escState.bossY) ? escState.bossY : 0;
+      if (cutBoss.model?.obj) {
+        cutBoss.model.obj.visible = Boolean(escState.bossVisible);
+        cutBoss.model.obj.position.set(cutBoss.x, bossY, cutBoss.z);
+        cutBoss.model.obj.rotation.set(0, cutBoss.facing, 0);
+      }
+      cutBoss.model?.handle?.setBossMouthOpen?.(escState.bossMouthOpen01 || 0);
+      if (escState.bossVisible && escState.bossAnimName) {
+        cutBoss.model?.handle?.setCutsceneClipNormalized?.(escState.bossAnimName, escState.bossAnimU ?? 0, clipBlend);
+      }
+      if (cutBoss.model?.obj && escState.bossVisible) {
+        updateSoulsBossVisuals(cutBoss.model.obj, silentCues ? 0.45 : stepDt, {
+          phase2Enraged: Boolean(escState.bossEnragedFire),
+          isWindup: false,
+          isStaggered: false,
+          mouthOpen01: escState.bossMouthOpen01 || 0,
+          elapsed
+        });
+      }
+    }
+
+    // 3. Flying / Sliding / Falling 3D Oath Broadsword
+    const ds = escState.droppedSword;
+    if (ds && ds.visible) {
+      const swordProp = ensureDroppedSwordProp();
+      if (swordProp?.obj) {
+        swordProp.obj.visible = true;
+        swordProp.obj.position.set(ds.x || 0, ds.y || 0, ds.z || 0);
+        swordProp.obj.rotation.set(ds.rx || 0, ds.ry || 0, ds.rz || 0);
+      }
+    } else {
+      hideDroppedSwordProp();
+    }
+
+    if (silentCues) return;
+
+    // 4. Synchronized Escape Audio & VFX Cues (monotonic edge triggers)
+    const cues = escState.cues || {};
+    const vCue = Number(cues.voiceCue ?? escState.voiceCueIndex) || 0;
+    if (vCue > 0 && vCue !== souls.escapeCutsceneLastVoiceCue) {
+      souls.escapeCutsceneLastVoiceCue = vCue;
+      audio?.playEscapeVoiceLine?.(vCue);
+    }
+
+    const clCue = Number(cues.clashCue) || 0;
+    if (clCue > souls.escapeCutsceneLastClashCue) {
+      souls.escapeCutsceneLastClashCue = clCue;
+      audio?.playSwordParryClash?.(clCue === 1 ? 1.0 : 1.18);
+      world?.addScreenShake?.(clCue === 1 ? 0.34 : 0.42, 0.16);
+      const midX = (player.x + (cutBoss?.x ?? 0)) * 0.5;
+      const midZ = (player.z + (cutBoss?.z ?? player.z - 2)) * 0.5;
+      spawnSoulsClashSparks(midX, 1.38, midZ, 0, 0.55, 1, 'parry');
+      emitParticles(midX, 1.38, midZ, 0xfde047, 18, 6.2, 0.14);
+    }
+
+    const disCue = Number(cues.disarmCue) || 0;
+    if (disCue > souls.escapeCutsceneLastDisarmCue) {
+      souls.escapeCutsceneLastDisarmCue = disCue;
+      audio?.playSwordDisarmClatter?.();
+      world?.addScreenShake?.(0.30, 0.16);
+      spawnSoulsClashSparks(player.x + 0.35, 1.18, player.z - 0.3, 0.65, 0.45, 0.4, 'parry');
+      emitParticles(player.x + 0.35, 1.15, player.z - 0.3, 0xfef08a, 16, 5.4, 0.12);
+    }
+
+    const kdCue = Number(cues.knockdownCue) || 0;
+    if (kdCue > souls.escapeCutsceneLastKnockdownCue) {
+      souls.escapeCutsceneLastKnockdownCue = kdCue;
+      audio?.playHeroKnockdownThud?.();
+      world?.addScreenShake?.(0.45, 0.20);
+      emitParticles(player.x, 0.25, player.z, 0xd6d3d1, 16, 4.4, 0.14);
+      emitShockwave(player.x, player.z, 2.2, 0xf59e0b, 0.26);
+    }
+
+    const scCue = Number(cues.scootCue) || 0;
+    if (scCue > souls.escapeCutsceneLastScootCue) {
+      souls.escapeCutsceneLastScootCue = scCue;
+      audio?.playArmorScootScrape?.();
+      emitParticles(player.x, 0.08, player.z, 0xa8a29e, 5, 1.8, 0.09);
+    }
+
+    const smCue = Number(cues.slowMoCue) || 0;
+    if (smCue > souls.escapeCutsceneLastSlowMoCue) {
+      souls.escapeCutsceneLastSlowMoCue = smCue;
+      audio?.playSlowMoPulse?.();
+    }
+
+    const fsCue = Number(cues.floorSmashCue) || 0;
+    if (fsCue > souls.escapeCutsceneLastFloorSmashCue) {
+      souls.escapeCutsceneLastFloorSmashCue = fsCue;
+      audio?.playFloorCollapseSmash?.();
+      world?.addScreenShake?.(1.30, 0.45);
+      const hx = Number(escState.floorHoleX) || 0;
+      const hz = Number(escState.floorHoleZ) ?? SOULS_CASTLE_CONSTANTS.BOSS_CENTER_Z;
+      emitShockwave(hx, hz, 7.2, 0xf97316, 0.55);
+      emitParticles(hx, 0.35, hz, 0xf97316, 32, 8.6, 0.20);
+      emitParticles(hx, 0.25, hz, 0x78716c, 28, 7.2, 0.18);
+    }
+
+    const wantWind =
+      ((escState.stageMode === 'castle' && heroY < -1.5) ||
+        (escState.stageMode === 'shaft_river' && (Number(cues.waterSplashCue) || 0) === 0));
+    if (wantWind !== Boolean(souls.escapeChasmWindActive)) {
+      souls.escapeChasmWindActive = wantWind;
+      audio?.playChasmWindFall?.(wantWind);
+    }
+
+    const wsCue = Number(cues.waterSplashCue) || 0;
+    if (wsCue > souls.escapeCutsceneLastWaterSplashCue) {
+      souls.escapeCutsceneLastWaterSplashCue = wsCue;
+      souls.escapeChasmWindActive = false;
+      audio?.playChasmWindFall?.(false);
+      audio?.playRiverSplashUnderwater?.();
+      emitParticles(player.x, 0.35, player.z, 0xbae6fd, 28, 6.4, 0.16);
+      emitShockwave(player.x, player.z, 3.8, 0x7dd3fc, 0.40);
+    }
+
+    const gbCue = Number(cues.grateBreakCue) || 0;
+    if (gbCue > souls.escapeCutsceneLastGrateBreakCue) {
+      souls.escapeCutsceneLastGrateBreakCue = gbCue;
+      audio?.playIronGrateBreak?.();
+      world?.addScreenShake?.(0.55, 0.25);
+      emitParticles(player.x, 0.65, player.z + 0.8, 0xfef08a, 20, 6.2, 0.14);
+      emitParticles(player.x, 0.45, player.z + 0.8, 0xbae6fd, 22, 5.8, 0.15);
+    }
+
+    const swCue = Number(cues.shoreWakeCue) || 0;
+    if (swCue > souls.escapeCutsceneLastShoreWakeCue) {
+      souls.escapeCutsceneLastShoreWakeCue = swCue;
+      audio?.setSoulsAmbientActive?.(false, { nearBonfire: false });
+      audio?.setExteriorShoreAmbient?.(true);
+    }
+  }
+
+  function startBossEscapeCutscene(bossOverride = null) {
+    if (!isSoulslike || !runActive || runEnded || playerDying) return false;
+    if (souls.escapeCutsceneActive) return true;
+
+    let cutBoss = bossOverride || enemies.find((en) => en && en.isSoulsBoss);
+    if (!cutBoss) {
+      // Allow replaying the escape cutscene cleanly even from the Exterior Shore!
+      world?.setSoulsZoneMode?.('castle');
+      world?.sealBossDoors?.();
+      world?.setSoulsFogGate?.(true);
+      cutBoss = spawnEnemy('boss_warden', 0, SOULS_CASTLE_CONSTANTS.BOSS_CENTER_Z - 2.0, null, {
+        nameRu: 'Рыцарь Пепла — Судия Руин',
+        hp: 1175,
+        damage: 38,
+        speed: 2.95,
+        xp: 220,
+        gold: 250,
+        scale: 4.0,
+        radius: 1.75,
+        noEmerge: true,
+        ignoreSpawnObstacles: true,
+        isFinaleTarget: true,
+        isSoulsUnit: true,
+        isSoulsBoss: true,
+        soulsThronePhase: 'done',
+        staggerMax: SOULS_BOSS_MULTI_PARRY.staggerMax,
+        flatDef: 22,
+        physNegation: 0.10,
+        aggroRange: 0
+      });
+      if (cutBoss?.model?.obj) {
+        enhanceSoulsBossModel(cutBoss.model.obj);
+      }
+    }
+
+    if (cutBoss) {
+      cutBoss.hp = Math.max(1, cutBoss.hp);
+      cutBoss._deadHandled = false;
+      cutBoss.soulsThronePhase = 'done';
+      cutBoss.soulsAwake = true;
+      cutBoss.soulsState = 'cutscene';
+      cutBoss.soulsActiveAttack = null;
+      cutBoss._soulsActiveSwing = null;
+      cutBoss.currentAttackMeta = null;
+      cutBoss.staggeredTimer = 0;
+      cutBoss.parriedRiposteTimer = 0;
+      cancelSoulsBossTelegraph(cutBoss, elapsedRunTime);
+      // Immediately clear any lingering hit-react/override & white hit-flash material so Boss renders in full dark Gothic iron PBR!
+      cutBoss.model?.handle?.cancelHitReact?.();
+      cutBoss.model?.handle?.setClipOverride?.(null);
+      cutBoss.model?.handle?.update?.(0.30, false, 0, elapsedRunTime);
+      if (cutBoss.model?.obj) {
+        updateSoulsBossVisuals(cutBoss.model.obj, 0.50, {
+          phase2Enraged: false,
+          isWindup: false,
+          isStaggered: false,
+          mouthOpen01: 0,
+          elapsed: elapsedRunTime
+        });
+      }
+      bossEntity = cutBoss;
+    }
+
+    clearTargetLock();
+    bossHazards.length = 0;
+    activeBurningZones.length = 0;
+    bomberHazards.length = 0;
+    pendingMeleeStrikes.length = 0;
+    meleeStepLunge = null;
+    souls.activeAttack = null;
+    souls.activeRiposte = null;
+    souls.canRiposte = false;
+    souls.riposteTarget = null;
+    souls.isBlocking = false;
+    souls.flaskDrinkTimer = 0;
+    souls.flaskHealTimer = 0;
+    souls.guardBreakTimer = 0;
+    souls.doorCutsceneActive = false;
+    souls.bossEscaped = false;
+    souls.bossDefeated = false;
+    souls.escapeCutsceneActive = true;
+    souls.escapeCutsceneLastVoiceCue = 0;
+    souls.escapeCutsceneLastClashCue = 0;
+    souls.escapeCutsceneLastDisarmCue = 0;
+    souls.escapeCutsceneLastKnockdownCue = 0;
+    souls.escapeCutsceneLastScootCue = 0;
+    souls.escapeCutsceneLastSlowMoCue = 0;
+    souls.escapeCutsceneLastFloorSmashCue = 0;
+    souls.escapeCutsceneLastWaterSplashCue = 0;
+    souls.escapeCutsceneLastGrateBreakCue = 0;
+    souls.escapeCutsceneLastShoreWakeCue = 0;
+    souls.escapeChasmWindActive = false;
+    souls.canInteract = false;
+    souls.canOpenBossDoors = false;
+    soulsActionBuffer.clear();
+
+    player.dashTimer = 0;
+    player.hasHyperArmor = false;
+    player.moveVelX = 0;
+    player.moveVelZ = 0;
+    resetActorPhysics(player);
+    cancelPlayerTurn180(0.5);
+    setModelBlocking(heroModel, false);
+    heroModel?.handle?.cancelFlaskDrinkAnim?.();
+    heroModel?.handle?.setDoorPushMode?.(false);
+    heroModel?.handle?.setWeaponDisarmed?.(false, false);
+    weaponTrails?.clearAll?.();
+    hitStopTimer = 0;
+
+    // Hide any remaining corridor mobs during escape sequence
+    for (let i = 0; i < enemies.length; i++) {
+      const e = enemies[i];
+      if (e && !e.isSoulsBoss && e.model?.obj) {
+        e.model.obj.visible = false;
+      }
+    }
+
+    audio?.stopBossRoar?.(0.08);
+    audio?.stopBossIntroVoice?.(0.08);
+    audio?.stopEscapeAudio?.(0.08);
+    audio?.setExteriorShoreAmbient?.(false);
+    audio?.setSoulsAmbientActive?.(true, { nearBonfire: false });
+    audio?.setMusicMode?.('combat');
+
+    const anchorX = Number.isFinite(cutBoss?.x) ? cutBoss.x : 0;
+    const anchorZ = Number.isFinite(cutBoss?.z) ? cutBoss.z : SOULS_CASTLE_CONSTANTS.BOSS_CENTER_Z;
+    const initState = world?.startBossEscapeCutscene?.(anchorX, anchorZ);
+    if (initState) {
+      applyBossEscapeCutsceneState(initState, 0.016, elapsedRunTime, true);
+    }
+    return Boolean(initState);
+  }
+
+  function skipBossEscapeCutscene(force = false) {
+    if (!isSoulslike || !runActive || runEnded || playerDying) return false;
+    if (!souls.escapeCutsceneActive && !world?.isBossEscapeCutsceneActive?.()) return false;
+    const skipRes = world?.skipBossEscapeCutscene?.(force);
+    if (!skipRes && !force && !souls.cutsceneCanSkip) {
+      return false;
+    }
+    audio?.stopEscapeVoice?.(0.08);
+    audio?.playChasmWindFall?.(false);
+    finishBossEscapeCutsceneToShore(true);
+    return true;
+  }
+
+  function seekBossEscapeCutscene(tSec = 0) {
+    if (!souls.escapeCutsceneActive && !world?.isBossEscapeCutsceneActive?.()) {
+      startBossEscapeCutscene();
+    }
+    const st = world?.seekBossEscapeCutscene?.(tSec);
+    if (st) {
+      applyBossEscapeCutsceneState(st, 0.016, elapsedRunTime, true);
+    }
+    return st;
+  }
+
+  function teleportToExteriorShore(opts = {}) {
+    if (!isSoulslike || !runActive) return false;
+    finishBossEscapeCutsceneToShore(true, opts);
+    return true;
+  }
+
   function skipBossDoorCutscene(force = false) {
     if (!isSoulslike || !runActive || runEnded || playerDying) return false;
+    if (souls.escapeCutsceneActive || world?.isBossEscapeCutsceneActive?.()) {
+      return skipBossEscapeCutscene(force);
+    }
     if (!souls.doorCutsceneActive && !world?.isBossDoorCutsceneActive?.()) return false;
     const skipRes = world?.skipBossDoorCutscene?.(force, {
       x: 0,
@@ -639,8 +1165,12 @@ export function createCombatController({
 
   if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
     window.addEventListener('grimborne-skip-cutscene', () => {
-      if (isSoulslike && runActive && !runEnded && !playerDying && (souls.doorCutsceneActive || world?.isBossDoorCutsceneActive?.())) {
-        skipBossDoorCutscene(false);
+      if (isSoulslike && runActive && !runEnded && !playerDying) {
+        if (souls.escapeCutsceneActive || world?.isBossEscapeCutsceneActive?.()) {
+          skipBossEscapeCutscene(false);
+        } else if (souls.doorCutsceneActive || world?.isBossDoorCutsceneActive?.()) {
+          skipBossDoorCutscene(false);
+        }
       }
     });
   }
@@ -1036,8 +1566,11 @@ export function createCombatController({
     audio?.stopBossRoar?.(0.08);
     audio?.stopCinematicBossDoorSequence?.(0.08);
     audio?.stopBossIntroVoice?.(0.08);
+    audio?.stopEscapeAudio?.(0.08);
     audio?.updateSoulsSpatial?.(0, 0, 0, false, false, 0);
     audio?.setSoulsAmbientActive?.(false, { nearBonfire: false });
+    disposeDroppedSwordProp();
+    world?.setSoulsZoneMode?.('castle');
     isEndless = false;
     endlessWave = 1;
     endlessBossTimer = 45.0;
@@ -1076,6 +1609,9 @@ export function createCombatController({
     difficultyMode,
     endless = false,
     startAtBossArena = false,
+    startAtExteriorShore = false,
+    restoreShoreSword = false,
+    restoreShoreBonfire = false,
     resetCheckpoint = false,
     restoreBonfireCheckpoint = false
   } = {}) {
@@ -1271,7 +1807,21 @@ export function createCombatController({
       resetSoulsPackCoordinator();
       resetActorPhysics(player);
       const bossRematch = Boolean(startAtBossArena);
-      if (bossRematch) {
+      if (startAtExteriorShore) {
+        resetSoulsControllers(true);
+        player.hp = player.maxHp;
+        souls.flasks = souls.flasksMax;
+        playerDying = false;
+        deathModalDelay = 0;
+        pendingDefeatPayload = null;
+        poiseCtrl.resetEntityPoise(player, { isPlayer: true });
+        heroModel?.handle?.setDeadState?.(false);
+        heroModel?.obj?.userData?.setDeadState?.(false);
+        finishBossEscapeCutsceneToShore(true, {
+          withSword: Boolean(restoreShoreSword),
+          bonfireLit: Boolean(restoreShoreBonfire)
+        });
+      } else if (bossRematch) {
         // Stake of Marika — Instant 1v1 Boss Arena Rematch (skip corridor mobs & Intro Cutscene!)
         player.x = 0;
         player.z = SOULS_CASTLE_CONSTANTS.BOSS_HERO_ENTRY_Z;
@@ -3095,7 +3645,10 @@ export function createCombatController({
       enemy.vz += kz * resistMult;
     }
 
-    if (!isDoT) {
+    const willTriggerBossEscape = Boolean(
+      isSoulslike && enemy.isSoulsBoss && enemy.hp <= 0 && !souls.escapeCutsceneActive && !souls.bossEscaped
+    );
+    if (!isDoT && !willTriggerBossEscape) {
       triggerModelHitFlash(enemy.model);
       if (enemy.isSoulsBoss && enemy.model?.obj) {
         triggerSoulsBossHitFlash(enemy.model.obj, Boolean(hitMeta?.isHeavy || isComboFinisher) ? 1.15 : 0.86);
@@ -3537,6 +4090,12 @@ export function createCombatController({
     if (enemy.isTrainingDummy) {
       if (enemy.hp < enemy.maxHp * 0.25) enemy.hp = enemy.maxHp;
     } else if (enemy.hp <= 0) {
+      if (isSoulslike && enemy.isSoulsBoss && !souls.escapeCutsceneActive && !souls.bossEscaped) {
+        enemy.hp = 1;
+        enemy._deadHandled = false;
+        startBossEscapeCutscene(enemy);
+        return;
+      }
       handleEnemyDeath(enemy);
     }
   }
@@ -3593,6 +4152,12 @@ export function createCombatController({
   }
 
   function handleEnemyDeath(enemy) {
+    if (isSoulslike && enemy?.isSoulsBoss && !souls.escapeCutsceneActive && !souls.bossEscaped) {
+      enemy.hp = 1;
+      enemy._deadHandled = false;
+      startBossEscapeCutscene(enemy);
+      return;
+    }
     if (enemy._deadHandled) return;
     enemy._deadHandled = true;
 
@@ -5247,6 +5812,14 @@ export function createCombatController({
 
     // Chapter 26 Elden Ring TAE Attack Pipeline (strictly `isSoulslike === true` & melee!)
     if (isSoulslike && wpn.type === 'melee') {
+      if (souls.zoneMode === 'exterior_shore' && !souls.shoreSwordPickedUp) {
+        if ((souls.shoreNoSwordHintCd || 0) <= 0) {
+          souls.shoreNoSwordHintCd = 1.25;
+          floatText('Подберите Меч Клятвы!', player.x, player.z - 0.7, '#fde68a');
+          callbacks?.onToast?.('Сначала подберите Меч Клятвы на берегу!');
+        }
+        return false;
+      }
       if (souls.guardBreakTimer > 0 || souls.flaskDrinkTimer > 0) return false;
 
       let attackKey = attackOpts?.attackKey || null;
@@ -6355,8 +6928,18 @@ export function createCombatController({
     let speedRatio = Math.min(1, moveMag);
 
     let soulsDoorCutsceneActive = false;
+    let soulsEscapeCutsceneActive = false;
     if (isSoulslike) {
-      if (souls.doorCutsceneActive) {
+      if (souls.escapeCutsceneActive) {
+        const escState = world?.getBossEscapeCutsceneState?.() || null;
+        if (!escState || escState.finished) {
+          finishBossEscapeCutsceneToShore(false);
+          soulsEscapeCutsceneActive = false;
+        } else {
+          soulsEscapeCutsceneActive = true;
+          applyBossEscapeCutsceneState(escState, frameDt, elapsedTime, false);
+        }
+      } else if (souls.doorCutsceneActive) {
         souls.doorCutsceneTimer = Math.max(0, (souls.doorCutsceneTimer || 0) - frameDt);
         const cutState = world?.getBossDoorCutsceneState?.() || null;
         if (!cutState || cutState.finished || souls.doorCutsceneTimer <= 0) {
@@ -6477,6 +7060,9 @@ export function createCombatController({
       } else {
         soulsDoorCutsceneActive = Boolean(world?.isBossDoorCutsceneActive?.());
       }
+      if (soulsEscapeCutsceneActive) {
+        soulsDoorCutsceneActive = true;
+      }
       if (soulsDoorCutsceneActive) {
         mx = 0;
         mz = 0;
@@ -6486,7 +7072,7 @@ export function createCombatController({
     }
 
     const liveCamYaw = world?.getCombatOrbitYaw?.() ?? input?.cameraYaw ?? 0;
-    if (isSoulslike) {
+    if (isSoulslike && !soulsEscapeCutsceneActive && souls.zoneMode === 'castle') {
       audio?.updateSoulsSpatial?.(
         player.x,
         player.z,
@@ -6614,29 +7200,45 @@ export function createCombatController({
       if (souls.guardCounterTimer > 0) souls.guardCounterTimer = Math.max(0, souls.guardCounterTimer - dt);
       if (souls.bonfireHealCooldown > 0) souls.bonfireHealCooldown = Math.max(0, souls.bonfireHealCooldown - dt);
       if (souls.bonfireRestTimer > 0) souls.bonfireRestTimer = Math.max(0, souls.bonfireRestTimer - dt);
+      if (souls.shoreNoSwordHintCd > 0) souls.shoreNoSwordHintCd = Math.max(0, souls.shoreNoSwordHintCd - dt);
       if (souls.justLandedTimer > 0) souls.justLandedTimer = Math.max(0, souls.justLandedTimer - dt);
       if (souls.recoilVisual > 0) souls.recoilVisual = Math.max(0, souls.recoilVisual - dt * 3.8);
 
-      // Update current 6-zone non-linear Dark Souls castle room title
-      const curRoom = getCastleRoomAt(player.x, player.z);
-      if (curRoom && curRoom.labelRu) {
-        souls.zoneTitleRu = curRoom.labelRu;
-      } else if (player.z < SOULS_CASTLE_CONSTANTS.BOSS_DOOR_Z) {
-        souls.zoneTitleRu = 'Тронный Зал';
-      } else {
-        souls.zoneTitleRu = 'Замок Пепла';
-      }
+      const isExteriorShoreNow = souls.zoneMode === 'exterior_shore';
+      let bf = world?.getSoulsBonfirePos?.() || SOULS_CASTLE_BONFIRE;
+      let distToBonfire = 999;
+      let nearBonfireNow = false;
 
-      const bf = world?.getSoulsBonfirePos?.() || SOULS_CASTLE_BONFIRE;
-      const distToBonfire = Math.hypot(player.x - bf.x, player.z - bf.z);
-      const nearBonfireNow = (!souls.bossAwakened || souls.bossDefeated) && (isInBonfireSafeZone(player.x, player.z, 1.0) || distToBonfire <= 10.5);
-      audio?.setSoulsAmbientActive?.(true, { nearBonfire: nearBonfireNow });
+      if (isExteriorShoreNow) {
+        souls.zoneTitleRu = 'Берег Пепельного Стока';
+        const shoreAnchors = world?.getExteriorShoreAnchors?.() || {};
+        bf = shoreAnchors.bonfirePos || { x: -2.2, y: 0.2, z: 15.0 };
+        distToBonfire = Math.hypot(player.x - bf.x, player.z - bf.z);
+        nearBonfireNow = distToBonfire <= 5.5;
+        if (!soulsEscapeCutsceneActive) {
+          audio?.setExteriorShoreAmbient?.(true);
+        }
+      } else if (!soulsEscapeCutsceneActive) {
+        // Update current 6-zone non-linear Dark Souls castle room title
+        const curRoom = getCastleRoomAt(player.x, player.z);
+        if (curRoom && curRoom.labelRu) {
+          souls.zoneTitleRu = curRoom.labelRu;
+        } else if (player.z < SOULS_CASTLE_CONSTANTS.BOSS_DOOR_Z) {
+          souls.zoneTitleRu = 'Тронный Зал';
+        } else {
+          souls.zoneTitleRu = 'Замок Пепла';
+        }
+
+        distToBonfire = Math.hypot(player.x - bf.x, player.z - bf.z);
+        nearBonfireNow = (!souls.bossAwakened || souls.bossDefeated) && (isInBonfireSafeZone(player.x, player.z, 1.0) || distToBonfire <= 10.5);
+        audio?.setSoulsAmbientActive?.(true, { nearBonfire: nearBonfireNow });
+      }
 
       // Timed Wall Flame Jet Traps (#8, #449 — harder 5-gargoyle Fire Gauntlet) & East Alcove Flank Ambush (#9)
       if (souls.flameTrapHitCd > 0) {
         souls.flameTrapHitCd = Math.max(0, souls.flameTrapHitCd - dt);
       }
-      if (!soulsDoorCutsceneActive && !souls.activeRiposte) {
+      if (!isExteriorShoreNow && !soulsDoorCutsceneActive && !souls.activeRiposte) {
         if (
           souls.flameTrapHitCd <= 0 &&
           player.invulnTimer <= 0 &&
@@ -6851,8 +7453,8 @@ export function createCombatController({
         souls.riposteTarget = null;
       }
 
-      // Rest near Bonfire (0, 25): restore HP & refill Estus Flasks (available before boss duel or after boss is defeated!)
-      if (!souls.bossAwakened || souls.bossDefeated) {
+      // Rest near Castle Bonfire (0, 25): restore HP & refill Estus Flasks (skip on Exterior Shore — Shore Bonfire uses [E]!)
+      if (!isExteriorShoreNow && (!souls.bossAwakened || souls.bossDefeated)) {
         if (distToBonfire <= 2.9 && souls.bonfireHealCooldown <= 0) {
           if (player.hp < stats.maxHp || souls.flasks < souls.flasksMax) {
             player.hp = stats.maxHp;
@@ -6871,6 +7473,85 @@ export function createCombatController({
         }
       }
 
+      const rawInteractIn = Boolean(input?.interact);
+      if (isExteriorShoreNow) {
+        // Exterior River Shore («Берег Пепельного Стока») Interactive Landmarks:
+        //   1. Fallen Oath Broadsword (`swordPos`) -> [E] Подобрать Меч Клятвы
+        //   2. Shore Bonfire (`bonfirePos`) -> [E] Зажечь Костёр Берега / Отдохнуть
+        //   3. Ash Gorge Gate (`gatePos`) -> [E] Пепельное Ущелье (Глава II)
+        const shoreAnchors = world?.getExteriorShoreAnchors?.() || {};
+        const swordAnchor = shoreAnchors.swordPos || { x: 2.8, y: 0.08, z: 5.2 };
+        const bonfireAnchor = shoreAnchors.bonfirePos || { x: -2.2, y: 0.21, z: 15.0 };
+        const gateAnchor = shoreAnchors.gatePos || { x: 0.0, y: 0.56, z: 31.0 };
+
+        const distSword = Math.hypot(player.x - swordAnchor.x, player.z - swordAnchor.z);
+        const distShoreBf = Math.hypot(player.x - bonfireAnchor.x, player.z - bonfireAnchor.z);
+        const distGate = Math.hypot(player.x - gateAnchor.x, player.z - gateAnchor.z);
+
+        const nearShoreSword = !soulsDoorCutsceneActive && !souls.shoreSwordPickedUp && distSword <= 2.75;
+        const nearShoreBonfire = !soulsDoorCutsceneActive && !nearShoreSword && distShoreBf <= 2.95;
+        const nearShoreGate = !soulsDoorCutsceneActive && !nearShoreSword && !nearShoreBonfire && distGate <= 3.55;
+
+        souls.canRestAtBonfire = Boolean(nearShoreBonfire);
+        souls.canInteract = Boolean(nearShoreSword || nearShoreBonfire || nearShoreGate);
+        souls.canOpenBossDoors = souls.canInteract;
+        const shoreLabel = nearShoreSword
+          ? 'Подобрать Меч Клятвы'
+          : nearShoreBonfire
+            ? (souls.shoreBonfireLit ? 'Отдохнуть у Костра Берега' : 'Зажечь Костёр Берега')
+            : nearShoreGate
+              ? 'Пепельное Ущелье (Глава II)'
+              : 'Открыть врата';
+        souls.interactLabel = shoreLabel;
+        souls.interactPromptRu = shoreLabel;
+
+        if (rawInteractIn && !souls.prevInteractInput && !soulsDoorCutsceneActive && !souls.activeRiposte) {
+          if (nearShoreSword) {
+            souls.shoreSwordPickedUp = true;
+            world?.setShoreSwordPickedUp?.(true);
+            heroModel?.handle?.setWeaponDisarmed?.(false, false);
+            audio?.playSwordPickupChime?.();
+            world?.addScreenShake?.(0.24, 0.16);
+            emitShockwave(swordAnchor.x, swordAnchor.z, 3.6, 0xfde047, 0.45);
+            emitParticles(swordAnchor.x, (swordAnchor.y || 0) + 0.85, swordAnchor.z, 0xfde047, 26, 6.2, 0.15);
+            emitParticles(player.x, 1.0, player.z, 0xfef08a, 16, 4.8, 0.13);
+            floatText('⚔️ МЕЧ КЛЯТВЫ ВОЗВРАЩЁН!', player.x, player.z - 0.9, '#fde047');
+            callbacks?.onSoulsCue?.('МЕЧ КЛЯТВЫ ВОЗВРАЩЁН', 'guard_counter');
+            callbacks?.onShoreSwordPickedUp?.();
+          } else if (nearShoreBonfire) {
+            souls.shoreBonfireLit = true;
+            souls.escapedCastle = true;
+            souls.bonfireCheckpointLit = true;
+            souls.flasksMax = Math.max(4, souls.flasksMax || 4);
+            souls.flasks = souls.flasksMax;
+            player.hp = stats.maxHp;
+            soulsStaminaCtrl.reset(SOULS_STAMINA_CFG.MAX_STAMINA);
+            syncSoulsStaminaMirror();
+            souls.bonfireHealCooldown = 3.5;
+            souls.bonfireRestTimer = 4.5;
+            world?.setShoreBonfireLit?.(true);
+            audio?.playPickup?.('heart');
+            audio?.playFlaskDrink?.();
+            emitShockwave(bonfireAnchor.x, bonfireAnchor.z, 5.2, 0xfbbf24, 0.55);
+            emitParticles(bonfireAnchor.x, (bonfireAnchor.y || 0) + 0.95, bonfireAnchor.z, 0xfde047, 28, 6.4, 0.16);
+            emitParticles(player.x, 1.0, player.z, 0xf59e0b, 18, 4.8, 0.14);
+            floatText(`🔥 КОСТЁР БЕРЕГА ЗАЖЖЁН • ЧЕКПОИНТ СОХРАНЁН • ${souls.flasks}/${souls.flasksMax} ФЛЯГ`, player.x, player.z - 0.9, '#fde047');
+            callbacks?.onSoulsCue?.('КОСТЁР БЕРЕГА ЗАЖЖЁН', 'guard_counter');
+            callbacks?.onShoreBonfireLit?.({
+              escapedCastle: true,
+              shoreBonfireLit: true,
+              shoreSwordPickedUp: Boolean(souls.shoreSwordPickedUp)
+            });
+          } else if (nearShoreGate) {
+            callbacks?.onShorePrologueGateInteract?.({
+              escapedCastle: true,
+              shoreSwordPickedUp: Boolean(souls.shoreSwordPickedUp),
+              shoreBonfireLit: Boolean(souls.shoreBonfireLit)
+            });
+          }
+        }
+        souls.prevInteractInput = rawInteractIn;
+      } else {
       // Monumental Twin Boss Doors ([E]) + Pre-Boss Checkpoint Bonfire ([E]) + East Alcove Relic Shrine ([E])
       if (souls.bossDoorExitingHall) {
         if (player.z >= SOULS_CASTLE_CONSTANTS.BOSS_DOOR_Z + 1.0) {
@@ -6899,7 +7580,6 @@ export function createCombatController({
       souls.interactLabel = activeInteractLabel;
       souls.interactPromptRu = activeInteractLabel;
 
-      const rawInteractIn = Boolean(input?.interact);
       if (rawInteractIn && !souls.prevInteractInput && !soulsDoorCutsceneActive && !souls.activeRiposte) {
         if (nearDoor) {
           const isInsideReopen = doorState === 'sealed' || player.z < SOULS_CASTLE_CONSTANTS.BOSS_DOOR_Z - 0.5;
@@ -7066,6 +7746,7 @@ export function createCombatController({
       // Skipped while the narrative intro cutscene owns boss awakening & door closure,
       // while the player is exiting through re-opened doors, or after Boss victory.
       if (
+        !isExteriorShoreNow &&
         !souls.bossAwakened &&
         !souls.bossDefeated &&
         !souls.bossDoorExitingHall &&
@@ -7103,6 +7784,7 @@ export function createCombatController({
           }
         }
       }
+      } // end castle vs exterior_shore interact branch
 
       // 1-Slot Smart Input Buffer capture (rising-edge + guaranteed discrete touch tap counter; heavy attack disabled)
       const soulsLockControls = soulsDoorCutsceneActive || Boolean(souls.activeRiposte);
@@ -8046,7 +8728,9 @@ export function createCombatController({
     );
 
     const targetFacing =
-      soulsDoorCutsceneActive
+      soulsEscapeCutsceneActive
+        ? null
+        : soulsDoorCutsceneActive
         ? Math.PI
         : isSoulslike && isDashingNow
         ? Math.atan2(player.dashDirX || 0, player.dashDirZ || 1)
@@ -8084,6 +8768,10 @@ export function createCombatController({
     }
 
     if (heroModel?.obj) {
+      if (soulsEscapeCutsceneActive) {
+        // Hero X/Y/Z, facing, disarm & clip scrub are driven directly by applyBossEscapeCutsceneState()!
+        animateEntityModel(heroModel, frameDt, false, 0, false, false, elapsedTime, 0, 1, false);
+      } else {
       const heroGroundY = sampleSmoothGroundY(player, player.x, player.z, frameDt, soulsDoorCutsceneActive);
       const actualMoveSpeed = Math.hypot(player.moveVelX || 0, player.moveVelZ || 0);
       heroModel.obj.position.x = player.x;
@@ -8192,6 +8880,7 @@ export function createCombatController({
           player.turn180Delta = 0;
         }
       }
+      } // end !soulsEscapeCutsceneActive heroModel block
     }
 
     const emitHeroFootstep = (stepParity) => {
@@ -9187,6 +9876,15 @@ export function createCombatController({
 
       // Chapter 26 Dark Souls / Elden Ring Handcrafted Deliberate Enemy & Boss AI
       if (e.isSoulsUnit) {
+        if (e.isSoulsBoss && soulsEscapeCutsceneActive) {
+          // 32.5s Boss Escape Cutscene: step handle.update(frameDt) so hit-flash decays & cutscene cross-fade advances cleanly!
+          e.vx = 0;
+          e.vz = 0;
+          if (e.model?.obj && e.model.obj.visible) {
+            animateEntityModel(e.model, frameDt, false, 0, false, false, elapsedTime);
+          }
+          continue;
+        }
         // Active 43.20s First-Boss Narrative Intro Cutscene: boss pose & Z are driven strictly by `soulsCutsceneChoreography.js`!
         if (e.isSoulsBoss && soulsDoorCutsceneActive) {
           e.vx = 0;
@@ -10308,11 +11006,13 @@ export function createCombatController({
       phaseText: freeRoamMode
         ? '🎯 Тренировочный полигон • Бей по мишени'
         : isSoulslike
-          ? souls.bossDefeated
-            ? 'Локация зачищена • [Esc] Меню'
-            : souls.bossAwakened
-              ? 'СУДИЯ РУИН'
-              : (souls.zoneTitleRu === 'Тронный Зал' ? 'Тронный Зал' : 'Иди на север')
+          ? souls.zoneMode === 'exterior_shore'
+            ? (souls.shoreSwordPickedUp ? 'Иди к Вратам Пепельного Ущелья' : 'Подбери Меч Клятвы')
+            : souls.bossDefeated
+              ? 'Локация зачищена • [Esc] Меню'
+              : souls.bossAwakened
+                ? 'СУДИЯ РУИН'
+                : (souls.zoneTitleRu === 'Тронный Зал' ? 'Тронный Зал' : 'Иди на север')
           : isEndless
             ? `♾️ Волна ${endlessWave} • ${endlessMm}:${endlessSs} • ☠️ ${kills}`
             : finaleStarted
@@ -10329,8 +11029,8 @@ export function createCombatController({
       hasCompanion: Boolean(companion),
       timeLeft: +Math.max(0, timeLeft).toFixed(1),
       levelNumber: currentLevelNumber,
-      levelNameRu: freeRoamMode ? 'Тренировочный полигон' : currentLevelDef.nameRu,
-      boss: activeBoss
+      levelNameRu: freeRoamMode ? 'Тренировочный полигон' : (isSoulslike && souls.zoneMode === 'exterior_shore' ? 'Берег Пепельного Стока' : currentLevelDef.nameRu),
+      boss: activeBoss && !(isSoulslike && (souls.escapeCutsceneActive || souls.bossEscaped || souls.zoneMode === 'exterior_shore'))
         ? {
             nameRu: aliveFinaleCount > 1 ? `${activeBoss.nameRu} (+${aliveFinaleCount - 1})` : activeBoss.nameRu,
             hp: Math.max(0, Math.ceil(activeBoss.hp)),
@@ -10374,8 +11074,13 @@ export function createCombatController({
             mobileAutoFlaskEnabled: Boolean(mobileAutoFlaskEnabled),
             mobileSmartLockEnabled: Boolean(mobileSmartLockEnabled),
             zoneTitleRu: souls.zoneTitleRu,
+            zoneMode: souls.zoneMode || 'castle',
             bossAwakened: Boolean(souls.bossAwakened),
             bossDefeated: Boolean(souls.bossDefeated),
+            bossEscaped: Boolean(souls.bossEscaped),
+            escapedCastle: Boolean(souls.escapedCastle),
+            shoreSwordPickedUp: Boolean(souls.shoreSwordPickedUp),
+            shoreBonfireLit: Boolean(souls.shoreBonfireLit),
             canOpenBossDoors: Boolean(souls.canOpenBossDoors),
             canRestAtBonfire: Boolean(souls.canRestAtBonfire),
             canInteract: Boolean(souls.canInteract || souls.canOpenBossDoors),
@@ -10383,13 +11088,19 @@ export function createCombatController({
             interactLabel: souls.interactLabel || 'Открыть врата',
             interactPromptRu: souls.interactPromptRu || souls.interactLabel || 'Открыть врата',
             doorCutsceneActive: Boolean(souls.doorCutsceneActive || world?.isBossDoorCutsceneActive?.()),
-            subtitleSpeaker: souls.doorCutsceneActive ? (souls.cutsceneSubtitleSpeaker || '') : '',
-            subtitleText: souls.doorCutsceneActive ? (souls.cutsceneSubtitleText || '') : '',
+            escapeCutsceneActive: Boolean(souls.escapeCutsceneActive || world?.isBossEscapeCutsceneActive?.()),
+            subtitleSpeaker: (souls.doorCutsceneActive || souls.escapeCutsceneActive) ? (souls.cutsceneSubtitleSpeaker || '') : '',
+            subtitleText: (souls.doorCutsceneActive || souls.escapeCutsceneActive) ? (souls.cutsceneSubtitleText || '') : '',
             showBossTitleCard: Boolean(souls.doorCutsceneActive && souls.cutsceneShowBossTitleCard),
-            canSkip: Boolean(souls.doorCutsceneActive && souls.cutsceneCanSkip),
+            showLocationCard: Boolean(souls.escapeCutsceneActive && souls.cutsceneShowLocationCard),
+            locationTitleRu: souls.cutsceneLocationTitleRu || 'БЕРЕГ ПЕПЕЛЬНОГО СТОКА',
+            locationSubtitleRu: souls.cutsceneLocationSubtitleRu || 'ЗА СТЕНАМИ ЗАМКА ПЕПЛА',
+            fadeToBlack01: souls.escapeCutsceneActive ? +(souls.cutsceneFadeToBlack01 || 0).toFixed(3) : 0,
+            underwater01: souls.escapeCutsceneActive ? +(souls.cutsceneUnderwater01 || 0).toFixed(3) : 0,
+            canSkip: Boolean((souls.doorCutsceneActive || souls.escapeCutsceneActive) && souls.cutsceneCanSkip),
             bossTitleRu: souls.cutsceneBossTitleRu || BOSS_DOOR_CUTSCENE_ACTS.BOSS_TITLE_RU,
             bossSubtitleRu: souls.cutsceneBossSubtitleRu || BOSS_DOOR_CUTSCENE_ACTS.BOSS_SUBTITLE_RU,
-            letterbox01: souls.doorCutsceneActive ? +(souls.cutsceneLetterbox01 || 0).toFixed(3) : 0
+            letterbox01: (souls.doorCutsceneActive || souls.escapeCutsceneActive) ? +(souls.cutsceneLetterbox01 || 0).toFixed(3) : 0
           }
         : null,
       onboardingDone: Boolean(progState.onboardingDone),
@@ -10446,6 +11157,10 @@ export function createCombatController({
       applyDamageToEnemy,
       applyDamageToPlayer,
       addBossStagger,
+      startBossEscapeCutscene,
+      skipBossEscapeCutscene,
+      seekBossEscapeCutscene,
+      teleportToExteriorShore,
       triggerBossParry: (boss) => applySoulsBossParry(boss, lastFrameElapsedTime, bossAiCtx),
       triggerMobParry: (mob) => {
         mob._mobActiveSwing = null;
@@ -10536,6 +11251,10 @@ export function createCombatController({
     isPlayerDying: () => playerDying,
     isSoulsBossAwakened: () => Boolean(isSoulslike && souls.bossAwakened),
     skipBossDoorCutscene,
+    startBossEscapeCutscene,
+    skipBossEscapeCutscene,
+    seekBossEscapeCutscene,
+    teleportToExteriorShore,
     setLowSpecMode,
     debugTeleport,
     getQaContext,

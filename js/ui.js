@@ -6,12 +6,12 @@
 // - Mobile Landscape Touch Controls (Floating Left Joystick + Right Camera Swipe + 6 Obsidian+Gold SVG Buttons)
 // - Cinematic Boss Cutscene Letterbox, Subtitles, Title Card, Interact/Riposte Prompts & Victory/Defeat Overlays
 
-import { WEAPONS } from './config.js?v=20261124z90';
-import { el } from './ui/resolvers.js?v=20261124z90';
-import { makeSvgNode, createWeaponSvg } from './ui/svgIcons.js?v=20261124z90';
-import { createModalsController } from './ui/modals.js?v=20261124z90';
+import { WEAPONS } from './config.js?v=20261124z91';
+import { el } from './ui/resolvers.js?v=20261124z91';
+import { makeSvgNode, createWeaponSvg } from './ui/svgIcons.js?v=20261124z91';
+import { createModalsController } from './ui/modals.js?v=20261124z91';
 
-export { createWeaponSvg } from './ui/svgIcons.js?v=20261124z90';
+export { createWeaponSvg } from './ui/svgIcons.js?v=20261124z91';
 
 const DIFFICULTY_OPTIONS = [
   { id: 'easy', labelRu: 'Странник', noteRu: 'Мягкий режим (в разработке)' },
@@ -1303,6 +1303,13 @@ export function createUIManager(initialCallbacks = {}) {
   const btnNewGameSub = el('span', 'souls-menu-item-sub', 'Зал Пробуждения');
   btnNewGame.append(btnNewGameMain, btnNewGameSub);
 
+  // 2b. РЕВАНШ НА АРЕНЕ (всегда доступен на главном экране — прямой бой с Судиёй Руин!)
+  const btnArenaRematch = el('button', 'souls-menu-item');
+  btnArenaRematch.type = 'button';
+  const btnArenaRematchMain = el('span', 'souls-menu-item-label', 'РЕВАНШ НА АРЕНЕ');
+  const btnArenaRematchSub = el('span', 'souls-menu-item-sub', 'Судия Руин • Тронный Зал');
+  btnArenaRematch.append(btnArenaRematchMain, btnArenaRematchSub);
+
   // 3. СЛОЖНОСТЬ (Clean menu slot — expandable inline selector)
   const diffGroup = el('div', 'souls-menu-diff-group');
   const btnDifficulty = el('button', 'souls-menu-item');
@@ -1336,7 +1343,7 @@ export function createUIManager(initialCallbacks = {}) {
   btnSettings.type = 'button';
   btnSettings.appendChild(el('span', 'souls-menu-item-label', 'НАСТРОЙКИ'));
 
-  titleNav.append(btnContinue, btnNewGame, diffGroup, btnSettings);
+  titleNav.append(btnContinue, btnNewGame, btnArenaRematch, diffGroup, btnSettings);
 
   const titleFootNote = el('div', 'souls-title-footer', 'Тёмное фэнтези • Ближний бой');
   titleColumn.append(titleHeader, titleNav, titleFootNote);
@@ -1392,6 +1399,12 @@ export function createUIManager(initialCallbacks = {}) {
     callbacks.onNewGame?.();
   });
 
+  btnArenaRematch.addEventListener('click', () => {
+    difficultyDrawerOpen = false;
+    syncDifficultyUI();
+    callbacks.onBossRematch?.();
+  });
+
   btnDifficulty.addEventListener('click', () => {
     difficultyDrawerOpen = !difficultyDrawerOpen;
     syncDifficultyUI();
@@ -1404,7 +1417,7 @@ export function createUIManager(initialCallbacks = {}) {
   });
 
   // Keyboard navigation on the Gothic Title Screen
-  const titleMenuItems = [btnContinue, btnNewGame, btnDifficulty, btnSettings];
+  const titleMenuItems = [btnContinue, btnNewGame, btnArenaRematch, btnDifficulty, btnSettings];
   window.addEventListener('keydown', (e) => {
     if (hubScreen.classList.contains('hidden')) return;
     if (modals.isStageBlockedByModal()) return;
@@ -1446,6 +1459,8 @@ export function createUIManager(initialCallbacks = {}) {
   const soulsAtmosphereVignette = el('div', 'souls-atmosphere-vignette hidden');
   hudScreen.insertBefore(soulsAtmosphereVignette, hudScreen.firstChild);
 
+  const soulsUnderwaterOverlay = el('div', 'souls-underwater-overlay');
+  const soulsFadeOverlay = el('div', 'souls-fade-overlay');
   const soulsLetterboxTop = el('div', 'souls-letterbox-bar souls-letterbox-top');
   const soulsLetterboxBottom = el('div', 'souls-letterbox-bar souls-letterbox-bottom');
 
@@ -1483,10 +1498,19 @@ export function createUIManager(initialCallbacks = {}) {
   soulsCutsceneSkipBtn.type = 'button';
   soulsCutsceneSkipBtn.setAttribute('aria-label', 'Пропустить кат-сцену');
 
-  root.append(soulsLetterboxTop, soulsLetterboxBottom, soulsBossTitleCard, soulsSubtitleWrap, soulsCutsceneSkipBtn);
+  root.append(
+    soulsUnderwaterOverlay,
+    soulsFadeOverlay,
+    soulsLetterboxTop,
+    soulsLetterboxBottom,
+    soulsBossTitleCard,
+    soulsSubtitleWrap,
+    soulsCutsceneSkipBtn
+  );
 
   let soulsLetterboxActive = false;
   let soulsTitleCardVisible = false;
+  let soulsTitleCardIsLocation = false;
   let soulsSubtitleVisible = false;
   let soulsSubtitleSpeakerCache = 'РЫЦАРЬ ПЕПЛА';
   let soulsSubtitleTextCache = '';
@@ -1494,6 +1518,8 @@ export function createUIManager(initialCallbacks = {}) {
   let soulsCutsceneCanSkip = false;
   let soulsTitleCardTextCache = 'РЫЦАРЬ ПЕПЛА';
   let soulsTitleCardSubCache = 'СУДИЯ РУИН';
+  let soulsFadeAlphaCache = 0;
+  let soulsUnderwaterAlphaCache = 0;
   let lastCutsceneSkipDispatchMs = 0;
 
   function triggerSkipBossDoorCutscene() {
@@ -1535,14 +1561,33 @@ export function createUIManager(initialCallbacks = {}) {
         document.body.classList.toggle('is-souls-cutscene', next);
       }
     }
-    const showTitle = next && Boolean(meta?.showBossTitleCard);
+    const nextFade = next ? Math.max(0, Math.min(1, Number(meta?.fadeToBlack01) || 0)) : 0;
+    if (Math.abs(nextFade - soulsFadeAlphaCache) > 0.004 || (nextFade === 0 && soulsFadeAlphaCache !== 0)) {
+      soulsFadeAlphaCache = nextFade;
+      soulsFadeOverlay.style.opacity = nextFade > 0.002 ? nextFade.toFixed(3) : '0';
+    }
+    const nextUw = next ? Math.max(0, Math.min(1, Number(meta?.underwater01) || 0)) : 0;
+    if (Math.abs(nextUw - soulsUnderwaterAlphaCache) > 0.004 || (nextUw === 0 && soulsUnderwaterAlphaCache !== 0)) {
+      soulsUnderwaterAlphaCache = nextUw;
+      soulsUnderwaterOverlay.style.opacity = nextUw > 0.002 ? nextUw.toFixed(3) : '0';
+    }
+    const isLocationCard = next && Boolean(meta?.showLocationCard);
+    const showTitle = next && Boolean(meta?.showBossTitleCard || isLocationCard);
+    if (isLocationCard !== soulsTitleCardIsLocation) {
+      soulsTitleCardIsLocation = isLocationCard;
+      soulsBossTitleCard.classList.toggle('is-location-card', isLocationCard);
+    }
     if (showTitle !== soulsTitleCardVisible) {
       soulsTitleCardVisible = showTitle;
       soulsBossTitleCard.classList.toggle('is-visible', showTitle);
     }
     if (showTitle) {
-      const nextTitle = (meta?.bossTitleRu && String(meta.bossTitleRu).trim()) || 'РЫЦАРЬ ПЕПЛА';
-      const nextSub = (meta?.bossSubtitleRu && String(meta.bossSubtitleRu).trim()) || 'СУДИЯ РУИН';
+      const nextTitle = isLocationCard
+        ? ((meta?.locationTitleRu && String(meta.locationTitleRu).trim()) || 'БЕРЕГ ПЕПЕЛЬНОГО СТОКА')
+        : ((meta?.bossTitleRu && String(meta.bossTitleRu).trim()) || 'РЫЦАРЬ ПЕПЛА');
+      const nextSub = isLocationCard
+        ? ((meta?.locationSubtitleRu && String(meta.locationSubtitleRu).trim()) || 'ЗА СТЕНАМИ ЗАМКА ПЕПЛА')
+        : ((meta?.bossSubtitleRu && String(meta.bossSubtitleRu).trim()) || 'СУДИЯ РУИН');
       if (nextTitle !== soulsTitleCardTextCache) {
         soulsTitleCardTextCache = nextTitle;
         soulsTitleCardMain.textContent = nextTitle;
@@ -1627,7 +1672,9 @@ export function createUIManager(initialCallbacks = {}) {
   const INTERACT_SVG = {
     door: '<svg viewBox="0 0 20 20" width="15" height="15" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M5 17 V8.5 C5 5 7.2 3 10 3 C12.8 3 15 5 15 8.5 V17 H5 Z" stroke="#e5c787" stroke-width="1.5" stroke-linejoin="round"/><path d="M10 3 V17" stroke="#c8a862" stroke-width="1.2"/></svg>',
     bonfire: '<svg viewBox="0 0 20 20" width="15" height="15" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M10 2.6 C10 2.6 14.4 6.8 14.4 11.2 C14.4 13.9 12.4 16 10 16 C7.6 16 5.6 13.9 5.6 11.2 C5.6 9.3 6.7 7.6 8 6.4 C7.9 8.2 8.9 9.2 10 9.2 C10.4 7.1 10 2.6 10 2.6 Z" fill="rgba(229,162,72,0.28)" stroke="#e5c787" stroke-width="1.45" stroke-linejoin="round"/><path d="M5.5 17.4 H14.5" stroke="#c8a862" stroke-width="1.5" stroke-linecap="round"/></svg>',
-    shrine: '<svg viewBox="0 0 20 20" width="15" height="15" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M7.5 3.2 H12.5 M8.5 3.2 V6.8 L5.6 12.2 C5.1 13.4 5.9 15.6 7.8 15.6 H12.2 C14.1 15.6 14.9 13.4 14.4 12.2 L11.5 6.8 V3.2" stroke="#e5c787" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 17.5 H13" stroke="#c8a862" stroke-width="1.4" stroke-linecap="round"/></svg>'
+    shrine: '<svg viewBox="0 0 20 20" width="15" height="15" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M7.5 3.2 H12.5 M8.5 3.2 V6.8 L5.6 12.2 C5.1 13.4 5.9 15.6 7.8 15.6 H12.2 C14.1 15.6 14.9 13.4 14.4 12.2 L11.5 6.8 V3.2" stroke="#e5c787" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 17.5 H13" stroke="#c8a862" stroke-width="1.4" stroke-linecap="round"/></svg>',
+    sword: '<svg viewBox="0 0 20 20" width="15" height="15" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M15.8 3.2 L8.8 10.2 L7.2 8.6 L14.2 1.6 L16.4 1.5 Z" fill="#f3d69b" stroke="#c8a862" stroke-width="0.9"/><path d="M6.4 8.2 L11.8 13.6 M5.5 14.6 L8.5 11.6 M3.8 16.3 L5.8 14.3" stroke="#e5c787" stroke-width="1.7" stroke-linecap="round"/></svg>',
+    gate: '<svg viewBox="0 0 20 20" width="15" height="15" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M3.5 17 V9.5 C3.5 5.4 6.4 2.8 10 2.8 C13.6 2.8 16.5 5.4 16.5 9.5 V17" stroke="#e5c787" stroke-width="1.5" stroke-linecap="round"/><path d="M6.5 17 V10.2 C6.5 7.7 8 6 10 6 C12 6 13.5 7.7 13.5 10.2 V17 M2.5 17 H17.5" stroke="#c8a862" stroke-width="1.25" stroke-linecap="round"/></svg>'
   };
 
   const soulsInteractPrompt = el('button', 'souls-interact-prompt hidden');
@@ -1695,9 +1742,13 @@ export function createUIManager(initialCallbacks = {}) {
       const lower = cleaned.toLowerCase();
       const nextKind = lower.includes('кост')
         ? 'bonfire'
-        : (lower.includes('алтар') || lower.includes('реликв') || lower.includes('фляг'))
-          ? 'shrine'
-          : 'door';
+        : (lower.includes('меч') || lower.includes('клятв'))
+          ? 'sword'
+          : (lower.includes('ущель') || lower.includes('глав'))
+            ? 'gate'
+            : (lower.includes('алтар') || lower.includes('реликв') || lower.includes('фляг'))
+              ? 'shrine'
+              : 'door';
       if (nextKind !== soulsInteractIconKind) {
         soulsInteractIconKind = nextKind;
         soulsInteractIcon.innerHTML = INTERACT_SVG[nextKind];
@@ -1744,6 +1795,30 @@ export function createUIManager(initialCallbacks = {}) {
   const soulsDefeatActions = el('div', 'souls-defeat-actions');
   soulsDefeatOverlay.append(soulsDefeatBand, soulsDefeatActions);
   root.appendChild(soulsDefeatOverlay);
+
+  // Chapter I / Prologue Complete Overlay (Ворота Пепельного Ущелья на Берегу Пепельного Стока)
+  const soulsPrologueOverlay = el('div', 'souls-prologue-overlay hidden');
+  const soulsPrologueCard = el('div', 'souls-prologue-card');
+  const soulsPrologueEyebrow = el('div', 'souls-prologue-eyebrow', 'ПРОЛОГ • ГЛАВА I ЗАВЕРШЕНА');
+  const soulsPrologueTitle = el('div', 'souls-prologue-title', 'ВЫ ВЫБРАЛИСЬ ИЗ ЗАМКА ПЕПЛА');
+  const soulsPrologueSub = el('div', 'souls-prologue-sub', 'Глава II: Пепельное Ущелье — в разработке');
+  const soulsPrologueLore = el(
+    'p',
+    'souls-prologue-lore',
+    'Чёрная река вынесла вас за стены собора. За спиной на утёсе всё ещё тлеет Замок Пепла — а впереди открывается путь в Пепельное Ущелье.'
+  );
+  const soulsPrologueActions = el('div', 'souls-prologue-actions');
+  soulsPrologueCard.append(
+    soulsPrologueEyebrow,
+    el('div', 'souls-prologue-line'),
+    soulsPrologueTitle,
+    soulsPrologueSub,
+    el('div', 'souls-prologue-line'),
+    soulsPrologueLore,
+    soulsPrologueActions
+  );
+  soulsPrologueOverlay.appendChild(soulsPrologueCard);
+  root.appendChild(soulsPrologueOverlay);
 
   function clearSoulsBannerTimers() {
     if (soulsBannerFadeTimer) { clearTimeout(soulsBannerFadeTimer); soulsBannerFadeTimer = null; }
@@ -1801,6 +1876,63 @@ export function createUIManager(initialCallbacks = {}) {
     setSoulsLetterbox(false);
     soulsAtmosphereVignette.classList.toggle('hidden', !soulsModeActive);
     soulsDefeatOverlay.classList.add('hidden');
+    soulsPrologueOverlay.classList.add('hidden');
+  }
+
+  function hideSoulsPrologueCompleteOverlay() {
+    soulsPrologueOverlay.classList.add('hidden');
+  }
+
+  function showSoulsPrologueCompleteOverlay({
+    onExploreShore,
+    onBossRematch,
+    onReplayEscape,
+    onHub
+  } = {}) {
+    closeSoundPopover();
+    soulsDefeatOverlay.classList.add('hidden');
+    soulsPrologueActions.innerHTML = '';
+
+    const exploreBtn = el('button', 'souls-defeat-btn btn-shore-explore', 'Продолжить исследовать берег');
+    exploreBtn.type = 'button';
+    exploreBtn.addEventListener('click', () => {
+      hideSoulsPrologueCompleteOverlay();
+      onExploreShore?.();
+    });
+    soulsPrologueActions.appendChild(exploreBtn);
+
+    const rematchBtn = el('button', 'souls-defeat-btn btn-boss-rematch', 'Реванш: Судия Руин');
+    rematchBtn.type = 'button';
+    rematchBtn.addEventListener('click', async () => {
+      rematchBtn.disabled = true;
+      hideSoulsPrologueCompleteOverlay();
+      await onBossRematch?.();
+    });
+    soulsPrologueActions.appendChild(rematchBtn);
+
+    const replayBtn = el('button', 'souls-defeat-btn btn-replay-escape', 'Пересмотреть побег');
+    replayBtn.type = 'button';
+    replayBtn.addEventListener('click', async () => {
+      replayBtn.disabled = true;
+      hideSoulsPrologueCompleteOverlay();
+      await onReplayEscape?.();
+    });
+    soulsPrologueActions.appendChild(replayBtn);
+
+    const hubBtn = el('button', 'souls-defeat-btn btn-souls-hub', 'В главное меню');
+    hubBtn.type = 'button';
+    hubBtn.addEventListener('click', () => {
+      hubBtn.disabled = true;
+      hideSoulsPrologueCompleteOverlay();
+      onHub?.();
+    });
+    soulsPrologueActions.appendChild(hubBtn);
+
+    soulsPrologueOverlay.classList.remove('hidden');
+  }
+
+  function isSoulsPrologueCompleteOpen() {
+    return !soulsPrologueOverlay.classList.contains('hidden');
   }
 
   function showSoulsDefeatOverlay({ canBossRematch = false, onBossRematch, onBonfireRestart, onHub } = {}) {
@@ -1897,8 +2029,12 @@ export function createUIManager(initialCallbacks = {}) {
     selectedDifficulty = DIFFICULTY_OPTIONS.some((o) => o.id === st.difficultyMode) ? st.difficultyMode : 'normal';
     lowSpecEnabled = Boolean(st.lowSpec);
     const save = st.soulsSave || {};
-    hasSoulsSave = Boolean(save.hasRun || save.bonfireCheckpointLit);
-    savedZoneCaption = save.bonfireCheckpointLit ? 'Костёр • Замок Пепла' : 'Зал Пробуждения';
+    hasSoulsSave = Boolean(save.hasRun || save.bonfireCheckpointLit || save.escapedCastle);
+    savedZoneCaption = save.escapedCastle
+      ? 'Берег Пепельного Стока'
+      : save.bonfireCheckpointLit
+        ? 'Костёр • Замок Пепла'
+        : 'Зал Пробуждения';
     syncContinueUI();
     syncDifficultyUI();
     syncMuteButtons();
@@ -1973,15 +2109,21 @@ export function createUIManager(initialCallbacks = {}) {
       hudDerivedInteract = { visible: canInteractNow, label: dynInteractPrompt };
       applySoulsInteractPromptState(canInteractNow, dynInteractPrompt);
 
-      if (typeof sData.doorCutsceneActive === 'boolean') {
-        setSoulsLetterbox(sData.doorCutsceneActive, {
+      if (typeof sData.doorCutsceneActive === 'boolean' || typeof sData.escapeCutsceneActive === 'boolean') {
+        const anyCutActive = Boolean(sData.doorCutsceneActive || sData.escapeCutsceneActive);
+        setSoulsLetterbox(anyCutActive, {
           showBossTitleCard: Boolean(sData.showBossTitleCard),
+          showLocationCard: Boolean(sData.showLocationCard),
+          locationTitleRu: sData.locationTitleRu,
+          locationSubtitleRu: sData.locationSubtitleRu,
           canSkip: Boolean(sData.canSkip ?? sData.cutsceneCanSkip),
           bossTitleRu: sData.bossTitleRu,
           bossSubtitleRu: sData.bossSubtitleRu,
           subtitleSpeaker: sData.subtitleSpeaker,
           subtitleText: sData.subtitleText,
-          letterbox01: sData.letterbox01
+          letterbox01: sData.letterbox01,
+          fadeToBlack01: sData.fadeToBlack01,
+          underwater01: sData.underwater01
         });
       }
 
@@ -2278,6 +2420,9 @@ export function createUIManager(initialCallbacks = {}) {
     setSoulsLetterbox,
     showSoulsDefeatOverlay,
     hideSoulsDefeatOverlay,
+    showSoulsPrologueCompleteOverlay,
+    hideSoulsPrologueCompleteOverlay,
+    isSoulsPrologueCompleteOpen,
     hideSoulsOverlays,
     isSoulsDefeatOpen,
     setSoulsPointerLockHintVisible,

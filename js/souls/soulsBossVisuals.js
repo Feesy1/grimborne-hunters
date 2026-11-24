@@ -8,7 +8,7 @@
 
 import * as THREE from '../../vendor/three.module.js';
 import { mergeGeometries } from '../../vendor/BufferGeometryUtils.js';
-import { createHammerFireTrailMaterial } from './soulsFireVfx.js?v=20261124z90';
+import { createHammerFireTrailMaterial } from './soulsFireVfx.js?v=20261124z91';
 
 // ============================================================================
 // Module-level State, Mobile Detection & Ref-Counted Shared GPU Resources

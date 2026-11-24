@@ -8,7 +8,7 @@ import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { DRACOLoader } from '../vendor/DRACOLoader.js';
 import { clone as cloneSkinned } from '../vendor/SkeletonUtils.js';
-import { WEAPONS } from './config.js?v=20261124z90';
+import { WEAPONS } from './config.js?v=20261124z91';
 import {
   getGeo,
   getMat,
@@ -17,28 +17,28 @@ import {
   createAnimController,
   setBoneRelEuler,
   solveMixamoArmIK
-} from './models/shared.js?v=20261124z90';
+} from './models/shared.js?v=20261124z91';
 import {
   getWarriorWeaponMountConfig,
   createWarriorStanceState,
   applyWarriorWeaponStance,
   applyWarriorAttackOverlay
-} from './models/warriorStances.js?v=20261124z90';
+} from './models/warriorStances.js?v=20261124z91';
 import {
   computeFootSyncPlaybackRate,
   computeCombatPostureDynamics,
   applyCombatPostureToObject3D,
   applyCombatRecoilImpulse
-} from './souls/soulsPhysicsFeel.js?v=20261124z90';
-import { createActorContactShadowMesh } from './souls/soulsAtmosphere.js?v=20261124z90';
+} from './souls/soulsPhysicsFeel.js?v=20261124z91';
+import { createActorContactShadowMesh } from './souls/soulsAtmosphere.js?v=20261124z91';
 import {
   applyEldenDissolveToModel,
   resetEldenDissolveFromModel
-} from './souls/soulsDissolveVfx.js?v=20261124z90';
+} from './souls/soulsDissolveVfx.js?v=20261124z91';
 
 const MODEL_PATHS = {
   // Warrior Knight (Mixamo Sword & Shield Run + Diagonal Slash + Turn_180 + Combat_Roll + Heavy_Thrust + Door_Push)
-  warrior_run: './assets/models/Warrior_Run.glb?v=20261124z90',
+  warrior_run: './assets/models/Warrior_Run.glb?v=20261124z91',
 
   // All 5 Warrior Melee Weapons + Shield (preserved for in-world discovery & future equipment!)
   sword_tripo: './assets/models/Sword_Tripo.glb?v=20261120z34',
@@ -49,10 +49,10 @@ const MODEL_PATHS = {
   hammer_tripo: './assets/models/Hammer_Tripo.glb?v=20261120z34',
 
   // Castle of Ash Enemies & Boss (Boss untouched!)
-  rift_boss: './assets/models/Rift_Boss_Tripo.glb?v=20261124z90',
-  rift_executioner: './assets/models/Rift_Executioner_Tripo.glb?v=20261124z90',
-  rift_vanguard: './assets/models/Rift_Vanguard_Tripo.glb?v=20261124z90',
-  rift_acolyte: './assets/models/Rift_Acolyte_Tripo.glb?v=20261124z90'
+  rift_boss: './assets/models/Rift_Boss_Tripo.glb?v=20261124z91',
+  rift_executioner: './assets/models/Rift_Executioner_Tripo.glb?v=20261124z91',
+  rift_vanguard: './assets/models/Rift_Vanguard_Tripo.glb?v=20261124z91',
+  rift_acolyte: './assets/models/Rift_Acolyte_Tripo.glb?v=20261124z91'
 };
 
 const gltfCache = new Map();
@@ -3569,6 +3569,188 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
     'LeftShoulder', 'LeftArm', 'LeftForeArm', 'LeftHand'
   ];
   let flaskBonesDirty = false;
+  let heroSwordDisarmed = false;
+  let heroShieldDisarmed = false;
+
+  // Normalized cutscene clip scrubber for Warrior (Boss Escape Cutscene:
+  // Cutscene_Knockdown_Scoot, Cutscene_Dodge_Fall, Cutscene_River_Tumble, Cutscene_Shore_WakeUp, Heavy_Thrust__Full)
+  let heroCutsceneAction = null;
+  let heroPrevCutsceneFromAction = null;
+  let heroCutsceneBlendElapsed = 0;
+  let heroCutsceneBlendDur = 0.20;
+  let heroCutsceneLastPerfMs = 0;
+
+  function applyHeroDisarmVisibility() {
+    if (mountedWeaponObj) {
+      mountedWeaponObj.visible = !heroSwordDisarmed;
+    }
+    if (embeddedWarriorSwordNode) {
+      embeddedWarriorSwordNode.visible = !heroSwordDisarmed && !mountedWeaponObj;
+    }
+    const activeShield = mountedShieldObj || legacyWarriorShieldObj;
+    if (activeShield) {
+      activeShield.visible = !heroShieldDisarmed && !isCurrentWeaponTwoHanded;
+    }
+  }
+
+  function setWeaponDisarmed(swordHidden = false, shieldHidden = false) {
+    heroSwordDisarmed = Boolean(swordHidden);
+    heroShieldDisarmed = Boolean(shieldHidden);
+    applyHeroDisarmVisibility();
+  }
+
+  function getWeaponDisarmed() {
+    return { sword: heroSwordDisarmed, shield: heroShieldDisarmed };
+  }
+
+  function advanceHeroCutsceneBlend(dtSec) {
+    if (!heroCutsceneAction) return;
+    if (heroPrevCutsceneFromAction) {
+      heroCutsceneBlendElapsed += Math.max(0, dtSec);
+      const u = heroCutsceneBlendDur > 0.005 ? Math.min(1, heroCutsceneBlendElapsed / heroCutsceneBlendDur) : 1;
+      const s = u * u * (3 - 2 * u);
+      heroCutsceneAction.setEffectiveWeight(s);
+      heroPrevCutsceneFromAction.setEffectiveWeight(1 - s);
+      if (u >= 1) {
+        heroPrevCutsceneFromAction.stopFading();
+        heroPrevCutsceneFromAction.setEffectiveWeight(0);
+        heroPrevCutsceneFromAction.stop();
+        heroPrevCutsceneFromAction = null;
+      }
+    } else {
+      heroCutsceneAction.setEffectiveWeight(1.0);
+    }
+  }
+
+  function setCutsceneClipNormalized(clipName, u01 = 0, blendSec = 0.20) {
+    if (isDeadState || !animCtrl || typeof clipName !== 'string' || !clipName) {
+      return false;
+    }
+    const act = animCtrl.getAction?.(`${clipName}__Full`) || animCtrl.getAction?.(clipName);
+    if (!act) return false;
+    cancelFlaskDrinkAnim();
+    isDoorPushing = false;
+    animCtrl.setDoorPushState?.(false, 0);
+    warriorAttackTimer = 0;
+    dashAnimTimer = 0;
+    isWarriorBlocking = false;
+    animCtrl.setBlockState?.(false);
+
+    const clip = act.getClip?.();
+    const dur = clip?.duration > 0 ? clip.duration : 1.0;
+    const clampedU = Math.max(0, Math.min(1, Number.isFinite(Number(u01)) ? Number(u01) : 0));
+    const safeBlend = Number.isFinite(Number(blendSec)) ? Math.max(0, Math.min(0.8, Number(blendSec))) : 0.20;
+    const nowMs = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+
+    if (heroCutsceneAction !== act) {
+      const preferredOutgoing = heroCutsceneAction && heroCutsceneAction !== act ? heroCutsceneAction : null;
+      const rawFromAct = animCtrl.prepareExternalClip
+        ? animCtrl.prepareExternalClip(act, safeBlend > 0.005 ? preferredOutgoing : null)
+        : null;
+      if (safeBlend <= 0.005 && rawFromAct && rawFromAct !== act) {
+        rawFromAct.stopFading();
+        rawFromAct.setEffectiveWeight(0);
+        rawFromAct.stop();
+      }
+      const fromAct = safeBlend > 0.005 ? rawFromAct : null;
+      if (heroPrevCutsceneFromAction && heroPrevCutsceneFromAction !== fromAct) {
+        heroPrevCutsceneFromAction.stopFading();
+        heroPrevCutsceneFromAction.setEffectiveWeight(0);
+        heroPrevCutsceneFromAction.stop();
+      }
+      heroPrevCutsceneFromAction = safeBlend > 0.005 ? (fromAct || null) : null;
+      if (heroPrevCutsceneFromAction) {
+        heroPrevCutsceneFromAction.paused = true;
+        heroPrevCutsceneFromAction.enabled = true;
+        heroPrevCutsceneFromAction.setEffectiveWeight(1.0);
+      }
+      if (heroCutsceneAction && heroCutsceneAction !== fromAct) {
+        heroCutsceneAction.stopFading();
+        heroCutsceneAction.setEffectiveWeight(0);
+        heroCutsceneAction.stop();
+      }
+
+      act.stopFading();
+      act.reset();
+      act.setLoop(THREE.LoopOnce, 1);
+      act.clampWhenFinished = true;
+      act.timeScale = 1.0;
+      act.enabled = true;
+      act.play();
+      act.paused = true;
+      act.time = clampedU * dur;
+      heroCutsceneAction = act;
+      heroCutsceneBlendDur = safeBlend;
+      heroCutsceneBlendElapsed = heroPrevCutsceneFromAction ? 0 : safeBlend;
+      heroCutsceneLastPerfMs = nowMs;
+      advanceHeroCutsceneBlend(0);
+    } else {
+      act.enabled = true;
+      act.paused = true;
+      act.time = clampedU * dur;
+      if (safeBlend <= 0.005 && heroPrevCutsceneFromAction) {
+        heroPrevCutsceneFromAction.stopFading();
+        heroPrevCutsceneFromAction.setEffectiveWeight(0);
+        heroPrevCutsceneFromAction.stop();
+        heroPrevCutsceneFromAction = null;
+        act.setEffectiveWeight(1.0);
+        heroCutsceneLastPerfMs = nowMs;
+      } else if (heroPrevCutsceneFromAction) {
+        const dtWall = heroCutsceneLastPerfMs > 0 ? Math.max(0, Math.min(0.05, (nowMs - heroCutsceneLastPerfMs) * 0.001)) : 0.016;
+        heroCutsceneLastPerfMs = nowMs;
+        advanceHeroCutsceneBlend(dtWall > 0.0005 ? dtWall : 0.016);
+      } else {
+        act.setEffectiveWeight(1.0);
+        heroCutsceneLastPerfMs = nowMs;
+      }
+    }
+
+    if (modelInstance) {
+      modelInstance.rotation.x = 0;
+      modelInstance.position.y = 0;
+    }
+    animCtrl.mixer.update(0);
+    applyHeroDisarmVisibility();
+    return true;
+  }
+
+  function clearCutsceneClip(blendOutSec = 0.20) {
+    const outgoing = heroCutsceneAction;
+    if (heroPrevCutsceneFromAction) {
+      heroPrevCutsceneFromAction.stopFading();
+      heroPrevCutsceneFromAction.setEffectiveWeight(0);
+      heroPrevCutsceneFromAction.stop();
+      heroPrevCutsceneFromAction = null;
+    }
+    heroCutsceneAction = null;
+    heroCutsceneBlendElapsed = 0;
+    heroCutsceneBlendDur = 0.20;
+    heroCutsceneLastPerfMs = 0;
+    if (animCtrl && !isDeadState) {
+      const safeBlend = Number.isFinite(Number(blendOutSec)) ? Number(blendOutSec) : 0.20;
+      if (outgoing && safeBlend > 0.01 && typeof animCtrl.handoffExternalClipToBase === 'function') {
+        animCtrl.handoffExternalClipToBase(outgoing, 'Idle', 1.0, safeBlend);
+      } else {
+        if (outgoing) {
+          outgoing.stopFading();
+          outgoing.setEffectiveWeight(0);
+          outgoing.stop();
+        }
+        animCtrl.setBaseState('Idle', 1.0);
+        animCtrl.updateOneShotFade?.(0.25);
+      }
+      animCtrl.mixer.update(0);
+    } else if (outgoing) {
+      outgoing.stopFading();
+      outgoing.setEffectiveWeight(0);
+      outgoing.stop();
+    }
+    applyHeroDisarmVisibility();
+  }
+
+  function isCutsceneClipActive() {
+    return Boolean(!isDeadState && heroCutsceneAction);
+  }
 
   function restoreWeaponToRightHand() {
     if (safeClass !== 'warrior' || !mountedWeaponObj || !handR) return;
@@ -3578,7 +3760,7 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
     if (mountedWeaponObj.userData?.basePos) mountedWeaponObj.position.copy(mountedWeaponObj.userData.basePos);
     if (mountedWeaponObj.userData?.baseQuat) mountedWeaponObj.quaternion.copy(mountedWeaponObj.userData.baseQuat);
     if (mountedWeaponObj.userData?.baseScale) mountedWeaponObj.scale.copy(mountedWeaponObj.userData.baseScale);
-    mountedWeaponObj.visible = true;
+    mountedWeaponObj.visible = !heroSwordDisarmed;
   }
 
   function restoreShieldToLeftHand() {
@@ -3593,7 +3775,7 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
     if (activeShield.userData?.basePos) activeShield.position.copy(activeShield.userData.basePos);
     if (activeShield.userData?.baseQuat) activeShield.quaternion.copy(activeShield.userData.baseQuat);
     if (activeShield.userData?.baseScale) activeShield.scale.copy(activeShield.userData.baseScale);
-    activeShield.visible = true;
+    activeShield.visible = !heroShieldDisarmed && !isCurrentWeaponTwoHanded;
     shieldStowedToModelSpace = false;
   }
 
@@ -5212,6 +5394,28 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
       return;
     }
 
+    // Active normalized cutscene clip (Boss Escape Cutscene: Knockdown_Scoot / Dodge_Fall / River_Tumble / Shore_WakeUp):
+    // Keep act.paused = true & time pinned strictly by setCutsceneClipNormalized(clip, u01) with zero Idle/Run overwrite!
+    if (heroCutsceneAction && animCtrl) {
+      pendingFootstepEvent = null;
+      prevLocomotionClip = null;
+      prevLocomotionPhase = null;
+      advanceHeroCutsceneBlend(safeDt);
+      heroCutsceneAction.enabled = true;
+      heroCutsceneAction.paused = true;
+      if (modelInstance) {
+        modelInstance.rotation.x = 0;
+        modelInstance.position.y = 0;
+      }
+      animCtrl.mixer.update(0);
+      applyHeroDisarmVisibility();
+      if (flashTimer > 0) {
+        flashTimer = Math.max(0, flashTimer - safeDt);
+        if (flashTimer <= 0) setBeastMode(isBeast);
+      }
+      return;
+    }
+
     let activeRunClip = 'Running_A';
     const isTurning180 = Boolean(animCtrl?.isTurn180Active?.());
     const isRolling = Boolean(animCtrl?.isRollActive?.());
@@ -5556,6 +5760,8 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
       }
     }
 
+    applyHeroDisarmVisibility();
+
     if (beastRing.visible) {
       beastRing.rotation.z = elapsedTime * 2.5;
       const pulse = 1 + Math.sin(elapsedTime * 7) * 0.08;
@@ -5713,6 +5919,11 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
     isCriticalRiposteActive,
     setDoorPushMode,
     isDoorPushActive,
+    setCutsceneClipNormalized,
+    clearCutsceneClip,
+    isCutsceneClipActive,
+    setWeaponDisarmed,
+    getWeaponDisarmed,
     playFlaskDrinkAnim,
     cancelFlaskDrinkAnim,
     isFlaskDrinkActive,
@@ -5749,6 +5960,11 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
   root.userData.isFlaskDrinkActive = isFlaskDrinkActive;
   root.userData.setDoorPushMode = setDoorPushMode;
   root.userData.isDoorPushActive = isDoorPushActive;
+  root.userData.setCutsceneClipNormalized = setCutsceneClipNormalized;
+  root.userData.clearCutsceneClip = clearCutsceneClip;
+  root.userData.isCutsceneClipActive = isCutsceneClipActive;
+  root.userData.setWeaponDisarmed = setWeaponDisarmed;
+  root.userData.getWeaponDisarmed = getWeaponDisarmed;
   root.userData.contactShadow = heroContactShadow;
   root.userData.playDeathAnim = playDeathAnim;
   root.userData.setDeadState = setDeadState;
@@ -5863,6 +6079,11 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
     isFlaskDrinkActive,
     setDoorPushMode,
     isDoorPushActive,
+    setCutsceneClipNormalized,
+    clearCutsceneClip,
+    isCutsceneClipActive,
+    setWeaponDisarmed,
+    getWeaponDisarmed,
     playDeathAnim,
     setDeadState,
     resetDeath,
@@ -5891,6 +6112,49 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
     heroHandle.consumeFootstepEvent = consumeFootstepEvent;
   }
   return heroHandle;
+}
+
+// ============================================================================
+// 1b. DROPPED OATH BROADSWORD PROP (World-space flying/sliding 3D sword for Boss Escape Cutscene)
+// ============================================================================
+export function createDroppedSwordMesh() {
+  const root = new THREE.Group();
+  root.name = 'DroppedOathSword';
+  const swordAsset = gltfCache.get('sword_tripo');
+  let inner = null;
+  if (swordAsset?.scene) {
+    inner = swordAsset.scene.clone(true);
+    inner.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(inner);
+    const size = new THREE.Vector3();
+    const center = new THREE.Vector3();
+    box.getSize(size);
+    box.getCenter(center);
+    const maxSpan = Math.max(size.x, size.y, size.z, 1e-4);
+    const targetLen = 1.32;
+    const sc = targetLen / maxSpan;
+    inner.scale.setScalar(sc);
+    inner.position.set(-center.x * sc, -center.y * sc, -center.z * sc);
+    inner.traverse((n) => {
+      if (n.isMesh) {
+        n.castShadow = true;
+        n.receiveShadow = false;
+        n.frustumCulled = false;
+      }
+    });
+  } else {
+    inner = createHeroWeaponMesh('club', null);
+    inner.scale.setScalar(1.25);
+  }
+  root.add(inner);
+  root.visible = false;
+  return {
+    obj: root,
+    dispose() {
+      if (root.parent) root.parent.remove(root);
+      disposeOwnedWeaponMaterials(inner);
+    }
+  };
 }
 
 // ============================================================================
@@ -9632,10 +9896,15 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
         baseClipOverride = null;
         baseClipOverrideSpeed = null;
 
-        const fromAct =
-          safeBlend > 0.005 && animCtrl.prepareExternalClip
-            ? animCtrl.prepareExternalClip(act, preferredOutgoing)
-            : (animCtrl.prepareExternalClip?.(act, null), null);
+        const rawFromAct = animCtrl.prepareExternalClip
+          ? animCtrl.prepareExternalClip(act, safeBlend > 0.005 ? preferredOutgoing : null)
+          : null;
+        if (safeBlend <= 0.005 && rawFromAct && rawFromAct !== act) {
+          rawFromAct.stopFading();
+          rawFromAct.setEffectiveWeight(0);
+          rawFromAct.stop();
+        }
+        const fromAct = safeBlend > 0.005 ? rawFromAct : null;
         if (prevCutsceneFromAction && prevCutsceneFromAction !== fromAct) {
           prevCutsceneFromAction.stopFading();
           prevCutsceneFromAction.setEffectiveWeight(0);
@@ -9671,7 +9940,14 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
         act.enabled = true;
         act.paused = true;
         act.time = clampedU * dur;
-        if (prevCutsceneFromAction) {
+        if (safeBlend <= 0.005 && prevCutsceneFromAction) {
+          prevCutsceneFromAction.stopFading();
+          prevCutsceneFromAction.setEffectiveWeight(0);
+          prevCutsceneFromAction.stop();
+          prevCutsceneFromAction = null;
+          act.setEffectiveWeight(1.0);
+          cutsceneLastPerfMs = nowMs;
+        } else if (prevCutsceneFromAction) {
           const dtWall = cutsceneLastPerfMs > 0 ? Math.max(0, Math.min(0.05, (nowMs - cutsceneLastPerfMs) * 0.001)) : 0.016;
           cutsceneLastPerfMs = nowMs;
           advanceCutsceneBlend(dtWall > 0.0005 ? dtWall : 0.016);

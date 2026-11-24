@@ -5,7 +5,7 @@ import {
   ARENA_HALF_SIZE,
   CLASSES,
   ENEMY_TYPES
-} from '../config.js?v=20261124z90';
+} from '../config.js?v=20261124z91';
 
 export const TWO_PI = Math.PI * 2;
 // Keep the player just inside the decorative fence ring (HALF_SIZE - 1.6).
@@ -547,6 +547,13 @@ export function createCombatBridge({ world, models, progression } = {}) {
 
   // === Smooth Obstacle Collision & Arena Clamping ===
   function resolveObstaclesAndBounds(x, z, entityRadius, arenaLimit) {
+    if (
+      world?.isSoulsArena?.() &&
+      world?.getSoulsZoneMode?.() === 'exterior_shore' &&
+      typeof world.clampSoulsPosition === 'function'
+    ) {
+      return world.clampSoulsPosition(x, z, entityRadius);
+    }
     let nx = x;
     let nz = z;
     const obstacles = world?.obstacles;
