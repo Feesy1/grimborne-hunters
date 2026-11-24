@@ -8,7 +8,7 @@
 //      + exact 30-FPS lip-sync curves (`BOSS_ESCAPE_VO_DURATIONS_SEC`, `sampleEscapeBossMouthOpen`)
 //   2. Lightweight filtered-noise environmental beds (chasm fall wind, river plunge, exterior shore river/waterfall).
 
-export const SOULS_ESCAPE_AUDIO_VERSION = '20261124z97';
+export const SOULS_ESCAPE_AUDIO_VERSION = '20261124z98';
 export const BOSS_ESCAPE_VO_COUNT = 3;
 export const BOSS_ESCAPE_LIPSYNC_FPS = 30;
 
@@ -254,9 +254,8 @@ export function createSoulsEscapeAudio(getCtxOrOpts, getMasterGainArg, getSfxVol
         shoreWindLoading = null;
         if (buf && !disposed) {
           shoreWindBuf = buf;
-          // If shore ambient is currently running on temporary pink-noise fallback, seamlessly upgrade to real wind loop!
-          if (shoreAmbientWanted && !isMuted && shoreAmbientHandle && !shoreAmbientHandle.isRealWind) {
-            stopShoreHandle(0.28);
+          // Start silky studio nocturnal wind loop the instant decode finishes (ZERO pink-noise fallback!)
+          if (shoreAmbientWanted && !isMuted && !shoreAmbientHandle) {
             startShoreWindHandle(ctx, true);
           }
         }
@@ -491,39 +490,18 @@ export function createSoulsEscapeAudio(getCtxOrOpts, getMasterGainArg, getSfxVol
 
   function startShoreWindHandle(ctx, useRealSample) {
     if (!ctx || !envBus || shoreAmbientHandle) return;
+    if (!useRealSample || !shoreWindBuf) return;
     const now = ctx.currentTime;
-    if (useRealSample && shoreWindBuf) {
-      const src = ctx.createBufferSource();
-      src.buffer = shoreWindBuf;
-      src.loop = true;
-      const gain = ctx.createGain();
-      gain.gain.setValueAtTime(0.0001, now);
-      gain.gain.linearRampToValueAtTime(0.76, now + 0.85);
-      src.connect(gain);
-      gain.connect(envBus);
-      src.start(now);
-      shoreAmbientHandle = { src, hp: null, lp: null, gain, isRealWind: true };
-      return;
-    }
-    if (!noiseBuf) return;
     const src = ctx.createBufferSource();
-    src.buffer = noiseBuf;
+    src.buffer = shoreWindBuf;
     src.loop = true;
-    const hp = ctx.createBiquadFilter();
-    hp.type = 'highpass';
-    hp.frequency.setValueAtTime(110, now);
-    const lp = ctx.createBiquadFilter();
-    lp.type = 'lowpass';
-    lp.frequency.setValueAtTime(920, now);
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.linearRampToValueAtTime(0.18, now + 0.75);
-    src.connect(hp);
-    hp.connect(lp);
-    lp.connect(gain);
+    gain.gain.linearRampToValueAtTime(0.46, now + 1.15);
+    src.connect(gain);
     gain.connect(envBus);
     src.start(now);
-    shoreAmbientHandle = { src, hp, lp, gain, isRealWind: false };
+    shoreAmbientHandle = { src, hp: null, lp: null, gain, isRealWind: true };
   }
 
   function setExteriorShoreAmbient(active) {
@@ -535,20 +513,11 @@ export function createSoulsEscapeAudio(getCtxOrOpts, getMasterGainArg, getSfxVol
     }
     const ctx = ensureGraph();
     if (!ctx || !envBus) return;
-    if (shoreAmbientHandle) {
-      if (!shoreAmbientHandle.isRealWind && shoreWindBuf) {
-        stopShoreHandle(0.28);
-        startShoreWindHandle(ctx, true);
-      } else if (!shoreWindBuf && !shoreWindLoading) {
-        fetchShoreWindBuf(ctx);
-      }
-      return;
-    }
+    if (shoreAmbientHandle) return;
     if (shoreWindBuf) {
       startShoreWindHandle(ctx, true);
-    } else {
+    } else if (!shoreWindLoading) {
       fetchShoreWindBuf(ctx);
-      startShoreWindHandle(ctx, false);
     }
   }
 

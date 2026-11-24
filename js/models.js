@@ -8,7 +8,7 @@ import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { DRACOLoader } from '../vendor/DRACOLoader.js';
 import { clone as cloneSkinned } from '../vendor/SkeletonUtils.js';
-import { WEAPONS } from './config.js?v=20261124z97';
+import { WEAPONS } from './config.js?v=20261124z98';
 import {
   getGeo,
   getMat,
@@ -17,43 +17,43 @@ import {
   createAnimController,
   setBoneRelEuler,
   solveMixamoArmIK
-} from './models/shared.js?v=20261124z97';
+} from './models/shared.js?v=20261124z98';
 import {
   getWarriorWeaponMountConfig,
   createWarriorStanceState,
   applyWarriorWeaponStance,
   applyWarriorAttackOverlay
-} from './models/warriorStances.js?v=20261124z97';
+} from './models/warriorStances.js?v=20261124z98';
 import {
   computeFootSyncPlaybackRate,
   computeCombatPostureDynamics,
   applyCombatPostureToObject3D,
   applyCombatRecoilImpulse
-} from './souls/soulsPhysicsFeel.js?v=20261124z97';
-import { createActorContactShadowMesh } from './souls/soulsAtmosphere.js?v=20261124z97';
+} from './souls/soulsPhysicsFeel.js?v=20261124z98';
+import { createActorContactShadowMesh } from './souls/soulsAtmosphere.js?v=20261124z98';
 import {
   applyEldenDissolveToModel,
   resetEldenDissolveFromModel
-} from './souls/soulsDissolveVfx.js?v=20261124z97';
+} from './souls/soulsDissolveVfx.js?v=20261124z98';
 
 const MODEL_PATHS = {
   // Warrior Knight (Mixamo Sword & Shield Run + Diagonal Slash + Turn_180 + Combat_Roll + Heavy_Thrust + Door_Push)
-  warrior_run: './assets/models/Warrior_Run.glb?v=20261124z97',
+  warrior_run: './assets/models/Warrior_Run.glb?v=20261124z98',
 
   // All Warrior Melee Weapons + Shield (preserved for in-world discovery & future equipment!)
   sword_tripo: './assets/models/Sword_Tripo.glb?v=20261120z34',
   shield_custom: './assets/models/Shield_Custom.glb?v=20261120z34',
-  great_club_tripo: './assets/models/Great_Club.glb?v=20261124z97',
+  great_club_tripo: './assets/models/Great_Club.glb?v=20261124z98',
   spear_tripo: './assets/models/Spear_Tripo.glb?v=20261120z34',
   zweihander_tripo: './assets/models/Zweihander_Tripo.glb?v=20261120z34',
   axe_tripo: './assets/models/Axe_Tripo.glb?v=20261120z34',
   hammer_tripo: './assets/models/Hammer_Tripo.glb?v=20261120z34',
 
   // Castle of Ash Enemies & Boss (Boss untouched!)
-  rift_boss: './assets/models/Rift_Boss_Tripo.glb?v=20261124z97',
-  rift_executioner: './assets/models/Rift_Executioner_Tripo.glb?v=20261124z97',
-  rift_vanguard: './assets/models/Rift_Vanguard_Tripo.glb?v=20261124z97',
-  rift_acolyte: './assets/models/Rift_Acolyte_Tripo.glb?v=20261124z97'
+  rift_boss: './assets/models/Rift_Boss_Tripo.glb?v=20261124z98',
+  rift_executioner: './assets/models/Rift_Executioner_Tripo.glb?v=20261124z98',
+  rift_vanguard: './assets/models/Rift_Vanguard_Tripo.glb?v=20261124z98',
+  rift_acolyte: './assets/models/Rift_Acolyte_Tripo.glb?v=20261124z98'
 };
 
 const gltfCache = new Map();

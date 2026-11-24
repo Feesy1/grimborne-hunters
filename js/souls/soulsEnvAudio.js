@@ -2,7 +2,7 @@
 // Studio 44.1 kHz 16-bit WAV samples + acoustic procedural fallbacks during decode.
 // Strictly isolated from PvE biomes; zero external dependencies (Vanilla ES Module).
 
-export const SOULS_ENV_AUDIO_VERSION = '20261124z97';
+export const SOULS_ENV_AUDIO_VERSION = '20261124z98';
 
 const BASE_AUDIO_PATH = './assets/audio';
 
@@ -24,7 +24,6 @@ export const SOULS_ENV_SAMPLE_MANIFEST = Object.freeze([
   ['bonfire_crackle', `${BASE_AUDIO_PATH}/souls_env_bonfire_crackle.wav?v=${SOULS_ENV_AUDIO_VERSION}`],
   ['fog_gate', `${BASE_AUDIO_PATH}/souls_env_fog_gate.wav?v=${SOULS_ENV_AUDIO_VERSION}`],
   ['cathedral_drone', `${BASE_AUDIO_PATH}/souls_env_cathedral_drone.wav?v=${SOULS_ENV_AUDIO_VERSION}`],
-  ['shore_wind', `${BASE_AUDIO_PATH}/souls_shore_wind_ambient.mp3?v=${SOULS_ENV_AUDIO_VERSION}`],
   ['door_open', `${BASE_AUDIO_PATH}/souls_env_door_open.wav?v=${SOULS_ENV_AUDIO_VERSION}`],
   ['door_close', `${BASE_AUDIO_PATH}/souls_env_door_close.wav?v=${SOULS_ENV_AUDIO_VERSION}`]
 ]);
@@ -99,11 +98,6 @@ export function createSoulsEnvAudio({
   let droneGain = null;
   let droneStopTimer = null;
   let droneDestRef = null;
-
-  let castleWindNode = null;
-  let castleWindGain = null;
-  let castleWindStopTimer = null;
-  let castleWindDestRef = null;
 
   let bonfireNode = null;
   let bonfireGain = null;
@@ -729,23 +723,6 @@ export function createSoulsEnvAudio({
     droneDestRef = null;
   }
 
-  function teardownCastleWind() {
-    if (castleWindStopTimer !== null) {
-      clearTimeout(castleWindStopTimer);
-      castleWindStopTimer = null;
-    }
-    if (castleWindNode) {
-      try { castleWindNode.stop(); } catch {}
-      try { castleWindNode.disconnect(); } catch {}
-      castleWindNode = null;
-    }
-    if (castleWindGain) {
-      try { castleWindGain.disconnect(); } catch {}
-      castleWindGain = null;
-    }
-    castleWindDestRef = null;
-  }
-
   function teardownBonfire() {
     if (bonfireStopTimer !== null) {
       clearTimeout(bonfireStopTimer);
@@ -772,7 +749,6 @@ export function createSoulsEnvAudio({
     if (!ctx) {
       if (!ambientActive) {
         teardownDrone();
-        teardownCastleWind();
         if (shoreBonfireLevel <= 0.01) teardownBonfire();
       }
       return;
@@ -814,7 +790,7 @@ export function createSoulsEnvAudio({
         }
       }
       if (droneGain) {
-        const droneTarget = musicDest ? 0.24 : 0.10;
+        const droneTarget = musicDest ? 0.28 : 0.11;
         droneGain.gain.cancelScheduledValues(t);
         droneGain.gain.setTargetAtTime(droneTarget, t, 0.42);
       }
@@ -825,50 +801,6 @@ export function createSoulsEnvAudio({
         droneStopTimer = setTimeout(() => {
           droneStopTimer = null;
           if (!ambientActive) teardownDrone();
-        }, 1050);
-      }
-    }
-
-    // 1b. Haunting Cold Nocturnal Wind bed layered softly in Castle courtyard & ruins!
-    const targetWindDest = sfxDest || musicDest;
-    const wantCastleWind = ambientActive && Boolean(targetWindDest);
-    const windBuf = buffers.get('shore_wind');
-    if (wantCastleWind) {
-      if (castleWindStopTimer !== null) {
-        clearTimeout(castleWindStopTimer);
-        castleWindStopTimer = null;
-      }
-      if (castleWindNode && castleWindDestRef !== targetWindDest) {
-        teardownCastleWind();
-      }
-      if (!castleWindNode && windBuf) {
-        try {
-          const src = ctx.createBufferSource();
-          src.buffer = windBuf;
-          src.loop = true;
-          const g = ctx.createGain();
-          g.gain.setValueAtTime(0.0001, t);
-          src.connect(g);
-          g.connect(targetWindDest);
-          src.start(t);
-          castleWindNode = src;
-          castleWindGain = g;
-          castleWindDestRef = targetWindDest;
-        } catch {
-          teardownCastleWind();
-        }
-      }
-      if (castleWindGain) {
-        castleWindGain.gain.cancelScheduledValues(t);
-        castleWindGain.gain.setTargetAtTime(0.26, t, 0.55);
-      }
-    } else if (castleWindGain) {
-      castleWindGain.gain.cancelScheduledValues(t);
-      castleWindGain.gain.setTargetAtTime(0.0001, t, 0.26);
-      if (castleWindStopTimer === null) {
-        castleWindStopTimer = setTimeout(() => {
-          castleWindStopTimer = null;
-          if (!ambientActive) teardownCastleWind();
         }, 1050);
       }
     }
@@ -951,7 +883,7 @@ export function createSoulsEnvAudio({
           if (decoded) {
             buffers.set(key, decoded);
             if (
-              (ambientActive && (key === 'cathedral_drone' || key === 'bonfire_crackle' || key === 'shore_wind')) ||
+              (ambientActive && (key === 'cathedral_drone' || key === 'bonfire_crackle')) ||
               (shoreBonfireLevel > 0.01 && key === 'bonfire_crackle')
             ) {
               syncAmbientLoops();
@@ -1166,7 +1098,7 @@ export function createSoulsEnvAudio({
 
     if (ambientActive) {
       const ctx = safeGet(getCtx);
-      if (ctx && (!buffers.has('cathedral_drone') || !buffers.has('bonfire_crackle') || !buffers.has('shore_wind'))) {
+      if (ctx && (!buffers.has('cathedral_drone') || !buffers.has('bonfire_crackle'))) {
         preload(ctx);
       }
     }
@@ -1187,7 +1119,6 @@ export function createSoulsEnvAudio({
     bonfireLevel = 0;
     shoreBonfireLevel = 0;
     teardownDrone();
-    teardownCastleWind();
     teardownBonfire();
     buffers.clear();
     pendingLoads.clear();
