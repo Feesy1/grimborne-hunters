@@ -8,6 +8,12 @@
 //       above, and warm blackbody amber hearth/brazier lobes below/sideways — giving wet
 //       flagstones, forged steel armor, blades, and iron cages authentic specular reflections
 //       with ZERO highlight blowout or milky shadow washout.
+//   - createSoulsShoreEnvironmentMap(renderer, options)
+//       Generates an outdoor brooding moonlit night-sky linear HDR PMREM CubeUV environment map
+//       for the Exterior Shore / Extended Gorge Road: deep midnight-indigo zenith, moody
+//       blue-slate horizon, dark damp earth nadir, single crisp silver-blue moon specular lobe
+//       aligned with exterior moon normalize(vec3(0.240, 0.315, 0.918)), and subtle cool
+//       northern sky shadow fill (zero cathedral windows, zero indoor fire lobes).
 //   - createSoulsFireShadowRig(scene, options)
 //       On Desktop (!isMobile): manages 2 real shadow-casting THREE.PointLight instances
 //       (primary 1024x1024 + secondary 512x512, inverse-square decay = 2, bias = -0.0006,
@@ -406,6 +412,151 @@ export function createSoulsEnvironmentMap(renderer, options = {}) {
     renderer.toneMappingExposure = prevExposure;
     renderer.setClearColor(prevClearColor, prevClearAlpha);
     renderer.setRenderTarget(prevRenderTarget);
+  }
+
+  const envTex = envRT.texture;
+  const origTexDispose = envTex.dispose.bind(envTex);
+  let disposed = false;
+
+  const fullDispose = () => {
+    if (disposed) return;
+    disposed = true;
+    envRT.dispose();
+    origTexDispose();
+  };
+
+  envTex.texture = envTex;
+  envTex.envMap = envTex;
+  envTex.renderTarget = envRT;
+  envTex.dispose = fullDispose;
+
+  return envTex;
+}
+
+/**
+ * Generates an outdoor brooding moonlit night-sky linear-HDR PMREM environment map strictly
+ * for the Exterior Shore & Gorge Road (`exterior_shore`).
+ *
+ * Features a deep midnight-indigo zenith, moody blue-slate horizon band, dark damp stone/earth
+ * ground nadir, a single crisp silver-blue moon specular lobe aligned with the exterior sky moon
+ * `normalize(vec3(0.240, 0.315, 0.918))`, and a subtle cool northern sky fill opposite the moon
+ * so forged steel armor, Great Club studs, wet cobblestones, and river puddles catch authentic
+ * cold moonlight with zero indoor cathedral windows or orange fire lobes.
+ *
+ * Matches `createSoulsEnvironmentMap(renderer, options)` signature & disposal contract (and also
+ * accepts `(THREE, renderer, options)` if a Three.js namespace is passed first).
+ *
+ * @param {THREE.WebGLRenderer} renderer
+ * @param {{ blurSigma?: number, isMobile?: boolean }} [options={}]
+ * @returns {THREE.Texture & { texture: THREE.Texture, envMap: THREE.Texture, renderTarget: THREE.WebGLRenderTarget | null, dispose: () => void }}
+ */
+export function createSoulsShoreEnvironmentMap(renderer, options = {}, ...rest) {
+  let targetThree = THREE;
+  let targetRenderer = renderer;
+  let targetOptions = options;
+  if (renderer && typeof renderer.render !== 'function' && options && typeof options.render === 'function') {
+    if (renderer.Scene && renderer.PMREMGenerator) targetThree = renderer;
+    targetRenderer = options;
+    targetOptions = rest[0] || {};
+  }
+  if (!targetRenderer || typeof targetRenderer.render !== 'function') {
+    throw new Error('[soulsLightingRig] createSoulsShoreEnvironmentMap requires a valid THREE.WebGLRenderer');
+  }
+
+  const blurSigma = Number.isFinite(targetOptions?.blurSigma) ? Math.max(0, targetOptions.blurSigma) : 0.018;
+
+  const envScene = new targetThree.Scene();
+  const domeGeo = new targetThree.SphereGeometry(24, 48, 28);
+  const domeMat = new targetThree.ShaderMaterial({
+    side: targetThree.BackSide,
+    depthWrite: false,
+    depthTest: false,
+    toneMapped: false,
+    vertexShader: `
+      varying vec3 vWorldDir;
+      void main() {
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vWorldDir = wp.xyz;
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }
+    `,
+    fragmentShader: `
+      varying vec3 vWorldDir;
+
+      void main() {
+        vec3 d = normalize(vWorldDir);
+        float y = d.y;
+        float az = atan(d.z, d.x);
+
+        // 1. Outdoor nocturnal vertical sky-to-earth gradient in linear HDR
+        vec3 zenithSky = vec3(0.035, 0.062, 0.125);
+        vec3 horizonSlate = vec3(0.024, 0.042, 0.078);
+        vec3 groundNadir = vec3(0.010, 0.014, 0.022);
+
+        vec3 col = horizonSlate;
+        if (y >= 0.0) {
+          col = mix(horizonSlate, zenithSky, smoothstep(0.0, 0.72, y));
+          // Subtle brooding storm-cloud density undulation overhead for natural steel/puddle reflections
+          float cloudBand = 0.5 + 0.5 * sin(az * 2.0 + y * 5.2) * cos(az * 3.0 - y * 3.1);
+          col *= mix(1.0, 0.84 + 0.28 * cloudBand, smoothstep(0.06, 0.55, y));
+        } else {
+          col = mix(horizonSlate, groundNadir, smoothstep(0.0, 0.45, -y));
+        }
+
+        // Subtle dark distant mountain-ridge silhouette break right along the horizon band
+        float ridgeH = 0.055 + 0.028 * sin(az * 3.0 + 0.85) + 0.016 * cos(az * 7.0 - 1.15);
+        float ridgeMask = smoothstep(ridgeH + 0.045, ridgeH - 0.025, y) * smoothstep(-0.18, 0.02, y);
+        col = mix(col, vec3(0.013, 0.020, 0.034), ridgeMask * 0.42);
+
+        // 2. Single crisp silver-blue moon specular lobe aligned with exterior moon
+        vec3 moonDir = normalize(vec3(0.240, 0.315, 0.918));
+        float moonDot = max(0.0, dot(d, moonDir));
+        float moonCore = pow(moonDot, 160.0) * 3.25;
+        float moonHalo = pow(moonDot, 26.0) * 0.76;
+        float moonScatter = pow(moonDot, 4.5) * 0.135;
+        col += vec3(0.84, 0.92, 1.12) * moonCore;
+        col += vec3(0.50, 0.68, 1.02) * moonHalo;
+        col += vec3(0.32, 0.48, 0.80) * moonScatter;
+
+        // 3. Subtle cool northern sky fill opposite the moon so shadows hold deep blue-slate tone
+        vec3 northFillDir = normalize(vec3(-0.32, 0.48, -0.82));
+        float fillDot = max(0.0, dot(d, northFillDir));
+        col += vec3(0.055, 0.088, 0.148) * (pow(fillDot, 2.6) * 0.52 + pow(fillDot, 8.0) * 0.20);
+
+        // 4. Faint cold moonlit water reflection shimmer off damp ground/river below horizon
+        vec3 riverReflDir = normalize(vec3(0.240, -0.340, 0.918));
+        float riverGlint = pow(max(0.0, dot(d, riverReflDir)), 10.0) * smoothstep(0.02, -0.20, y);
+        col += vec3(0.040, 0.062, 0.102) * riverGlint;
+
+        gl_FragColor = vec4(col, 1.0);
+      }
+    `
+  });
+
+  const domeMesh = new targetThree.Mesh(domeGeo, domeMat);
+  envScene.add(domeMesh);
+
+  // Preserve renderer state strictly so mid-frame or setup calls leave 0 side effects
+  const prevRenderTarget = targetRenderer.getRenderTarget();
+  const prevToneMapping = targetRenderer.toneMapping;
+  const prevExposure = targetRenderer.toneMappingExposure;
+  const prevClearAlpha = targetRenderer.getClearAlpha();
+  const prevClearColor = targetRenderer.getClearColor(new targetThree.Color());
+
+  let pmrem = null;
+  let envRT = null;
+  try {
+    targetRenderer.toneMapping = targetThree.NoToneMapping;
+    pmrem = new targetThree.PMREMGenerator(targetRenderer);
+    envRT = pmrem.fromScene(envScene, blurSigma, 0.1, 60);
+  } finally {
+    domeGeo.dispose();
+    domeMat.dispose();
+    if (pmrem) pmrem.dispose();
+    targetRenderer.toneMapping = prevToneMapping;
+    targetRenderer.toneMappingExposure = prevExposure;
+    targetRenderer.setClearColor(prevClearColor, prevClearAlpha);
+    targetRenderer.setRenderTarget(prevRenderTarget);
   }
 
   const envTex = envRT.texture;

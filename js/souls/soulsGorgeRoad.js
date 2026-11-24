@@ -1,9 +1,11 @@
 // Dark Souls / Bloodborne Interconnected Riverside Gorge Renderer («Тракт Древней Арки • Акведук Разлома • Башня Перевала»)
-// Studio AAA Visual & Level-Design Overhaul (z101):
+// Stylized-Realistic Visual Cohesion Overhaul (z103):
 //   - Real Blender 4.5.9 sculpted Draco-compressed GLB kits (`gorge_nature.glb` + `gorge_ruins.glb`)
 //   - 1024px seamlessly tileable PBR textures (`cobble`, `ruin_stone`, `cliff_rock`) + 512px (`bark`, `wood_timber`, `moss_earth`)
+//   - Unified moss-coated stone/cliff/boulder/timber materials (`soulsGorgeTerrainMat.js`) & smoky campfire VFX (`soulsGorgeAtmosphere.js`)
 //   - 512px alpha-cutout botanical foliage (`pine_bough_rgba`, `fern_frond_rgba`, `ivy_vine_rgba`, `river_grass_rgba`) with wind sway
 //   - True multi-elevation Dark Souls architecture synced 1:1 with `soulsGorgeTopology.js`:
+//       Zone 0 Sculpted Ash Gate & Pilgrim Arch
 //       Zone 1 Ancient Archway Road + Branch A Lower River Shoal
 //       Zone 2 Lantern Road + Overhead Stone Aqueduct Bridge (y = 5.60m) + Branch C Smuggler's Grotto
 //       Branch B Upper Cliffside Ruined Chapel Terrace + Interactive One-Way Iron Shortcut Gate & Lever
@@ -22,9 +24,14 @@ import {
   getGorgeRiverCenterX,
   getGorgeRiverHalfWidth,
   getGorgeRiverSignedDist
-} from './soulsGorgeTopology.js?v=20261125z102';
+} from './soulsGorgeTopology.js?v=20261125z103';
+import { createCampfireVfxRig } from './soulsGorgeAtmosphere.js?v=20261125z103';
+import {
+  createStylizedGorgeTerrainMaterial,
+  createMossCoatedStoneMaterial
+} from './soulsGorgeTerrainMat.js?v=20261125z103';
 
-const ASSET_VER = '20261125z102';
+const ASSET_VER = '20261125z103';
 const TEX_BASE = './assets/env/textures';
 const NATURE_GLB_URL = `./assets/env/gorge_nature.glb?v=${ASSET_VER}`;
 const RUINS_GLB_URL = `./assets/env/gorge_ruins.glb?v=${ASSET_VER}`;
@@ -136,193 +143,10 @@ export function createGorgePbrTextures(THREE, { anisotropy = 4, trackTex = (t) =
 }
 
 // ============================================================================
-// Multi-Layer Wet Cobblestone / Moss / Cliff Terrain Material w/ Puddle Mirror Reflections!
-// Matches `frame_00` (golden campfire puddle reflection) & `frame_07` (silver moonlit puddles)
+// Backward-Compatible Wrapper -> Unified Stylized-Realistic Gorge Terrain Material (z103)
 // ============================================================================
-export function createWetGorgeTerrainMaterial(THREE, pbrTex, { uTimeUniform, lowSpecMode = false, trackMat = (m) => m } = {}) {
-  const mat = new THREE.MeshStandardMaterial({
-    map: pbrTex.cobble.albedo,
-    normalMap: lowSpecMode ? null : pbrTex.cobble.normal,
-    normalScale: new THREE.Vector2(1.18, 1.18),
-    roughnessMap: pbrTex.cobble.orm,
-    aoMap: pbrTex.cobble.orm,
-    aoMapIntensity: 0.72,
-    vertexColors: true,
-    color: 0xffffff,
-    roughness: 0.88,
-    metalness: 0.04
-  });
-
-  const extraUniforms = {
-    uTimeGorge: uTimeUniform || { value: 0.0 },
-    uMossAlbedo: { value: pbrTex.mossEarth.albedo },
-    uCliffAlbedo: { value: pbrTex.cliffRock.albedo },
-    uBonfireLitGorge: { value: 0.0 }
-  };
-
-  mat.onBeforeCompile = (shader) => {
-    shader.uniforms.uTimeGorge = extraUniforms.uTimeGorge;
-    shader.uniforms.uMossAlbedo = extraUniforms.uMossAlbedo;
-    shader.uniforms.uCliffAlbedo = extraUniforms.uCliffAlbedo;
-    shader.uniforms.uBonfireLitGorge = extraUniforms.uBonfireLitGorge;
-
-    shader.vertexShader = shader.vertexShader
-      .replace(
-        '#include <common>',
-        `#include <common>
-        attribute vec4 aTerrainMix;
-        varying vec3 vGorgeWorldPos;
-        varying vec3 vGorgeWorldNorm;
-        varying vec4 vTerrainMix;`
-      )
-      .replace(
-        '#include <worldpos_vertex>',
-        `#include <worldpos_vertex>
-        vec4 gorgeWp = modelMatrix * vec4(transformed, 1.0);
-        vGorgeWorldPos = gorgeWp.xyz;
-        vGorgeWorldNorm = normalize(mat3(modelMatrix) * objectNormal);
-        vTerrainMix = aTerrainMix;`
-      );
-
-    shader.fragmentShader = shader.fragmentShader
-      .replace(
-        '#include <common>',
-        `#include <common>
-        uniform float uTimeGorge;
-        uniform sampler2D uMossAlbedo;
-        uniform sampler2D uCliffAlbedo;
-        uniform float uBonfireLitGorge;
-        varying vec3 vGorgeWorldPos;
-        varying vec3 vGorgeWorldNorm;
-        varying vec4 vTerrainMix;
-
-        float gHash21(vec2 p) {
-          p = fract(p * vec2(127.1, 311.7));
-          p += dot(p, p + 34.53);
-          return fract(p.x * p.y);
-        }
-        float gVnoise(vec2 p) {
-          vec2 i = floor(p);
-          vec2 f = fract(p);
-          f = f * f * (3.0 - 2.0 * f);
-          return mix(
-            mix(gHash21(i), gHash21(i + vec2(1.0, 0.0)), f.x),
-            mix(gHash21(i + vec2(0.0, 1.0)), gHash21(i + vec2(1.0, 1.0)), f.x),
-            f.y
-          );
-        }
-        float gPuddleMask(vec2 wp, float wy, float roadW, float wetW) {
-          // NEVER create puddle glare underwater/riverbed — keep puddles strictly on damp cobbled road & upper banks!
-          float aboveWater = smoothstep(0.06, 0.36, wy);
-          float n1 = gVnoise(wp * 0.42 + vec2(3.7, 1.9));
-          float n2 = gVnoise(wp * 1.05 - vec2(5.1, 2.4));
-          float n3 = gVnoise(wp * 2.15 + vec2(1.4, -3.2));
-          float raw = n1 * 0.54 + n2 * 0.32 + n3 * 0.14;
-          // Localized broken rain puddles (~20-28% of damp cobblestone road — matches frame_00 & frame_07!)
-          float roadFocus = clamp(roadW * 0.90 + wetW * 0.25, 0.0, 1.0);
-          return smoothstep(0.58, 0.72, raw) * roadFocus * aboveWater;
-        }`
-      )
-      .replace(
-        '#include <map_fragment>',
-        `#include <map_fragment>
-        {
-          // vTerrainMix: x = roadCobble, y = mossEarth, z = cliffRock, w = wetShore/puddleBoost
-          vec2 wp = vGorgeWorldPos.xz;
-          vec3 mossSample = texture2D(uMossAlbedo, wp * 0.28).rgb;
-          vec3 cliffSample = texture2D(uCliffAlbedo, wp * 0.16 + vec2(0.0, vGorgeWorldPos.y * 0.18)).rgb;
-          float slopeCliff = clamp(vTerrainMix.z + smoothstep(0.76, 0.42, vGorgeWorldNorm.y) * 0.85, 0.0, 1.0);
-          float mossW = clamp(vTerrainMix.y * (1.0 - vTerrainMix.x * 0.82), 0.0, 1.0);
-          diffuseColor.rgb = mix(diffuseColor.rgb, mossSample * 0.90, mossW * 0.88);
-          diffuseColor.rgb = mix(diffuseColor.rgb, cliffSample * 0.82, slopeCliff * 0.92);
-          float pMaskCol = gPuddleMask(wp, vGorgeWorldPos.y, vTerrainMix.x, vTerrainMix.w);
-          // Damp cobbles & standing water puddles darken stone realistically
-          diffuseColor.rgb *= mix(1.0, 0.44, pMaskCol * 0.88 + vTerrainMix.w * 0.22);
-        }`
-      )
-      .replace(
-        '#include <roughnessmap_fragment>',
-        `#include <roughnessmap_fragment>
-        float gPuddle = gPuddleMask(vGorgeWorldPos.xz, vGorgeWorldPos.y, vTerrainMix.x, vTerrainMix.w);
-        roughnessFactor = mix(roughnessFactor, 0.08, gPuddle * 0.90);
-        roughnessFactor = mix(roughnessFactor, 0.94, vTerrainMix.y * (1.0 - gPuddle) * 0.65);`
-      )
-      .replace(
-        '#include <normal_fragment_maps>',
-        `#include <normal_fragment_maps>
-        {
-          float pN = gPuddleMask(vGorgeWorldPos.xz, vGorgeWorldPos.y, vTerrainMix.x, vTerrainMix.w);
-          if (pN > 0.05) {
-            vec3 flatViewN = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
-            float rip = sin(vGorgeWorldPos.x * 9.0 + uTimeGorge * 2.2) * cos(vGorgeWorldPos.z * 8.5 - uTimeGorge * 1.8) * 0.014;
-            normal = normalize(mix(normal, normalize(flatViewN + vec3(rip, 0.0, rip)), pN * 0.90));
-          }
-        }`
-      )
-      .replace(
-        '#include <tonemapping_fragment>',
-        `{
-          // Physical HDR Wet Puddle Reflections injected BEFORE ACES Filmic Tone-Mapping (NEVER clips solid white!)
-          float pRefl = gPuddleMask(vGorgeWorldPos.xz, vGorgeWorldPos.y, vTerrainMix.x, vTerrainMix.w);
-          if (pRefl > 0.02) {
-            vec3 Vw = normalize(cameraPosition - vGorgeWorldPos);
-            float ripX = sin(vGorgeWorldPos.x * 11.0 + vGorgeWorldPos.z * 5.0 + uTimeGorge * 2.4) * 0.025;
-            float ripZ = cos(vGorgeWorldPos.z * 10.5 - vGorgeWorldPos.x * 4.5 - uTimeGorge * 2.0) * 0.025;
-            vec3 Nw = normalize(vec3(ripX, 1.0, ripZ));
-            float fres = pow(1.0 - max(dot(Nw, Vw), 0.0), 3.6);
-
-            // 1. Subtle nocturnal sky & silver moonlight specular glint in road puddles (matches frame_07!)
-            vec3 moonDir = normalize(vec3(0.285, 0.255, 0.922));
-            vec3 Hm = normalize(moonDir + Vw);
-            float moonSpec = pow(max(dot(Nw, Hm), 0.0), 82.0) * 0.62 + pow(max(dot(Nw, Hm), 0.0), 22.0) * 0.09;
-            vec3 reflCol = vec3(0.05, 0.085, 0.15) * (0.24 + fres * 0.72)
-                         + vec3(0.68, 0.80, 0.98) * moonSpec;
-
-            // 2. Shimmering warm golden campfire & lantern reflections in damp road puddles (matches frame_00!)
-            float fl1 = 0.88 + 0.12 * sin(uTimeGorge * 9.2 + vGorgeWorldPos.x * 3.0);
-            vec3 camp1P = vec3(-2.95, 1.45, 45.20);
-            vec3 L1 = camp1P - vGorgeWorldPos;
-            float d1 = length(L1);
-            vec3 H1 = normalize(normalize(L1) + Vw);
-            float s1 = (pow(max(dot(Nw, H1), 0.0), 32.0) * 1.45 + pow(max(dot(Nw, H1), 0.0), 10.0) * 0.24) * exp(-d1 * 0.15) * fl1;
-
-            vec3 camp2P = vec3(-3.55, 1.85, 71.20);
-            vec3 L2 = camp2P - vGorgeWorldPos;
-            float d2 = length(L2);
-            vec3 H2 = normalize(normalize(L2) + Vw);
-            float s2 = (pow(max(dot(Nw, H2), 0.0), 32.0) * 1.45 + pow(max(dot(Nw, H2), 0.0), 10.0) * 0.24) * exp(-d2 * 0.15) * fl1;
-
-            vec3 wtP = vec3(0.65, 3.85, 111.20);
-            vec3 L3 = wtP - vGorgeWorldPos;
-            float d3 = length(L3);
-            vec3 H3 = normalize(normalize(L3) + Vw);
-            float s3 = (pow(max(dot(Nw, H3), 0.0), 30.0) * 1.35 + pow(max(dot(Nw, H3), 0.0), 10.0) * 0.22) * exp(-d3 * 0.15) * fl1;
-
-            vec3 bfP = vec3(-2.20, 1.45, 15.00);
-            vec3 L0 = bfP - vGorgeWorldPos;
-            float d0 = length(L0);
-            vec3 H0 = normalize(normalize(L0) + Vw);
-            float s0 = pow(max(dot(Nw, H0), 0.0), 30.0) * 1.35 * exp(-d0 * 0.16) * uBonfireLitGorge * fl1;
-
-            vec3 lanA = vec3(-2.55, 4.10, 55.10);
-            float sLA = pow(max(dot(Nw, normalize(normalize(lanA - vGorgeWorldPos) + Vw)), 0.0), 28.0) * exp(-length(lanA - vGorgeWorldPos) * 0.19) * 0.85;
-            vec3 lan1 = vec3(-3.20, 4.10, 66.20);
-            float sL1 = pow(max(dot(Nw, normalize(normalize(lan1 - vGorgeWorldPos) + Vw)), 0.0), 28.0) * exp(-length(lan1 - vGorgeWorldPos) * 0.19) * 0.85;
-            vec3 lan2 = vec3(-3.25, 4.25, 75.40);
-            float sL2 = pow(max(dot(Nw, normalize(normalize(lan2 - vGorgeWorldPos) + Vw)), 0.0), 28.0) * exp(-length(lan2 - vGorgeWorldPos) * 0.19) * 0.85;
-            vec3 lan3 = vec3(-2.05, 4.40, 84.20);
-            float sL3 = pow(max(dot(Nw, normalize(normalize(lan3 - vGorgeWorldPos) + Vw)), 0.0), 28.0) * exp(-length(lan3 - vGorgeWorldPos) * 0.19) * 0.85;
-
-            reflCol += vec3(1.55, 0.72, 0.20) * (s0 + s1 + s2 + s3 + sLA + sL1 + sL2 + sL3);
-            gl_FragColor.rgb += reflCol * pRefl * (0.48 + 0.52 * fres);
-          }
-        }
-        #include <tonemapping_fragment>`
-      );
-  };
-  mat.customProgramCacheKey = () => (lowSpecMode ? 'gorge_wet_terrain_low' : 'gorge_wet_terrain_hq');
-  mat.userData.gorgeUniforms = extraUniforms;
-  return trackMat(mat);
+export function createWetGorgeTerrainMaterial(THREE, pbrTex, opts = {}) {
+  return createStylizedGorgeTerrainMaterial(THREE, pbrTex, opts);
 }
 
 // ============================================================================
@@ -446,102 +270,109 @@ export function createSoulsGorgeRoad(THREE, ctx) {
   const rng = makeRng(202611251);
 
   // --------------------------------------------------------------------------
-  // 1. Studio 1024px / 512px PBR Materials (Shared across GLB kits & Architecture)
+  // 1. Unified Stylized-Realistic Moss-Coated PBR Materials (Hero Cohesion envMapIntensity 0.40–0.62)
   // --------------------------------------------------------------------------
-  const ruinStoneMat = regNormalMat(
-    trackMat(new THREE.MeshStandardMaterial({
-      map: pbrTex.ruinStone.albedo,
-      normalMap: lowSpecMode ? null : pbrTex.ruinStone.normal,
-      normalScale: new THREE.Vector2(1.15, 1.15),
-      roughnessMap: pbrTex.ruinStone.orm,
-      aoMap: pbrTex.ruinStone.orm,
-      aoMapIntensity: 0.78,
-      vertexColors: true,
-      color: 0xdbe4f4,
-      roughness: 0.86,
-      metalness: 0.05
-    })),
-    pbrTex.ruinStone.normal
-  );
+  const ruinStoneMat = createMossCoatedStoneMaterial(THREE, pbrTex, {
+    kind: 'ruin',
+    color: 0xb4c0d4,
+    envMapIntensity: 0.44,
+    mossAmount: 0.68,
+    groundAO: 0.36,
+    rimStrength: 0.15,
+    lowSpecMode,
+    trackMat,
+    regNormalMat
+  });
 
-  const ruinStoneDeckMat = regNormalMat(
-    trackMat(new THREE.MeshStandardMaterial({
-      map: pbrTex.cobble.albedo,
-      normalMap: lowSpecMode ? null : pbrTex.cobble.normal,
-      normalScale: new THREE.Vector2(1.05, 1.05),
-      roughnessMap: pbrTex.cobble.orm,
-      aoMap: pbrTex.cobble.orm,
-      aoMapIntensity: 0.75,
-      vertexColors: true,
-      color: 0xcdd8eb,
-      roughness: 0.78,
-      metalness: 0.06
-    })),
-    pbrTex.cobble.normal
-  );
+  const zone0GateMat = createMossCoatedStoneMaterial(THREE, pbrTex, {
+    kind: 'zone0_gate',
+    color: 0xb6c2d6,
+    envMapIntensity: 0.44,
+    mossAmount: 0.58,
+    groundAO: 0.38,
+    rimStrength: 0.16,
+    lowSpecMode,
+    trackMat,
+    regNormalMat
+  });
 
-  const cliffRockMat = regNormalMat(
-    trackMat(new THREE.MeshStandardMaterial({
-      map: pbrTex.cliffRock.albedo,
-      normalMap: lowSpecMode ? null : pbrTex.cliffRock.normal,
-      normalScale: new THREE.Vector2(1.25, 1.25),
-      roughnessMap: pbrTex.cliffRock.orm,
-      aoMap: pbrTex.cliffRock.orm,
-      aoMapIntensity: 0.82,
-      vertexColors: true,
-      color: 0xd8e4f6,
-      roughness: 0.90,
-      metalness: 0.04
-    })),
-    pbrTex.cliffRock.normal
-  );
+  const ruinStoneDeckMat = createMossCoatedStoneMaterial(THREE, pbrTex, {
+    kind: 'deck',
+    color: 0xb8c4d8,
+    envMapIntensity: 0.52,
+    mossAmount: 0.14,
+    groundAO: 0.24,
+    rimStrength: 0.12,
+    lowSpecMode,
+    trackMat,
+    regNormalMat
+  });
 
-  const wetRiverBoulderMat = regNormalMat(
-    trackMat(new THREE.MeshStandardMaterial({
-      map: pbrTex.cliffRock.albedo,
-      normalMap: lowSpecMode ? null : pbrTex.cliffRock.normal,
-      normalScale: new THREE.Vector2(1.10, 1.10),
-      roughnessMap: pbrTex.cliffRock.orm,
-      aoMap: pbrTex.cliffRock.orm,
-      aoMapIntensity: 0.72,
-      vertexColors: true,
-      color: 0xaab9cf,
-      roughness: 0.44,
-      metalness: 0.08
-    })),
-    pbrTex.cliffRock.normal
-  );
+  const cliffRockMat = createMossCoatedStoneMaterial(THREE, pbrTex, {
+    kind: 'cliff',
+    color: 0xa8b5c8,
+    envMapIntensity: 0.42,
+    mossAmount: 0.80,
+    groundAO: 0.38,
+    rimStrength: 0.16,
+    lowSpecMode,
+    trackMat,
+    regNormalMat
+  });
 
-  const barkMat = regNormalMat(
-    trackMat(new THREE.MeshStandardMaterial({
-      map: pbrTex.bark.albedo,
-      normalMap: lowSpecMode ? null : pbrTex.bark.normal,
-      normalScale: new THREE.Vector2(1.20, 1.20),
-      vertexColors: true,
-      color: 0xd8cec2,
-      roughness: 0.92,
-      metalness: 0.02
-    })),
-    pbrTex.bark.normal
-  );
+  const mossMoundMat = createMossCoatedStoneMaterial(THREE, pbrTex, {
+    kind: 'cliff',
+    color: 0x9cb0a4,
+    envMapIntensity: 0.42,
+    mossAmount: 0.94,
+    groundAO: 0.34,
+    rimStrength: 0.12,
+    lowSpecMode,
+    trackMat,
+    regNormalMat
+  });
 
-  const timberWoodMat = regNormalMat(
-    trackMat(new THREE.MeshStandardMaterial({
-      map: pbrTex.woodTimber.albedo,
-      normalMap: lowSpecMode ? null : pbrTex.woodTimber.normal,
-      normalScale: new THREE.Vector2(1.05, 1.05),
-      vertexColors: true,
-      color: 0xdccbb8,
-      roughness: 0.84,
-      metalness: 0.04
-    })),
-    pbrTex.woodTimber.normal
-  );
+  const wetRiverBoulderMat = createMossCoatedStoneMaterial(THREE, pbrTex, {
+    kind: 'boulder',
+    color: 0x98a8c0,
+    envMapIntensity: 0.62,
+    mossAmount: 0.66,
+    groundAO: 0.40,
+    rimStrength: 0.16,
+    lowSpecMode,
+    trackMat,
+    regNormalMat
+  });
+
+  const barkMat = createMossCoatedStoneMaterial(THREE, pbrTex, {
+    kind: 'bark',
+    color: 0xb6aca2,
+    envMapIntensity: 0.42,
+    mossAmount: 0.30,
+    groundAO: 0.38,
+    rimStrength: 0.14,
+    lowSpecMode,
+    trackMat,
+    regNormalMat
+  });
+
+  const timberWoodMat = createMossCoatedStoneMaterial(THREE, pbrTex, {
+    kind: 'timber',
+    color: 0xb8a898,
+    envMapIntensity: 0.44,
+    mossAmount: 0.10,
+    groundAO: 0.32,
+    rimStrength: 0.12,
+    lowSpecMode,
+    trackMat,
+    regNormalMat
+  });
 
   const forgedIronMat = trackMat(new THREE.MeshStandardMaterial({
     color: 0x3b424e,
     roughness: 0.46,
     metalness: 0.82,
+    envMapIntensity: 0.62,
     vertexColors: true
   }));
 
@@ -558,6 +389,7 @@ export function createSoulsGorgeRoad(THREE, ctx) {
       color: 0x9b242c,
       roughness: 0.86,
       metalness: 0.02,
+      envMapIntensity: 0.42,
       vertexColors: true,
       side: THREE.DoubleSide
     })),
@@ -565,15 +397,16 @@ export function createSoulsGorgeRoad(THREE, ctx) {
     { amp: 0.14, freq: 2.1, anchorTop: true, cacheKey: 'gorge_banner_wind' }
   );
 
-  // Botanical Alpha-Cutout Materials (0 halo, double-sided, subtle moonlight wind sway!)
+  // Botanical Alpha-Cutout Materials (0 halo, double-sided, balanced moonlit tints for v2 deep botanical cards!)
   const pineFoliageMat = applyWindSway(
     trackMat(new THREE.MeshStandardMaterial({
       map: pbrTex.foliage.pineBough,
       alphaTest: 0.40,
       side: THREE.DoubleSide,
-      color: 0xbcd4c2,
+      color: 0xd0e4d6,
       roughness: 0.86,
       metalness: 0.02,
+      envMapIntensity: 0.48,
       vertexColors: true
     })),
     uTimeUniform,
@@ -585,9 +418,10 @@ export function createSoulsGorgeRoad(THREE, ctx) {
       map: pbrTex.foliage.ivyVine,
       alphaTest: 0.36,
       side: THREE.DoubleSide,
-      color: 0xb6d6b0,
+      color: 0xcce2c6,
       roughness: 0.80,
       metalness: 0.02,
+      envMapIntensity: 0.48,
       vertexColors: true
     })),
     uTimeUniform,
@@ -599,9 +433,10 @@ export function createSoulsGorgeRoad(THREE, ctx) {
       map: pbrTex.foliage.ivyVinePlane,
       alphaTest: 0.36,
       side: THREE.DoubleSide,
-      color: 0xacd0a6,
+      color: 0xc2d8bc,
       roughness: 0.82,
-      metalness: 0.02
+      metalness: 0.02,
+      envMapIntensity: 0.48
     })),
     uTimeUniform,
     { amp: 0.06, freq: 1.75, anchorTop: true, cacheKey: 'gorge_ivy_plane_wind' }
@@ -612,9 +447,10 @@ export function createSoulsGorgeRoad(THREE, ctx) {
       map: pbrTex.foliage.fernFrond,
       alphaTest: 0.42,
       side: THREE.DoubleSide,
-      color: 0xc2d8b4,
+      color: 0xd0e2c4,
       roughness: 0.78,
-      metalness: 0.02
+      metalness: 0.02,
+      envMapIntensity: 0.48
     })),
     uTimeUniform,
     { amp: 0.075, freq: 1.85, anchorTop: false, cacheKey: 'gorge_fern_wind' }
@@ -625,15 +461,16 @@ export function createSoulsGorgeRoad(THREE, ctx) {
       map: pbrTex.foliage.riverGrass,
       alphaTest: 0.40,
       side: THREE.DoubleSide,
-      color: 0xb4caaa,
+      color: 0xc6dac0,
       roughness: 0.80,
-      metalness: 0.02
+      metalness: 0.02,
+      envMapIntensity: 0.48
     })),
     uTimeUniform,
     { amp: 0.085, freq: 2.15, anchorTop: false, cacheKey: 'gorge_grass_wind' }
   );
 
-  // Atmospheric Distant Alpine Mountain Material (supports InstancedMesh! Fades naturally into moody nocturnal valley mist like frame_00 & frame_07!)
+  // Atmospheric Distant Alpine Mountain Material (supports InstancedMesh! Fades seamlessly into layered blue-slate valley mist #0e1828!)
   const distantMountainMat = trackMat(new THREE.ShaderMaterial({
     uniforms: {
       uTime: uTimeUniform
@@ -676,12 +513,12 @@ export function createSoulsGorgeRoad(THREE, ctx) {
         vec3 col = mix(rockDark, rockLit, clamp(ndl * 0.60 + ridge * 0.22, 0.0, 1.0)) * (0.62 + 0.50 * vCol.r);
         col += vec3(0.18, 0.27, 0.42) * rim * (0.30 + 0.65 * ndl);
 
-        // Moody dark blue-slate valley mist rising gently from the mountain base + aerial perspective depth fade
+        // Layered luminous moonlit blue-slate valley mist (#1a2a40) rising from the mountain base + aerial perspective
         float dist = length(vWorldPos - cameraPosition);
-        float valleyMist = (1.0 - smoothstep(-2.0, 20.0, vWorldPos.y)) * 0.68;
-        float depthMist = smoothstep(68.0, 195.0, dist) * 0.62;
-        float totalMist = clamp(max(valleyMist, depthMist), 0.0, 0.82);
-        vec3 mistCol = mix(vec3(0.052, 0.080, 0.135), vec3(0.11, 0.16, 0.25), clamp(ndl * 0.45 + smoothstep(6.0, 28.0, vWorldPos.y) * 0.30, 0.0, 1.0));
+        float valleyMist = (1.0 - smoothstep(-2.0, 22.0, vWorldPos.y)) * 0.72;
+        float depthMist = smoothstep(64.0, 188.0, dist) * 0.66;
+        float totalMist = clamp(max(valleyMist, depthMist), 0.0, 0.85);
+        vec3 mistCol = mix(vec3(0.088, 0.145, 0.242), vec3(0.145, 0.220, 0.348), clamp(ndl * 0.36 + smoothstep(8.0, 28.0, vWorldPos.y) * 0.26, 0.0, 1.0));
         col = mix(col, mistCol, totalMist);
 
         gl_FragColor = vec4(col, 1.0);
@@ -795,13 +632,15 @@ export function createSoulsGorgeRoad(THREE, ctx) {
   addMasonryBox(archStoneParts, 1.08, 0.22, 2.05, -11.85, 6.20, 64.0, 0, 0, 0, 0xa2b2ce, 0x4f5a70);
 
   // B) Stone Aqueduct Bridge East River-Overlook Balcony (x = 3.5..5.7, z = 79.6..84.4, y = 5.60m)
-  //    Connects seamlessly onto the east end of `Stone_Arch_Bridge_Bay`!
-  addMasonryBox(archStoneParts, 2.8, 5.8, 5.0, 4.65, 2.68, 82.0, 0, 0, 0, 0x7b89a2, 0x293040);
+  //    Slender Gothic open colonnade piers underneath (keeps river & moonlit valley vista WIDE OPEN in frame_07!)
+  addMasonryBox(archStoneParts, 0.72, 5.7, 0.72, 5.42, 2.65, 79.90, 0, 0, 0, 0x8a99b4, 0x343d50);
+  addMasonryBox(archStoneParts, 0.72, 5.7, 0.72, 5.42, 2.65, 84.10, 0, 0, 0, 0x8a99b4, 0x343d50);
+  addMasonryBox(archStoneParts, 2.60, 0.52, 4.90, 4.60, 5.14, 82.0, 0, 0, 0, 0x8c9bb6, 0x3a4358);
   addMasonryBox(archDeckParts,  2.6, 0.26, 4.9, 4.60, 5.48, 82.0, 0, 0, 0, 0xa0aec8, 0x4e586d);
-  // Overlook balcony parapets (north, south & east river edge)
-  addMasonryBox(archStoneParts, 0.48, 1.08, 5.1, 5.82, 6.08, 82.0, 0, 0, 0, 0x96a6c2, 0x444e63);
-  addMasonryBox(archStoneParts, 2.6, 0.96, 0.46, 4.60, 6.04, 79.55, 0, 0, 0, 0x96a6c2, 0x444e63);
-  addMasonryBox(archStoneParts, 2.6, 0.96, 0.46, 4.60, 6.04, 84.45, 0, 0, 0, 0x96a6c2, 0x444e63);
+  // Overlook balcony low broken weathered parapets (north, south & east river edge)
+  addMasonryBox(archStoneParts, 0.44, 0.78, 4.9, 5.80, 5.96, 82.0, 0, 0, 0, 0x96a6c2, 0x444e63);
+  addMasonryBox(archStoneParts, 2.4, 0.72, 0.42, 4.60, 5.94, 79.58, 0, 0, 0, 0x96a6c2, 0x444e63);
+  addMasonryBox(archStoneParts, 2.4, 0.72, 0.42, 4.60, 5.94, 84.42, 0, 0, 0, 0x96a6c2, 0x444e63);
   // West bridge transition deck tying `Stone_Arch_Bridge_Bay` (-6.1) seamlessly into Upper Chapel Terrace (-12.4)
   addMasonryBox(archStoneParts, 6.6, 5.8, 3.8, -9.2, 2.68, 82.0, 0, 0, 0, 0x7a88a0, 0x2b3242);
   addMasonryBox(archDeckParts,  6.5, 0.24, 3.5, -9.2, 5.49, 82.0, 0, 0, 0, 0x9baac4, 0x4d576c);
@@ -931,10 +770,20 @@ export function createSoulsGorgeRoad(THREE, ctx) {
   gorgeGroup.add(archDeckMesh);
 
   // --------------------------------------------------------------------------
-  // 3. LIVE CAMPFIRES, BRAZIERS, EMBER BEDS, RISING SMOKE & WARM GROUND POOLS
+  // 3. ROARING SMOKY CAMPFIRES (`createCampfireVfxRig`), BRAZIERS & WARM GROUND POOLS
   // --------------------------------------------------------------------------
   const fireAssemblies = [];
   const warmSprites = [];
+
+  const campfireRig = createCampfireVfxRig(THREE, {
+    parentGroup: gorgeGroup,
+    uTimeUniform,
+    mistSpriteTex,
+    isMobile,
+    lowSpecMode,
+    trackGeo,
+    trackMat
+  });
 
   function addLanternGlowSprite(x, y, z, scale = 1.65) {
     const sp = new THREE.Sprite(warmHaloMat);
@@ -945,14 +794,17 @@ export function createSoulsGorgeRoad(THREE, ctx) {
   }
 
   function addCampfireFx(x, y, z, scale = 1.0) {
-    // createFlameAssemblyMesh(scaleW, scaleH, litUniformRef) — EXACT 3 args!
-    const flame = createFlameAssemblyMesh(0.86 * scale, 1.38 * scale, alwaysOneUniform);
-    flame.position.set(x, y + 0.16, z);
-    gorgeGroup.add(flame);
-    fireAssemblies.push(flame);
+    // CRITICAL: addPointLight: false so NUM_POINT_LIGHTS never changes (zero shader recompile hitch;
+    // world.js permanent burningGroundLight handles real dynamic firelight!)
+    campfireRig.addCampfire(x, y, z, {
+      scale,
+      litUniform: alwaysOneUniform,
+      phase: x * 0.7 + z * 0.4,
+      addPointLight: false
+    });
     // addWarmGroundPool(px, pz, radius, colorRgb, strength, litUniformRef, phaseOff) — EXACT 7 args!
     addWarmGroundPool(x, z, 5.4 * scale, [1.12, 0.48, 0.12], 0.44, alwaysOneUniform, x * 0.7 + z * 0.4);
-    addLanternGlowSprite(x, y + 0.88 * scale, z, 2.5 * scale);
+    addLanternGlowSprite(x, y + 0.88 * scale, z, 2.2 * scale);
   }
 
   // Campfire 1 (Zone 1), Campfire 2 (Zone 2), Watchtower Bonfire (Zone 3)
@@ -984,69 +836,6 @@ export function createSoulsGorgeRoad(THREE, ctx) {
   brazierMesh.castShadow = true;
   gorgeGroup.add(brazierMesh);
 
-  // Soft rising campfire smoke + sparks particle system above all 3 major fires
-  const SMOKE_COUNT = isMobile ? 36 : 72;
-  const smokePos = new Float32Array(SMOKE_COUNT * 3);
-  const smokeSeed = new Float32Array(SMOKE_COUNT * 3);
-  const smokeOrigins = [
-    GORGE_ANCHORS.camp1Pos,
-    GORGE_ANCHORS.camp2Pos,
-    GORGE_ANCHORS.watchtowerHearthPos
-  ];
-  for (let i = 0; i < SMOKE_COUNT; i++) {
-    const o = smokeOrigins[i % smokeOrigins.length];
-    smokePos[i * 3]     = o.x + (rng() - 0.5) * 0.42;
-    smokePos[i * 3 + 1] = o.y + 0.35;
-    smokePos[i * 3 + 2] = o.z + (rng() - 0.5) * 0.42;
-    smokeSeed[i * 3]     = rng();
-    smokeSeed[i * 3 + 1] = 0.24 + rng() * 0.22;
-    smokeSeed[i * 3 + 2] = 0.8 + rng() * 1.3;
-  }
-  const smokeGeo = trackGeo(new THREE.BufferGeometry());
-  smokeGeo.setAttribute('position', new THREE.BufferAttribute(smokePos, 3));
-  smokeGeo.setAttribute('aSeed', new THREE.BufferAttribute(smokeSeed, 3));
-  const smokeMat = trackMat(new THREE.ShaderMaterial({
-    uniforms: { uTime: uTimeUniform, uTex: { value: mistSpriteTex } },
-    vertexShader: `
-      attribute vec3 aSeed;
-      uniform float uTime;
-      varying float vAlpha;
-      varying float vHeat;
-      void main() {
-        float cyc = fract(aSeed.x + uTime * aSeed.y);
-        vec3 p = position;
-        p.y += cyc * 4.4;
-        p.x += sin(uTime * 1.1 + aSeed.x * 20.0) * (0.20 + cyc * 0.65);
-        p.z += cos(uTime * 0.9 + aSeed.x * 15.0) * (0.16 + cyc * 0.45);
-        vec4 mv = modelViewMatrix * vec4(p, 1.0);
-        gl_Position = projectionMatrix * mv;
-        float isSpark = step(0.76, aSeed.x);
-        float sz = mix((1.1 + cyc * 1.9) * aSeed.z * 160.0, 48.0, isSpark);
-        gl_PointSize = clamp(sz / max(1.2, -mv.z), mix(8.0, 2.2, isSpark), mix(68.0, 8.0, isSpark));
-        vAlpha = sin(cyc * 3.14159) * mix(0.24, 0.92, isSpark);
-        vHeat = mix(1.0 - smoothstep(0.0, 0.55, cyc), 1.0, isSpark);
-      }
-    `,
-    fragmentShader: `
-      uniform sampler2D uTex;
-      varying float vAlpha;
-      varying float vHeat;
-      void main() {
-        vec4 t = texture2D(uTex, gl_PointCoord);
-        vec3 col = mix(vec3(0.32, 0.38, 0.48), vec3(1.85, 0.82, 0.24), vHeat);
-        float a = t.a * vAlpha;
-        if (a < 0.008) discard;
-        gl_FragColor = vec4(col, a);
-      }
-    `,
-    transparent: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending
-  }));
-  const smokePoints = new THREE.Points(smokeGeo, smokeMat);
-  smokePoints.frustumCulled = false;
-  gorgeGroup.add(smokePoints);
-
   // --------------------------------------------------------------------------
   // 4. LUSH BOTANICAL UNDERGROWTH (`InstancedMesh`: Woodland Ferns, River Sedge Grass & Hanging Ivy!)
   //    Eliminates every trace of barren "dump" ground — frames foreground, riverbank & ruins like frame_00/07!
@@ -1058,35 +847,66 @@ export function createSoulsGorgeRoad(THREE, ctx) {
   ivyCardGeo.translate(0, -3.1, 0);
 
   const fernSpots = [];
-  // Hero foreground ferns framing bottom-right & road shoulders of Video Part 1 (`frame_00`)
+  // Hero foreground ferns framing bottom-right, tree roots & road shoulders of Video Part 1 (`frame_00`)
   const heroFerns = [
     { x: -3.2, z: 34.4, sc: 1.25 }, { x: -4.4, z: 35.6, sc: 1.18 }, { x: -5.2, z: 37.8, sc: 1.32 },
     { x: -4.6, z: 40.4, sc: 1.10 }, { x: -6.8, z: 42.2, sc: 1.22 }, { x: -5.4, z: 47.6, sc: 1.15 },
     { x: -4.8, z: 51.8, sc: 1.26 }, { x:  3.4, z: 54.6, sc: 1.18 }, { x:  4.5, z: 52.4, sc: 1.05 },
     { x: -4.9, z: 60.5, sc: 1.18 }, { x: -5.2, z: 65.0, sc: 1.24 }, { x: -4.8, z: 73.6, sc: 1.20 },
-    { x: -4.5, z: 78.2, sc: 1.16 }, { x: -3.8, z: 86.2, sc: 1.22 }, { x: -4.4, z: 93.4, sc: 1.15 }
+    { x: -4.5, z: 78.2, sc: 1.16 }, { x: -3.8, z: 86.2, sc: 1.22 }, { x: -4.4, z: 93.4, sc: 1.15 },
+    // Extra tight clusters around Gnarled Dead Tree roots, Archway Dead Tree, and foreground riverbank rocks
+    { x: -5.2, z: 38.6, sc: 1.08 }, { x: -6.4, z: 39.8, sc: 1.20 }, { x: -5.5, z: 40.5, sc: 1.02 },
+    { x: -4.4, z: 53.6, sc: 1.12 }, { x: -5.4, z: 54.9, sc: 1.18 }, { x:  2.9, z: 35.4, sc: 1.04 },
+    { x:  3.3, z: 38.0, sc: 1.12 }, { x:  3.1, z: 42.0, sc: 1.08 }, { x: -4.6, z: 32.6, sc: 1.14 }
   ];
   for (let i = 0; i < heroFerns.length; i++) fernSpots.push(heroFerns[i]);
-  // Dense organic scatter along right cliff base (-X), left riverbank boulders (+X), and Zone 0->1 transition
-  const fernCountTarget = isMobile ? 110 : 195;
+  // Dense organic scatter tightly clustered around tree roots, right cliff foot (-X) & riverbank rocks (+X)
+  const fernAnchorClusters = [
+    { x: -5.85, z: 39.2, r: 2.3 }, // Gnarled Dead Tree roots
+    { x: -4.85, z: 54.4, r: 2.0 }, // Archway Dead Tree roots
+    { x: -4.90, z: 47.6, r: 2.1 }, // Twin Fluted Columns foot
+    { x: -4.60, z: 31.4, r: 2.0 }, // Zone 0 Ash Gate west pier
+    { x:  4.40, z: 31.4, r: 2.0 }, // Zone 0 Ash Gate east pier
+    { x: -3.60, z: 55.6, r: 1.8 }, // Ancient Archway west pier
+    { x:  3.40, z: 55.2, r: 2.0 }, // Ancient Archway east wing
+    { x: -5.40, z: 65.5, r: 2.6 }, // Lantern Road cliff foot mid
+    { x: -5.30, z: 76.0, r: 2.5 }  // Lantern Road cliff foot north
+  ];
+  const fernCountTarget = isMobile ? 160 : 290;
   for (let i = 0; i < fernCountTarget; i++) {
-    const z = 18.0 + rng() * 94.0;
-    const pathX = getGorgePathCenterX(z);
-    const side = rng() < 0.62 ? -1 : 1;
+    const mode = rng();
     let x;
-    if (side < 0) {
-      x = pathX - (2.8 + rng() * 4.4);
+    let z;
+    if (mode < 0.28) {
+      // Tight botanical pockets hugging tree roots & ruin pier bases
+      const cl = fernAnchorClusters[Math.floor(rng() * fernAnchorClusters.length)];
+      const ang = rng() * Math.PI * 2;
+      const rad = 0.55 + Math.sqrt(rng()) * cl.r;
+      x = cl.x + Math.cos(ang) * rad;
+      z = cl.z + Math.sin(ang) * rad;
     } else {
-      const rcx = getGorgeRiverCenterX(z);
-      const rhw = getGorgeRiverHalfWidth(z);
-      x = lerp(pathX + 2.5, rcx - rhw + 0.6, rng());
+      z = 16.0 + rng() * 96.0;
+      const pathX = getGorgePathCenterX(z);
+      if (mode < 0.72) {
+        // Right cliff foot (-X) tighter border along verges & crag feet
+        x = pathX - (2.35 + rng() * 3.85);
+      } else {
+        // Left riverbank rocks (+X) between road shoulder and wet waterline
+        const rcx = getGorgeRiverCenterX(z);
+        const rhw = getGorgeRiverHalfWidth(z);
+        x = lerp(pathX + 2.35, rcx - rhw + 0.45, rng());
+      }
     }
+    const pathX = getGorgePathCenterX(z);
+    if (Math.abs(x - pathX) < 2.10 && z < 98.0) continue;
     const gy = evalBaseTerrainY(x, z);
     if (gy < WATER_LEVEL + 0.08 || gy > 4.6) continue;
-    // Keep clear of campfires
+    // Keep clear of campfires, shore bonfire & grotto doorway
+    if (Math.hypot(x - GORGE_ANCHORS.bonfirePos.x, z - GORGE_ANCHORS.bonfirePos.z) < 2.2) continue;
     if (Math.hypot(x - GORGE_ANCHORS.camp1Pos.x, z - GORGE_ANCHORS.camp1Pos.z) < 2.1) continue;
     if (Math.hypot(x - GORGE_ANCHORS.camp2Pos.x, z - GORGE_ANCHORS.camp2Pos.z) < 2.1) continue;
-    fernSpots.push({ x, z, sc: 0.68 + rng() * 0.72 });
+    if (Math.hypot(x - (-4.2), z - 88.8) < 2.1) continue;
+    fernSpots.push({ x, z, sc: 0.66 + rng() * 0.74 });
   }
   const fernInst = new THREE.InstancedMesh(fernGeo, fernMat, fernSpots.length);
   const _m = new THREE.Object3D();
@@ -1103,9 +923,9 @@ export function createSoulsGorgeRoad(THREE, ctx) {
   fernInst.receiveShadow = true;
   gorgeGroup.add(fernInst);
 
-  // Riverbank Sedge & Wet Roadside Grass Tufts (matches frame_00 & frame_07 left cobble-water margin!)
+  // Riverbank Sedge & Wet Roadside Grass Tufts (hugging near rocky riverbank scree & cobble road kerbs!)
   const grassSpots = [];
-  const grassCountTarget = isMobile ? 160 : 280;
+  const grassCountTarget = isMobile ? 220 : 420;
   for (let i = 0; i < grassCountTarget; i++) {
     const z = 8.0 + rng() * 108.0;
     const rcx = getGorgeRiverCenterX(z);
@@ -1113,20 +933,27 @@ export function createSoulsGorgeRoad(THREE, ctx) {
     const pathX = getGorgePathCenterX(z);
     const mode = rng();
     let x;
-    if (mode < 0.64) {
-      // Directly along near (+X) riverbank water margin & shoal rocks!
-      x = (rcx - rhw) + (rng() - 0.55) * 3.4;
-    } else if (mode < 0.84) {
-      // Right roadside (-X) creeping out between damp cobbles & cliff boulders
-      x = pathX - (2.3 + rng() * 2.8);
+    if (mode < 0.54) {
+      // Tightly hugging the near (+X) rocky riverbank scree & water margin!
+      x = lerp(pathX + 2.35, rcx - rhw + 0.85, rng());
+    } else if (mode < 0.78) {
+      // Right cobble road kerb (-X) creeping out between damp cobbles & cliff boulders
+      x = pathX - (2.05 + rng() * 2.25);
+    } else if (mode < 0.88) {
+      // Left cobble road kerb (+X) tufting right along the cobbled shoulder
+      x = pathX + (2.05 + rng() * 1.25);
     } else {
       // Far riverbank (+X) edge across the water
       x = (rcx + rhw) + (rng() - 0.3) * 2.6;
     }
     const gy = evalBaseTerrainY(x, z);
     if (gy < WATER_LEVEL - 0.10 || gy > 3.2) continue;
-    if (Math.hypot(x - pathX, 0) < 1.85 && z < 98) continue;
-    grassSpots.push({ x, y: Math.max(gy, WATER_LEVEL - 0.04), z, sc: 0.72 + rng() * 0.78 });
+    if (Math.abs(x - pathX) < 1.90 && z < 98.0) continue;
+    if (Math.hypot(x - GORGE_ANCHORS.bonfirePos.x, z - GORGE_ANCHORS.bonfirePos.z) < 2.0) continue;
+    if (Math.hypot(x - GORGE_ANCHORS.camp1Pos.x, z - GORGE_ANCHORS.camp1Pos.z) < 2.0) continue;
+    if (Math.hypot(x - GORGE_ANCHORS.camp2Pos.x, z - GORGE_ANCHORS.camp2Pos.z) < 2.0) continue;
+    if (Math.hypot(x - (-4.2), z - 88.8) < 2.0) continue;
+    grassSpots.push({ x, y: Math.max(gy, WATER_LEVEL - 0.04), z, sc: 0.70 + rng() * 0.78 });
   }
   const grassInst = new THREE.InstancedMesh(grassGeo, riverGrassMat, grassSpots.length);
   for (let i = 0; i < grassSpots.length; i++) {
@@ -1416,6 +1243,174 @@ export function createSoulsGorgeRoad(THREE, ctx) {
       createInstancedFromMesh(fallenLog, barkMat, logXforms, { castShadow: true, receiveShadow: true });
     }
 
+    // 4b. Sculpted 3D Ground-Cover Meshes (`Road_Flagstone_Cluster`, `Riverbank_Scree_Cluster`,
+    //     `Cliff_Rubble_Pile`, `Moss_Mound_Cushion`) — breaks up smooth terrain & grounds ruins/roots!
+    const groundRng = makeRng(202611259);
+
+    // 4b-1. Grounded Medieval Road Flagstone Clusters (~34 along z = 32.5..95.5, clear of campfire pits)
+    const flagstoneCluster = natureMap.get('Road_Flagstone_Cluster');
+    if (flagstoneCluster) {
+      const FLAGSTONE_COUNT = 34;
+      const flagXforms = [];
+      for (let i = 0; i < FLAGSTONE_COUNT; i++) {
+        const z = lerp(32.5, 95.5, i / (FLAGSTONE_COUNT - 1)) + (groundRng() - 0.5) * 0.34;
+        const pathX = getGorgePathCenterX(z);
+        const sideSign = (i % 2 === 0) ? 1 : -1;
+        let x = pathX + sideSign * (0.20 + groundRng() * 0.70);
+        // Keep clear of Campfire 1 & Campfire 2 stone rings
+        if (Math.hypot(x - GORGE_ANCHORS.camp1Pos.x, z - GORGE_ANCHORS.camp1Pos.z) < 2.30) {
+          x = pathX + 0.75;
+        }
+        if (Math.hypot(x - GORGE_ANCHORS.camp2Pos.x, z - GORGE_ANCHORS.camp2Pos.z) < 2.30) {
+          x = pathX + 0.75;
+        }
+        if (Math.hypot(x - GORGE_ANCHORS.camp1Pos.x, z - GORGE_ANCHORS.camp1Pos.z) < 2.15) continue;
+        if (Math.hypot(x - GORGE_ANCHORS.camp2Pos.x, z - GORGE_ANCHORS.camp2Pos.z) < 2.15) continue;
+        const y = evalBaseTerrainY(x, z) - 0.048;
+        flagXforms.push({
+          x,
+          y,
+          z,
+          ry: groundRng() * Math.PI * 2,
+          sx: 0.90 + groundRng() * 0.42,
+          sy: 0.62 + groundRng() * 0.20,
+          sz: 0.90 + groundRng() * 0.42
+        });
+      }
+      createInstancedFromMesh(flagstoneCluster, ruinStoneDeckMat, flagXforms, { castShadow: false, receiveShadow: true });
+    }
+
+    // 4b-2. Interlocking Wet Riverbank Scree Clusters (~48 armoring the entire road-to-river slope z = 26..101!)
+    const screeCluster = natureMap.get('Riverbank_Scree_Cluster');
+    if (screeCluster) {
+      const SCREE_COUNT = 48;
+      const screeXforms = [];
+      for (let i = 0; i < SCREE_COUNT; i++) {
+        const z = lerp(26.0, 101.0, i / (SCREE_COUNT - 1)) + (groundRng() - 0.5) * 0.28;
+        const pathX = getGorgePathCenterX(z);
+        const rcx = getGorgeRiverCenterX(z);
+        const rhw = getGorgeRiverHalfWidth(z);
+        const edgeRoad = pathX + 2.55;
+        const edgeWater = Math.max(edgeRoad + 0.35, rcx - rhw + 0.35);
+        // Hug closer to the waterline along Branch A River Shoal (z=38..58.5) & Zone 0 Ash Gate (z=29..33)
+        const inShoalOrGate = (z >= 37.8 && z <= 58.8) || (z >= 29.0 && z <= 33.2);
+        const tBank = inShoalOrGate
+          ? (0.68 + groundRng() * 0.28)
+          : (0.24 + groundRng() * 0.64);
+        const x = lerp(edgeRoad, edgeWater, tBank);
+        const y = evalBaseTerrainY(x, z) - 0.14;
+        const sBase = 0.95 + groundRng() * 0.50;
+        screeXforms.push({
+          x,
+          y,
+          z,
+          rx: (groundRng() - 0.5) * 0.06,
+          // Mesh tapers down from local -Z (high road bank) to local +Z (low waterline), long axis along local X:
+          // rotate +90deg around Y so long axis runs along Z shoreline and slope drops cleanly toward +X river!
+          ry: Math.PI * 0.5 + (groundRng() - 0.5) * 0.28,
+          rz: (groundRng() - 0.5) * 0.06,
+          sx: sBase * (0.94 + groundRng() * 0.12),
+          sy: sBase * (0.86 + groundRng() * 0.20),
+          sz: sBase * (0.94 + groundRng() * 0.12)
+        });
+      }
+      createInstancedFromMesh(screeCluster, wetRiverBoulderMat, screeXforms, { castShadow: true, receiveShadow: true });
+    }
+
+    // 4b-3. Grounding Cliff & Architectural Pier Rubble Piles (~20 piles, strictly outside road & doorways!)
+    const cliffRubble = natureMap.get('Cliff_Rubble_Pile');
+    if (cliffRubble) {
+      const rubbleSpecs = [
+        // Zone 0 Pilgrim Arch piers
+        { x: -4.60, z: 10.60, ry:  0.35, s: 0.92 },
+        { x:  4.00, z: 10.60, ry: -0.55, s: 0.90 },
+        // Zone 0 Ash Gate piers
+        { x: -4.40, z: 31.20, ry:  0.80, s: 0.98 },
+        { x:  4.40, z: 31.20, ry: -0.95, s: 0.96 },
+        // Twin Fluted Columns pedestals
+        { x: -4.90, z: 46.20, ry:  0.42, s: 0.78 },
+        { x: -5.30, z: 49.40, ry:  1.85, s: 0.80 },
+        // Zone 1 Ancient Archway piers
+        { x: -3.40, z: 55.50, ry:  0.22, s: 0.76 },
+        { x:  2.20, z: 55.50, ry: -0.40, s: 0.74 },
+        // Right cliff foot & Lantern Road ruin bases (clear of road, campfires, shortcut stair & grotto door!)
+        { x: -6.80, z: 36.00, ry:  0.50, s: 1.08 },
+        { x: -7.20, z: 41.50, ry: -0.30, s: 1.04 },
+        { x: -6.10, z: 52.50, ry:  1.10, s: 0.96 },
+        { x: -6.60, z: 60.50, ry:  0.15, s: 1.05 },
+        { x: -6.75, z: 67.50, ry: -0.65, s: 1.10 },
+        { x: -6.65, z: 73.50, ry:  0.90, s: 1.02 },
+        { x: -6.50, z: 79.00, ry: -0.25, s: 1.08 },
+        { x: -5.45, z: 86.00, ry:  0.60, s: 0.88 },
+        { x: -5.80, z: 93.00, ry: -0.45, s: 1.05 },
+        { x: -4.40, z: 98.50, ry:  0.75, s: 1.00 },
+        // Aqueduct Bridge east pier foot & Bastion approach east base
+        { x:  4.65, z: 82.60, ry: -1.20, s: 0.92 },
+        { x:  4.90, z: 98.50, ry:  2.10, s: 0.98 }
+      ];
+      const rubbleXforms = rubbleSpecs.map((r) => ({
+        x: r.x,
+        y: evalBaseTerrainY(r.x, r.z) - 0.12,
+        z: r.z,
+        ry: r.ry,
+        sx: r.s * (0.94 + groundRng() * 0.14),
+        sy: r.s * (0.88 + groundRng() * 0.18),
+        sz: r.s * (0.94 + groundRng() * 0.14)
+      }));
+      createInstancedFromMesh(cliffRubble, cliffRockMat, rubbleXforms, { castShadow: true, receiveShadow: true });
+    }
+
+    // 4b-4. Plush Velvety Moss Ground Mounds (~30 around dead tree roots, foreground verges & boulders!)
+    const mossMound = natureMap.get('Moss_Mound_Cushion');
+    if (mossMound) {
+      const mossSpecs = [
+        // 4 mounds hugging Gnarled Dead Tree root flare (-5.85, 39.2)
+        { x: -5.05, z: 38.40, ry:  0.40, s: 1.08 },
+        { x: -6.45, z: 38.60, ry:  1.95, s: 1.15 },
+        { x: -5.25, z: 40.10, ry:  3.10, s: 0.96 },
+        { x: -6.60, z: 40.00, ry:  4.60, s: 1.10 },
+        // 3 mounds hugging Archway Dead Tree root flare (-4.85, 54.4)
+        { x: -4.25, z: 53.60, ry:  0.85, s: 0.98 },
+        { x: -5.45, z: 54.80, ry:  2.40, s: 1.06 },
+        { x: -4.40, z: 55.10, ry:  4.10, s: 0.88 },
+        // 9 foreground road verges (z = 33.5..44.5 on both -X and +X shoulders matching frame_00!)
+        { x: -3.25, z: 33.80, ry:  0.25, s: 1.05 },
+        { x: -3.75, z: 36.00, ry:  1.45, s: 1.12 },
+        { x: -4.20, z: 38.20, ry:  2.80, s: 0.95 },
+        { x: -4.45, z: 41.20, ry:  4.25, s: 1.08 },
+        { x: -4.85, z: 43.80, ry:  5.40, s: 1.00 },
+        { x:  2.65, z: 34.40, ry:  0.70, s: 1.04 },
+        { x:  2.95, z: 37.50, ry:  2.15, s: 1.14 },
+        { x:  3.10, z: 40.60, ry:  3.60, s: 1.02 },
+        { x:  2.85, z: 43.60, ry:  5.05, s: 0.96 },
+        // 14 mossy cushions along mossy boulders & Lantern Road verges (z = 48..95, clear of road & campfires!)
+        { x: -4.35, z: 48.20, ry:  1.15, s: 0.96 },
+        { x:  2.60, z: 48.60, ry:  2.65, s: 1.05 },
+        { x: -4.15, z: 51.40, ry:  4.05, s: 0.98 },
+        { x:  3.55, z: 51.80, ry:  0.55, s: 1.08 },
+        { x: -4.55, z: 58.60, ry:  1.80, s: 1.12 },
+        { x:  2.45, z: 59.40, ry:  3.35, s: 1.00 },
+        { x: -4.85, z: 62.80, ry:  4.90, s: 1.10 },
+        { x:  2.35, z: 64.20, ry:  0.95, s: 1.04 },
+        { x: -5.10, z: 67.60, ry:  2.30, s: 1.15 },
+        { x:  2.10, z: 69.80, ry:  3.80, s: 0.98 },
+        { x: -5.25, z: 74.80, ry:  5.20, s: 1.06 },
+        { x:  1.85, z: 76.20, ry:  1.40, s: 1.02 },
+        { x: -4.75, z: 80.20, ry:  2.95, s: 1.08 },
+        { x: -3.20, z: 93.80, ry:  4.45, s: 1.04 }
+      ];
+      const mossXforms = mossSpecs.map((ms) => ({
+        x: ms.x,
+        y: evalBaseTerrainY(ms.x, ms.z) - 0.06,
+        z: ms.z,
+        ry: ms.ry,
+        sx: ms.s * (0.92 + groundRng() * 0.22),
+        sy: ms.s * (0.85 + groundRng() * 0.26),
+        sz: ms.s * (0.92 + groundRng() * 0.22)
+      }));
+      createInstancedFromMesh(mossMound, mossMoundMat, mossXforms, { castShadow: true, receiveShadow: true });
+    }
+
     // 5. Monumental Eroded Alpine Distant Mountains (`Distant_Mountain_A/B`) framing the horizon beneath the Full Moon!
     const mtnA = natureMap.get('Distant_Mountain_A');
     const mtnB = natureMap.get('Distant_Mountain_B');
@@ -1436,6 +1431,41 @@ export function createSoulsGorgeRoad(THREE, ctx) {
     // ========================================================================
     // B) MEDIEVAL RUINS & PROPS KIT (`gorge_ruins.glb`)
     // ========================================================================
+    // 0. Sculpted Zone 0 Architectural Gates (`Zone0_Ash_Gate_Stone` & `Zone0_Pilgrim_Arch_Stone`)
+    const zone0AshGate = ruinsMap.get('Zone0_Ash_Gate_Stone');
+    const zone0AshGateIvy = ruinsMap.get('Zone0_Ash_Gate_Ivy');
+    const zone0AshGateIron = ruinsMap.get('Zone0_Ash_Gate_Iron');
+    const ashGateY = evalBaseTerrainY(0.0, 31.0) - 0.06;
+    if (zone0AshGate) {
+      const m = cloneStyledMesh(zone0AshGate, zone0GateMat, { castShadow: true, receiveShadow: true });
+      m.position.set(0.0, ashGateY, 31.0);
+      gorgeGroup.add(m);
+    }
+    if (zone0AshGateIvy) {
+      const mIvy = cloneStyledMesh(zone0AshGateIvy, ivyArchMat, { castShadow: false, receiveShadow: true });
+      mIvy.position.set(0.0, ashGateY, 31.0);
+      gorgeGroup.add(mIvy);
+    }
+    if (zone0AshGateIron) {
+      const mIron = cloneStyledMesh(zone0AshGateIron, forgedIronMat, { castShadow: true, receiveShadow: true });
+      mIron.position.set(0.0, ashGateY, 31.0);
+      gorgeGroup.add(mIron);
+    }
+
+    const zone0PilgrimArch = ruinsMap.get('Zone0_Pilgrim_Arch_Stone');
+    const zone0PilgrimArchIvy = ruinsMap.get('Zone0_Pilgrim_Arch_Ivy');
+    const pilgrimArchY = evalBaseTerrainY(-0.30, 10.60) - 0.06;
+    if (zone0PilgrimArch) {
+      const m = cloneStyledMesh(zone0PilgrimArch, zone0GateMat, { castShadow: true, receiveShadow: true });
+      m.position.set(-0.30, pilgrimArchY, 10.60);
+      gorgeGroup.add(m);
+    }
+    if (zone0PilgrimArchIvy) {
+      const mIvy = cloneStyledMesh(zone0PilgrimArchIvy, ivyArchMat, { castShadow: false, receiveShadow: true });
+      mIvy.position.set(-0.30, pilgrimArchY, 10.60);
+      gorgeGroup.add(mIvy);
+    }
+
     // 1. Iconic Zone 1 Ancient Ivy-Draped Ruined Stone Archway (`-0.60, y, 55.50`, exact 4.60m clear road!)
     const archStone = ruinsMap.get('Ancient_Archway_Stone');
     const archIvy = ruinsMap.get('Ancient_Archway_Ivy');
@@ -1601,6 +1631,7 @@ export function createSoulsGorgeRoad(THREE, ctx) {
     // 8. Sculpted Campfire Rings & Split Logs, Weathered Plank Piles, Crimson War Banners
     const cfStones = ruinsMap.get('Campfire_Stones');
     const cfLogs = ruinsMap.get('Campfire_Logs');
+    const cfAshMound = ruinsMap.get('Campfire_Ash_Mound');
     const cfXforms = GORGE_PLACEMENT_MANIFEST.campfires.map((cf) => ({
       x: cf.x,
       y: cf.y - 0.02,
@@ -1610,6 +1641,9 @@ export function createSoulsGorgeRoad(THREE, ctx) {
     }));
     createInstancedFromMesh(cfStones, cliffRockMat, cfXforms, { castShadow: true, receiveShadow: true });
     createInstancedFromMesh(cfLogs, barkMat, cfXforms, { castShadow: true, receiveShadow: true });
+    if (cfAshMound) {
+      createInstancedFromMesh(cfAshMound, cliffRockMat, cfXforms, { castShadow: false, receiveShadow: true });
+    }
 
     const plankPile = ruinsMap.get('Weathered_Plank_Pile');
     if (plankPile) {
@@ -1686,9 +1720,16 @@ export function createSoulsGorgeRoad(THREE, ctx) {
     applyShortcutVisuals();
   }
 
-  function update(dt = 0.016, elapsed = 0) {
+  function setLowSpec(flag) {
+    campfireRig.setLowSpec(Boolean(flag));
+  }
+
+  function update(dt = 0.016, elapsed = 0, camPos = null) {
     const safeDt = Math.min(Math.max(Number.isFinite(dt) ? dt : 0.016, 0.001), 0.1);
     const t = Number.isFinite(elapsed) ? elapsed : 0.0;
+
+    // Update smoky roaring campfires (billowing smoke plumes, molten embers, flames, sparks)
+    campfireRig.update(t);
 
     // Smooth one-way Iron Shortcut Gate & Lever animation
     const targetAnim = shortcutUnlocked ? 1.0 : 0.0;
@@ -1714,6 +1755,7 @@ export function createSoulsGorgeRoad(THREE, ctx) {
     readyPromise,
     setShortcutUnlocked,
     isShortcutUnlocked: () => shortcutUnlocked,
+    setLowSpec,
     update
   };
 }

@@ -4,14 +4,14 @@
 import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { DRACOLoader } from '../vendor/DRACOLoader.js';
-import { ARENA_HALF_SIZE } from './config.js?v=20261125z102';
-import { createSoulsArena } from './soulsArena.js?v=20261125z102';
+import { ARENA_HALF_SIZE } from './config.js?v=20261125z103';
+import { createSoulsArena } from './soulsArena.js?v=20261125z103';
 import {
   BOSS_DOOR_CUTSCENE_DURATION,
   evaluateBossDoorCutscene,
   getBossDoorCutsceneSkipState,
   computeBossDoorCutsceneShakeOffset
-} from './souls/soulsCutsceneChoreography.js?v=20261125z102';
+} from './souls/soulsCutsceneChoreography.js?v=20261125z103';
 import {
   BOSS_ESCAPE_CUTSCENE_DURATION,
   BOSS_ESCAPE_CUTSCENE_SKIP_TIME,
@@ -21,19 +21,23 @@ import {
   sampleBossEscapeCutscene,
   getBossEscapeCutsceneSkipState,
   computeBossEscapeCameraShakeOffset
-} from './souls/soulsEscapeCutscene.js?v=20261125z102';
+} from './souls/soulsEscapeCutscene.js?v=20261125z103';
 import {
   EXTERIOR_SHORE_ANCHORS,
   createSoulsExteriorShore
-} from './souls/soulsExteriorShore.js?v=20261125z102';
-import { createSoulsEscapeVfx } from './souls/soulsEscapeVfx.js?v=20261125z102';
+} from './souls/soulsExteriorShore.js?v=20261125z103';
+import { createSoulsEscapeVfx } from './souls/soulsEscapeVfx.js?v=20261125z103';
 import {
   clampCastleCameraPosition,
   SOULS_CASTLE_CONSTANTS
-} from './souls/soulsCastleLayout.js?v=20261125z102';
-import { createSoulsEnvironmentMap } from './souls/soulsLightingRig.js?v=20261125z102';
-import { applyEldenDissolveToModel } from './souls/soulsDissolveVfx.js?v=20261125z102';
-import * as SoulsFireVfx from './souls/soulsFireVfx.js?v=20261125z102';
+} from './souls/soulsCastleLayout.js?v=20261125z103';
+import {
+  createSoulsEnvironmentMap,
+  createSoulsShoreEnvironmentMap
+} from './souls/soulsLightingRig.js?v=20261125z103';
+import { setSoulsRimLight } from './models.js?v=20261125z103';
+import { applyEldenDissolveToModel } from './souls/soulsDissolveVfx.js?v=20261125z103';
+import * as SoulsFireVfx from './souls/soulsFireVfx.js?v=20261125z103';
 import {
   createCourtyardStoneTexture,
   createHubMistTexture,
@@ -44,7 +48,7 @@ import {
   createHubContactAoTexture,
   createArcaneCircleTexture,
   getSlashCrescentGeo
-} from './world/textures.js?v=20261125z102';
+} from './world/textures.js?v=20261125z103';
 
 const sharedDracoLoader = new DRACOLoader();
 sharedDracoLoader.setDecoderPath('./vendor/draco/');
@@ -100,6 +104,12 @@ export function createArenaWorld(canvas) {
         const h = vp?.h || window.innerHeight;
         renderer.setPixelRatio(getTargetPixelRatio());
         renderer.setSize(w, h);
+        disposeSoulsEnvMaps();
+        if (cameraMode === 'hub') {
+          scene.environment = getSoulsEnvMap();
+        } else if (isSoulsBiome(currentBiome)) {
+          scene.environment = soulsZoneMode === 'exterior_shore' ? getSoulsShoreEnvMap() : getSoulsEnvMap();
+        }
       },
       false
     );
@@ -164,11 +174,11 @@ export function createArenaWorld(canvas) {
     plazaRune: new THREE.Color(0x38bdf8)
   };
   const PALETTE_SOULS_SHORE = {
-    bg: new THREE.Color(0x0b1525),
-    fog: new THREE.Color(0x17253a),
-    hemiSky: new THREE.Color(0x7ba4dc),
-    hemiGround: new THREE.Color(0x233045),
-    dir: new THREE.Color(0xc8dfff),
+    bg: new THREE.Color(0x0b1424),
+    fog: new THREE.Color(0x1a2a40),
+    hemiSky: new THREE.Color(0x769ed4),
+    hemiGround: new THREE.Color(0x1f2c3f),
+    dir: new THREE.Color(0xc4ddff),
     plazaRune: new THREE.Color(0xf59e0b)
   };
   let soulsZoneMode = 'castle'; // 'castle' | 'shaft_river' | 'exterior_shore'
@@ -233,6 +243,31 @@ export function createArenaWorld(canvas) {
     }
     return soulsEnvMap;
   }
+  // Outdoor brooding moonlit night-sky PMREM strictly for souls_citadel exterior_shore
+  let soulsShoreEnvMap = null;
+  function getSoulsShoreEnvMap() {
+    if (soulsShoreEnvMap) return soulsShoreEnvMap;
+    try {
+      soulsShoreEnvMap = createSoulsShoreEnvironmentMap(renderer, { isMobile: isMobileDevice });
+    } catch {
+      soulsShoreEnvMap = null;
+    }
+    return soulsShoreEnvMap;
+  }
+  function disposeSoulsEnvMaps() {
+    if (soulsEnvMap) {
+      soulsEnvMap.dispose?.();
+      soulsEnvMap = null;
+    }
+    if (soulsShoreEnvMap) {
+      soulsShoreEnvMap.dispose?.();
+      soulsShoreEnvMap = null;
+    }
+    if (soulsEnvRenderTarget) {
+      soulsEnvRenderTarget.dispose?.();
+      soulsEnvRenderTarget = null;
+    }
+  }
   const getCombatExposureForBiome = (b = currentBiome) => {
     if (b === 'souls_citadel') return 1.12;
     if (b === 'misty_forest') return COMBAT_FOREST_EXPOSURE;
@@ -248,7 +283,7 @@ export function createArenaWorld(canvas) {
   const getCombatFogForBiome = (b = currentBiome, isModeSwitch = false) => {
     if (b === 'souls_citadel') {
       if (soulsZoneMode === 'shaft_river') return { near: 8, far: 48 };
-      if (soulsZoneMode === 'exterior_shore') return { near: 26, far: 166 };
+      if (soulsZoneMode === 'exterior_shore') return { near: 20, far: 128 };
       return { near: 14, far: 58 };
     }
     if (b === 'frost_ruins') return { near: 46, far: 116 };
@@ -395,6 +430,7 @@ export function createArenaWorld(canvas) {
     try {
       const shore = ensureSoulsExteriorShore();
       const vfx = ensureSoulsEscapeVfx();
+      getSoulsShoreEnvMap();
       const prevArenaVis = soulsArena?.group ? soulsArena.group.visible : false;
       const prevVfxVis = vfx?.rootGroup ? vfx.rootGroup.visible : false;
       shore?.setCompilePreview?.(true);
@@ -511,9 +547,15 @@ export function createArenaWorld(canvas) {
       dirLight.color.copy(pal.dir);
       // Drive nocturnal moonlight / cavern bounce cleanly through permanent lights (0 extra lights -> 0 shader recompile!)
       if (next === 'exterior_shore') {
-        hemiLight.intensity = 1.48;
-        dirLight.intensity = 2.15;
-        ambientLight.intensity = 0.36;
+        renderer.toneMappingExposure = 1.10;
+        scene.environment = getSoulsShoreEnvMap();
+        hemiLight.intensity = 1.18;
+        dirLight.intensity = 2.08;
+        ambientLight.intensity = 0.28;
+        heroAuraLight.color.setHex(0x9cb9e8);
+        heroAuraLight.intensity = 0.64;
+        heroAuraLight.distance = 7.5;
+        setSoulsRimLight(true, { strength: 0.22, power: 2.75, color: 0x7c9ad0 });
         const extShad = isMobileDevice ? 14.5 : 19.5;
         dirLight.shadow.camera.left = -extShad;
         dirLight.shadow.camera.right = extShad;
@@ -522,6 +564,8 @@ export function createArenaWorld(canvas) {
         dirLight.shadow.camera.near = 2;
         dirLight.shadow.camera.far = 76;
         dirLight.shadow.camera.updateProjectionMatrix();
+        lastDirSnapX = NaN;
+        lastDirSnapZ = NaN;
         burningGroundLight.color.setHex(0xff8a28);
         burningGroundLight.distance = 24;
         burningGroundLight.decay = 1.5;
@@ -534,14 +578,38 @@ export function createArenaWorld(canvas) {
           soulsCamClipDist = orbitDist;
         }
       } else if (next === 'shaft_river') {
+        renderer.toneMappingExposure = getCombatExposureForBiome('souls_citadel');
+        scene.environment = getSoulsEnvMap();
         hemiLight.intensity = 0.92;
         dirLight.intensity = 1.25;
+        ambientLight.intensity = 0.15;
+        heroAuraLight.color.setHex(0x9eb8e8);
+        heroAuraLight.intensity = 0.28;
+        heroAuraLight.distance = 8.5;
+        setSoulsRimLight(true, { strength: 0.16, power: 2.85, color: 0x687b9e });
         burningGroundLight.color.setHex(0x8ec4ff);
         burningGroundLight.position.set(0, 5.2, 26.0);
         burningGroundLight.intensity = 5.5;
       } else {
+        renderer.toneMappingExposure = getCombatExposureForBiome('souls_citadel');
+        scene.environment = getSoulsEnvMap();
         hemiLight.intensity = 0.78;
         dirLight.intensity = 1.12;
+        ambientLight.intensity = 0.15;
+        heroAuraLight.color.setHex(0x9eb8e8);
+        heroAuraLight.intensity = 0.28;
+        heroAuraLight.distance = 8.5;
+        setSoulsRimLight(true, { strength: 0.16, power: 2.85, color: 0x687b9e });
+        const castleShad = isMobileDevice ? 13 : 12.2;
+        dirLight.shadow.camera.left = -castleShad;
+        dirLight.shadow.camera.right = castleShad;
+        dirLight.shadow.camera.top = castleShad;
+        dirLight.shadow.camera.bottom = -castleShad;
+        dirLight.shadow.camera.near = 2;
+        dirLight.shadow.camera.far = 62;
+        dirLight.shadow.camera.updateProjectionMatrix();
+        lastDirSnapX = NaN;
+        lastDirSnapZ = NaN;
         burningGroundLight.intensity = 0;
       }
     }
@@ -6293,6 +6361,8 @@ export function createArenaWorld(canvas) {
     const basePal = getCombatBasePalette();
     const combatPal = getActiveCombatPalette();
     const isSouls = isSoulsBiome(currentBiome);
+    const isSoulsShore = isSouls && soulsZoneMode === 'exterior_shore';
+    const isSoulsShaft = isSouls && soulsZoneMode === 'shaft_river';
     const isMisty = isMistyBiome(currentBiome);
     const isAsh = currentBiome === 'ash_citadel';
     const isFrost = currentBiome === 'frost_ruins';
@@ -6300,9 +6370,11 @@ export function createArenaWorld(canvas) {
 
     if (!scene.background) scene.background = combatPal.bg.clone();
     else scene.background.copy(combatPal.bg);
-    renderer.setClearColor((isModeSwitch ? basePal : combatPal).bg.getHex(), 1);
-    renderer.toneMappingExposure = getCombatExposureForBiome(currentBiome);
-    scene.environment = isSouls ? getSoulsEnvMap() : null;
+    renderer.setClearColor((isModeSwitch && !isSoulsShore && !isSoulsShaft ? basePal : combatPal).bg.getHex(), 1);
+    renderer.toneMappingExposure = isSoulsShore ? 1.10 : getCombatExposureForBiome(currentBiome);
+    scene.environment = isSouls
+      ? (isSoulsShore ? getSoulsShoreEnvMap() : getSoulsEnvMap())
+      : null;
     scene.fog.color.copy(combatPal.fog);
     scene.fog.near = fogCfg.near;
     scene.fog.far = fogCfg.far;
@@ -6312,29 +6384,48 @@ export function createArenaWorld(canvas) {
     hemiLight.color.copy(combatPal.hemiSky);
     hemiLight.groundColor.copy(combatPal.hemiGround);
     hemiLight.intensity = isSouls
-      ? 0.56
+      ? (isSoulsShore ? 1.18 : isSoulsShaft ? 0.92 : 0.56)
       : isMisty
         ? COMBAT_HEMI_INTENSITY * (isAsh ? 1.14 : 1.12)
         : COMBAT_HEMI_INTENSITY;
 
     ambientLight.color.setHex(getCombatAmbientColorForBiome(currentBiome));
     ambientLight.intensity = isSouls
-      ? 0.15
+      ? (isSoulsShore ? 0.28 : 0.15)
       : isMisty
         ? COMBAT_AMBIENT_INTENSITY * (isAsh ? 1.12 : isFrost ? 1.14 : 1.15)
         : COMBAT_AMBIENT_INTENSITY;
 
     dirLight.color.copy(combatPal.dir);
     dirLight.intensity = isSouls
-      ? 1.85
+      ? (isSoulsShore ? 2.08 : isSoulsShaft ? 1.25 : 1.85)
       : isMisty
         ? COMBAT_DIR_INTENSITY * (isFrost || isAsh ? 1.08 : 1.06)
         : COMBAT_DIR_INTENSITY;
 
     // Subtle cool moonlit rim fill on hero in souls_citadel so warm bonfire/brazier/boss fire pops with cinematic contrast
-    heroAuraLight.color.setHex(isSouls ? 0x9eb8e8 : COMBAT_HERO_AURA_COLOR);
-    heroAuraLight.intensity = isSouls ? 0.28 : COMBAT_HERO_AURA_INTENSITY;
-    heroAuraLight.distance = isSouls ? 8.5 : 16.5;
+    heroAuraLight.color.setHex(
+      isSouls
+        ? (isSoulsShore ? 0x9cb9e8 : 0x9eb8e8)
+        : COMBAT_HERO_AURA_COLOR
+    );
+    heroAuraLight.intensity = isSouls
+      ? (isSoulsShore ? 0.64 : 0.28)
+      : COMBAT_HERO_AURA_INTENSITY;
+    heroAuraLight.distance = isSouls
+      ? (isSoulsShore ? 7.5 : 8.5)
+      : 16.5;
+
+    if (isSouls) {
+      if (isSoulsShore) {
+        setSoulsRimLight(true, { strength: 0.22, power: 2.75, color: 0x7c9ad0 });
+      } else {
+        setSoulsRimLight(true, { strength: 0.16, power: 2.85, color: 0x687b9e });
+      }
+    } else {
+      setSoulsRimLight(false, { strength: 0.16, power: 2.85, color: 0x687b9e });
+      setSoulsRimLight('auto');
+    }
 
     dirLight.castShadow = true;
     const targetShadowRes = isMobileDevice
@@ -6344,13 +6435,15 @@ export function createArenaWorld(canvas) {
         : (isSouls ? 2048 : 1024);
     syncDirLightShadowMapSize(targetShadowRes);
 
-    const combatShadExt = isSouls ? (isMobileDevice ? 13 : 12.2) : 21;
+    const combatShadExt = isSouls
+      ? (isSoulsShore ? (isMobileDevice ? 14.5 : 19.5) : (isMobileDevice ? 13 : 12.2))
+      : 21;
     dirLight.shadow.camera.left = -combatShadExt;
     dirLight.shadow.camera.right = combatShadExt;
     dirLight.shadow.camera.top = combatShadExt;
     dirLight.shadow.camera.bottom = -combatShadExt;
     dirLight.shadow.camera.near = isSouls ? 2 : 4;
-    dirLight.shadow.camera.far = isSouls ? 62 : 75;
+    dirLight.shadow.camera.far = isSouls ? (isSoulsShore ? 76 : 62) : 75;
     dirLight.shadow.radius = isSouls ? 2.0 : 2.2;
     dirLight.shadow.bias = isSouls ? -0.00028 : -0.00035;
     dirLight.shadow.normalBias = isSouls ? 0.032 : 0.0;
@@ -6434,6 +6527,8 @@ export function createArenaWorld(canvas) {
       bossEscapeGrateBroken = false;
       soulsZoneMode = 'castle';
       soulsExteriorShore?.setStageMode?.('none');
+      setSoulsRimLight(true, { strength: 0.16, power: 2.85, color: 0x687b9e });
+      setSoulsRimLight('auto');
       lockOnTarget = null;
       lockLookOffsetX = 0;
       lockLookOffsetY = 0;
@@ -6560,6 +6655,8 @@ export function createArenaWorld(canvas) {
       bossEscapeGrateBroken = false;
       soulsZoneMode = 'castle';
       soulsExteriorShore?.setStageMode?.('none');
+      setSoulsRimLight(true, { strength: 0.16, power: 2.85, color: 0x687b9e });
+      setSoulsRimLight('auto');
       const sa = ensureSoulsArena();
       sa.group.visible = true;
       sa.setFogGateSealed(false);
@@ -6972,7 +7069,7 @@ export function createArenaWorld(canvas) {
     if (devEditors) return Promise.resolve(devEditors);
     if (!isDevModeEnabled()) return Promise.resolve(null);
     if (!devEditorsPromise) {
-      devEditorsPromise = import('./world/devEditors.js?v=20261125z102')
+      devEditorsPromise = import('./world/devEditors.js?v=20261125z103')
         .then((mod) => {
           devEditors = mod.createWorldDevEditors({
             scene,
