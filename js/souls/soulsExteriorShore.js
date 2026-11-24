@@ -44,12 +44,12 @@ import {
   evalGorgeSurfaceType,
   clampGorgePosition,
   getGorgeZoneTitleAt
-} from './soulsGorgeTopology.js?v=20261125z101';
+} from './soulsGorgeTopology.js?v=20261125z102';
 import {
   createSoulsGorgeRoad,
   createGorgePbrTextures,
   createWetGorgeTerrainMaterial
-} from './soulsGorgeRoad.js?v=20261125z101';
+} from './soulsGorgeRoad.js?v=20261125z102';
 
 const CHASM_STENCIL_ID = 65; // 0x41: odd bit-0 masks bossRing; far outside world.js crater pool slots (3..33)
 

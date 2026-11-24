@@ -22,9 +22,9 @@ import {
   getGorgeRiverCenterX,
   getGorgeRiverHalfWidth,
   getGorgeRiverSignedDist
-} from './soulsGorgeTopology.js?v=20261125z101';
+} from './soulsGorgeTopology.js?v=20261125z102';
 
-const ASSET_VER = '20261125z101';
+const ASSET_VER = '20261125z102';
 const TEX_BASE = './assets/env/textures';
 const NATURE_GLB_URL = `./assets/env/gorge_nature.glb?v=${ASSET_VER}`;
 const RUINS_GLB_URL = `./assets/env/gorge_ruins.glb?v=${ASSET_VER}`;
@@ -633,7 +633,7 @@ export function createSoulsGorgeRoad(THREE, ctx) {
     { amp: 0.085, freq: 2.15, anchorTop: false, cacheKey: 'gorge_grass_wind' }
   );
 
-  // Atmospheric Distant Alpine Mountain Material (fades naturally into luminous blue-grey mist like frame_00 & frame_07!)
+  // Atmospheric Distant Alpine Mountain Material (supports InstancedMesh! Fades naturally into moody nocturnal valley mist like frame_00 & frame_07!)
   const distantMountainMat = trackMat(new THREE.ShaderMaterial({
     uniforms: {
       uTime: uTimeUniform
@@ -645,9 +645,15 @@ export function createSoulsGorgeRoad(THREE, ctx) {
       varying vec3 vCol;
       void main() {
         vCol = color;
-        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vec4 localPos = vec4(position, 1.0);
+        vec3 localNorm = normal;
+        #ifdef USE_INSTANCING
+          localPos = instanceMatrix * localPos;
+          localNorm = mat3(instanceMatrix) * localNorm;
+        #endif
+        vec4 wp = modelMatrix * localPos;
         vWorldPos = wp.xyz;
-        vNormalW = normalize(mat3(modelMatrix) * normal);
+        vNormalW = normalize(mat3(modelMatrix) * localNorm);
         gl_Position = projectionMatrix * viewMatrix * wp;
       }
     `,
@@ -659,23 +665,23 @@ export function createSoulsGorgeRoad(THREE, ctx) {
       void main() {
         vec3 N = normalize(vNormalW);
         vec3 V = normalize(cameraPosition - vWorldPos);
-        vec3 moonL = normalize(vec3(0.315, 0.250, 0.916));
+        vec3 moonL = normalize(vec3(0.240, 0.315, 0.918));
         float ndl = max(dot(N, moonL), 0.0);
-        float rim = pow(1.0 - max(dot(N, V), 0.0), 2.4);
+        float rim = pow(1.0 - max(dot(N, V), 0.0), 2.6);
         float ridge = smoothstep(0.42, 0.86, N.y);
 
-        // Deep brooding alpine rock slate-blue with cold silver moonlit arête ridges!
-        vec3 rockDark = vec3(0.032, 0.052, 0.088);
-        vec3 rockLit  = vec3(0.16, 0.23, 0.34);
-        vec3 col = mix(rockDark, rockLit, clamp(ndl * 0.65 + ridge * 0.25, 0.0, 1.0)) * (0.68 + 0.50 * vCol.r);
-        col += vec3(0.28, 0.40, 0.58) * rim * (0.35 + 0.65 * ndl);
+        // Deep brooding dark-slate alpine rock with cold moonlight rim along craggy arêtes (NEVER pale snow!)
+        vec3 rockDark = vec3(0.018, 0.030, 0.054);
+        vec3 rockLit  = vec3(0.085, 0.125, 0.195);
+        vec3 col = mix(rockDark, rockLit, clamp(ndl * 0.60 + ridge * 0.22, 0.0, 1.0)) * (0.62 + 0.50 * vCol.r);
+        col += vec3(0.18, 0.27, 0.42) * rim * (0.30 + 0.65 * ndl);
 
-        // Valley mist rising cleanly around lower mountain skirts + aerial perspective depth fade!
+        // Moody dark blue-slate valley mist rising gently from the mountain base + aerial perspective depth fade
         float dist = length(vWorldPos - cameraPosition);
-        float valleyMist = (1.0 - smoothstep(-2.0, 22.0, vWorldPos.y)) * 0.72;
-        float depthMist = smoothstep(52.0, 175.0, dist) * 0.78;
-        float totalMist = clamp(max(valleyMist, depthMist), 0.0, 0.88);
-        vec3 mistCol = mix(vec3(0.11, 0.16, 0.25), vec3(0.20, 0.28, 0.41), clamp(ndl * 0.5 + smoothstep(6.0, 26.0, vWorldPos.y) * 0.35, 0.0, 1.0));
+        float valleyMist = (1.0 - smoothstep(-2.0, 20.0, vWorldPos.y)) * 0.68;
+        float depthMist = smoothstep(68.0, 195.0, dist) * 0.62;
+        float totalMist = clamp(max(valleyMist, depthMist), 0.0, 0.82);
+        vec3 mistCol = mix(vec3(0.052, 0.080, 0.135), vec3(0.11, 0.16, 0.25), clamp(ndl * 0.45 + smoothstep(6.0, 28.0, vWorldPos.y) * 0.30, 0.0, 1.0));
         col = mix(col, mistCol, totalMist);
 
         gl_FragColor = vec4(col, 1.0);

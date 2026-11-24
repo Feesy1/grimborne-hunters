@@ -10,11 +10,11 @@
 import {
   SOULS_CASTLE_CONSTANTS,
   SOULS_CASTLE_THRONE_CONFIG
-} from './soulsCastleLayout.js?v=20261125z101';
+} from './soulsCastleLayout.js?v=20261125z102';
 import {
   BOSS_ESCAPE_VO_DURATIONS_SEC,
   sampleEscapeBossMouthOpen
-} from './soulsEscapeAudio.js?v=20261125z101';
+} from './soulsEscapeAudio.js?v=20261125z102';
 
 const BOSS_SPEAKER_RU = 'РЫЦАРЬ ПЕПЛА';
 const LOCATION_TITLE_RU = 'БЕРЕГ ПЕПЕЛЬНОГО СТОКА';

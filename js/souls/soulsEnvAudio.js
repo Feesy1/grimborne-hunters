@@ -2,7 +2,7 @@
 // Studio 44.1 kHz 16-bit WAV samples + acoustic procedural fallbacks during decode.
 // Strictly isolated from PvE biomes; zero external dependencies (Vanilla ES Module).
 
-export const SOULS_ENV_AUDIO_VERSION = '20261125z101';
+export const SOULS_ENV_AUDIO_VERSION = '20261125z102';
 
 const BASE_AUDIO_PATH = './assets/audio';
 
