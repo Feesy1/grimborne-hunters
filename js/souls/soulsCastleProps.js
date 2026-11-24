@@ -1,4 +1,4 @@
-// Wave 2 (`?v=20261124z89`) Next-Gen Gothic Castle 3D Props — «Abandoned Knight Rift»
+// Wave 2 (`?v=20261124z90`) Next-Gen Gothic Castle 3D Props — «Abandoned Knight Rift»
 // +200% PC Polygon Fidelity, Physical PBR Reflections & Dynamic Fire Shadow-Casting
 // while preserving the strict <= 45k-tri Mobile Yandex Games tessellation budget:
 //   1. createHeroBonfire3D             -> High-poly 16-stone charred hearth + ash mound + 6 bark-grooved charred logs
@@ -25,13 +25,13 @@ import {
   createInstancedWallLanternFlames,
   createCandleFlameShaderMaterial,
   createCandleFlameTeardropGeometry
-} from './soulsFireVfx.js?v=20261124z89';
+} from './soulsFireVfx.js?v=20261124z90';
 import {
   SOULS_CASTLE_ALCOVE_DECOR,
   SOULS_CASTLE_WALL_SEGMENTS,
   SOULS_CASTLE_FLAME_TRAPS,
   SOULS_CASTLE_WALL_LANTERNS
-} from './soulsCastleLayout.js?v=20261124z89';
+} from './soulsCastleLayout.js?v=20261124z90';
 
 // ============================================================================
 // Dual-Profile Tessellation Shim:

@@ -6,12 +6,12 @@
 // - Mobile Landscape Touch Controls (Floating Left Joystick + Right Camera Swipe + 6 Obsidian+Gold SVG Buttons)
 // - Cinematic Boss Cutscene Letterbox, Subtitles, Title Card, Interact/Riposte Prompts & Victory/Defeat Overlays
 
-import { WEAPONS } from './config.js?v=20261124z89';
-import { el } from './ui/resolvers.js?v=20261124z89';
-import { makeSvgNode, createWeaponSvg } from './ui/svgIcons.js?v=20261124z89';
-import { createModalsController } from './ui/modals.js?v=20261124z89';
+import { WEAPONS } from './config.js?v=20261124z90';
+import { el } from './ui/resolvers.js?v=20261124z90';
+import { makeSvgNode, createWeaponSvg } from './ui/svgIcons.js?v=20261124z90';
+import { createModalsController } from './ui/modals.js?v=20261124z90';
 
-export { createWeaponSvg } from './ui/svgIcons.js?v=20261124z89';
+export { createWeaponSvg } from './ui/svgIcons.js?v=20261124z90';
 
 const DIFFICULTY_OPTIONS = [
   { id: 'easy', labelRu: 'Странник', noteRu: 'Мягкий режим (в разработке)' },

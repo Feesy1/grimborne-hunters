@@ -1,11 +1,11 @@
 // Procedural Web Audio API Dark-Fantasy Synthesizer + Abandoned Knight Rift Studio Audio Router
 // Instant startup, crisp dynamics, full suspend/mute compliance.
 
-import { createSoulsEnvAudio } from './souls/soulsEnvAudio.js?v=20261124z89';
-import { createSoulsHeroAudio } from './souls/soulsHeroAudio.js?v=20261124z89';
-import { createSoulsEnemyAudio } from './souls/soulsEnemyAudio.js?v=20261124z89';
-import { createSoulsMusicManager } from './souls/soulsMusicManager.js?v=20261124z89';
-import { createSoulsSpatialAudio } from './souls/soulsSpatialAudio.js?v=20261124z89';
+import { createSoulsEnvAudio } from './souls/soulsEnvAudio.js?v=20261124z90';
+import { createSoulsHeroAudio } from './souls/soulsHeroAudio.js?v=20261124z90';
+import { createSoulsEnemyAudio } from './souls/soulsEnemyAudio.js?v=20261124z90';
+import { createSoulsMusicManager } from './souls/soulsMusicManager.js?v=20261124z90';
+import { createSoulsSpatialAudio } from './souls/soulsSpatialAudio.js?v=20261124z90';
 
 export function createAudioEngine() {
   let ctx = null;
@@ -25,7 +25,7 @@ export function createAudioEngine() {
 
   function preloadExternalSamples(audioCtx) {
     if (!audioCtx || typeof fetch === 'undefined') return;
-    const stepVer = '20261124z89';
+    const stepVer = '20261124z90';
     const files = [
       ['step_warrior_1', `./assets/audio/step_warrior_1.wav?v=${stepVer}`],
       ['step_warrior_2', `./assets/audio/step_warrior_2.wav?v=${stepVer}`],
@@ -257,8 +257,8 @@ export function createAudioEngine() {
   // - rift_explore: Elden Castle Drone (Bonfire / Castle Corridor / East Alcove)
   // - boss_phase1/boss_phase2: unified Epic Boss Battle (God of War Style)
   // Routed directly to masterGain (bypassing retro 980Hz musicFilter lowpass!) with own musicVolume scaling
-  const SOULS_EXPLORE_TRACK_URL = './assets/audio/music_rift_explore.mp3?v=20261124z89';
-  const SOULS_BOSS_TRACK_URL = './assets/audio/music_boss_rift.mp3?v=20261124z89';
+  const SOULS_EXPLORE_TRACK_URL = './assets/audio/music_rift_explore.mp3?v=20261124z90';
+  const SOULS_BOSS_TRACK_URL = './assets/audio/music_boss_rift.mp3?v=20261124z90';
   let soulsAmbientActive = false;
   const soulsMusic = createSoulsMusicManager({
     getCtx: () => ctx,
