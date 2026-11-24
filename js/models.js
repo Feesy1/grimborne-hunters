@@ -8,7 +8,7 @@ import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { DRACOLoader } from '../vendor/DRACOLoader.js';
 import { clone as cloneSkinned } from '../vendor/SkeletonUtils.js';
-import { WEAPONS } from './config.js?v=20261124z93';
+import { WEAPONS } from './config.js?v=20261124z94';
 import {
   getGeo,
   getMat,
@@ -17,42 +17,43 @@ import {
   createAnimController,
   setBoneRelEuler,
   solveMixamoArmIK
-} from './models/shared.js?v=20261124z93';
+} from './models/shared.js?v=20261124z94';
 import {
   getWarriorWeaponMountConfig,
   createWarriorStanceState,
   applyWarriorWeaponStance,
   applyWarriorAttackOverlay
-} from './models/warriorStances.js?v=20261124z93';
+} from './models/warriorStances.js?v=20261124z94';
 import {
   computeFootSyncPlaybackRate,
   computeCombatPostureDynamics,
   applyCombatPostureToObject3D,
   applyCombatRecoilImpulse
-} from './souls/soulsPhysicsFeel.js?v=20261124z93';
-import { createActorContactShadowMesh } from './souls/soulsAtmosphere.js?v=20261124z93';
+} from './souls/soulsPhysicsFeel.js?v=20261124z94';
+import { createActorContactShadowMesh } from './souls/soulsAtmosphere.js?v=20261124z94';
 import {
   applyEldenDissolveToModel,
   resetEldenDissolveFromModel
-} from './souls/soulsDissolveVfx.js?v=20261124z93';
+} from './souls/soulsDissolveVfx.js?v=20261124z94';
 
 const MODEL_PATHS = {
   // Warrior Knight (Mixamo Sword & Shield Run + Diagonal Slash + Turn_180 + Combat_Roll + Heavy_Thrust + Door_Push)
-  warrior_run: './assets/models/Warrior_Run.glb?v=20261124z93',
+  warrior_run: './assets/models/Warrior_Run.glb?v=20261124z94',
 
-  // All 5 Warrior Melee Weapons + Shield (preserved for in-world discovery & future equipment!)
+  // All Warrior Melee Weapons + Shield (preserved for in-world discovery & future equipment!)
   sword_tripo: './assets/models/Sword_Tripo.glb?v=20261120z34',
   shield_custom: './assets/models/Shield_Custom.glb?v=20261120z34',
+  great_club_tripo: './assets/models/Great_Club.glb?v=20261124z94',
   spear_tripo: './assets/models/Spear_Tripo.glb?v=20261120z34',
   zweihander_tripo: './assets/models/Zweihander_Tripo.glb?v=20261120z34',
   axe_tripo: './assets/models/Axe_Tripo.glb?v=20261120z34',
   hammer_tripo: './assets/models/Hammer_Tripo.glb?v=20261120z34',
 
   // Castle of Ash Enemies & Boss (Boss untouched!)
-  rift_boss: './assets/models/Rift_Boss_Tripo.glb?v=20261124z93',
-  rift_executioner: './assets/models/Rift_Executioner_Tripo.glb?v=20261124z93',
-  rift_vanguard: './assets/models/Rift_Vanguard_Tripo.glb?v=20261124z93',
-  rift_acolyte: './assets/models/Rift_Acolyte_Tripo.glb?v=20261124z93'
+  rift_boss: './assets/models/Rift_Boss_Tripo.glb?v=20261124z94',
+  rift_executioner: './assets/models/Rift_Executioner_Tripo.glb?v=20261124z94',
+  rift_vanguard: './assets/models/Rift_Vanguard_Tripo.glb?v=20261124z94',
+  rift_acolyte: './assets/models/Rift_Acolyte_Tripo.glb?v=20261124z94'
 };
 
 const gltfCache = new Map();
@@ -89,6 +90,7 @@ let soulsRimCustomStrength = SOULS_RIM_DEFAULT_STRENGTH;
 const SOULS_RIM_WEAPON_KEYS = new Set([
   'sword_tripo',
   'shield_custom',
+  'great_club_tripo',
   'spear_tripo',
   'zweihander_tripo',
   'axe_tripo',
@@ -692,6 +694,7 @@ function buildTripoSkullEyeEmissiveMap(cacheKey, sceneRoot) {
 }
 
 function getWeaponAssetKey(weaponId = 'club') {
+  if (weaponId === 'great_club') return 'great_club_tripo';
   if (weaponId === 'spear' || weaponId === 'cleaver') return 'spear_tripo';
   if (weaponId === 'zweihander') return 'zweihander_tripo';
   if (weaponId === 'axe' || weaponId === 'flail') return 'axe_tripo';
@@ -831,9 +834,9 @@ function loadSingleModelKey(key) {
                   }
                 }
                 if (legMeans.size > 0) clip.userData = { ...(clip.userData || {}), legMeans };
-              } else if (/^(?:1H_Melee_Attack_Slice_Horizontal|Slash|Attack|Heavy_Thrust|Block)(?:\.\d+)?$/i.test(clip.name || '')) {
+              } else if (/^(?:1H_Melee_Attack_Slice_Horizontal|Slash|Attack|Heavy_Thrust|Club_Attack_1|Club_Attack_2|Club_Attack_3|Block)(?:\.\d+)?$/i.test(clip.name || '')) {
                 const cleanAtkName = (clip.name || '').replace(/\.\d+$/, '');
-                const isMeleeAttackClip = /^(?:1H_Melee_Attack_Slice_Horizontal|Slash|Attack|Heavy_Thrust)$/i.test(cleanAtkName);
+                const isMeleeAttackClip = /^(?:1H_Melee_Attack_Slice_Horizontal|Slash|Attack|Heavy_Thrust|Club_Attack_1|Club_Attack_2|Club_Attack_3)$/i.test(cleanAtkName);
                 if (isMeleeAttackClip) {
                   // a) Full-body variant (<name>__Full) for standing attacks:
                   //    Preserves ALL leg/foot/hips rotations and natural mid-swing step/lunge displacement,
@@ -1087,6 +1090,7 @@ function loadSingleModelKey(key) {
             key === 'smg_tripo' ||
             key === 'ak47_tripo' ||
             key === 'sword_tripo' ||
+            key === 'great_club_tripo' ||
             key === 'spear_tripo' ||
             key === 'zweihander_tripo' ||
             key === 'axe_tripo' ||
@@ -1246,6 +1250,7 @@ export function getBootModelKeys(_classId = 'warrior', weaponId = 'club') {
   const set = new Set([
     'warrior_run',
     'shield_custom',
+    'great_club_tripo',
     getWeaponAssetKey(weaponId || 'club'),
     ...SOULS_RIFT_BIOME_KEYS
   ]);
@@ -3803,7 +3808,7 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
       if (animCtrl?.mixer && !isDeadState) {
         animCtrl.mixer.update(0);
       }
-      if (assetKey === 'warrior_run' && isCurrentWeaponTwoHanded && !isDeadState) {
+      if (assetKey === 'warrior_run' && (isCurrentWeaponTwoHanded || currentWeaponId === 'great_club') && !isDeadState) {
         warriorStanceRig.modelInstance = modelInstance;
         warriorStanceRig.mountedWeaponObj = mountedWeaponObj;
         warriorStanceRig.leftGripSocket = warriorLeftGripSocket;
@@ -4265,34 +4270,54 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
         _weaponType === 'heavy_thrust' ||
         _weaponType === 'Heavy_Thrust';
       const step = isHeavyThrust ? 4 : comboStep === 2 ? 2 : comboStep === 3 ? 3 : 1;
-      const isHeavyWpn = currentWeaponId === 'axe' || currentWeaponId === 'boss_hammer';
+      const isGreatClub = currentWeaponId === 'great_club';
+      const isHeavyWpn = currentWeaponId === 'axe' || currentWeaponId === 'boss_hammer' || isGreatClub;
       let targetClip = '1H_Melee_Attack_Slice_Horizontal';
       // Grounded Elden Ring strike cadence: readable steel blade arc (165-190ms) + physical end-of-arc arrest!
-      let baseClipSpd = isHeavyThrust
-        ? (isHeavyWpn ? 0.84 : 0.94)
-        : step === 3
-          ? (isHeavyWpn ? 0.82 : 0.92)
-          : step === 2
-            ? (isHeavyWpn ? 0.96 : 1.08)
-            : (isHeavyWpn ? 0.98 : 1.12);
+      let baseClipSpd = isGreatClub
+        ? 1.0
+        : isHeavyThrust
+          ? (isHeavyWpn ? 0.84 : 0.94)
+          : step === 3
+            ? (isHeavyWpn ? 0.82 : 0.92)
+            : step === 2
+              ? (isHeavyWpn ? 0.96 : 1.08)
+              : (isHeavyWpn ? 0.98 : 1.12);
       if (isTripoWarrior) {
-        // Warrior_Run.glb carries 4 distinct melee attack clips:
-        //   1 -> 1H_Melee_Attack_Slice_Horizontal (crisp top-right -> bottom-left R1 opener)
-        //   2 -> Slash (right-foot step-in diagonal top-left -> bottom-right R1 cut)
-        //   3 -> Attack (slow, heavy overhead slam R1 finisher)
-        //   4 -> Heavy_Thrust (60 FPS 1H piercing forward lunge for R2 / Charged R2)
-        const desired = isHeavyThrust
-          ? 'Heavy_Thrust'
-          : step === 2
-            ? 'Slash'
-            : step === 3
+        if (isGreatClub) {
+          // Elden Ring Large Club / Great Club 3-hit authentic combo clips:
+          //   1 -> Club_Attack_1 (high-right -> low-left diagonal downward crush, 1.05s)
+          //   2 -> Club_Attack_2 (wide low-left -> high-right rising horizontal cross-sweep, 1.05s)
+          //   3 / 4 -> Club_Attack_3 (sky-high overhead earth-slam crusher, 1.32s)
+          const clubDesired = isHeavyThrust || step === 3
+            ? 'Club_Attack_3'
+            : step === 2
+              ? 'Club_Attack_2'
+              : 'Club_Attack_1';
+          targetClip = asset?.clips?.has(clubDesired)
+            ? clubDesired
+            : asset?.clips?.has('Attack')
               ? 'Attack'
               : '1H_Melee_Attack_Slice_Horizontal';
-        targetClip = asset?.clips?.has(desired)
-          ? desired
-          : isHeavyThrust && asset?.clips?.has('Attack')
-            ? 'Attack'
-            : '1H_Melee_Attack_Slice_Horizontal';
+        } else {
+          // Warrior_Run.glb carries 4 distinct sword melee attack clips:
+          //   1 -> 1H_Melee_Attack_Slice_Horizontal (crisp top-right -> bottom-left R1 opener)
+          //   2 -> Slash (right-foot step-in diagonal top-left -> bottom-right R1 cut)
+          //   3 -> Attack (slow, heavy overhead slam R1 finisher)
+          //   4 -> Heavy_Thrust (60 FPS 1H piercing forward lunge for R2 / Charged R2)
+          const desired = isHeavyThrust
+            ? 'Heavy_Thrust'
+            : step === 2
+              ? 'Slash'
+              : step === 3
+                ? 'Attack'
+                : '1H_Melee_Attack_Slice_Horizontal';
+          targetClip = asset?.clips?.has(desired)
+            ? desired
+            : isHeavyThrust && asset?.clips?.has('Attack')
+              ? 'Attack'
+              : '1H_Melee_Attack_Slice_Horizontal';
+        }
       } else {
         baseClipSpd = isHeavyThrust ? 1.05 : step === 3 ? 1.15 : step === 2 ? 1.32 : 1.75;
         const desired = isHeavyThrust
@@ -4353,13 +4378,15 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
 
     const safeScale = Math.max(0.4, Math.min(2.5, Number(speedScale) || 1.0));
     const targetClip =
-      asset?.clips?.has('Heavy_Thrust')
-        ? 'Heavy_Thrust'
-        : asset?.clips?.has('1H_Melee_Attack_Stab')
-          ? '1H_Melee_Attack_Stab'
-          : asset?.clips?.has('Attack')
-            ? 'Attack'
-            : '1H_Melee_Attack_Slice_Horizontal';
+      currentWeaponId === 'great_club' && asset?.clips?.has('Club_Attack_3')
+        ? 'Club_Attack_3'
+        : asset?.clips?.has('Heavy_Thrust')
+          ? 'Heavy_Thrust'
+          : asset?.clips?.has('1H_Melee_Attack_Stab')
+            ? '1H_Melee_Attack_Stab'
+            : asset?.clips?.has('Attack')
+              ? 'Attack'
+              : '1H_Melee_Attack_Slice_Horizontal';
     const cl = asset?.clips?.get(targetClip);
     let finalSpd = safeScale;
     if (attackDuration > 0 && cl?.duration) {
@@ -4609,7 +4636,7 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
     if (warriorStanceRig?.state) {
       warriorStanceRig.state.blend = 1;
     }
-    if (assetKey === 'warrior_run' && isCurrentWeaponTwoHanded) {
+    if (assetKey === 'warrior_run' && (isCurrentWeaponTwoHanded || currentWeaponId === 'great_club')) {
       applyWarriorWeaponAnimOverlay(0.016, false, 0, 0);
     } else if (isTripoGunslinger && !hasBakedGunslingerClips) {
       positionTripoGunPivot(0, 0, 0, 0, isBeast ? 1.78 : 1);
@@ -4787,16 +4814,18 @@ export function createHeroMesh(classId = 'warrior', weaponId = null, mageElement
     const isAxe = currentWeaponStyle === 'axe';
     const isHammer = currentWeaponStyle === 'hammer';
     const isZwei = currentWeaponStyle === 'zweihander';
+    const isGreatClub = currentWeaponId === 'great_club';
     const isTwoHand = isCurrentWeaponTwoHanded || isSpear || isZwei || isAxe || isHammer;
+    const hasCustomStance = isTwoHand || isGreatClub;
 
     restoreWeaponToRightHand();
 
     // Warrior_Run.glb:
     //  - 1H Sword + Shield ('club', 'blade', 'claymore'): 100% pure golden Mixamo clips!
-    //  - 2H weapons (Axe, Hammer, Zweihander, Spear): dedicated Blender-verified stance solver
-    //    (warriorStances.js) with smooth fade-out during active swings/block/death & zero clipping!
+    //  - 1H Great Club + Shield ('great_club') & 2H weapons (Axe, Hammer, Zweihander, Spear):
+    //    dedicated Blender-verified stance solver (warriorStances.js) with smooth fade-out during active swings/block/death!
     if (assetKey === 'warrior_run') {
-      if (!isTwoHand) {
+      if (!hasCustomStance) {
         return;
       }
       const isDead = Boolean(animCtrl?.isDeadState?.());
@@ -6149,6 +6178,41 @@ export function createRealOathSwordClone({ targetLen = HERO_EQUIPPED_OATH_SWORD_
   });
   wrapper.add(inner);
   wrapper.userData.isRealSwordTripo = true;
+  return wrapper;
+}
+
+const HERO_EQUIPPED_GREAT_CLUB_LEN = 1.62; // Gnarled dark-oak Elden Ring Great Club resting length on the shore
+
+export function createRealGreatClubClone({ targetLen = HERO_EQUIPPED_GREAT_CLUB_LEN, centerOrigin = false } = {}) {
+  const clubAsset = gltfCache.get('great_club_tripo');
+  if (!clubAsset?.scene) return null;
+  const wrapper = new THREE.Group();
+  wrapper.name = 'RealGreatClubTripoClone';
+  const inner = clubAsset.scene.clone(true);
+  inner.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(inner);
+  const size = new THREE.Vector3();
+  const center = new THREE.Vector3();
+  box.getSize(size);
+  box.getCenter(center);
+  const maxSpan = Math.max(size.x, size.y, size.z, 1e-4);
+  const sc = (Number(targetLen) > 0 ? Number(targetLen) : HERO_EQUIPPED_GREAT_CLUB_LEN) / maxSpan;
+  inner.scale.setScalar(sc);
+  if (centerOrigin) {
+    inner.position.set(-center.x * sc, -center.y * sc, -center.z * sc);
+  } else {
+    inner.position.set(-center.x * sc, -box.min.y * sc, -center.z * sc);
+  }
+  inner.traverse((n) => {
+    if (n.isMesh) {
+      n.castShadow = true;
+      n.receiveShadow = true;
+      n.frustumCulled = false;
+    }
+  });
+  wrapper.add(inner);
+  wrapper.userData.isRealGreatClub = true;
+  wrapper.userData.isGreatClub = true;
   return wrapper;
 }
 

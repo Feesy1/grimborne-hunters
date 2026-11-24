@@ -1,5 +1,5 @@
 // 6-Zone Non-Linear Gothic Castle Layout, Pre-Boss Bonfire Checkpoint, 5-Gargoyle Flame Gauntlet,
-// Exact Wall Line-of-Sight & Doorway Steering for `Abandoned Knight Rift` (?v=20261124z93).
+// Exact Wall Line-of-Sight & Doorway Steering for `Abandoned Knight Rift` (?v=20261124z94).
 // Pure zero-dependency ES module (Vanilla JS, V8/Browser/Node compatible).
 //
 // 6-Zone Non-Linear Progression (South +Z -> North -Z, zero "narrow corridor tube"):

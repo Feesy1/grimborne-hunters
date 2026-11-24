@@ -9,7 +9,7 @@ import {
   LEVELS,
   getLevelDef,
   RUN_UPGRADES
-} from './config.js?v=20261124z93';
+} from './config.js?v=20261124z94';
 import {
   TWO_PI,
   ARENA_PLAYER_LIMIT,
@@ -21,7 +21,7 @@ import {
   lerpAngle,
   resolveArenaBiomeForLevel,
   createCombatBridge
-} from './combat/bridge.js?v=20261124z93';
+} from './combat/bridge.js?v=20261124z94';
 import {
   updateBossAI,
   updateSoulsBossAI,
@@ -31,7 +31,7 @@ import {
   cancelSoulsBossTelegraph,
   applySoulsBossParry,
   SOULS_BOSS_MULTI_PARRY
-} from './combat/bossAi.js?v=20261124z93';
+} from './combat/bossAi.js?v=20261124z94';
 import {
   createPoiseController,
   STANCE_DAMAGE_TABLE,
@@ -40,26 +40,26 @@ import {
   getPlayerHitstunSpec,
   SOULS_GUARD_CFG,
   computeBlockedStaminaCost
-} from './combat/poiseSystem.js?v=20261124z93';
+} from './combat/poiseSystem.js?v=20261124z94';
 import {
   SOULS_ROLL_CFG,
   getSoulsRollIframes,
   sampleSoulsRollStepDist,
   sampleAttackLungeStep,
   createAliveStanceSmoother
-} from './souls/soulsLocomotion.js?v=20261124z93';
+} from './souls/soulsLocomotion.js?v=20261124z94';
 import {
   SOULS_STAMINA_CFG,
   createSoulsStaminaController,
   createSoulsActionBuffer
-} from './souls/soulsStaminaBuffer.js?v=20261124z93';
+} from './souls/soulsStaminaBuffer.js?v=20261124z94';
 import {
   SOULS_ATTACK_SPECS,
   getSoulsAttackSpec,
   computeSoulsDamage,
   testSweptBladeHits
-} from './souls/soulsHitboxDamage.js?v=20261124z93';
-import * as SOULS_MOB_AI from './souls/soulsMobAi.js?v=20261124z93';
+} from './souls/soulsHitboxDamage.js?v=20261124z94';
+import * as SOULS_MOB_AI from './souls/soulsMobAi.js?v=20261124z94';
 import {
   initSoulsMobState,
   stepSoulsMobAi,
@@ -67,7 +67,7 @@ import {
   onSoulsMobInterrupted,
   resetSoulsPackCoordinator,
   releaseSoulsAttackToken
-} from './souls/soulsMobAi.js?v=20261124z93';
+} from './souls/soulsMobAi.js?v=20261124z94';
 import {
   SOULS_CASTLE_CONSTANTS,
   SOULS_CASTLE_BONFIRE,
@@ -86,36 +86,36 @@ import {
   canInteractWithBossDoor,
   findInteractableRelic,
   clampCastlePosition
-} from './souls/soulsCastleLayout.js?v=20261124z93';
+} from './souls/soulsCastleLayout.js?v=20261124z94';
 import {
   createDissolveAshSystem
-} from './souls/soulsDissolveVfx.js?v=20261124z93';
+} from './souls/soulsDissolveVfx.js?v=20261124z94';
 import {
   enhanceSoulsBossModel,
   updateSoulsBossVisuals,
   triggerSoulsBossHitFlash,
   disposeSoulsBossVisuals
-} from './souls/soulsBossVisuals.js?v=20261124z93';
+} from './souls/soulsBossVisuals.js?v=20261124z94';
 import {
   createSoulsGameFeel,
   getImpactSparkBurst
-} from './souls/soulsGameFeel.js?v=20261124z93';
+} from './souls/soulsGameFeel.js?v=20261124z94';
 import {
   BOSS_DOOR_CUTSCENE_DURATION,
   BOSS_DOOR_CUTSCENE_ACTS
-} from './souls/soulsCutsceneChoreography.js?v=20261124z93';
+} from './souls/soulsCutsceneChoreography.js?v=20261124z94';
 import {
   BOSS_ESCAPE_CUTSCENE_DURATION,
   BOSS_ESCAPE_ACTS
-} from './souls/soulsEscapeCutscene.js?v=20261124z93';
+} from './souls/soulsEscapeCutscene.js?v=20261124z94';
 import {
   resetActorPhysics,
   applyKnockbackImpulse,
   stepActorPhysicsBody
-} from './souls/soulsPhysicsFeel.js?v=20261124z93';
+} from './souls/soulsPhysicsFeel.js?v=20261124z94';
 import {
   createWeaponTrailSystem
-} from './souls/soulsWeaponTrails.js?v=20261124z93';
+} from './souls/soulsWeaponTrails.js?v=20261124z94';
 
 export function createCombatController({
   world,
@@ -533,10 +533,16 @@ export function createCombatController({
 
   function ensureShoreRealSwordAttached() {
     if (shoreRealSwordAttached) return true;
-    if (typeof models?.createRealOathSwordClone !== 'function') return false;
     const attachNow = () => {
       if (shoreRealSwordAttached) return true;
-      const clone = models.createRealOathSwordClone({ centerOrigin: false });
+      // After the Boss Escape Cutscene, the Hero loses his old Oath Broadsword and discovers
+      // the gnarled Elden Ring Great Club («Большая Дубина») lying on the coastal pebbles!
+      const clone =
+        typeof models?.createRealGreatClubClone === 'function'
+          ? models.createRealGreatClubClone({ centerOrigin: false })
+          : typeof models?.createRealOathSwordClone === 'function'
+            ? models.createRealOathSwordClone({ centerOrigin: false })
+            : null;
       if (!clone) return false;
       shoreRealSwordAttached = true;
       world?.attachShoreRealSwordModel?.(clone);
@@ -544,11 +550,26 @@ export function createCombatController({
     };
     if (attachNow()) return true;
     if (typeof models?.ensureModelKeysLoaded === 'function') {
-      models.ensureModelKeysLoaded(['sword_tripo']).then(() => {
+      models.ensureModelKeysLoaded(['great_club_tripo', 'sword_tripo']).then(() => {
         attachNow();
       }).catch(() => {});
     }
     return false;
+  }
+
+  function equipHeroWeapon(weaponId = 'great_club') {
+    const targetId = WEAPONS[weaponId] ? weaponId : 'club';
+    currentWeaponId = targetId;
+    recomputeStats();
+    heroModel?.handle?.setWeapon?.(targetId);
+    heroModel?.obj?.userData?.setWeapon?.(targetId);
+    heroModel?.handle?.setWeaponDisarmed?.(false, false);
+    if (isSoulslike && souls.zoneMode === 'exterior_shore' && targetId === 'great_club') {
+      souls.shoreSwordPickedUp = true;
+      world?.setShoreSwordPickedUp?.(true);
+    }
+    ui?.updateHud?.(getHudSnapshot());
+    return currentWeaponId;
   }
 
   function ensureDroppedSwordProp() {
@@ -802,7 +823,12 @@ export function createCombatController({
     heroModel?.handle?.cancelFlaskDrinkAnim?.();
     heroModel?.handle?.setDoorPushMode?.(false);
     heroModel?.handle?.clearCutsceneClip?.(skipped ? 0.05 : 0.25);
-    heroModel?.handle?.setWeaponDisarmed?.(!withSword, false);
+    ensureShoreRealSwordAttached();
+    if (withSword) {
+      equipHeroWeapon('great_club');
+    } else {
+      heroModel?.handle?.setWeaponDisarmed?.(true, false);
+    }
 
     if (world?.isBossEscapeCutsceneActive?.()) {
       world.skipBossEscapeCutscene(true);
@@ -859,7 +885,7 @@ export function createCombatController({
       shoreBonfireLit: bonfireLit
     });
     if (!withSword) {
-      floatText('БЕРЕГ ПЕПЕЛЬНОГО СТОКА • Подберите Меч Клятвы!', player.x, player.z - 1.2, '#e2e8f0');
+      floatText('БЕРЕГ ПЕПЕЛЬНОГО СТОКА • Найдите оружие на берегу!', player.x, player.z - 1.2, '#e2e8f0');
     }
   }
 
@@ -3981,6 +4007,9 @@ export function createCombatController({
       if (!hitEnemyFrontShield && (enemy.isSoulsBoss || hitSoundCooldown <= 0)) {
         hitSoundCooldown = isSoulslike && !isProjectile ? 0.025 : 0.045;
         if (isSoulslike && !isProjectile) {
+          if ((hitMeta?.weaponId || currentWeaponId) === 'great_club' && typeof audio?.playBossHammerHit === 'function') {
+            audio.playBossHammerHit(hitMeta?.isHeavy || isComboFinisher ? 0.86 : 0.64);
+          }
           if (typeof audio?.playSwordHit === 'function') {
             const targetKind = enemy.isSoulsBoss
               ? 'boss_flesh'
@@ -5919,8 +5948,8 @@ export function createCombatController({
       if (souls.zoneMode === 'exterior_shore' && !souls.shoreSwordPickedUp) {
         if ((souls.shoreNoSwordHintCd || 0) <= 0) {
           souls.shoreNoSwordHintCd = 1.25;
-          floatText('Подберите Меч Клятвы!', player.x, player.z - 0.7, '#fde68a');
-          callbacks?.onToast?.('Сначала подберите Меч Клятвы на берегу!');
+          floatText('Подберите Большую Дубину!', player.x, player.z - 0.7, '#fde68a');
+          callbacks?.onToast?.('Сначала подберите Большую Дубину на берегу!');
         }
         return false;
       }
@@ -7600,7 +7629,7 @@ export function createCombatController({
         souls.canInteract = Boolean(nearShoreSword || nearShoreBonfire || nearShoreGate);
         souls.canOpenBossDoors = souls.canInteract;
         const shoreLabel = nearShoreSword
-          ? 'Подобрать Меч Клятвы'
+          ? 'Подобрать Большую Дубину'
           : nearShoreBonfire
             ? (souls.shoreBonfireLit ? 'Отдохнуть у Костра Берега' : 'Зажечь Костёр Берега')
             : nearShoreGate
@@ -7613,14 +7642,14 @@ export function createCombatController({
           if (nearShoreSword) {
             souls.shoreSwordPickedUp = true;
             world?.setShoreSwordPickedUp?.(true);
-            heroModel?.handle?.setWeaponDisarmed?.(false, false);
+            equipHeroWeapon('great_club');
             audio?.playSwordPickupChime?.();
-            world?.addScreenShake?.(0.24, 0.16);
-            emitShockwave(swordAnchor.x, swordAnchor.z, 3.6, 0xfde047, 0.45);
-            emitParticles(swordAnchor.x, (swordAnchor.y || 0) + 0.85, swordAnchor.z, 0xfde047, 26, 6.2, 0.15);
-            emitParticles(player.x, 1.0, player.z, 0xfef08a, 16, 4.8, 0.13);
-            floatText('⚔️ МЕЧ КЛЯТВЫ ВОЗВРАЩЁН!', player.x, player.z - 0.9, '#fde047');
-            callbacks?.onSoulsCue?.('МЕЧ КЛЯТВЫ ВОЗВРАЩЁН', 'guard_counter');
+            audio?.playBossHammerWhoosh?.(false);
+            world?.addScreenShake?.(0.16, 0.14);
+            emitParticles(swordAnchor.x, (swordAnchor.y || 0) + 0.55, swordAnchor.z, 0xd6b588, 22, 5.0, 0.14);
+            emitParticles(player.x, 1.0, player.z, 0xfef08a, 14, 4.4, 0.13);
+            floatText('🪵 БОЛЬШАЯ ДУБИНА ПОДОБРАНА!', player.x, player.z - 0.9, '#fde047');
+            callbacks?.onSoulsCue?.('БОЛЬШАЯ ДУБИНА', 'guard_counter');
             callbacks?.onShoreSwordPickedUp?.();
           } else if (nearShoreBonfire) {
             souls.shoreBonfireLit = true;
@@ -8500,7 +8529,8 @@ export function createCombatController({
           const prevU = clamp(meleeStepLunge.elapsed / meleeStepLunge.duration, 0, 1);
           meleeStepLunge.elapsed = Math.min(meleeStepLunge.duration, meleeStepLunge.elapsed + dt);
           const nextU = clamp(meleeStepLunge.elapsed / meleeStepLunge.duration, 0, 1);
-          const runForwardScale = moveMag > 0.05 && moveDotFwd > 0.35 ? 0.45 : 1.0;
+          const isClubStep = currentWeaponId === 'great_club';
+          const runForwardScale = moveMag > 0.05 && moveDotFwd > 0.35 ? (isClubStep ? 0.78 : 0.45) : 1.0;
           let stepDist;
           if (meleeStepLunge.useSoulsCurve) {
             stepDist = sampleAttackLungeStep(prevU, nextU, meleeStepLunge.totalDist) * runForwardScale;
@@ -9042,7 +9072,9 @@ export function createCombatController({
 
         if (!atk.whooshPlayed && atk.elapsed >= Math.max(0, activeStart - 0.055)) {
           atk.whooshPlayed = true;
-          if (typeof audio?.playSwordSwing === 'function') {
+          if (atk.wpnId === 'great_club') {
+            audio?.playBossHammerWhoosh?.(atk.isHeavy || atk.comboStep === 3);
+          } else if (typeof audio?.playSwordSwing === 'function') {
             audio.playSwordSwing(atk.comboStep, atk.isHeavy);
           } else {
             audio?.playMeleeSwing?.(atk.wpnId, atk.isHeavy);
@@ -9070,7 +9102,7 @@ export function createCombatController({
             duration: atk.isFinisher ? 0.24 : 0.18,
             sweepRad: atk.comboStep === 2 ? -baseSweep * 1.15 : atk.comboStep === 3 ? baseSweep * 1.25 : baseSweep
           };
-          if (atk.isHeavy || atk.key === 'guard_counter') {
+          if (atk.wpnId !== 'great_club' && (atk.isHeavy || atk.key === 'guard_counter')) {
             if (atk.isFinisher) {
               emitShockwave(slashX + fwdX * 1.1, slashZ + fwdZ * 1.1, Math.min(2.6, atk.range * 0.78), 0xfbbf24, 0.28);
               emitParticles(slashX + fwdX * 0.72, 0.92, slashZ + fwdZ * 0.72, 0xfde047, 10, 6.2, 0.14);
@@ -9081,6 +9113,25 @@ export function createCombatController({
             heroModel?.handle?.getWeaponSegmentWorld?.() ||
             heroModel?.obj?.userData?.getWeaponSegmentWorld?.() ||
             null;
+        }
+
+        // Elden Ring Great Club overhead earth-slam impact (Club_Attack_3 / R2 / Charged R2 / Guard Counter):
+        // Trigger grounded blunt thud + earthy dust burst right when the massive timber head strikes the ground!
+        if (
+          atk.wpnId === 'great_club' &&
+          !atk.clubSlamFired &&
+          (atk.isHeavy || atk.comboStep === 3) &&
+          atk.elapsed >= activeStart + spec.active * 0.62
+        ) {
+          atk.clubSlamFired = true;
+          const slamAim = Number.isFinite(atk.strikeAngle) ? atk.strikeAngle : player.facing;
+          const slamX = player.x + Math.sin(slamAim) * 1.28;
+          const slamZ = player.z + Math.cos(slamAim) * 1.28;
+          const slamGroundY = sampleSmoothGroundY(player, slamX, slamZ, 0, true);
+          audio?.playBossHammerGround?.(atk.key === 'charged_r2' ? 1.05 : 0.78);
+          emitParticles(slamX, slamGroundY + 0.16, slamZ, 0xb8a894, 15, 5.2, 0.14);
+          emitParticles(slamX, slamGroundY + 0.24, slamZ, 0x6b4d35, 8, 3.8, 0.11);
+          world?.addScreenShake?.(atk.key === 'charged_r2' ? 0.24 : 0.18, 0.14);
         }
 
         // Active hitbox window: test swept blade capsule across [startup, startup + active]
@@ -11078,6 +11129,10 @@ export function createCombatController({
       runLevel: progState.heroLevel ?? runLevel,
       weaponRunLevel,
       weaponId: wpnDef.id,
+      weaponNameRu:
+        isSoulslike && souls.zoneMode === 'exterior_shore' && !souls.shoreSwordPickedUp
+          ? 'Без оружия'
+          : wpnDef.nameRu,
       weapon: wpnDef,
       weaponDef: wpnDef,
       ammo: player.ammo,
@@ -11111,7 +11166,7 @@ export function createCombatController({
         ? '🎯 Тренировочный полигон • Бей по мишени'
         : isSoulslike
           ? souls.zoneMode === 'exterior_shore'
-            ? (souls.shoreSwordPickedUp ? 'Иди к Вратам Пепельного Ущелья' : 'Подбери Меч Клятвы')
+            ? (souls.shoreSwordPickedUp ? 'Иди к Вратам Пепельного Ущелья' : 'Подбери Большую Дубину')
             : souls.bossDefeated
               ? 'Локация зачищена • [Esc] Меню'
               : souls.bossAwakened
@@ -11362,6 +11417,7 @@ export function createCombatController({
     skipBossEscapeCutscene,
     seekBossEscapeCutscene,
     teleportToExteriorShore,
+    equipWeapon: equipHeroWeapon,
     setLowSpecMode,
     debugTeleport,
     getQaContext,

@@ -226,8 +226,116 @@ export const SOULS_ATTACK_SPECS = Object.freeze({
   })
 });
 
+export const SOULS_GREAT_CLUB_ATTACK_SPECS = Object.freeze({
+  // Exact Elden Ring Large Club / Great Club frame data synced 1:1 with Club_Attack_1..3 (1.05s / 1.05s / 1.32s)
+  // with simultaneous forward step-in lunge (`lungeDist`) matching the reference video!
+  r1_1: Object.freeze({
+    startup: 0.34,
+    active: 0.22,
+    recovery: 0.49,
+    cancelChainAt: 0.62,
+    cancelRollAt: 0.64,
+    cancelBlockAt: 0.66,
+    trackingCutoff01: 0.72,
+    mv: 1.24,
+    stanceDmg: 17,
+    stamina: 18,
+    hitstop: 0.078,
+    lungeDist: 1.08
+  }),
+  r1_2: Object.freeze({
+    startup: 0.30,
+    active: 0.24,
+    recovery: 0.51,
+    cancelChainAt: 0.62,
+    cancelRollAt: 0.64,
+    cancelBlockAt: 0.66,
+    trackingCutoff01: 0.72,
+    mv: 1.32,
+    stanceDmg: 19,
+    stamina: 19,
+    hitstop: 0.084,
+    lungeDist: 1.18
+  }),
+  r1_3: Object.freeze({
+    startup: 0.48,
+    active: 0.22,
+    recovery: 0.62,
+    cancelChainAt: 0.90,
+    cancelRollAt: 0.84,
+    cancelBlockAt: 0.88,
+    trackingCutoff01: 0.66,
+    mv: 1.68,
+    stanceDmg: 32,
+    stamina: 24,
+    hitstop: 0.105,
+    lungeDist: 1.45,
+    hyperarmor: true
+  }),
+  r2: Object.freeze({
+    startup: 0.46,
+    active: 0.22,
+    recovery: 0.58,
+    cancelChainAt: 0.86,
+    cancelRollAt: 0.80,
+    cancelBlockAt: 0.84,
+    trackingCutoff01: 0.68,
+    mv: 1.72,
+    stanceDmg: 34,
+    stamina: 26,
+    hitstop: 0.108,
+    lungeDist: 1.48,
+    hyperarmor: true
+  }),
+  charged_r2: Object.freeze({
+    startup: 0.70,
+    active: 0.24,
+    recovery: 0.62,
+    cancelChainAt: 1.12,
+    cancelRollAt: 1.02,
+    cancelBlockAt: 1.04,
+    trackingCutoff01: 0.65,
+    mv: 2.15,
+    stanceDmg: 46,
+    stamina: 34,
+    hitstop: 0.125,
+    lungeDist: 1.72,
+    hyperarmor: true
+  }),
+  rolling_r1: Object.freeze({
+    startup: 0.26,
+    active: 0.20,
+    recovery: 0.42,
+    cancelChainAt: 0.54,
+    cancelRollAt: 0.52,
+    cancelBlockAt: 0.54,
+    trackingCutoff01: 0.74,
+    mv: 1.18,
+    stanceDmg: 16,
+    stamina: 17,
+    hitstop: 0.072,
+    lungeDist: 1.12
+  }),
+  guard_counter: Object.freeze({
+    startup: 0.34,
+    active: 0.22,
+    recovery: 0.52,
+    cancelChainAt: 0.74,
+    cancelRollAt: 0.68,
+    cancelBlockAt: 0.70,
+    trackingCutoff01: 0.74,
+    mv: 1.65,
+    stanceDmg: 38,
+    stamina: 22,
+    hitstop: 0.112,
+    lungeDist: 1.28,
+    hyperarmor: true
+  })
+});
+
 export const SOULS_WEAPON_WEIGHT_PROFILES = Object.freeze({
   club: Object.freeze({ timeMult: 1.00, lungeMult: 1.00, staminaMult: 1.00, stanceMult: 1.00, hitstopMult: 1.00 }),
+  great_club: Object.freeze({ timeMult: 1.24, lungeMult: 1.52, staminaMult: 1.45, stanceMult: 1.90, hitstopMult: 1.32, hyperarmorHeavy: true }),
   spear: Object.freeze({ timeMult: 1.09, lungeMult: 1.22, staminaMult: 1.12, stanceMult: 1.15, hitstopMult: 1.10, forcePierce: true }),
   cleaver: Object.freeze({ timeMult: 1.12, lungeMult: 1.10, staminaMult: 1.15, stanceMult: 1.22, hitstopMult: 1.15 }),
   axe: Object.freeze({ timeMult: 1.16, lungeMult: 1.06, staminaMult: 1.20, stanceMult: 1.35, hitstopMult: 1.20 }),
@@ -247,6 +355,9 @@ const _scaledSpecCache = new Map();
  */
 export function getSoulsAttackSpec(attackKey, weaponId = null) {
   const safeKey = attackKey && SOULS_ATTACK_SPECS[attackKey] ? attackKey : 'r1_1';
+  if (weaponId === 'great_club' && SOULS_GREAT_CLUB_ATTACK_SPECS[safeKey]) {
+    return SOULS_GREAT_CLUB_ATTACK_SPECS[safeKey];
+  }
   const base = SOULS_ATTACK_SPECS[safeKey];
   if (!weaponId || weaponId === 'club' || !SOULS_WEAPON_WEIGHT_PROFILES[weaponId]) {
     return base;

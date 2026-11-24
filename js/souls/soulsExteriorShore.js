@@ -5889,11 +5889,11 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     }
 
     const wrapper = new THREE.Group();
-    wrapper.name = 'RealOathSwordAlignedWrapper';
+    wrapper.name = swordMesh.userData?.isGreatClub ? 'RealGreatClubShoreWrapper' : 'RealOathSwordAlignedWrapper';
     swordMesh.visible = true;
     wrapper.add(swordMesh);
 
-    // Measure intrinsic orientation & span of the passed sword object
+    // Measure intrinsic orientation & span of the passed weapon object
     wrapper.updateMatrixWorld(true);
     const box0 = new THREE.Box3().setFromObject(wrapper);
     const size0 = new THREE.Vector3();
@@ -5904,6 +5904,39 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
       swordFallbackGroup.visible = true;
       return false;
     }
+
+    if (swordMesh.userData?.isGreatClub) {
+      // Lay the Elden Ring Great Club naturally propped diagonally across the coastal rock/pebble mound!
+      // Butt/leather handle rests on the wet pebbles near the waking hero; massive gnarled dark-oak head
+      // leans naturally up onto the coastal mound (~20 deg tilt) so its iconic silhouette pops immediately!
+      swordVisualPivot.rotation.set(0, 0, 0);
+      const center0 = new THREE.Vector3();
+      box0.getCenter(center0);
+      const targetLen = 1.72;
+      const sc = targetLen / Math.max(1e-4, size0.y);
+      wrapper.scale.setScalar(sc);
+      wrapper.position.set(-center0.x * sc, -box0.min.y * sc, -center0.z * sc);
+
+      const finalMount = new THREE.Group();
+      finalMount.name = 'RealGreatClubShoreMount';
+      finalMount.add(wrapper);
+      // Tilt from vertical (+Y) to ~26 deg above horizontal leaning naturally up onto the coastal rock mound,
+      // angled prominently toward the waking hero so the gnarled dark-oak silhouette & leather grip pop clearly!
+      finalMount.rotation.order = 'YXZ';
+      finalMount.rotation.y = 0.72;
+      finalMount.rotation.z = -1.10;
+      finalMount.rotation.x = 0.06;
+      finalMount.position.set(-0.34, 0.14, -0.14);
+
+      swordRealMount.add(finalMount);
+      attachedRealSword = swordMesh;
+      attachedRealSwordWrapper = finalMount;
+      swordFallbackGroup.visible = false;
+      swordGroup.visible = !swordPickedUp;
+      return true;
+    }
+
+    swordVisualPivot.rotation.set(0.18, 0.52, -0.11); // ~12.1 deg heroic angle for Oath Broadsword if used
 
     // Align longest axis vertically along Y
     if (size0.x >= size0.y && size0.x >= size0.z) {

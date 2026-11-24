@@ -10,7 +10,7 @@
 // across Hub Front, Combat Isometric, Right-Side Profile, and Running_A mid-stride views.
 
 import * as THREE from '../../vendor/three.module.js';
-import { solveMixamoArmIK } from './shared.js?v=20261124z93';
+import { solveMixamoArmIK } from './shared.js?v=20261124z94';
 
 const MOUNT_PIVOT_POS = Object.freeze({ x: -0.0235, y: 0.0415, z: -0.0086 });
 const MOUNT_PIVOT_ROT = Object.freeze({ x: -1.04, y: 0.24, z: -1.52 });
@@ -25,6 +25,22 @@ function buildMountLocalQuatInv(rotY = 0) {
 }
 
 const WEAPON_MOUNT_CONFIGS = Object.freeze({
+  great_club_tripo: Object.freeze({
+    assetKey: 'great_club_tripo',
+    stanceId: 'great_club_shoulder',
+    twoHanded: false,
+    scale: 0.96,
+    gripY: 0.18,
+    leftGripY: null,
+    rotY: 0,
+    centerZ: 0,
+    pivotPos: MOUNT_PIVOT_POS,
+    pivotRot: MOUNT_PIVOT_ROT,
+    gripLX: 0,
+    gripLY: 0.10,
+    gripLZ: 0,
+    mountLocalQInv: buildMountLocalQuatInv(0)
+  }),
   axe_tripo: Object.freeze({
     assetKey: 'axe_tripo',
     stanceId: 'axe_shoulder',
@@ -96,6 +112,23 @@ const WEAPON_MOUNT_CONFIGS = Object.freeze({
 // Model-space stance definitions (unit modelInstance space, anchored to Spine2 live position).
 // All coordinates verified via exact 3D clearance checks & multi-angle Blender renders.
 const STANCE_DEFS = Object.freeze({
+  great_club_shoulder: Object.freeze({
+    // Exact Elden Ring 1H Right-Shoulder Carry + Iron Shield in Left Hand!
+    // Massive dark-oak timber head sweeps diagonally UP (+Y), BACK (-Z behind helmet/horns), and ACROSS-LEFT (+X).
+    torsoYaw: -0.14,
+    torsoPitch: 0.05,
+    runPitchBoost: 0.08,
+    clavR: [0.16, -0.02],
+    clavL: [0, 0],
+    handR: [-0.175, 0.020, 0.115],
+    poleR: [-0.44, -0.18, -0.05],
+    shaftDir: new THREE.Vector3(0.62, 0.60, -0.50).normalize(),
+    bladeXHint: new THREE.Vector3(-0.74, 0.50, 0.45).normalize(),
+    leftMode: 'keep_shield',
+    weaponRunSwayX: 0.014,
+    weaponRunBobY: 0.018,
+    weaponRunPitchBob: 0.042
+  }),
   axe_shoulder: Object.freeze({
     torsoYaw: -0.10,
     torsoPitch: 0.04,
@@ -166,6 +199,7 @@ const STANCE_DEFS = Object.freeze({
 
 export function resolveWarriorStanceId(weaponId) {
   const id = String(weaponId || 'club');
+  if (id === 'great_club') return 'great_club_shoulder';
   if (id === 'axe' || id === 'flail') return 'axe_shoulder';
   if (id === 'boss_hammer' || id === 'hammer') return 'hammer_shoulder';
   if (id === 'zweihander') return 'zweihander_2h';
@@ -175,6 +209,7 @@ export function resolveWarriorStanceId(weaponId) {
 
 export function getWarriorWeaponMountConfig(weaponId) {
   const id = String(weaponId || 'club');
+  if (id === 'great_club') return WEAPON_MOUNT_CONFIGS.great_club_tripo;
   if (id === 'spear' || id === 'cleaver') return WEAPON_MOUNT_CONFIGS.spear_tripo;
   if (id === 'zweihander') return WEAPON_MOUNT_CONFIGS.zweihander_tripo;
   if (id === 'axe' || id === 'flail') return WEAPON_MOUNT_CONFIGS.axe_tripo;
@@ -471,7 +506,7 @@ export function applyWarriorWeaponStance(skeletonOrRig, weaponId, dt = 0.016, op
   if (mx.RightShoulder) {
     setClavicleModelRot(mx.RightShoulder, st.clavR[0], st.clavR[1], blend);
   }
-  if (mx.LeftShoulder) {
+  if (mx.LeftShoulder && st.leftMode !== 'keep_shield') {
     setClavicleModelRot(mx.LeftShoulder, st.clavL[0], st.clavL[1], blend);
   }
 
@@ -501,8 +536,9 @@ export function applyWarriorWeaponStance(skeletonOrRig, weaponId, dt = 0.016, op
   // 4. Orient RightHand so mounted weapon aligns EXACTLY with shaftDir + bladeXHint
   _vWY.copy(st.shaftDir);
   if (Math.abs(breath) > 1e-4 || Math.abs(runCycle) > 1e-4) {
-    _vWY.y += breath * 0.015 + runBounce * 0.018;
-    _vWY.x += runCycle * 0.016;
+    const pitchBob = st.weaponRunPitchBob || 0.018;
+    _vWY.y += breath * 0.015 + runBounce * pitchBob;
+    _vWY.x += runCycle * (st.leftMode === 'keep_shield' ? 0.028 : 0.016);
     _vWY.normalize();
   }
   _vWX.copy(st.bladeXHint).addScaledVector(_vWY, -st.bladeXHint.dot(_vWY)).normalize();
@@ -514,8 +550,9 @@ export function applyWarriorWeaponStance(skeletonOrRig, weaponId, dt = 0.016, op
   _qHandRModel.copy(_qWeaponModel).multiply(mountCfg.mountLocalQInv).normalize();
   setBoneModelQuat(mx.RightHand.node, _qHandRModel, blend);
 
-  // 5. Solve Left Arm (either FREE visible balance stance for Axe/Hammer, or exact 2H grip IK for Zweihander/Spear)
-  if (mx.LeftArm?.node && mx.LeftForeArm?.node && mx.LeftHand?.node) {
+  // 5. Solve Left Arm (either FREE visible balance stance for Axe/Hammer, exact 2H grip IK for Zweihander/Spear,
+  //    or 'keep_shield' for Great Club so LeftArm keeps pure Mixamo shield animation untouched!)
+  if (st.leftMode !== 'keep_shield' && mx.LeftArm?.node && mx.LeftForeArm?.node && mx.LeftHand?.node) {
     _vPoleLM.set(
       _vAnchorM.x + st.poleL[0],
       _vAnchorM.y + st.poleL[1],
@@ -583,7 +620,8 @@ export function applyWarriorWeaponStance(skeletonOrRig, weaponId, dt = 0.016, op
 export function applyWarriorAttackOverlay(rig, weaponId, attackProgress01, stanceBlend = 0) {
   if (!rig || !rig.mx || !rig.modelInstance) return 0;
   const stanceId = resolveWarriorStanceId(weaponId);
-  if (stanceId === 'sword_shield') return 0;
+  // 1H Sword+Shield AND Great Club use pure hand-crafted Blender animation clips (Club_Attack_1..3) — zero procedural cleave fight!
+  if (stanceId === 'sword_shield' || stanceId === 'great_club_shoulder') return 0;
 
   const u = Math.max(0, Math.min(1, attackProgress01));
   const atkWeight = Math.max(0, Math.min(1, 1 - stanceBlend * 0.85));

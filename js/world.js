@@ -4,14 +4,14 @@
 import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { DRACOLoader } from '../vendor/DRACOLoader.js';
-import { ARENA_HALF_SIZE } from './config.js?v=20261124z93';
-import { createSoulsArena } from './soulsArena.js?v=20261124z93';
+import { ARENA_HALF_SIZE } from './config.js?v=20261124z94';
+import { createSoulsArena } from './soulsArena.js?v=20261124z94';
 import {
   BOSS_DOOR_CUTSCENE_DURATION,
   evaluateBossDoorCutscene,
   getBossDoorCutsceneSkipState,
   computeBossDoorCutsceneShakeOffset
-} from './souls/soulsCutsceneChoreography.js?v=20261124z93';
+} from './souls/soulsCutsceneChoreography.js?v=20261124z94';
 import {
   BOSS_ESCAPE_CUTSCENE_DURATION,
   BOSS_ESCAPE_CUTSCENE_SKIP_TIME,
@@ -21,19 +21,19 @@ import {
   sampleBossEscapeCutscene,
   getBossEscapeCutsceneSkipState,
   computeBossEscapeCameraShakeOffset
-} from './souls/soulsEscapeCutscene.js?v=20261124z93';
+} from './souls/soulsEscapeCutscene.js?v=20261124z94';
 import {
   EXTERIOR_SHORE_ANCHORS,
   createSoulsExteriorShore
-} from './souls/soulsExteriorShore.js?v=20261124z93';
-import { createSoulsEscapeVfx } from './souls/soulsEscapeVfx.js?v=20261124z93';
+} from './souls/soulsExteriorShore.js?v=20261124z94';
+import { createSoulsEscapeVfx } from './souls/soulsEscapeVfx.js?v=20261124z94';
 import {
   clampCastleCameraPosition,
   SOULS_CASTLE_CONSTANTS
-} from './souls/soulsCastleLayout.js?v=20261124z93';
-import { createSoulsEnvironmentMap } from './souls/soulsLightingRig.js?v=20261124z93';
-import { applyEldenDissolveToModel } from './souls/soulsDissolveVfx.js?v=20261124z93';
-import * as SoulsFireVfx from './souls/soulsFireVfx.js?v=20261124z93';
+} from './souls/soulsCastleLayout.js?v=20261124z94';
+import { createSoulsEnvironmentMap } from './souls/soulsLightingRig.js?v=20261124z94';
+import { applyEldenDissolveToModel } from './souls/soulsDissolveVfx.js?v=20261124z94';
+import * as SoulsFireVfx from './souls/soulsFireVfx.js?v=20261124z94';
 import {
   createCourtyardStoneTexture,
   createHubMistTexture,
@@ -44,7 +44,7 @@ import {
   createHubContactAoTexture,
   createArcaneCircleTexture,
   getSlashCrescentGeo
-} from './world/textures.js?v=20261124z93';
+} from './world/textures.js?v=20261124z94';
 
 const sharedDracoLoader = new DRACOLoader();
 sharedDracoLoader.setDecoderPath('./vendor/draco/');
@@ -6952,7 +6952,7 @@ export function createArenaWorld(canvas) {
     if (devEditors) return Promise.resolve(devEditors);
     if (!isDevModeEnabled()) return Promise.resolve(null);
     if (!devEditorsPromise) {
-      devEditorsPromise = import('./world/devEditors.js?v=20261124z93')
+      devEditorsPromise = import('./world/devEditors.js?v=20261124z94')
         .then((mod) => {
           devEditors = mod.createWorldDevEditors({
             scene,

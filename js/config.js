@@ -22,11 +22,11 @@ export const CLASSES = {
     colorSecondary: 0xc8ccd4,
     colorAccent: 0xf4b942,
     starterWeapon: 'club',
-    weapons: ['club', 'spear', 'zweihander', 'axe', 'boss_hammer']
+    weapons: ['club', 'great_club', 'spear', 'zweihander', 'axe', 'boss_hammer']
   }
 };
 
-// All 5 Warrior Melee Weapons preserved for in-world discovery & equipment
+// All Warrior Melee Weapons preserved for in-world discovery & equipment
 export const WEAPONS = {
   club: {
     id: 'club',
@@ -46,6 +46,26 @@ export const WEAPONS = {
     moveSpeedMult: 1.0,
     maxTargets: 1,
     color: 0xd97706
+  },
+  great_club: {
+    id: 'great_club',
+    classId: 'warrior',
+    tier: 2,
+    twoHanded: false,
+    nameRu: 'Большая Дубина',
+    nameEn: 'Great Club',
+    descRu: 'Массивная сучковатая дубина из тёмного дуба. Размашистые сокрушительные удары с шагом вперёд и огромным уроном по стойке.',
+    type: 'melee',
+    baseDamage: 22,
+    cooldown: 1.05,
+    range: 1.65,
+    arcAngle: Math.PI * 0.86,
+    knockback: 11.8,
+    armorPierce: 0.45,
+    splashRadius: 1.55,
+    moveSpeedMult: 0.93,
+    maxTargets: 3,
+    color: 0xb45309
   },
   spear: {
     id: 'spear',

@@ -1,7 +1,7 @@
 // Pure Soulslike Progression & Base Warrior Stat Calculator («Замок Пепла»)
 // Zero PvE gold/shop/talents/daily-quests/mage/gunslinger bloat.
 
-import { CLASSES, WEAPONS } from './config.js?v=20261124z93';
+import { CLASSES, WEAPONS } from './config.js?v=20261124z94';
 
 function createDefaultState() {
   return {
