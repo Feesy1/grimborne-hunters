@@ -13,8 +13,8 @@ import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { DRACOLoader } from '../vendor/DRACOLoader.js';
 import { mergeGeometries } from '../vendor/BufferGeometryUtils.js';
-import { createSoulsPbrTextures } from './souls/soulsPbrTextures.js?v=20261124z86';
-import * as CastleLayout from './souls/soulsCastleLayout.js?v=20261124z86';
+import { createSoulsPbrTextures } from './souls/soulsPbrTextures.js?v=20261124z87';
+import * as CastleLayout from './souls/soulsCastleLayout.js?v=20261124z87';
 import {
   SOULS_CASTLE_CONSTANTS,
   SOULS_CASTLE_BONFIRE,
@@ -38,26 +38,26 @@ import {
   clampCastlePosition,
   getCastleSurfaceType,
   getCastleStaticColliders
-} from './souls/soulsCastleLayout.js?v=20261124z86';
-import { createWallFlameJetTraps } from './souls/soulsFireVfx.js?v=20261124z86';
-import { createSoulsCastleDoors } from './souls/soulsCastleDoors.js?v=20261124z86';
+} from './souls/soulsCastleLayout.js?v=20261124z87';
+import { createWallFlameJetTraps } from './souls/soulsFireVfx.js?v=20261124z87';
+import { createSoulsCastleDoors } from './souls/soulsCastleDoors.js?v=20261124z87';
 import {
   createHeroBonfire3D,
   createGothicLanternBraziers3D,
   createMeltedCandleClusters3D,
   createCastleBannersAndShrines3D
-} from './souls/soulsCastleProps.js?v=20261124z86';
-import { createSoulsCastleRoof } from './souls/soulsCastleRoof.js?v=20261124z86';
-import { createCastleAtmosphere } from './souls/soulsAtmosphere.js?v=20261124z86';
+} from './souls/soulsCastleProps.js?v=20261124z87';
+import { createSoulsCastleRoof } from './souls/soulsCastleRoof.js?v=20261124z87';
+import { createCastleAtmosphere } from './souls/soulsAtmosphere.js?v=20261124z87';
 import {
   createSoulsFireShadowRig,
   buildFireSourcesFromCastleLayout
-} from './souls/soulsLightingRig.js?v=20261124z86';
+} from './souls/soulsLightingRig.js?v=20261124z87';
 
 const sharedDracoLoader = new DRACOLoader();
 sharedDracoLoader.setDecoderPath('./vendor/draco/');
 
-const THRONE_GLB_URL = './assets/env/souls_throne.glb?v=20261124z86';
+const THRONE_GLB_URL = './assets/env/souls_throne.glb?v=20261124z87';
 
 const BOSS_CENTER_Z = SOULS_CASTLE_CONSTANTS.BOSS_CENTER_Z;
 const BOSS_RADIUS = SOULS_CASTLE_CONSTANTS.BOSS_RADIUS;
@@ -725,6 +725,7 @@ export function createSoulsArena(options = {}) {
   const walkableFloorGeo = trackGeo(mergeBucket(floorParts, 3.85));
   const walkableFloorMesh = new THREE.Mesh(walkableFloorGeo, stoneFloorMat);
   walkableFloorMesh.receiveShadow = true;
+  walkableFloorMesh.renderOrder = -200;
   group.add(walkableFloorMesh);
 
   // ==========================================================================
@@ -780,7 +781,15 @@ export function createSoulsArena(options = {}) {
     transparent: true,
     opacity: 0.16,
     blending: THREE.AdditiveBlending,
-    depthWrite: false
+    depthWrite: false,
+    stencilWrite: true,
+    stencilRef: 0,
+    stencilFunc: THREE.EqualStencilFunc,
+    stencilFuncMask: 0x01,
+    stencilWriteMask: 0x00,
+    stencilFail: THREE.KeepStencilOp,
+    stencilZFail: THREE.KeepStencilOp,
+    stencilZPass: THREE.KeepStencilOp
   }));
   // Golden sigil of the Boss arena, centred strictly on BOSS_CENTER_Z
   const bossRing = new THREE.Mesh(
@@ -868,17 +877,19 @@ export function createSoulsArena(options = {}) {
   const darkStoneBatch = new THREE.Mesh(trackGeo(mergeBucket(darkStoneParts, 3.2)), darkStoneMat);
   darkStoneBatch.castShadow = false;
   darkStoneBatch.receiveShadow = true;
+  darkStoneBatch.renderOrder = -195;
   group.add(darkStoneBatch);
 
   const trimStoneBatch = new THREE.Mesh(trackGeo(mergeBucket(trimStoneParts, 3.0)), trimStoneMat);
   trimStoneBatch.castShadow = false;
   trimStoneBatch.receiveShadow = true;
+  trimStoneBatch.renderOrder = -195;
   group.add(trimStoneBatch);
 
   const crimsonCarpetBatch = new THREE.Mesh(trackGeo(mergeBucket(carpetParts, 0)), daisRunnerMat);
   crimsonCarpetBatch.castShadow = false;
   crimsonCarpetBatch.receiveShadow = true;
-  crimsonCarpetBatch.renderOrder = 3;
+  crimsonCarpetBatch.renderOrder = -190;
   group.add(crimsonCarpetBatch);
 
   // Camera-safe solid stone upper wall groups (South, West, East) [3 DC]
@@ -1457,7 +1468,15 @@ export function createSoulsArena(options = {}) {
     depthWrite: false,
     polygonOffset: true,
     polygonOffsetFactor: -1,
-    polygonOffsetUnits: -1
+    polygonOffsetUnits: -1,
+    stencilWrite: true,
+    stencilRef: 0,
+    stencilFunc: THREE.EqualStencilFunc,
+    stencilFuncMask: 0x01,
+    stencilWriteMask: 0x00,
+    stencilFail: THREE.KeepStencilOp,
+    stencilZFail: THREE.KeepStencilOp,
+    stencilZPass: THREE.KeepStencilOp
   }));
   const groundDecalsMesh = new THREE.Mesh(trackGeo(mergeBucket(decalParts, 0)), decalMat);
   groundDecalsMesh.renderOrder = 1;

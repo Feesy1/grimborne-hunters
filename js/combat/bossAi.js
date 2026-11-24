@@ -7,8 +7,8 @@ import {
   clamp,
   normalizeAngle,
   lerpAngle
-} from './bridge.js?v=20261124z86';
-import { SOULS_CASTLE_CONSTANTS } from '../souls/soulsCastleLayout.js?v=20261124z86';
+} from './bridge.js?v=20261124z87';
+import { SOULS_CASTLE_CONSTANTS } from '../souls/soulsCastleLayout.js?v=20261124z87';
 
 export function updateBossAI(boss, dt, elapsedTime, ctx) {
   const {
@@ -3547,8 +3547,11 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
       boss.soulsState = 'whirl_spin';
       boss.soulsTimer = spinDur;
       boss.soulsSpinTotalDur = spinDur;
-      boss.soulsSpinPeakVel = phase2 ? 8.4 : 7.3;
-      boss.soulsSpinAngVel = 1.45;
+      // Footstep-synced rotational velocity matching Whirl_Spin's 4 circular boot steps / 1.20s loop
+      // (~4.35 rad/s P1 / ~5.05 rad/s P2 -> ~1.5-2.0 grounded stomping revolutions, ZERO ice-skating!)
+      boss.soulsSpinPeakVel = phase2 ? 5.05 : 4.35;
+      boss.soulsSpinAngVel = 1.65;
+      boss.soulsSpinStepClock = 0;
       boss.spinHitTimer = 0;
       boss.spinVfxTimer = 0;
       playBossWhooshSfx(audio, true);
@@ -3567,40 +3570,47 @@ export function updateSoulsBossAI(boss, dt, elapsedTime, ctx) {
     const totalSpinDur = Math.max(0.5, boss.soulsSpinTotalDur || (phase2 ? 2.65 : 2.25));
     const spinU = clamp(1 - boss.soulsTimer / totalSpinDur, 0, 1);
     boss.soulsPosturePhase01 = spinU;
-    const peakVel = boss.soulsSpinPeakVel || (phase2 ? 8.4 : 7.3);
-    const startVel = 1.45;
-    const endVel = 1.70;
-    let curAngVel;
-    if (spinU < 0.36) {
-      // Heavy colossus acceleration overcoming warhammer inertia (0..36%)
-      const kAcc = spinU / 0.36;
+    const peakVel = boss.soulsSpinPeakVel || (phase2 ? 5.05 : 4.35);
+    const startVel = 1.65;
+    const endVel = 1.55;
+    let baseAngVel;
+    if (spinU < 0.30) {
+      // Heavy colossus acceleration overcoming warhammer inertia (0..30%)
+      const kAcc = spinU / 0.30;
       const easeAcc = kAcc * kAcc * (3 - 2 * kAcc);
-      curAngVel = startVel + (peakVel - startVel) * easeAcc;
-    } else if (spinU <= 0.72) {
-      // Full centrifugal cyclone velocity (36..72%)
-      curAngVel = peakVel;
+      baseAngVel = startVel + (peakVel - startVel) * easeAcc;
+    } else if (spinU <= 0.74) {
+      // Sustained foot-driven cyclone rotation (30..74%)
+      baseAngVel = peakVel;
     } else {
-      // Heavy rotational momentum wind-down (72..100%)
-      const kDec = (spinU - 0.72) / 0.28;
+      // Heavy rotational momentum wind-down (74..100%)
+      const kDec = (spinU - 0.74) / 0.26;
       const easeDec = kDec * kDec * (3 - 2 * kDec);
-      curAngVel = peakVel + (endVel - peakVel) * easeDec;
+      baseAngVel = peakVel + (endVel - peakVel) * easeDec;
     }
+    // Synchronize Whirl_Spin 4-step circular footwork speed 1:1 with live angular velocity (ZERO foot slip!)
+    // At clipSpeed=1.0 (1.20s loop = 4 steps * 72 deg), zero-slip angular speed is ~4.15 rad/s.
+    const clipSpeed = clamp(baseAngVel / 4.15, 0.55, 1.38);
+    boss.soulsSpinStepClock = (boss.soulsSpinStepClock || 0) + dt * clipSpeed;
+    // Biomechanical step-drive pulse: each armored boot plant accelerates the torso spin naturally!
+    const stepPulse = 1.0 + 0.16 * Math.cos((boss.soulsSpinStepClock / 1.20) * Math.PI * 8.0);
+    const curAngVel = baseAngVel * stepPulse;
     boss.soulsSpinAngVel = curAngVel;
-    const velRatio = clamp(curAngVel / 7.3, 0.22, 1.32);
-    boss.model?.handle?.setClipOverride?.('Whirl_Spin', clamp(0.46 + velRatio * 0.84, 0.46, 1.44));
+    const velRatio = clamp(baseAngVel / 4.35, 0.32, 1.30);
+    boss.model?.handle?.setClipOverride?.('Whirl_Spin', clipSpeed);
 
     boss.facing = normalizeAngle((boss.facing || 0) + dt * curAngVel);
     // Stomp-synced cyclone pursuit scaled by live angular momentum!
-    const driftSpeed = moveSpeed * (phase2 ? 0.76 : 0.54) * clamp(0.45 + 0.65 * velRatio, 0.45, 1.15);
+    const driftSpeed = moveSpeed * (phase2 ? 0.74 : 0.52) * clamp(0.45 + 0.60 * velRatio, 0.45, 1.12);
     if (dist > 2.0) {
       advanceBossWithCollision(boss, dx, dz, driftSpeed * dt, player, resolveObstaclesAndBounds);
     }
 
     if (boss.spinVfxTimer <= 0) {
-      boss.spinVfxTimer = clamp(0.42 - 0.21 * velRatio, 0.19, 0.42);
+      boss.spinVfxTimer = clamp(0.30 / Math.max(0.55, clipSpeed), 0.21, 0.44);
       playBossWhooshSfx(audio, velRatio > 0.78);
       audio?.playBossFootstep?.();
-      emitParticles(boss.x, 0.14, boss.z, 0xd6d3d1, 5, 2.8, 0.11);
+      emitParticles(boss.x, 0.14, boss.z, 0xd6d3d1, 6, 3.0, 0.12);
       if (boss.phase2Enraged) {
         emitParticles(boss.x, 1.05, boss.z, 0xfbbf24, 5, 4.8, 0.13);
       }

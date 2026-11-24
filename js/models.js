@@ -8,7 +8,7 @@ import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { DRACOLoader } from '../vendor/DRACOLoader.js';
 import { clone as cloneSkinned } from '../vendor/SkeletonUtils.js';
-import { WEAPONS } from './config.js?v=20261124z86';
+import { WEAPONS } from './config.js?v=20261124z87';
 import {
   getGeo,
   getMat,
@@ -17,28 +17,28 @@ import {
   createAnimController,
   setBoneRelEuler,
   solveMixamoArmIK
-} from './models/shared.js?v=20261124z86';
+} from './models/shared.js?v=20261124z87';
 import {
   getWarriorWeaponMountConfig,
   createWarriorStanceState,
   applyWarriorWeaponStance,
   applyWarriorAttackOverlay
-} from './models/warriorStances.js?v=20261124z86';
+} from './models/warriorStances.js?v=20261124z87';
 import {
   computeFootSyncPlaybackRate,
   computeCombatPostureDynamics,
   applyCombatPostureToObject3D,
   applyCombatRecoilImpulse
-} from './souls/soulsPhysicsFeel.js?v=20261124z86';
-import { createActorContactShadowMesh } from './souls/soulsAtmosphere.js?v=20261124z86';
+} from './souls/soulsPhysicsFeel.js?v=20261124z87';
+import { createActorContactShadowMesh } from './souls/soulsAtmosphere.js?v=20261124z87';
 import {
   applyEldenDissolveToModel,
   resetEldenDissolveFromModel
-} from './souls/soulsDissolveVfx.js?v=20261124z86';
+} from './souls/soulsDissolveVfx.js?v=20261124z87';
 
 const MODEL_PATHS = {
   // Warrior Knight (Mixamo Sword & Shield Run + Diagonal Slash + Turn_180 + Combat_Roll + Heavy_Thrust + Door_Push)
-  warrior_run: './assets/models/Warrior_Run.glb?v=20261124z86',
+  warrior_run: './assets/models/Warrior_Run.glb?v=20261124z87',
 
   // All 5 Warrior Melee Weapons + Shield (preserved for in-world discovery & future equipment!)
   sword_tripo: './assets/models/Sword_Tripo.glb?v=20261120z34',
@@ -49,10 +49,10 @@ const MODEL_PATHS = {
   hammer_tripo: './assets/models/Hammer_Tripo.glb?v=20261120z34',
 
   // Castle of Ash Enemies & Boss (Boss untouched!)
-  rift_boss: './assets/models/Rift_Boss_Tripo.glb?v=20261124z86',
-  rift_executioner: './assets/models/Rift_Executioner_Tripo.glb?v=20261124z86',
-  rift_vanguard: './assets/models/Rift_Vanguard_Tripo.glb?v=20261124z86',
-  rift_acolyte: './assets/models/Rift_Acolyte_Tripo.glb?v=20261124z86'
+  rift_boss: './assets/models/Rift_Boss_Tripo.glb?v=20261124z87',
+  rift_executioner: './assets/models/Rift_Executioner_Tripo.glb?v=20261124z87',
+  rift_vanguard: './assets/models/Rift_Vanguard_Tripo.glb?v=20261124z87',
+  rift_acolyte: './assets/models/Rift_Acolyte_Tripo.glb?v=20261124z87'
 };
 
 const gltfCache = new Map();
@@ -9323,9 +9323,9 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
     if (jawBone) {
       if (cfg.key === 'rift_boss') {
         // Real lower-jaw articulation on Rift_Boss_Tripo.glb (z83 isolated Jaw skin weights below mouth):
-        //   - Dialogue speech: 0 .. 0.26 rad driven by bossMouthSmooth
-        //   - Roar_Taunt / phase2_roar: opens up to 0.30 rad
-        const targetJawRad = Math.max(effSpeech01 * 0.26, roarOpen01 * 0.30);
+        //   - Dialogue speech: 0 .. 0.16 rad driven by bossMouthSmooth
+        //   - Roar_Taunt / phase2_roar: crisp 0.15 rad open (zero stretched chin / face protrusion!)
+        const targetJawRad = Math.max(effSpeech01 * 0.16, roarOpen01 * 0.15);
         if (targetJawRad > 0.0008) {
           let addRad = targetJawRad;
           if (hasJawBindQuat && roarOpen01 > 0.001) {
@@ -9342,7 +9342,7 @@ export function createEnemyMesh(typeId = 'ember_skeleton', eliteVariant = null, 
           }
           if (addRad > 0.0005) {
             jawPreAdditiveQ.copy(jawBone.quaternion);
-            jawBone.rotateX(Math.min(0.30, addRad));
+            jawBone.rotateX(Math.min(0.16, addRad));
             jawAdditiveApplied = true;
           }
         }

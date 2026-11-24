@@ -4,21 +4,21 @@
 import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { DRACOLoader } from '../vendor/DRACOLoader.js';
-import { ARENA_HALF_SIZE } from './config.js?v=20261124z86';
-import { createSoulsArena } from './soulsArena.js?v=20261124z86';
+import { ARENA_HALF_SIZE } from './config.js?v=20261124z87';
+import { createSoulsArena } from './soulsArena.js?v=20261124z87';
 import {
   BOSS_DOOR_CUTSCENE_DURATION,
   evaluateBossDoorCutscene,
   getBossDoorCutsceneSkipState,
   computeBossDoorCutsceneShakeOffset
-} from './souls/soulsCutsceneChoreography.js?v=20261124z86';
+} from './souls/soulsCutsceneChoreography.js?v=20261124z87';
 import {
   clampCastleCameraPosition,
   SOULS_CASTLE_CONSTANTS
-} from './souls/soulsCastleLayout.js?v=20261124z86';
-import { createSoulsEnvironmentMap } from './souls/soulsLightingRig.js?v=20261124z86';
-import { applyEldenDissolveToModel } from './souls/soulsDissolveVfx.js?v=20261124z86';
-import * as SoulsFireVfx from './souls/soulsFireVfx.js?v=20261124z86';
+} from './souls/soulsCastleLayout.js?v=20261124z87';
+import { createSoulsEnvironmentMap } from './souls/soulsLightingRig.js?v=20261124z87';
+import { applyEldenDissolveToModel } from './souls/soulsDissolveVfx.js?v=20261124z87';
+import * as SoulsFireVfx from './souls/soulsFireVfx.js?v=20261124z87';
 import {
   createCourtyardStoneTexture,
   createHubMistTexture,
@@ -29,7 +29,7 @@ import {
   createHubContactAoTexture,
   createArcaneCircleTexture,
   getSlashCrescentGeo
-} from './world/textures.js?v=20261124z86';
+} from './world/textures.js?v=20261124z87';
 
 const sharedDracoLoader = new DRACOLoader();
 sharedDracoLoader.setDecoderPath('./vendor/draco/');
@@ -54,6 +54,7 @@ export function createArenaWorld(canvas) {
   const renderer = new THREE.WebGLRenderer({
     canvas: canvas || undefined,
     alpha: false,
+    stencil: true,
     antialias: !isMobileDevice && nativeDpr < 1.5,
     powerPreference: 'high-performance'
   });
@@ -2501,9 +2502,9 @@ export function createArenaWorld(canvas) {
         float r = length(p.xz);
         float ang = atan(p.z, p.x);
         float buckle = 0.72 + 0.28 * sin(ang * 5.0 + uSeed) * cos(ang * 3.0 - uSeed * 0.7);
-        float rimRidge = exp(-pow((r - 0.50) / 0.17, 2.0)) * buckle;
-        float baseLift = 0.012 * (1.0 - smoothstep(0.76, 1.0, r)) + 0.005;
-        p.y = baseLift + rimRidge * 0.054 * uHeave;
+        float rimRidge = exp(-pow((r - 0.48) / 0.16, 2.0)) * buckle;
+        float baseLift = 0.008 * (1.0 - smoothstep(0.76, 1.0, r)) + 0.004;
+        p.y = baseLift + rimRidge * 0.026 * uHeave;
       } else {
         float ax = abs(p.x);
         float endEnv = sin(clamp(uv.y, 0.0, 1.0) * 3.14159265);
@@ -2592,6 +2593,12 @@ export function createArenaWorld(canvas) {
       vec2 p0 = vUv * 2.0 - 1.0;
       float r0 = length(p0);
       if (uFissure < 0.5 && r0 > 1.01) discard;
+      // Cut an actual open jagged portal in the flat rim decal for circular craters so the REAL 3D recessed pit shows cleanly!
+      if (uFissure < 0.5) {
+        float angPit = atan(p0.y, p0.x);
+        float pitEdge = (0.385 + 0.022 * sin(angPit * 5.0 + 0.4) + 0.015 * cos(angPit * 8.0 - 0.9) + 0.011 * sin(angPit * 13.0 + 1.7)) / 1.04;
+        if (r0 < pitEdge + 0.004) discard;
+      }
 
       float outerMask = texture2D(uReliefMap, vUv).a;
       if (outerMask < 0.008) discard;
@@ -2771,17 +2778,153 @@ export function createArenaWorld(canvas) {
       polygonOffset: true,
       polygonOffsetFactor: -2,
       polygonOffsetUnits: -2,
+      stencilWrite: true,
+      stencilRef: 0,
+      stencilFunc: THREE.EqualStencilFunc,
+      stencilFuncMask: 0x01,
+      stencilWriteMask: 0x00,
+      stencilFail: THREE.KeepStencilOp,
+      stencilZFail: THREE.KeepStencilOp,
+      stencilZPass: THREE.KeepStencilOp,
       toneMapped: true
     });
   }
 
-  // Sculpted 3D Fractured Cathedral Flagstone Wedges (4 distinct silhouettes with vertex-colored dark raw split faces!)
+  // Procedural Dark Cathedral Granite Albedo, Chisel Bump & Volcanic Vein Emissive Textures
+  // Eliminates untextured plastic prisms and flat solid-orange Phase-2 rocks!
+  function buildCathedralRockTextures() {
+    const sz = 256;
+    const albCv = document.createElement('canvas');
+    albCv.width = sz; albCv.height = sz;
+    const ac = albCv.getContext('2d');
+
+    const bmpCv = document.createElement('canvas');
+    bmpCv.width = sz; bmpCv.height = sz;
+    const bc = bmpCv.getContext('2d');
+
+    const emCv = document.createElement('canvas');
+    emCv.width = sz; emCv.height = sz;
+    const ec = emCv.getContext('2d');
+
+    let seed = 0x51a7c3d9;
+    const rnd = () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 4294967296;
+    };
+
+    // Base dark cathedral blue-slate granite matching Boss Hall flagstones
+    ac.fillStyle = '#3c404f';
+    ac.fillRect(0, 0, sz, sz);
+    bc.fillStyle = '#808080';
+    bc.fillRect(0, 0, sz, sz);
+    ec.fillStyle = '#000000';
+    ec.fillRect(0, 0, sz, sz);
+
+    // Mottled fractured mineral & quarry grain patches
+    for (let i = 0; i < 420; i++) {
+      const px = rnd() * sz;
+      const py = rnd() * sz;
+      const rw = 4 + rnd() * 22;
+      const rh = 3 + rnd() * 14;
+      const ang = rnd() * Math.PI;
+      const v = Math.round(42 + rnd() * 44);
+      const b = Math.min(255, Math.round(v * 1.12));
+      ac.save();
+      ac.translate(px, py);
+      ac.rotate(ang);
+      ac.fillStyle = `rgba(${v}, ${Math.round(v * 1.02)}, ${b}, ${0.22 + rnd() * 0.25})`;
+      ac.fillRect(-rw * 0.5, -rh * 0.5, rw, rh);
+      ac.restore();
+
+      const bv = Math.round(70 + rnd() * 120);
+      bc.save();
+      bc.translate(px, py);
+      bc.rotate(ang);
+      bc.fillStyle = `rgba(${bv}, ${bv}, ${bv}, 0.28)`;
+      bc.fillRect(-rw * 0.5, -rh * 0.5, rw, rh);
+      bc.restore();
+    }
+
+    // Fine stone grit speckles
+    for (let i = 0; i < 700; i++) {
+      const px = rnd() * sz;
+      const py = rnd() * sz;
+      const d = rnd() < 0.5 ? 24 : 96;
+      ac.fillStyle = `rgba(${d}, ${d}, ${Math.min(255, Math.round(d * 1.1))}, 0.24)`;
+      ac.fillRect(px, py, 2, 2);
+      bc.fillStyle = `rgba(${d * 2}, ${d * 2}, ${d * 2}, 0.25)`;
+      bc.fillRect(px, py, 2, 2);
+    }
+
+    // Sharp fractured rock cracks (dark in albedo/bump; thin hot volcanic veins in molten emissive!)
+    for (let c = 0; c < 18; c++) {
+      let cx = rnd() * sz;
+      let cy = rnd() * sz;
+      let dir = rnd() * Math.PI * 2;
+      const segs = 5 + Math.floor(rnd() * 5);
+      const pts = [[cx, cy]];
+      for (let s = 0; s < segs; s++) {
+        dir += (rnd() - 0.5) * 1.05;
+        const len = 10 + rnd() * 20;
+        cx += Math.cos(dir) * len;
+        cy += Math.sin(dir) * len;
+        pts.push([cx, cy]);
+      }
+      ac.strokeStyle = 'rgba(12, 13, 18, 0.78)';
+      ac.lineWidth = 1.4 + rnd() * 1.6;
+      ac.beginPath();
+      ac.moveTo(pts[0][0], pts[0][1]);
+      for (let s = 1; s < pts.length; s++) ac.lineTo(pts[s][0], pts[s][1]);
+      ac.stroke();
+
+      bc.strokeStyle = 'rgba(20, 20, 20, 0.85)';
+      bc.lineWidth = 2.0 + rnd() * 1.5;
+      bc.beginPath();
+      bc.moveTo(pts[0][0], pts[0][1]);
+      for (let s = 1; s < pts.length; s++) bc.lineTo(pts[s][0], pts[s][1]);
+      bc.stroke();
+
+      // Only ~40% of cracks carry subtle warm orange-amber magma fissures (natural scorched volcanic rock, never neon scribbles!)
+      if (c < 7) {
+        ec.lineCap = 'round';
+        ec.strokeStyle = 'rgba(175, 42, 6, 0.42)';
+        ec.lineWidth = 4.6;
+        ec.beginPath();
+        ec.moveTo(pts[0][0], pts[0][1]);
+        for (let s = 1; s < pts.length; s++) ec.lineTo(pts[s][0], pts[s][1]);
+        ec.stroke();
+
+        ec.strokeStyle = 'rgba(255, 165, 58, 0.88)';
+        ec.lineWidth = 1.4;
+        ec.beginPath();
+        ec.moveTo(pts[0][0], pts[0][1]);
+        for (let s = 1; s < pts.length; s++) ec.lineTo(pts[s][0], pts[s][1]);
+        ec.stroke();
+      }
+    }
+
+    const makeTex = (cv, isColor) => {
+      const t = new THREE.CanvasTexture(cv);
+      t.wrapS = THREE.RepeatWrapping;
+      t.wrapT = THREE.RepeatWrapping;
+      if (isColor) t.colorSpace = THREE.SRGBColorSpace;
+      t.needsUpdate = true;
+      return t;
+    };
+    return {
+      stoneRockTex: makeTex(albCv, true),
+      stoneBumpTex: makeTex(bmpCv, false),
+      moltenEmissiveTex: makeTex(emCv, true)
+    };
+  }
+
+  // Sculpted 3D Fractured Cathedral Flagstone Wedges (jagged rim slabs with box-projected UVs & dark split edges!)
   function buildBrokenCathedralFlagstoneGeo(variant = 0) {
-    const sides = variant === 0 ? 6 : (variant === 1 ? 5 : (variant === 2 ? 6 : 4));
-    const topR = variant === 3 ? 0.20 : 0.27;
-    const botR = variant === 3 ? 0.25 : 0.32;
-    const height = variant === 3 ? 0.16 : 0.135;
-    const rawGeo = new THREE.CylinderGeometry(topR, botR, height, sides, 1, false);
+    const sides = variant === 0 ? 7 : (variant === 1 ? 6 : (variant === 2 ? 7 : 5));
+    const topR = variant === 3 ? 0.21 : 0.28;
+    const botR = variant === 3 ? 0.26 : 0.34;
+    const height = variant === 3 ? 0.16 : 0.14;
+    const rawGeo = new THREE.CylinderGeometry(topR, botR, height, sides, 2, false);
     const geo = rawGeo.toNonIndexed();
     rawGeo.dispose();
 
@@ -2800,12 +2943,13 @@ export function createArenaWorld(canvas) {
       const key = `${vx.toFixed(3)}_${vy.toFixed(3)}_${vz.toFixed(3)}`;
       let out = vMap.get(key);
       if (!out) {
-        // Wedge taper: thinner toward inner fracture tip (-Z), thicker & broader at outer flagstone rim (+Z)
-        const wedgeWidth = (variant === 0 ? 1.24 : 1.06) + (vz > 0 ? 0.22 : -0.16) + (rnd() - 0.5) * 0.34;
-        const wedgeDepth = (variant === 2 ? 1.18 : 0.96) + (rnd() - 0.5) * 0.30;
+        const ang = Math.atan2(vz, vx);
+        const jag = 0.84 + 0.32 * Math.abs(Math.sin(ang * 3.0 + variant * 1.7)) + (rnd() - 0.5) * 0.26;
+        const wedgeWidth = ((variant === 0 ? 1.24 : 1.06) + (vz > 0 ? 0.20 : -0.14)) * jag;
+        const wedgeDepth = (variant === 2 ? 1.18 : 0.96) * (0.88 + rnd() * 0.24);
         const chiselSlope = vy > 0
-          ? (vz > 0 ? 0.026 : -0.022) + (rnd() - 0.5) * 0.020
-          : (rnd() - 0.5) * 0.012;
+          ? (vz > 0 ? 0.028 : -0.024) + (rnd() - 0.5) * 0.026
+          : (rnd() - 0.5) * 0.018;
         out = [vx * wedgeWidth, vy + chiselSlope, vz * wedgeDepth];
         vMap.set(key, out);
       }
@@ -2813,67 +2957,559 @@ export function createArenaWorld(canvas) {
     }
     geo.computeVertexNormals();
 
-    // Bake dark raw split-basalt side faces vs weathered cathedral flagstone top face (zero bright edges!)
     const norm = geo.attributes.normal;
     const colors = new Float32Array(pos.count * 3);
+    const uvs = new Float32Array(pos.count * 2);
     for (let i = 0; i < pos.count; i++) {
-      const ny = norm.getY(i);
+      const px = pos.getX(i);
       const py = pos.getY(i);
-      // Top worn stone face ~ 0.84; raw split vertical fracture wall ~ 0.44; underside ~ 0.26
-      const shade = ny > 0.55
-        ? 0.78 + (i % 5) * 0.025
-        : (py < 0 ? 0.32 : 0.46 + (i % 3) * 0.04);
+      const pz = pos.getZ(i);
+      const ny = norm.getY(i);
+      const shade = ny > 0.52
+        ? 0.88 + (i % 5) * 0.024
+        : (py < 0 ? 0.36 : 0.52 + (i % 3) * 0.05);
       colors[i * 3] = shade;
-      colors[i * 3 + 1] = shade * 0.96;
-      colors[i * 3 + 2] = shade * 1.03;
+      colors[i * 3 + 1] = shade * 0.99;
+      colors[i * 3 + 2] = shade * 1.04;
+      // Box-projected UVs so granite grain & lava veins map cleanly on top AND vertical split sides!
+      if (Math.abs(ny) > 0.55) {
+        uvs[i * 2] = px * 2.4 + 0.5;
+        uvs[i * 2 + 1] = pz * 2.4 + 0.5;
+      } else {
+        uvs[i * 2] = (px + pz) * 2.2 + 0.5;
+        uvs[i * 2 + 1] = py * 3.4 + 0.5;
+      }
     }
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
     return geo;
   }
+
+  // Sculpted Multi-Faceted Angular 3D Boulders & Crushed Rubble Chunks resting DEEP INSIDE THE CRATER PIT!
+  function buildRoughCraterBoulderGeo(variant = 0) {
+    const rawGeo = new THREE.IcosahedronGeometry(0.28, 1);
+    const geo = rawGeo.toNonIndexed();
+    rawGeo.dispose();
+
+    const pos = geo.attributes.position;
+    let seed = 88417 + variant * 13177;
+    const rnd = () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 4294967296;
+    };
+    const sx = variant === 0 ? 1.38 : (variant === 1 ? 1.12 : 1.28);
+    const sy = variant === 0 ? 0.72 : (variant === 1 ? 0.92 : 0.62);
+    const sz = variant === 0 ? 1.06 : (variant === 1 ? 1.24 : 0.94);
+
+    const vMap = new Map();
+    for (let i = 0; i < pos.count; i++) {
+      const vx = pos.getX(i);
+      const vy = pos.getY(i);
+      const vz = pos.getZ(i);
+      const key = `${vx.toFixed(3)}_${vy.toFixed(3)}_${vz.toFixed(3)}`;
+      let out = vMap.get(key);
+      if (!out) {
+        const crag = 0.72 + rnd() * 0.52;
+        const flatTop = vy > 0.12 ? 0.84 : 1.0;
+        const shearX = vy * (variant === 1 ? 0.28 : -0.22);
+        out = [vx * sx * crag + shearX, vy * sy * crag * flatTop, vz * sz * crag];
+        vMap.set(key, out);
+      }
+      pos.setXYZ(i, out[0], out[1], out[2]);
+    }
+    geo.computeVertexNormals();
+
+    const norm = geo.attributes.normal;
+    const colors = new Float32Array(pos.count * 3);
+    const uvs = new Float32Array(pos.count * 2);
+    for (let i = 0; i < pos.count; i++) {
+      const px = pos.getX(i);
+      const py = pos.getY(i);
+      const pz = pos.getZ(i);
+      const ny = norm.getY(i);
+      const shade = Math.max(0.28, Math.min(1.0, 0.56 + ny * 0.34 + (i % 4) * 0.03));
+      colors[i * 3] = shade;
+      colors[i * 3 + 1] = shade * 0.98;
+      colors[i * 3 + 2] = shade * 1.04;
+      if (Math.abs(ny) > 0.55) {
+        uvs[i * 2] = px * 2.2 + 0.5;
+        uvs[i * 2 + 1] = pz * 2.2 + 0.5;
+      } else {
+        uvs[i * 2] = (px + pz) * 2.0 + 0.5;
+        uvs[i * 2 + 1] = py * 2.6 + 0.5;
+      }
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+    return geo;
+  }
+
+  // Crisp angular broken-flagstone crater-pit aperture boundary matching CRATER_FUNNEL_FRAG_GLSL 1:1
+  function evalCraterPitEdgeR(theta) {
+    return (
+      0.385 +
+      0.022 * Math.sin(theta * 5.0 + 0.4) +
+      0.015 * Math.cos(theta * 8.0 - 0.9) +
+      0.011 * Math.sin(theta * 13.0 + 1.7)
+    );
+  }
+
+  // Flat angular broken-stone crater opening disc (XZ radius = evalCraterPitEdgeR(theta), y = 0)
+  function buildCraterPitApertureGeometry(segs = 24) {
+    const positions = new Float32Array((segs + 1) * 3);
+    const indices = [];
+    positions[0] = 0;
+    positions[1] = 0;
+    positions[2] = 0;
+    for (let s = 0; s < segs; s++) {
+      const th = (s / segs) * Math.PI * 2;
+      const r = evalCraterPitEdgeR(th);
+      positions[(s + 1) * 3] = Math.cos(th) * r;
+      positions[(s + 1) * 3 + 1] = 0;
+      positions[(s + 1) * 3 + 2] = Math.sin(th) * r;
+    }
+    for (let s = 0; s < segs; s++) {
+      const cur = s + 1;
+      const nxt = ((s + 1) % segs) + 1;
+      indices.push(0, nxt, cur);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setIndex(indices);
+    geo.computeVertexNormals();
+    return geo;
+  }
+
+  // TRUE 3D Physically Recessed Deep Cathedral Stone Chasm (plunges steeply down to y = -1.48m!)
+  //   - Ring 0 (rFrac 1.06, y +0.026) extends slightly past stencil portal so ZERO 1px sky pinholes ever appear!
+  //   - Rings 1..2 form a STEEP 22cm vertical broken flagstone cross-section wall!
+  //   - Rings 3..7 drop steeply through fractured dark basalt ledges down into a deep crushed pit basin!
+  function buildReal3DPitBowlGeometry(segs = 24) {
+    const ringProfile = [
+      { rFrac: 1.06, y:  0.026, jag: 0.000, shade: 0.68 }, // stencil-clipped outer seal collar
+      { rFrac: 1.00, y: -0.018, jag: 0.016, shade: 0.78 }, // sharp top lip of broken cathedral stone floor
+      { rFrac: 0.97, y: -0.240, jag: 0.036, shade: 0.62 }, // steep 22cm vertical broken flagstone slab cross-section!
+      { rFrac: 0.90, y: -0.560, jag: 0.056, shade: 0.44 }, // jagged sub-floor mortar & stepped masonry ledge
+      { rFrac: 0.74, y: -0.960, jag: 0.064, shade: 0.28 }, // steep dark fractured basalt shaft wall
+      { rFrac: 0.48, y: -1.280, jag: 0.050, shade: 0.17 }, // deep crushed stone rubble terrace
+      { rFrac: 0.22, y: -1.420, jag: 0.028, shade: 0.11 }, // abyssal pit basin floor
+      { rFrac: 0.00, y: -1.480, jag: 0.000, shade: 0.08 }  // deep warhammer impact socket bottom
+    ];
+    const nRings = ringProfile.length;
+    const ringVerts = [];
+    for (let ri = 0; ri < nRings; ri++) {
+      const rp = ringProfile[ri];
+      const row = [];
+      for (let s = 0; s <= segs; s++) {
+        const sWrap = s % segs;
+        const th = (sWrap / segs) * Math.PI * 2;
+        const baseEdge = evalCraterPitEdgeR(th);
+        const h1 = Math.sin(sWrap * 4.3 + ri * 2.7) * Math.cos(sWrap * 2.9 - ri * 1.9);
+        const h2 = Math.sin(sWrap * 8.7 - ri * 3.1);
+        const rJitter = 1.0 + rp.jag * (0.65 * h1 + 0.35 * h2);
+        const yJitter = rp.jag * 1.15 * h1;
+        const r = Math.max(0.0, baseEdge * rp.rFrac * rJitter);
+        const y = rp.y + yJitter;
+        const x = Math.cos(th) * r;
+        const z = Math.sin(th) * r;
+        const depth01 = Math.max(0.0, Math.min(1.0, (-y) / 1.48));
+        const facetVar = 0.80 + 0.40 * (0.5 + 0.5 * h2);
+        row.push({ x, y, z, depth01, shade: rp.shade * facetVar, u: s / segs, v: ri / (nRings - 1) });
+      }
+      ringVerts.push(row);
+    }
+
+    const posArr = [];
+    const colArr = [];
+    const uvArr = [];
+    const pushVert = (v) => {
+      posArr.push(v.x, v.y, v.z);
+      colArr.push(v.shade, v.depth01, 0.5);
+      uvArr.push(v.u, v.v);
+    };
+    for (let ri = 0; ri < nRings - 1; ri++) {
+      for (let s = 0; s < segs; s++) {
+        const a = ringVerts[ri][s];
+        const b = ringVerts[ri + 1][s];
+        const c = ringVerts[ri][s + 1];
+        const d = ringVerts[ri + 1][s + 1];
+        pushVert(a); pushVert(b); pushVert(c);
+        if (ri < nRings - 2) {
+          pushVert(b); pushVert(d); pushVert(c);
+        }
+      }
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(posArr, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(colArr, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvArr, 2));
+    geo.computeVertexNormals();
+    return geo;
+  }
+
+  // Dedicated 3D Recessed Pit Wall Shader:
+  //   - Exact inverse-transpose world normal under non-uniform (pitR, pitDepth, pitR) scaling!
+  //   - World-space stratified cathedral stone blocks on the upper 28cm vertical slab cross-section
+  //   - Crisp dark overhang AO right under the floor lip -> rapid darkening into deep abyssal pit floor
+  //   - ZERO bright clay halo! Reads 100% unmistakably as a deep recessed physical hole in dark cathedral stone!
+  const PIT_BOWL_VERT_GLSL = /* glsl */ `
+    attribute vec3 color;
+    varying vec3 vNormalW;
+    varying vec3 vMeta;
+    varying vec2 vUv;
+    varying vec3 vWorldPos;
+    void main() {
+      vMeta = color;
+      vUv = uv;
+      vec4 wp = modelMatrix * vec4(position, 1.0);
+      vWorldPos = wp.xyz;
+      // Exact inverse-transpose world normal for non-uniform scale M = R * S -> M * diag(1/s^2) * n
+      vec3 invS = vec3(
+        1.0 / max(0.001, length(modelMatrix[0].xyz)),
+        1.0 / max(0.001, length(modelMatrix[1].xyz)),
+        1.0 / max(0.001, length(modelMatrix[2].xyz))
+      );
+      vNormalW = normalize(mat3(modelMatrix) * (normal * invS * invS));
+      gl_Position = projectionMatrix * viewMatrix * wp;
+    }
+  `;
+
+  const PIT_BOWL_FRAG_GLSL = /* glsl */ `
+    uniform float uMolten;
+    uniform float uTime;
+    uniform float uSeed;
+    uniform float uGroundY;
+    varying vec3 vNormalW;
+    varying vec3 vMeta;
+    varying vec2 vUv;
+    varying vec3 vWorldPos;
+
+    float hash21(vec2 p) {
+      p = fract(p * vec2(127.1, 311.7));
+      p += dot(p, p + 34.53);
+      return fract(p.x * p.y);
+    }
+
+    void main() {
+      vec3 N = normalize(vNormalW);
+      float rockShade = vMeta.x;
+      float depthM = max(0.0, uGroundY - vWorldPos.y);
+      float depth01 = clamp(depthM / 1.45, 0.0, 1.0);
+
+      // World-space fractured masonry courses & vertical broken stone joints along the pit walls
+      float arcCoord = vUv.x * 16.0 + uSeed * 0.7;
+      float courseRow = floor(depthM * 4.4);
+      float blockCol = floor(arcCoord + mod(courseRow, 2.0) * 0.5);
+      float blockHash = hash21(vec2(blockCol, courseRow));
+      float horizJoint = 1.0 - smoothstep(0.04, 0.14, abs(fract(depthM * 4.4) - 0.5));
+      float vertJoint = 1.0 - smoothstep(0.03, 0.11, abs(fract(arcCoord + mod(courseRow, 2.0) * 0.5) - 0.5));
+      float masonrySeam = max(horizJoint * 0.55, vertJoint * 0.42) * (1.0 - smoothstep(0.45, 0.88, depth01));
+      float grit = 0.84 + 0.32 * hash21(floor(vec2(vWorldPos.x * 9.0 + vWorldPos.z * 9.0, vWorldPos.y * 12.0)));
+
+      // Overhead cathedral moonlight + subtle warm torch fill — vertical FAR wall catches directional bevels!
+      vec3 keyL = normalize(vec3(0.42, 0.78, 0.46));
+      vec3 warmL = normalize(vec3(-0.52, 0.40, -0.75));
+      float ndlKey = max(0.0, dot(N, keyL));
+      float ndlWarm = max(0.0, dot(N, warmL));
+
+      // Steepness mask: true vertical broken-slab shear wall (abs(N.y) < 0.65) shows individual stone cross-section
+      float isVertWall = 1.0 - smoothstep(0.28, 0.78, abs(N.y));
+      // Crisp dark overhang AO directly under the broken floor rim (0..6cm) so the floor edge visibly overhangs the chasm!
+      float overhangAo = mix(0.42, 1.0, smoothstep(0.0, 0.08, depthM));
+      // Exponential light falloff down into the deep dark abyssal pit!
+      float pitDepthAo = exp(-depthM * 1.95);
+
+      // Cool dark cathedral slate-basalt palette strictly matching the Boss Hall flagstones (NEVER bright clay grey!)
+      vec3 cBrokenSlab = vec3(0.028, 0.030, 0.042);   // vertical broken cathedral flagstone cross-section
+      vec3 cSubMasonry = vec3(0.013, 0.013, 0.020);   // dark sub-floor fractured stone
+      vec3 cDeepAbyss  = vec3(0.0018, 0.0019, 0.0030); // near-black crushed pit floor
+
+      vec3 baseCol = mix(cBrokenSlab, cSubMasonry, smoothstep(0.14, 0.48, depth01));
+      baseCol = mix(baseCol, cDeepAbyss, smoothstep(0.50, 0.95, depth01));
+      baseCol *= (0.76 + 0.48 * blockHash) * grit * (0.65 + 0.35 * rockShade);
+      baseCol *= (1.0 - masonrySeam * 0.72);
+
+      // Crisp directional wall shading with deep shadow drop-off
+      float lightSum = (0.18 + 1.18 * ndlKey + 0.42 * ndlWarm) * pitDepthAo * overhangAo;
+      vec3 lit = baseCol * lightSum;
+      // Subtle cool stone bevel catch ONLY on sunlit vertical cross-section blocks (keeps rim crisp without glowing!)
+      lit += cBrokenSlab * isVertWall * ndlKey * (1.0 - smoothstep(0.04, 0.36, depth01)) * overhangAo * 0.48;
+
+      if (uMolten > 0.01) {
+        // Phase-2 incandescent volcanic magma glowing DEEP AT THE BOTTOM & rising through fractured pit wall cracks!
+        float pulse = 0.84 + 0.16 * sin(uTime * 10.5 + uSeed + vUv.x * 12.0);
+        float bottomPool = smoothstep(0.50, 0.94, depth01) * (0.72 + 0.28 * blockHash);
+        float wallCrack = max(horizJoint, vertJoint) * smoothstep(0.24, 0.85, depth01) * (0.55 + 0.45 * blockHash);
+        float heat = clamp((bottomPool * 1.15 + wallCrack * 0.85) * pulse * uMolten, 0.0, 1.0);
+        vec3 lavaCol = mix(vec3(0.55, 0.045, 0.006), vec3(1.95, 0.72, 0.10), heat);
+        // Upward warm magma under-glow bouncing onto lower jagged pit walls!
+        float underGlow = smoothstep(0.22, 0.90, depth01) * (0.35 + 0.65 * max(0.0, -N.y * 0.5 + 0.5)) * uMolten;
+        lit = lit * 0.65 + vec3(0.24, 0.045, 0.008) * underGlow;
+        lit = mix(lit, lavaCol, smoothstep(0.14, 0.80, heat));
+      }
+
+      gl_FragColor = vec4(lit, 1.0);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+    }
+  `;
+
+  function createCraterPitBowlMaterial(stencilId = 3) {
+    return new THREE.ShaderMaterial({
+      uniforms: {
+        uMolten: { value: 0.0 },
+        uTime: { value: 0.0 },
+        uSeed: { value: 0.0 },
+        uGroundY: { value: 0.0 }
+      },
+      vertexShader: PIT_BOWL_VERT_GLSL,
+      fragmentShader: PIT_BOWL_FRAG_GLSL,
+      transparent: false,
+      depthTest: true,
+      depthWrite: true,
+      side: THREE.FrontSide,
+      stencilWrite: true,
+      stencilRef: stencilId,
+      stencilFunc: THREE.EqualStencilFunc,
+      stencilFuncMask: 0xFF,
+      stencilWriteMask: 0x00,
+      stencilFail: THREE.KeepStencilOp,
+      stencilZFail: THREE.KeepStencilOp,
+      stencilZPass: THREE.KeepStencilOp,
+      toneMapped: true
+    });
+  }
+
+  let nextGroundFractureSlotIdx = 0;
 
   function getSharedFractureAssets() {
     if (sharedFractureAssets) return sharedFractureAssets;
     const craterGridGeo = buildCraterFunnelGridGeometry(isMobileDevice ? 28 : 38);
+    const pitApertureGeo = buildCraterPitApertureGeometry(isMobileDevice ? 20 : 24);
+    const pitBowlGeo = buildReal3DPitBowlGeometry(isMobileDevice ? 20 : 24);
     const slabGeos = [
       buildBrokenCathedralFlagstoneGeo(0),
       buildBrokenCathedralFlagstoneGeo(1),
       buildBrokenCathedralFlagstoneGeo(2),
       buildBrokenCathedralFlagstoneGeo(3)
     ];
+    const boulderGeos = [
+      buildRoughCraterBoulderGeo(0),
+      buildRoughCraterBoulderGeo(1),
+      buildRoughCraterBoulderGeo(2)
+    ];
+    const rockTex = buildCathedralRockTextures();
 
     const circleReliefTex = buildCraterReliefDataTexture({ fissure: false });
     const fissureReliefTex = buildCraterReliefDataTexture({ fissure: true });
 
+    // Upgrade flying debris stone materials once rockTex is ready so molten chunks have real glowing cracks (not flat orange!)
+    if (typeof debrisRockMat !== 'undefined' && debrisRockMat) {
+      debrisRockMat.map = rockTex.stoneRockTex;
+      debrisRockMat.bumpMap = rockTex.stoneBumpTex;
+      debrisRockMat.bumpScale = 0.025;
+      debrisRockMat.color.setHex(0x888c9e);
+      debrisRockMat.needsUpdate = true;
+    }
+    if (typeof debrisFlagstoneChipMat !== 'undefined' && debrisFlagstoneChipMat) {
+      debrisFlagstoneChipMat.map = rockTex.stoneRockTex;
+      debrisFlagstoneChipMat.bumpMap = rockTex.stoneBumpTex;
+      debrisFlagstoneChipMat.bumpScale = 0.025;
+      debrisFlagstoneChipMat.color.setHex(0x989cae);
+      debrisFlagstoneChipMat.needsUpdate = true;
+    }
+    if (typeof debrisMoltenRockMat !== 'undefined' && debrisMoltenRockMat) {
+      debrisMoltenRockMat.map = rockTex.stoneRockTex;
+      debrisMoltenRockMat.bumpMap = rockTex.stoneBumpTex;
+      debrisMoltenRockMat.bumpScale = 0.03;
+      debrisMoltenRockMat.emissiveMap = rockTex.moltenEmissiveTex;
+      debrisMoltenRockMat.color.setHex(0x4b3f44);
+      debrisMoltenRockMat.emissive.setHex(0xff7824);
+      debrisMoltenRockMat.emissiveIntensity = 0.98;
+      debrisMoltenRockMat.needsUpdate = true;
+    }
+
+    // Outer buckled cathedral flagstone slabs (textured dark granite & charred obsidian with glowing lava veins!)
+    const stoneSlabMat = new THREE.MeshStandardMaterial({
+      color: 0x868a9c,
+      map: rockTex.stoneRockTex,
+      bumpMap: rockTex.stoneBumpTex,
+      bumpScale: 0.032,
+      vertexColors: true,
+      roughness: 0.90,
+      metalness: 0.05
+    });
+    const moltenSlabMat = new THREE.MeshStandardMaterial({
+      color: 0x4c4045,
+      map: rockTex.stoneRockTex,
+      bumpMap: rockTex.stoneBumpTex,
+      bumpScale: 0.034,
+      vertexColors: true,
+      emissive: 0xff7824,
+      emissiveMap: rockTex.moltenEmissiveTex,
+      emissiveIntensity: 0.92,
+      roughness: 0.86,
+      metalness: 0.08
+    });
+
     sharedFractureAssets = {
       craterGridGeo,
+      pitApertureGeo,
+      pitBowlGeo,
       slabGeos,
+      boulderGeos,
+      rockTex,
       circleReliefTex,
       fissureReliefTex,
-      stoneSlabMat: new THREE.MeshStandardMaterial({
-        color: 0x3b3542,
-        vertexColors: true,
-        roughness: 0.89,
-        metalness: 0.05
-      }),
-      moltenSlabMat: new THREE.MeshStandardMaterial({
-        color: 0x241a18,
-        vertexColors: true,
-        emissive: 0xc2410c,
-        emissiveIntensity: 0.45,
-        roughness: 0.82,
-        metalness: 0.10
-      })
+      stoneSlabMat,
+      moltenSlabMat
     };
     return sharedFractureAssets;
   }
 
   function createGroundFracturePoolEntry(assets) {
+    const slotIdx = nextGroundFractureSlotIdx % 16;
+    nextGroundFractureSlotIdx += 1;
+    // Odd unique 8-bit stencil ID (3, 5, 7, ..., 33):
+    //   - Bit 0 (0x01) = "inside ANY open pit" (masks bossRing, floor decals & overlapping crater rim decals!)
+    //   - Bits 1..7 = unique crater slot ID (100% isolated overlapping 3D pits!)
+    const stencilId = ((slotIdx + 1) << 1) | 1;
+    const baseOrder = -120 + slotIdx * 5;
+
     const group = new THREE.Group();
 
+    // --- REAL PHYSICALLY RECESSED 3D STENCIL PIT (isolated per slot, BEFORE opaque actors at renderOrder 0!) ---
+    const pitGroup = new THREE.Group();
+
+    const pitStencilMaskMat = new THREE.MeshBasicMaterial({
+      colorWrite: false,
+      depthWrite: false,
+      depthTest: true,
+      side: THREE.DoubleSide,
+      stencilWrite: true,
+      stencilRef: stencilId,
+      stencilFunc: THREE.AlwaysStencilFunc,
+      stencilFuncMask: 0xFF,
+      stencilWriteMask: 0xFF,
+      stencilFail: THREE.KeepStencilOp,
+      stencilZFail: THREE.KeepStencilOp,
+      stencilZPass: THREE.ReplaceStencilOp
+    });
+    const pitStencilMask = new THREE.Mesh(assets.pitApertureGeo, pitStencilMaskMat);
+    pitStencilMask.position.y = 0.028;
+    pitStencilMask.renderOrder = baseOrder + 0;
+    pitStencilMask.frustumCulled = false;
+
+    const pitDepthClearMat = new THREE.ShaderMaterial({
+      vertexShader: `void main() { vec4 c = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_Position = vec4(c.xy, c.w * 0.99995, c.w); }`,
+      fragmentShader: `void main() { gl_FragColor = vec4(0.0); }`,
+      colorWrite: false,
+      depthWrite: true,
+      depthTest: true,
+      depthFunc: THREE.AlwaysDepth,
+      side: THREE.DoubleSide,
+      stencilWrite: true,
+      stencilRef: stencilId,
+      stencilFunc: THREE.EqualStencilFunc,
+      stencilFuncMask: 0xFF,
+      stencilWriteMask: 0x00,
+      stencilFail: THREE.KeepStencilOp,
+      stencilZFail: THREE.KeepStencilOp,
+      stencilZPass: THREE.KeepStencilOp
+    });
+    const pitDepthClear = new THREE.Mesh(assets.pitApertureGeo, pitDepthClearMat);
+    pitDepthClear.position.y = 0.028;
+    pitDepthClear.renderOrder = baseOrder + 1;
+    pitDepthClear.frustumCulled = false;
+
+    const pitBowlMat = createCraterPitBowlMaterial(stencilId);
+    const pitBowlMesh = new THREE.Mesh(assets.pitBowlGeo, pitBowlMat);
+    pitBowlMesh.position.y = 0.002;
+    pitBowlMesh.renderOrder = baseOrder + 2;
+    pitBowlMesh.frustumCulled = false;
+
+    // Per-slot stencil-masked textured granite & volcanic boulder materials (clipped cleanly by floor overhang!)
+    const pitInnerStoneMat = new THREE.MeshStandardMaterial({
+      color: 0x626678,
+      map: assets.rockTex.stoneRockTex,
+      bumpMap: assets.rockTex.stoneBumpTex,
+      bumpScale: 0.036,
+      vertexColors: true,
+      roughness: 0.92,
+      metalness: 0.05,
+      stencilWrite: true,
+      stencilRef: stencilId,
+      stencilFunc: THREE.EqualStencilFunc,
+      stencilFuncMask: 0xFF,
+      stencilWriteMask: 0x00,
+      stencilFail: THREE.KeepStencilOp,
+      stencilZFail: THREE.KeepStencilOp,
+      stencilZPass: THREE.KeepStencilOp
+    });
+    const pitInnerMoltenMat = new THREE.MeshStandardMaterial({
+      color: 0x423539,
+      map: assets.rockTex.stoneRockTex,
+      bumpMap: assets.rockTex.stoneBumpTex,
+      bumpScale: 0.036,
+      vertexColors: true,
+      emissive: 0xff7824,
+      emissiveMap: assets.rockTex.moltenEmissiveTex,
+      emissiveIntensity: 1.05,
+      roughness: 0.86,
+      metalness: 0.08,
+      stencilWrite: true,
+      stencilRef: stencilId,
+      stencilFunc: THREE.EqualStencilFunc,
+      stencilFuncMask: 0xFF,
+      stencilWriteMask: 0x00,
+      stencilFail: THREE.KeepStencilOp,
+      stencilZFail: THREE.KeepStencilOp,
+      stencilZPass: THREE.KeepStencilOp
+    });
+
+    // 10 REAL 3D sculpted angular stone boulders & collapsed flagstone slabs resting DEEP INSIDE THE PIT!
+    // Physically positioned at y = -1.34m .. -0.68m so deep open chasm depth reads unmistakably around the rubble!
+    const pitInnerRocks = [];
+    const innerRockCount = isMobileDevice ? 7 : 10;
+    for (let i = 0; i < innerRockCount; i++) {
+      const useBoulder = i % 3 !== 2;
+      const geo = useBoulder
+        ? assets.boulderGeos[i % assets.boulderGeos.length]
+        : assets.slabGeos[i % assets.slabGeos.length];
+      const rm = new THREE.Mesh(geo, pitInnerStoneMat);
+      rm.rotation.order = 'YXZ';
+      rm.castShadow = false;
+      rm.receiveShadow = false;
+      rm.renderOrder = baseOrder + 3;
+      pitGroup.add(rm);
+
+      const isDeepCluster = i < 4;
+      const ang = (i / innerRockCount) * Math.PI * 2 + (isDeepCluster ? 0.35 : 0.82);
+      const distFrac = isDeepCluster ? (0.06 + (i % 2) * 0.065) : (0.19 + (i % 3) * 0.045);
+      // Seated cleanly on the deep chasm bottom (-1.34m .. -1.06m) & lower stone shelves (-0.98m .. -0.68m)!
+      const depthY = isDeepCluster ? (-1.34 + (i % 3) * 0.12) : (-0.98 + (i % 3) * 0.14);
+      pitInnerRocks.push({
+        mesh: rm,
+        dirX: Math.cos(ang) * distFrac,
+        dirZ: Math.sin(ang) * distFrac,
+        baseDepthY: depthY,
+        yaw: ang + 1.15 + (i % 3) * 0.42,
+        pitch: (isDeepCluster ? 0.30 : 0.56) * ((i % 2) * 2 - 1),
+        roll: (0.26 + (i % 3) * 0.16) * ((i % 3 === 0) ? -1 : 1),
+        scaleW: isDeepCluster ? (0.92 + (i % 3) * 0.20) : (0.78 + (i % 3) * 0.18),
+        scaleH: useBoulder ? (0.95 + (i % 2) * 0.24) : 1.15
+      });
+    }
+
+    pitGroup.add(pitStencilMask, pitDepthClear, pitBowlMesh);
+    group.add(pitGroup);
+
+    // Outer cracked cathedral stone rim ring (center hole is discarded in fragment shader!)
     const craterMat = createShatteredCraterShaderMaterial(assets.circleReliefTex);
     const craterDisc = new THREE.Mesh(assets.craterGridGeo, craterMat);
-    craterDisc.position.y = 0.004;
-    craterDisc.renderOrder = 3;
+    craterDisc.position.y = 0.006;
+    craterDisc.renderOrder = 2;
     group.add(craterDisc);
 
     // 3x Volumetric Fire Field ('circle', 1.0s blaze) & Fire Road ('fissure') from soulsFireVfx.js
@@ -2897,12 +3533,11 @@ export function createArenaWorld(canvas) {
       group.add(fireRoad.group);
     }
 
-    // 24 multi-tier 3D broken cathedral flagstones:
-    //   - Tier 0 (0..5):   6 sunken inner pit slabs (pitched downward into the central crushed funnel!)
-    //   - Tier 1 (6..15): 10 buckled rim flagstone wedges (inner edge dipped into pit, outer edge heaved 0.09..0.22m!)
-    //   - Tier 2 (16..23): 8 outer fractured spall plates transitioning back into the flat stone floor!
+    // 18 multi-tier 3D broken cathedral flagstones STRICTLY OUTSIDE THE PIT APERTURE (NEVER hovering over the hole!):
+    //   - Tier 1 (0..9):  10 buckled crater-rim flagstone wedges sitting around the jagged pit lip (r = 0.50..0.62R)
+    //   - Tier 2 (10..17): 8 outer fractured spall plates & scattered broken stones around the rim (r = 0.70..0.88R)
     const slabs = [];
-    const slabCount = 24;
+    const slabCount = 18;
     for (let i = 0; i < slabCount; i++) {
       const sm = new THREE.Mesh(assets.slabGeos[i % assets.slabGeos.length], assets.stoneSlabMat);
       sm.rotation.order = 'YXZ';
@@ -2915,36 +3550,30 @@ export function createArenaWorld(canvas) {
       let circlePitch;
       let circleLift;
       let tier;
-      if (i < 6) {
-        // Sunken inner pit slabs: tilted inward (-pitch along radial +Z) lining the caved-in funnel throat!
-        tier = 0;
-        ringAng = (i / 6) * Math.PI * 2 + 0.21;
-        distFrac = 0.20 + (i % 2) * 0.07;
-        circlePitch = -(0.42 + (i % 3) * 0.07);
-        circleLift = 0.022 + (i % 2) * 0.016;
-      } else if (i < 16) {
-        // Primary buckled crater-rim flagstone wedges: inner edge dipped in pit, outer edge heaved 0.09..0.22m!
+      if (i < 10) {
+        // Primary buckled crater-rim wedges strictly OUTSIDE evalCraterPitEdgeR(ringAng)!
         tier = 1;
-        const k = i - 6;
-        ringAng = (k / 10) * Math.PI * 2 + 0.09 + ((k % 2) - 0.5) * 0.06;
-        distFrac = 0.47 + (k % 3) * 0.055;
-        circlePitch = 0.30 + (k % 4) * 0.052;
-        circleLift = 0.095 + (k % 4) * 0.038; // 0.095m .. 0.209m!
+        ringAng = (i / 10) * Math.PI * 2 + 0.09 + ((i % 2) - 0.5) * 0.06;
+        const localPitEdge = evalCraterPitEdgeR(ringAng);
+        distFrac = localPitEdge + 0.09 + (i % 3) * 0.038;
+        circlePitch = 0.28 + (i % 4) * 0.052;
+        circleLift = 0.075 + (i % 4) * 0.034;
       } else {
-        // Outer perimeter spall plates & upturned stone teeth
+        // Outer perimeter fractured spall plates & scattered rubble around the crater
         tier = 2;
-        const k = i - 16;
+        const k = i - 10;
         ringAng = (k / 8) * Math.PI * 2 + 0.34;
-        distFrac = 0.72 + (k % 2) * 0.08;
-        circlePitch = 0.16 + (k % 3) * 0.045;
-        circleLift = 0.055 + (k % 3) * 0.022;
+        const localPitEdge = evalCraterPitEdgeR(ringAng);
+        distFrac = Math.max(0.72, localPitEdge + 0.26) + (k % 2) * 0.08;
+        circlePitch = 0.14 + (k % 3) * 0.042;
+        circleLift = 0.042 + (k % 3) * 0.020;
       }
 
-      const side = i < 12 ? -1 : 1;
-      const idxSide = i % 12;
-      const zFrac = -0.88 + (idxSide / 11) * 1.76;
+      const side = i < 9 ? -1 : 1;
+      const idxSide = i % 9;
+      const zFrac = -0.86 + (idxSide / 8) * 1.72;
       const isInnerTrenchSlab = idxSide % 4 === 0;
-      const xFrac = side * (isInnerTrenchSlab ? 0.20 : 0.38 + (idxSide % 3) * 0.11);
+      const xFrac = side * (isInnerTrenchSlab ? 0.22 : 0.38 + (idxSide % 3) * 0.11);
 
       slabs.push({
         mesh: sm,
@@ -2957,11 +3586,11 @@ export function createArenaWorld(canvas) {
         fissureX: xFrac,
         fissureZ: zFrac,
         fissureYaw: (side > 0 ? Math.PI * 0.5 : -Math.PI * 0.5) + ((idxSide % 3) - 1) * 0.20,
-        fissurePitch: isInnerTrenchSlab ? -0.36 : 0.32 + (idxSide % 3) * 0.07,
-        fissureLift: isInnerTrenchSlab ? 0.025 : 0.095 + (idxSide % 3) * 0.035,
+        fissurePitch: isInnerTrenchSlab ? -0.34 : 0.30 + (idxSide % 3) * 0.07,
+        fissureLift: isInnerTrenchSlab ? 0.022 : 0.088 + (idxSide % 3) * 0.032,
         tiltPitch: circlePitch,
         tiltRoll: ((i % 2) * 2 - 1) * (0.09 + (i % 3) * 0.045),
-        scaleW: tier === 1 ? (0.96 + (i % 3) * 0.22) : (0.82 + (i % 4) * 0.18),
+        scaleW: tier === 1 ? (0.94 + (i % 3) * 0.20) : (0.80 + (i % 4) * 0.18),
         maxLiftY: circleLift
       });
     }
@@ -2969,6 +3598,14 @@ export function createArenaWorld(canvas) {
     scene.add(group);
     return {
       group,
+      pitGroup,
+      pitStencilMask,
+      pitDepthClear,
+      pitBowlMesh,
+      pitBowlMat,
+      pitInnerStoneMat,
+      pitInnerMoltenMat,
+      pitInnerRocks,
       craterMat,
       craterDisc,
       fireField,
@@ -2984,6 +3621,7 @@ export function createArenaWorld(canvas) {
       duration: 2.4,
       fireDuration: 1.0,
       radius: 4.2,
+      pitDepth: 1.05,
       molten: false,
       burning: false,
       emberTick: 0,
@@ -3103,6 +3741,33 @@ export function createArenaWorld(canvas) {
       1,
       isFissure ? safeR * 1.20 : safeR * 1.04
     );
+
+    // Wire REAL physically recessed 3D Stencil Pit for circular hammer craters (steep 1.35..1.65m deep broken chasm!)
+    const showRealPit = !isFissure;
+    entry.pitDepth = Math.min(1.22, Math.max(0.88, safeR * 0.22));
+    if (entry.pitGroup) {
+      entry.pitGroup.visible = showRealPit;
+      if (showRealPit) {
+        entry.pitStencilMask.scale.set(safeR, 1, safeR);
+        entry.pitDepthClear.scale.set(safeR, 1, safeR);
+        entry.pitBowlMesh.scale.set(safeR, entry.pitDepth * 0.45, safeR);
+        entry.pitBowlMat.uniforms.uMolten.value = isMolten ? 1.0 : 0.0;
+        entry.pitBowlMat.uniforms.uTime.value = 0.0;
+        entry.pitBowlMat.uniforms.uSeed.value = entry.seed;
+        entry.pitBowlMat.uniforms.uGroundY.value = groundY;
+
+        const innerRockScale = Math.max(0.80, Math.min(1.55, safeR / 3.45));
+        const innerMat = isMolten ? entry.pitInnerMoltenMat : entry.pitInnerStoneMat;
+        for (let i = 0; i < entry.pitInnerRocks.length; i++) {
+          const ir = entry.pitInnerRocks[i];
+          ir.mesh.material = innerMat;
+          ir.mesh.position.set(ir.dirX * safeR, ir.baseDepthY * entry.pitDepth, ir.dirZ * safeR);
+          ir.mesh.rotation.set(ir.pitch, ir.yaw, ir.roll);
+          ir.mesh.scale.set(ir.scaleW * innerRockScale, ir.scaleH * innerRockScale, innerRockScale);
+          ir.mesh.visible = !lowSpecMode || i % 2 === 0;
+        }
+      }
+    }
 
     // Wire 3x Volumetric Fire Field ('circle') & Fire Road ('fissure') when molten === true
     if (entry.fireField?.group) {
@@ -3642,11 +4307,15 @@ export function createArenaWorld(canvas) {
         vz = (dirZ * fwdMix + perpZ * latMix) * inv * spd;
       } else {
         const ang = (i / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.38;
-        const rOff = radius * (0.14 + Math.random() * 0.38);
+        const fallsIntoPit = i % 3 === 0;
+        const rOff = fallsIntoPit
+          ? radius * (0.06 + Math.random() * 0.22)
+          : radius * (0.34 + Math.random() * 0.28);
+        const effSpd = fallsIntoPit ? (0.45 + Math.random() * 0.85) : spd;
         ox = Math.cos(ang) * rOff;
         oz = Math.sin(ang) * rOff;
-        vx = Math.cos(ang) * spd;
-        vz = Math.sin(ang) * spd;
+        vx = Math.cos(ang) * effSpd;
+        vz = Math.sin(ang) * effSpd;
       }
 
       d.x = x + ox;
@@ -5541,6 +6210,7 @@ export function createArenaWorld(canvas) {
         const gf0 = freeGroundFractures[0];
         setTempVisible(gf0.group, true);
         setTempVisible(gf0.craterDisc, true);
+        if (gf0.pitGroup) setTempVisible(gf0.pitGroup, true);
         if (gf0.fireField?.group) setTempVisible(gf0.fireField.group, true);
         if (gf0.fireRoad?.group) setTempVisible(gf0.fireRoad.group, true);
       }
@@ -5738,7 +6408,7 @@ export function createArenaWorld(canvas) {
     if (devEditors) return Promise.resolve(devEditors);
     if (!isDevModeEnabled()) return Promise.resolve(null);
     if (!devEditorsPromise) {
-      devEditorsPromise = import('./world/devEditors.js?v=20261124z86')
+      devEditorsPromise = import('./world/devEditors.js?v=20261124z87')
         .then((mod) => {
           devEditors = mod.createWorldDevEditors({
             scene,
@@ -6941,6 +7611,36 @@ export function createArenaWorld(canvas) {
       cu.uTime.value = gf.age;
       cu.uWrenchPulse.value = Math.min(1.5, gf.wrenchImpulse);
 
+      // Animate REAL physically recessed 3D Stencil Pit & sunken pit boulders!
+      if (gf.pitGroup) {
+        if (!isFissure && healSmooth > 0.03) {
+          gf.pitGroup.visible = true;
+          // Hold full aperture until the final 25% heal-out, then smoothly collapse aperture & depth back to floor
+          const pitOpen01 = healSmooth > 0.25 ? 1.0 : healSmooth / 0.25;
+          const pitEase = pitOpen01 * pitOpen01 * (3.0 - 2.0 * pitOpen01);
+          const pitR = gf.radius * (0.25 + 0.75 * pitEase);
+          const pitDepthNow = (gf.pitDepth || 1.05) * collapseIn * pitEase;
+          gf.pitStencilMask.scale.set(pitR, 1, pitR);
+          gf.pitDepthClear.scale.set(pitR, 1, pitR);
+          gf.pitBowlMesh.scale.set(pitR, Math.max(0.02, pitDepthNow), pitR);
+          gf.pitBowlMat.uniforms.uTime.value = gf.age;
+          gf.pitBowlMat.uniforms.uMolten.value = gf.molten ? cu.uMolten.value : 0.0;
+          gf.pitBowlMat.uniforms.uGroundY.value = gf.groundY || 0;
+          const pitRockJitter = gf.wrenchImpulse > 0 ? Math.sin(gf.age * 55.0 + gf.seed) * 0.022 * gf.wrenchImpulse : 0;
+          for (let ri = 0; ri < gf.pitInnerRocks.length; ri++) {
+            const ir = gf.pitInnerRocks[ri];
+            if (!ir.mesh.visible) continue;
+            ir.mesh.position.set(
+              ir.dirX * pitR,
+              ir.baseDepthY * pitDepthNow + pitRockJitter * ((ri % 2) * 2 - 1),
+              ir.dirZ * pitR
+            );
+          }
+        } else {
+          gf.pitGroup.visible = false;
+        }
+      }
+
       if (gf.molten) {
         const fireDur = isFissure ? gf.duration : (gf.fireDuration || Math.min(gf.duration, 1.0));
         const fireActiveNow = gf.age < fireDur;
@@ -7018,6 +7718,9 @@ export function createArenaWorld(canvas) {
           if (gf.radius > burnLightMaxR) burnLightMaxR = gf.radius;
         } else {
           cu.uMolten.value = 0.28 * healSmooth;
+        }
+        if (gf.pitBowlMat?.uniforms) {
+          gf.pitBowlMat.uniforms.uMolten.value = cu.uMolten.value;
         }
       }
 
@@ -7139,7 +7842,22 @@ export function createArenaWorld(canvas) {
         }
 
         const restHalfH = (d.kind === 'flagstone_chip' ? 0.028 : 0.068) * d.baseScale;
-        const floorY = getGroundHeight(d.x, d.z) + restHalfH;
+        let baseFloorY = getGroundHeight(d.x, d.z);
+        // Physical sunken-pit collision: rocks falling over a circular crater DROP DOWN INSIDE THE HOLE instead of bouncing on thin air!
+        for (let ci = 0; ci < activeGroundFractures.length; ci++) {
+          const gf = activeGroundFractures[ci];
+          if (gf.kind === 'fissure' || !gf.pitGroup?.visible) continue;
+          const dxC = d.x - gf.x;
+          const dzC = d.z - gf.z;
+          const distC = Math.hypot(dxC, dzC);
+          const pitOpeningR = gf.radius * 0.37;
+          if (distC < pitOpeningR) {
+            const uR = distC / Math.max(0.01, pitOpeningR);
+            const sinkDepth = (gf.pitDepth || 1.05) * (1.28 * (1.0 - uR * uR * 0.62));
+            baseFloorY = Math.min(baseFloorY, gf.groundY - sinkDepth);
+          }
+        }
+        const floorY = baseFloorY + restHalfH;
         if (d.y <= floorY) {
           d.y = floorY;
           if (d.bounces === 0) {
