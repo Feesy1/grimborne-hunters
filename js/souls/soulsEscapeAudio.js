@@ -8,7 +8,7 @@
 //      + exact 30-FPS lip-sync curves (`BOSS_ESCAPE_VO_DURATIONS_SEC`, `sampleEscapeBossMouthOpen`)
 //   2. Lightweight filtered-noise environmental beds (chasm fall wind, river plunge, exterior shore river/waterfall).
 
-export const SOULS_ESCAPE_AUDIO_VERSION = '20261125z100';
+export const SOULS_ESCAPE_AUDIO_VERSION = '20261125z101';
 export const BOSS_ESCAPE_VO_COUNT = 3;
 export const BOSS_ESCAPE_LIPSYNC_FPS = 30;
 
@@ -621,6 +621,7 @@ export function createSoulsEscapeAudio(getCtxOrOpts, getMasterGainArg, getSfxVol
     let pan = 0;
     if (hasCoords) {
       const lx = Number(opts.listenerX);
+      const ly = Number.isFinite(Number(opts.listenerY)) ? Number(opts.listenerY) : 0;
       const lz = Number(opts.listenerZ);
       const yaw = Number.isFinite(Number(opts.listenerYaw)) ? Number(opts.listenerYaw) : 0;
       const cosY = Math.cos(yaw);
@@ -643,26 +644,30 @@ export function createSoulsEscapeAudio(getCtxOrOpts, getMasterGainArg, getSfxVol
       let weightedPan = 0;
       let sumW = 0;
       for (let i = 0; i < srcCount; i++) {
-        let fx, fz, fw, refDist, maxDist;
+        let fx, fy, fz, fw, refDist, maxDist;
         if (customSources) {
           const fs = customSources[i];
           fx = Number(fs.x) || 0;
+          fy = Number.isFinite(Number(fs.y)) ? Number(fs.y) : ly;
           fz = Number(fs.z) || 0;
           fw = Number.isFinite(Number(fs.weight)) ? Number(fs.weight) : 0.9;
           refDist = fs.isBonfire ? 1.8 : 1.6;
           maxDist = Number.isFinite(Number(fs.radius)) ? Number(fs.radius) : 16.5;
         } else {
           fx = _shoreFireXs[i];
+          fy = ly;
           fz = _shoreFireZs[i];
           fw = _shoreFireWs[i];
           refDist = i === 0 ? 1.8 : 1.5;
           maxDist = i === 0 ? (bonfireLit ? 17.5 : 4.8) : 14.0;
         }
         const dx = fx - lx;
+        const dy = (fy - (ly + 1.2)) * 1.15;
         const dz = fz - lz;
-        const dSq = dx * dx + dz * dz;
+        const dSq = dx * dx + dy * dy + dz * dz;
         if (dSq >= maxDist * maxDist) continue;
         const d = Math.sqrt(dSq);
+        const horizD = Math.hypot(dx, dz);
         const norm = clamp((d - refDist) / Math.max(0.5, maxDist - refDist), 0, 1);
         // Smooth zero-slope perceptual rolloff (same curve as Castle `soulsSpatialAudio.js`, zero abrupt step!)
         const atten = Math.pow(1.0 - norm, 2.15) * fw;
@@ -674,9 +679,9 @@ export function createSoulsEscapeAudio(getCtxOrOpts, getMasterGainArg, getSfxVol
         } else {
           secondaryEnergy += atten * 0.22;
         }
-        if (d > 0.08) {
-          const projR = (dx * rightX + dz * rightZ) / d;
-          const nearScale = d < 1.35 ? clamp(d / 1.35, 0.14, 1.0) : 1.0;
+        if (horizD > 0.08) {
+          const projR = (dx * rightX + dz * rightZ) / horizD;
+          const nearScale = horizD < 1.35 ? clamp(horizD / 1.35, 0.14, 1.0) : 1.0;
           const srcPan = clamp(projR * 0.82 * nearScale, -0.88, 0.88);
           const pw = atten * atten;
           weightedPan += srcPan * pw;

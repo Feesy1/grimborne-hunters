@@ -1,9 +1,9 @@
 // Abandoned Knight Rift — Hero Combat Audio Module
-// Studio 44.1 kHz / 48 kHz WAV sample playback (?v=20261125z100) with cinematic gain (0.80–1.0),
+// Studio 44.1 kHz / 48 kHz WAV sample playback (?v=20261125z101) with cinematic gain (0.80–1.0),
 // razor-crisp sample-accurate attack, ±4% micro-pitch jitter, stone early-reflection send,
 // ElevenLabs parry steel ring support, armored roll slot, and Web Audio fallbacks.
 
-export const SOULS_HERO_AUDIO_VERSION = '20261125z100';
+export const SOULS_HERO_AUDIO_VERSION = '20261125z101';
 const SAMPLE_VER = SOULS_HERO_AUDIO_VERSION;
 
 export const HERO_SAMPLE_MANIFEST = Object.freeze([

@@ -462,21 +462,22 @@ export function createCombatBridge({ world, models, progression } = {}) {
 
   function syncFollowTarget(x, z, heroObj, dt = 0) {
     if (!world) return;
+    const heroY = Number.isFinite(heroObj?.position?.y) ? heroObj.position.y : undefined;
     if (typeof world.setFollowTarget === 'function') {
-      world.setFollowTarget(heroObj || { x, y: 0, z });
+      world.setFollowTarget(heroObj || { x, y: heroY ?? 0, z });
     }
     if (typeof world.followTarget === 'function') {
       if (world.followTarget.length >= 2 || inspectSignature(world.followTarget).params.length >= 2) {
-        world.followTarget(x, z, dt);
+        world.followTarget(x, z, dt, heroY);
       } else {
-        world.followTarget(heroObj || { x, y: 0, z, position: { x, y: 0, z } });
+        world.followTarget(heroObj || { x, y: heroY ?? 0, z, position: { x, y: heroY ?? 0, z } });
       }
     } else if (world.followTarget && typeof world.followTarget === 'object') {
       if (typeof world.followTarget.set === 'function') {
-        world.followTarget.set(x, 0, z);
+        world.followTarget.set(x, heroY ?? 0, z);
       } else {
         world.followTarget.x = x;
-        world.followTarget.y = 0;
+        world.followTarget.y = heroY ?? 0;
         world.followTarget.z = z;
       }
     }
