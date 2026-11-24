@@ -19,7 +19,7 @@
 //   - Calm Elden Ring pacing, Pack Token Coordination (`<= 2` melee attackers),
 //     smooth C1 step-in (`1.2–2.2 m/s`), live velocity lead & shield-turtle reads.
 
-import * as CASTLE_LAYOUT from './soulsCastleLayout.js?v=20261124z92';
+import * as CASTLE_LAYOUT from './soulsCastleLayout.js?v=20261124z93';
 
 const TWO_PI = Math.PI * 2;
 const _tmpClampOut = { x: 0, z: 0 };

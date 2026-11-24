@@ -4,14 +4,14 @@
 import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { DRACOLoader } from '../vendor/DRACOLoader.js';
-import { ARENA_HALF_SIZE } from './config.js?v=20261124z92';
-import { createSoulsArena } from './soulsArena.js?v=20261124z92';
+import { ARENA_HALF_SIZE } from './config.js?v=20261124z93';
+import { createSoulsArena } from './soulsArena.js?v=20261124z93';
 import {
   BOSS_DOOR_CUTSCENE_DURATION,
   evaluateBossDoorCutscene,
   getBossDoorCutsceneSkipState,
   computeBossDoorCutsceneShakeOffset
-} from './souls/soulsCutsceneChoreography.js?v=20261124z92';
+} from './souls/soulsCutsceneChoreography.js?v=20261124z93';
 import {
   BOSS_ESCAPE_CUTSCENE_DURATION,
   BOSS_ESCAPE_CUTSCENE_SKIP_TIME,
@@ -21,19 +21,19 @@ import {
   sampleBossEscapeCutscene,
   getBossEscapeCutsceneSkipState,
   computeBossEscapeCameraShakeOffset
-} from './souls/soulsEscapeCutscene.js?v=20261124z92';
+} from './souls/soulsEscapeCutscene.js?v=20261124z93';
 import {
   EXTERIOR_SHORE_ANCHORS,
   createSoulsExteriorShore
-} from './souls/soulsExteriorShore.js?v=20261124z92';
-import { createSoulsEscapeVfx } from './souls/soulsEscapeVfx.js?v=20261124z92';
+} from './souls/soulsExteriorShore.js?v=20261124z93';
+import { createSoulsEscapeVfx } from './souls/soulsEscapeVfx.js?v=20261124z93';
 import {
   clampCastleCameraPosition,
   SOULS_CASTLE_CONSTANTS
-} from './souls/soulsCastleLayout.js?v=20261124z92';
-import { createSoulsEnvironmentMap } from './souls/soulsLightingRig.js?v=20261124z92';
-import { applyEldenDissolveToModel } from './souls/soulsDissolveVfx.js?v=20261124z92';
-import * as SoulsFireVfx from './souls/soulsFireVfx.js?v=20261124z92';
+} from './souls/soulsCastleLayout.js?v=20261124z93';
+import { createSoulsEnvironmentMap } from './souls/soulsLightingRig.js?v=20261124z93';
+import { applyEldenDissolveToModel } from './souls/soulsDissolveVfx.js?v=20261124z93';
+import * as SoulsFireVfx from './souls/soulsFireVfx.js?v=20261124z93';
 import {
   createCourtyardStoneTexture,
   createHubMistTexture,
@@ -44,7 +44,7 @@ import {
   createHubContactAoTexture,
   createArcaneCircleTexture,
   getSlashCrescentGeo
-} from './world/textures.js?v=20261124z92';
+} from './world/textures.js?v=20261124z93';
 
 const sharedDracoLoader = new DRACOLoader();
 sharedDracoLoader.setDecoderPath('./vendor/draco/');
@@ -357,6 +357,7 @@ export function createArenaWorld(canvas) {
   let soulsArena = null;
   let soulsExteriorShore = null;
   let soulsEscapeVfx = null;
+  let soulsEscapePrewarmed = false;
   let pendingShoreSwordMesh = null;
   let phase2ArenaFireRingCtrl = null;
   function ensurePhase2ArenaFireRing() {
@@ -386,6 +387,36 @@ export function createArenaWorld(canvas) {
     return Boolean(ctrl);
   }
 
+  function prewarmSoulsEscapeStages() {
+    if (soulsEscapePrewarmed) return;
+    soulsEscapePrewarmed = true;
+    try {
+      const shore = ensureSoulsExteriorShore();
+      const vfx = ensureSoulsEscapeVfx();
+      const prevArenaVis = soulsArena?.group ? soulsArena.group.visible : false;
+      const prevVfxVis = vfx?.rootGroup ? vfx.rootGroup.visible : false;
+      shore?.setCompilePreview?.(true);
+      if (vfx?.rootGroup) vfx.rootGroup.visible = true;
+      // Compile shaders ONCE for castle-visible lighting state AND shore/shaft-only lighting state (including boss hidden!)
+      // so ZERO HLSL/WebGL shader-compile hitches ever occur during the escape cutscene!
+      if (soulsArena?.group) soulsArena.group.visible = true;
+      renderer.compile(scene, camera);
+      const hiddenLanterns = [];
+      scene.traverse((o) => {
+        if (o && o.isPointLight && o.name === 'bossShoulderLanternLight' && o.visible) {
+          o.visible = false;
+          hiddenLanterns.push(o);
+        }
+      });
+      if (soulsArena?.group) soulsArena.group.visible = false;
+      renderer.compile(scene, camera);
+      for (let i = 0; i < hiddenLanterns.length; i++) hiddenLanterns[i].visible = true;
+      if (soulsArena?.group) soulsArena.group.visible = prevArenaVis;
+      if (vfx?.rootGroup) vfx.rootGroup.visible = prevVfxVis;
+      shore?.setCompilePreview?.(false);
+    } catch {}
+  }
+
   function ensureSoulsArena() {
     if (!soulsArena) {
       soulsArena = createSoulsArena();
@@ -393,6 +424,8 @@ export function createArenaWorld(canvas) {
       arenaGroup.add(soulsArena.group);
     }
     ensurePhase2ArenaFireRing();
+    ensureSoulsExteriorShore();
+    ensureSoulsEscapeVfx();
     return soulsArena;
   }
 
@@ -448,7 +481,7 @@ export function createArenaWorld(canvas) {
       const sa = ensureSoulsArena();
       if (sa?.group) sa.group.visible = true;
       if (soulsExteriorShore) {
-        soulsExteriorShore.setStageMode?.(bossEscapeCutsceneActive ? 'chasm_only' : 'none');
+        soulsExteriorShore.setStageMode?.(bossEscapeCutsceneActive && bossEscapeChasmEnabled ? 'chasm_only' : 'none');
       }
     } else if (next === 'shaft_river') {
       if (soulsArena?.group) soulsArena.group.visible = false;
@@ -473,6 +506,24 @@ export function createArenaWorld(canvas) {
       hemiLight.color.copy(pal.hemiSky);
       hemiLight.groundColor.copy(pal.hemiGround);
       dirLight.color.copy(pal.dir);
+      // Drive nocturnal moonlight / cavern bounce cleanly through permanent lights (0 extra lights -> 0 shader recompile!)
+      if (next === 'exterior_shore') {
+        hemiLight.intensity = 1.05;
+        dirLight.intensity = 1.65;
+        burningGroundLight.color.setHex(0xff8a30);
+        burningGroundLight.position.set(EXTERIOR_SHORE_ANCHORS.bonfirePos.x, 1.85, EXTERIOR_SHORE_ANCHORS.bonfirePos.z);
+        burningGroundLight.intensity = soulsExteriorShore?.isBonfireLit?.() ? 5.2 : 0.0;
+      } else if (next === 'shaft_river') {
+        hemiLight.intensity = 0.92;
+        dirLight.intensity = 1.25;
+        burningGroundLight.color.setHex(0x8ec4ff);
+        burningGroundLight.position.set(0, 5.2, 26.0);
+        burningGroundLight.intensity = 5.5;
+      } else {
+        hemiLight.intensity = 0.78;
+        dirLight.intensity = 1.12;
+        burningGroundLight.intensity = 0;
+      }
     }
     return soulsZoneMode;
   }
@@ -5921,10 +5972,12 @@ export function createArenaWorld(canvas) {
           shore?.setStageMode?.('chasm_only');
         }
         shore?.setChasmState?.(holeP, st.floorHoleX || 0, st.floorHoleZ ?? SOULS_CASTLE_CONSTANTS.BOSS_CENTER_Z);
-      } else if (bossEscapeChasmEnabled) {
+      } else {
         bossEscapeChasmEnabled = false;
         shore?.setChasmState?.(0, st.floorHoleX || 0, st.floorHoleZ ?? SOULS_CASTLE_CONSTANTS.BOSS_CENTER_Z);
-        shore?.setStageMode?.('none');
+        if (shore?.getStageMode?.() !== 'none') {
+          shore?.setStageMode?.('none');
+        }
       }
     } else if (stStage === 'shaft_river' || stStage === 'exterior_shore') {
       const wantBroken = Boolean(
@@ -6056,17 +6109,19 @@ export function createArenaWorld(canvas) {
     const fx = Number(st.floorHoleX) || 0;
     const fz = Number(st.floorHoleZ) ?? SOULS_CASTLE_CONSTANTS.BOSS_CENTER_Z;
     if (st.stageMode === 'castle') {
-      if ((Number(st.impactFlash01) || 0) > 0.12 && clampedT < 4.5) {
-        escVfx?.emitParrySparks?.((hx + bx) * 0.5, 1.38, (hz + bz) * 0.5, 1.1);
-      } else if (clampedT >= 3.30 && clampedT <= 4.60) {
-        escVfx?.emitDustImpact?.(hx, 0.14, hz, 1.25);
-      } else if ((Number(st.floorHoleProgress) || 0) > 0.04 && clampedT < 21.3) {
+      if ((Number(st.impactFlash01) || 0) > 0.12 && clampedT < (BOSS_ESCAPE_ACTS?.ACT2_START ?? 4.2)) {
+        escVfx?.emitParrySparks?.((hx + bx) * 0.5, 1.38, (hz + bz) * 0.5, 1.0);
+      } else if (clampedT >= (BOSS_ESCAPE_ACTS?.KNOCKDOWN_CUE_TIME ?? 2.85) && clampedT <= (BOSS_ESCAPE_ACTS?.ACT2_START ?? 4.2)) {
+        escVfx?.emitDustImpact?.(hx, 0.14, hz, 1.1);
+      } else if ((Number(st.floorHoleProgress) || 0) > 0.04 && clampedT < (BOSS_ESCAPE_ACTS?.ACT4_START ?? 17.5)) {
         escVfx?.emitFloorCollapseBurst?.(fx, 0.25, fz);
       }
     } else if (st.stageMode === 'shaft_river') {
-      if ((Number(st.cues?.waterSplashCue) || 0) > 0 && clampedT < 26.2) {
-        escVfx?.emitWaterSplash?.(hx, 0.15, hz, 1.3);
-      } else if (Boolean(st.grateBroken) && clampedT < 28.8) {
+      const wsT = BOSS_ESCAPE_ACTS?.WATER_SPLASH_TIME ?? 18.85;
+      const gbT = BOSS_ESCAPE_ACTS?.GRATE_BREAK_TIME ?? 20.85;
+      if ((Number(st.cues?.waterSplashCue) || 0) > 0 && clampedT < wsT + 1.2) {
+        escVfx?.emitWaterSplash?.(hx, 0.15, hz, 1.2);
+      } else if (Boolean(st.grateBroken) && clampedT < gbT + 0.9) {
         escVfx?.emitGrateBreakBurst?.(hx, 0.55, Math.min(26.2, hz + 0.6));
       }
     }
@@ -6376,6 +6431,9 @@ export function createArenaWorld(canvas) {
 
       // Apply biome-accurate Combat lighting, PMREM env (Souls only), and shadow frustum
       applyCombatLightingAndShadows(true);
+      if (isSoulsBiome(currentBiome)) {
+        prewarmSoulsEscapeStages();
+      }
 
       lastDirSnapX = NaN;
       lastDirSnapZ = NaN;
@@ -6894,7 +6952,7 @@ export function createArenaWorld(canvas) {
     if (devEditors) return Promise.resolve(devEditors);
     if (!isDevModeEnabled()) return Promise.resolve(null);
     if (!devEditorsPromise) {
-      devEditorsPromise = import('./world/devEditors.js?v=20261124z92')
+      devEditorsPromise = import('./world/devEditors.js?v=20261124z93')
         .then((mod) => {
           devEditors = mod.createWorldDevEditors({
             scene,
@@ -9058,7 +9116,14 @@ export function createArenaWorld(canvas) {
     getExteriorShoreAnchors: () => (soulsExteriorShore?.getAnchors?.() || EXTERIOR_SHORE_ANCHORS),
     attachShoreRealSwordModel,
     setShoreSwordPickedUp: (picked) => ensureSoulsExteriorShore()?.setSwordPickedUp?.(Boolean(picked)),
-    setShoreBonfireLit: (lit) => ensureSoulsExteriorShore()?.setBonfireLit?.(Boolean(lit)),
+    setShoreBonfireLit: (lit) => {
+      ensureSoulsExteriorShore()?.setBonfireLit?.(Boolean(lit));
+      if (soulsZoneMode === 'exterior_shore') {
+        burningGroundLight.color.setHex(0xff8a30);
+        burningGroundLight.position.set(EXTERIOR_SHORE_ANCHORS.bonfirePos.x, 1.85, EXTERIOR_SHORE_ANCHORS.bonfirePos.z);
+        burningGroundLight.intensity = lit ? 5.2 : 0.0;
+      }
+    },
     setShoreGrateBroken: (broken) => ensureSoulsExteriorShore()?.setGrateBroken?.(Boolean(broken)),
     triggerShoreGrateBreak: () => ensureSoulsExteriorShore()?.triggerGrateBreak?.(),
     getSoulsEscapeVfx: () => ensureSoulsEscapeVfx(),

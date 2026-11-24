@@ -1,12 +1,12 @@
 // Procedural Web Audio API Dark-Fantasy Synthesizer + Abandoned Knight Rift Studio Audio Router
 // Instant startup, crisp dynamics, full suspend/mute compliance.
 
-import { createSoulsEnvAudio } from './souls/soulsEnvAudio.js?v=20261124z92';
-import { createSoulsHeroAudio } from './souls/soulsHeroAudio.js?v=20261124z92';
-import { createSoulsEnemyAudio } from './souls/soulsEnemyAudio.js?v=20261124z92';
-import { createSoulsMusicManager } from './souls/soulsMusicManager.js?v=20261124z92';
-import { createSoulsSpatialAudio } from './souls/soulsSpatialAudio.js?v=20261124z92';
-import { createSoulsEscapeAudio } from './souls/soulsEscapeAudio.js?v=20261124z92';
+import { createSoulsEnvAudio } from './souls/soulsEnvAudio.js?v=20261124z93';
+import { createSoulsHeroAudio } from './souls/soulsHeroAudio.js?v=20261124z93';
+import { createSoulsEnemyAudio } from './souls/soulsEnemyAudio.js?v=20261124z93';
+import { createSoulsMusicManager } from './souls/soulsMusicManager.js?v=20261124z93';
+import { createSoulsSpatialAudio } from './souls/soulsSpatialAudio.js?v=20261124z93';
+import { createSoulsEscapeAudio } from './souls/soulsEscapeAudio.js?v=20261124z93';
 
 export function createAudioEngine() {
   let ctx = null;
@@ -26,7 +26,7 @@ export function createAudioEngine() {
 
   function preloadExternalSamples(audioCtx) {
     if (!audioCtx || typeof fetch === 'undefined') return;
-    const stepVer = '20261124z92';
+    const stepVer = '20261124z93';
     const files = [
       ['step_warrior_1', `./assets/audio/step_warrior_1.wav?v=${stepVer}`],
       ['step_warrior_2', `./assets/audio/step_warrior_2.wav?v=${stepVer}`],
@@ -261,7 +261,7 @@ export function createAudioEngine() {
     getVoiceVolume: () => cutsceneVoiceVolume,
     getStoneReverbDest: () => getOrCreateStoneReverbSend(),
     duckMusic: (db, holdSec, relSec) => soulsMusic?.duck?.(db, holdSec, relSec),
-    assetVer: '20261124z92'
+    assetVer: '20261124z93'
   });
   soulsEscape.setMuted?.(muted);
   soulsEscape.setVoiceVolume?.(Math.max(0, Math.min(1.6, cutsceneVoiceVolume * 1.08)));
@@ -270,8 +270,8 @@ export function createAudioEngine() {
   // - rift_explore: Elden Castle Drone (Bonfire / Castle Corridor / East Alcove)
   // - boss_phase1/boss_phase2: unified Epic Boss Battle (God of War Style)
   // Routed directly to masterGain (bypassing retro 980Hz musicFilter lowpass!) with own musicVolume scaling
-  const SOULS_EXPLORE_TRACK_URL = './assets/audio/music_rift_explore.mp3?v=20261124z92';
-  const SOULS_BOSS_TRACK_URL = './assets/audio/music_boss_rift.mp3?v=20261124z92';
+  const SOULS_EXPLORE_TRACK_URL = './assets/audio/music_rift_explore.mp3?v=20261124z93';
+  const SOULS_BOSS_TRACK_URL = './assets/audio/music_boss_rift.mp3?v=20261124z93';
   let soulsAmbientActive = false;
   const soulsMusic = createSoulsMusicManager({
     getCtx: () => ctx,
@@ -2435,37 +2435,58 @@ export function createAudioEngine() {
     playSwordParryClash(intensity = 1.0) {
       if (!readyToPlay()) return;
       preloadSoulsAudio(ctx);
-      try { soulsEscape?.playSwordParryClash?.(intensity); } catch {}
+      if (intensity > 1.08) {
+        soulsEnemy.playBossHammerWhoosh?.(true);
+        soulsHero.playShieldBlock?.({ isBoss: true });
+        soulsEnemy.playBossHammerHit?.(0.88);
+      } else {
+        soulsHero.playSwordSwing?.(3, true);
+        soulsHero.playParrySuccess?.();
+      }
     },
 
     playSwordDisarmClatter() {
       if (!readyToPlay()) return;
       preloadSoulsAudio(ctx);
-      try { soulsEscape?.playSwordDisarmClatter?.(); } catch {}
+      soulsHero.playGuardBreak?.();
+      soulsHero.playPartialParry?.();
+      setTimeout(() => {
+        if (readyToPlay()) soulsHero.playHeroArmorHit?.();
+      }, 260);
     },
 
     playHeroKnockdownThud() {
       if (!readyToPlay()) return;
       preloadSoulsAudio(ctx);
-      try { soulsEscape?.playHeroKnockdownThud?.(); } catch {}
+      soulsEnemy.playBossHammerHit?.(1.0);
+      soulsHero.playHeroArmorHit?.();
+      setTimeout(() => {
+        if (readyToPlay()) soulsEnv.playRollStone?.({ surface: 'stone_courtyard' });
+      }, 320);
     },
 
     playArmorScootScrape() {
       if (!readyToPlay()) return;
       preloadSoulsAudio(ctx);
-      try { soulsEscape?.playArmorScootScrape?.(); } catch {}
+      soulsEnv.playTurnScrape?.({ surface: 'stone_courtyard' });
     },
 
     playSlowMoPulse() {
       if (!readyToPlay()) return;
       preloadSoulsAudio(ctx);
-      try { soulsEscape?.playSlowMoPulse?.(); } catch {}
+      try { soulsMusic?.duck?.(-6.5, 0.55, 0.65); } catch {}
+      soulsEnemy.playBossHammerWhoosh?.(true);
     },
 
     playFloorCollapseSmash() {
       if (!readyToPlay()) return;
       preloadSoulsAudio(ctx);
-      try { soulsEscape?.playFloorCollapseSmash?.(); } catch {}
+      soulsEnemy.playBossHammerSlam?.(1.25);
+      soulsEnemy.playBossHammerGround?.(1.15);
+      soulsEnemy.playStanceBreak?.();
+      setTimeout(() => {
+        if (readyToPlay()) soulsEnv.playCastleDoorClose?.();
+      }, 140);
     },
 
     playChasmWindFall(active) {
@@ -2483,13 +2504,17 @@ export function createAudioEngine() {
     playIronGrateBreak() {
       if (!readyToPlay()) return;
       preloadSoulsAudio(ctx);
-      try { soulsEscape?.playIronGrateBreak?.(); } catch {}
+      soulsHero.playGuardBreak?.();
+      soulsEnemy.playStanceBreak?.();
+      soulsHero.playParrySuccess?.();
+      try { soulsEscape?.playWaterSprayBurst?.(0.95); } catch {}
     },
 
     playSwordPickupChime() {
       if (!readyToPlay()) return;
       preloadSoulsAudio(ctx);
-      try { soulsEscape?.playSwordPickupChime?.(); } catch {}
+      soulsHero.playParrySuccess?.();
+      try { soulsSpatial?.playBossArmorShift?.(0.35); } catch {}
     },
 
     setExteriorShoreAmbient(active) {
