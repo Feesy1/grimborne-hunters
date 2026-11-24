@@ -227,49 +227,49 @@ export const SOULS_ATTACK_SPECS = Object.freeze({
 });
 
 export const SOULS_GREAT_CLUB_ATTACK_SPECS = Object.freeze({
-  // Exact Elden Ring Large Club / Great Club frame data synced 1:1 with Club_Attack_1..3 (1.05s / 1.05s / 1.32s)
-  // with simultaneous forward step-in lunge (`lungeDist`) matching the reference video!
+  // Exact 60-FPS Elden Ring 1H Large Club / Great Club frame data copied from vrvAYx9gTas
+  // synced 1:1 with Club_Attack_1..3 (1.22s / 1.18s / 1.42s) + simultaneous forward step-in lunge!
   r1_1: Object.freeze({
-    startup: 0.34,
-    active: 0.22,
-    recovery: 0.49,
-    cancelChainAt: 0.62,
-    cancelRollAt: 0.64,
-    cancelBlockAt: 0.66,
-    trackingCutoff01: 0.72,
+    startup: 0.44,
+    active: 0.20,
+    recovery: 0.58,
+    cancelChainAt: 0.72,
+    cancelRollAt: 0.72,
+    cancelBlockAt: 0.74,
+    trackingCutoff01: 0.70,
     mv: 1.24,
     stanceDmg: 17,
     stamina: 18,
     hitstop: 0.078,
-    lungeDist: 1.08
+    lungeDist: 1.15
   }),
   r1_2: Object.freeze({
-    startup: 0.30,
-    active: 0.24,
-    recovery: 0.51,
-    cancelChainAt: 0.62,
-    cancelRollAt: 0.64,
-    cancelBlockAt: 0.66,
-    trackingCutoff01: 0.72,
+    startup: 0.34,
+    active: 0.20,
+    recovery: 0.64,
+    cancelChainAt: 0.66,
+    cancelRollAt: 0.68,
+    cancelBlockAt: 0.70,
+    trackingCutoff01: 0.70,
     mv: 1.32,
     stanceDmg: 19,
     stamina: 19,
     hitstop: 0.084,
-    lungeDist: 1.18
+    lungeDist: 1.25
   }),
   r1_3: Object.freeze({
-    startup: 0.48,
-    active: 0.22,
-    recovery: 0.62,
-    cancelChainAt: 0.90,
-    cancelRollAt: 0.84,
-    cancelBlockAt: 0.88,
+    startup: 0.52,
+    active: 0.20,
+    recovery: 0.70,
+    cancelChainAt: 0.96,
+    cancelRollAt: 0.90,
+    cancelBlockAt: 0.92,
     trackingCutoff01: 0.66,
     mv: 1.68,
     stanceDmg: 32,
     stamina: 24,
     hitstop: 0.105,
-    lungeDist: 1.45,
+    lungeDist: 1.50,
     hyperarmor: true
   }),
   r2: Object.freeze({

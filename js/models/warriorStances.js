@@ -10,7 +10,7 @@
 // across Hub Front, Combat Isometric, Right-Side Profile, and Running_A mid-stride views.
 
 import * as THREE from '../../vendor/three.module.js';
-import { solveMixamoArmIK } from './shared.js?v=20261124z94';
+import { solveMixamoArmIK } from './shared.js?v=20261124z95';
 
 const MOUNT_PIVOT_POS = Object.freeze({ x: -0.0235, y: 0.0415, z: -0.0086 });
 const MOUNT_PIVOT_ROT = Object.freeze({ x: -1.04, y: 0.24, z: -1.52 });
@@ -29,7 +29,7 @@ const WEAPON_MOUNT_CONFIGS = Object.freeze({
     assetKey: 'great_club_tripo',
     stanceId: 'great_club_shoulder',
     twoHanded: false,
-    scale: 0.96,
+    scale: 0.82,
     gripY: 0.18,
     leftGripY: null,
     rotY: 0,
@@ -113,21 +113,21 @@ const WEAPON_MOUNT_CONFIGS = Object.freeze({
 // All coordinates verified via exact 3D clearance checks & multi-angle Blender renders.
 const STANCE_DEFS = Object.freeze({
   great_club_shoulder: Object.freeze({
-    // Exact Elden Ring 1H Right-Shoulder Carry + Iron Shield in Left Hand!
-    // Massive dark-oak timber head sweeps diagonally UP (+Y), BACK (-Z behind helmet/horns), and ACROSS-LEFT (+X).
-    torsoYaw: -0.14,
-    torsoPitch: 0.05,
-    runPitchBoost: 0.08,
-    clavR: [0.16, -0.02],
+    // Exact Elden Ring 1H Outer Right-Shoulder Carry + Iron Shield in Left Hand!
+    // Matches `z95_carry_360_turntable.png` 1:1 — rests on outer right shoulder, 0mm helmet/horn clipping from all 360 deg!
+    torsoYaw: -0.08,
+    torsoPitch: 0.04,
+    runPitchBoost: 0.07,
+    clavR: [0.14, -0.02],
     clavL: [0, 0],
-    handR: [-0.175, 0.020, 0.115],
-    poleR: [-0.44, -0.18, -0.05],
-    shaftDir: new THREE.Vector3(0.62, 0.60, -0.50).normalize(),
+    handR: [-0.184, -0.014, 0.128],
+    poleR: [-0.42, -0.18, -0.04],
+    shaftDir: new THREE.Vector3(-0.46, 0.48, -0.75).normalize(),
     bladeXHint: new THREE.Vector3(-0.74, 0.50, 0.45).normalize(),
     leftMode: 'keep_shield',
-    weaponRunSwayX: 0.014,
-    weaponRunBobY: 0.018,
-    weaponRunPitchBob: 0.042
+    weaponRunSwayX: 0.010,
+    weaponRunBobY: 0.014,
+    weaponRunPitchBob: 0.032
   }),
   axe_shoulder: Object.freeze({
     torsoYaw: -0.10,

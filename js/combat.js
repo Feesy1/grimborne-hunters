@@ -9,7 +9,7 @@ import {
   LEVELS,
   getLevelDef,
   RUN_UPGRADES
-} from './config.js?v=20261124z94';
+} from './config.js?v=20261124z95';
 import {
   TWO_PI,
   ARENA_PLAYER_LIMIT,
@@ -21,7 +21,7 @@ import {
   lerpAngle,
   resolveArenaBiomeForLevel,
   createCombatBridge
-} from './combat/bridge.js?v=20261124z94';
+} from './combat/bridge.js?v=20261124z95';
 import {
   updateBossAI,
   updateSoulsBossAI,
@@ -31,7 +31,7 @@ import {
   cancelSoulsBossTelegraph,
   applySoulsBossParry,
   SOULS_BOSS_MULTI_PARRY
-} from './combat/bossAi.js?v=20261124z94';
+} from './combat/bossAi.js?v=20261124z95';
 import {
   createPoiseController,
   STANCE_DAMAGE_TABLE,
@@ -40,26 +40,26 @@ import {
   getPlayerHitstunSpec,
   SOULS_GUARD_CFG,
   computeBlockedStaminaCost
-} from './combat/poiseSystem.js?v=20261124z94';
+} from './combat/poiseSystem.js?v=20261124z95';
 import {
   SOULS_ROLL_CFG,
   getSoulsRollIframes,
   sampleSoulsRollStepDist,
   sampleAttackLungeStep,
   createAliveStanceSmoother
-} from './souls/soulsLocomotion.js?v=20261124z94';
+} from './souls/soulsLocomotion.js?v=20261124z95';
 import {
   SOULS_STAMINA_CFG,
   createSoulsStaminaController,
   createSoulsActionBuffer
-} from './souls/soulsStaminaBuffer.js?v=20261124z94';
+} from './souls/soulsStaminaBuffer.js?v=20261124z95';
 import {
   SOULS_ATTACK_SPECS,
   getSoulsAttackSpec,
   computeSoulsDamage,
   testSweptBladeHits
-} from './souls/soulsHitboxDamage.js?v=20261124z94';
-import * as SOULS_MOB_AI from './souls/soulsMobAi.js?v=20261124z94';
+} from './souls/soulsHitboxDamage.js?v=20261124z95';
+import * as SOULS_MOB_AI from './souls/soulsMobAi.js?v=20261124z95';
 import {
   initSoulsMobState,
   stepSoulsMobAi,
@@ -67,7 +67,7 @@ import {
   onSoulsMobInterrupted,
   resetSoulsPackCoordinator,
   releaseSoulsAttackToken
-} from './souls/soulsMobAi.js?v=20261124z94';
+} from './souls/soulsMobAi.js?v=20261124z95';
 import {
   SOULS_CASTLE_CONSTANTS,
   SOULS_CASTLE_BONFIRE,
@@ -86,36 +86,36 @@ import {
   canInteractWithBossDoor,
   findInteractableRelic,
   clampCastlePosition
-} from './souls/soulsCastleLayout.js?v=20261124z94';
+} from './souls/soulsCastleLayout.js?v=20261124z95';
 import {
   createDissolveAshSystem
-} from './souls/soulsDissolveVfx.js?v=20261124z94';
+} from './souls/soulsDissolveVfx.js?v=20261124z95';
 import {
   enhanceSoulsBossModel,
   updateSoulsBossVisuals,
   triggerSoulsBossHitFlash,
   disposeSoulsBossVisuals
-} from './souls/soulsBossVisuals.js?v=20261124z94';
+} from './souls/soulsBossVisuals.js?v=20261124z95';
 import {
   createSoulsGameFeel,
   getImpactSparkBurst
-} from './souls/soulsGameFeel.js?v=20261124z94';
+} from './souls/soulsGameFeel.js?v=20261124z95';
 import {
   BOSS_DOOR_CUTSCENE_DURATION,
   BOSS_DOOR_CUTSCENE_ACTS
-} from './souls/soulsCutsceneChoreography.js?v=20261124z94';
+} from './souls/soulsCutsceneChoreography.js?v=20261124z95';
 import {
   BOSS_ESCAPE_CUTSCENE_DURATION,
   BOSS_ESCAPE_ACTS
-} from './souls/soulsEscapeCutscene.js?v=20261124z94';
+} from './souls/soulsEscapeCutscene.js?v=20261124z95';
 import {
   resetActorPhysics,
   applyKnockbackImpulse,
   stepActorPhysicsBody
-} from './souls/soulsPhysicsFeel.js?v=20261124z94';
+} from './souls/soulsPhysicsFeel.js?v=20261124z95';
 import {
   createWeaponTrailSystem
-} from './souls/soulsWeaponTrails.js?v=20261124z94';
+} from './souls/soulsWeaponTrails.js?v=20261124z95';
 
 export function createCombatController({
   world,
@@ -9073,7 +9073,13 @@ export function createCombatController({
         if (!atk.whooshPlayed && atk.elapsed >= Math.max(0, activeStart - 0.055)) {
           atk.whooshPlayed = true;
           if (atk.wpnId === 'great_club') {
-            audio?.playBossHammerWhoosh?.(atk.isHeavy || atk.comboStep === 3);
+            if (atk.isHeavy || atk.comboStep === 3) {
+              audio?.playBossHammerWhoosh?.(false);
+            } else if (typeof audio?.playSwordSwing === 'function') {
+              audio.playSwordSwing(atk.comboStep, true);
+            } else {
+              audio?.playMeleeSwing?.(atk.wpnId, true);
+            }
           } else if (typeof audio?.playSwordSwing === 'function') {
             audio.playSwordSwing(atk.comboStep, atk.isHeavy);
           } else {
@@ -9128,7 +9134,7 @@ export function createCombatController({
           const slamX = player.x + Math.sin(slamAim) * 1.28;
           const slamZ = player.z + Math.cos(slamAim) * 1.28;
           const slamGroundY = sampleSmoothGroundY(player, slamX, slamZ, 0, true);
-          audio?.playBossHammerGround?.(atk.key === 'charged_r2' ? 1.05 : 0.78);
+          audio?.playBossHammerGround?.(atk.key === 'charged_r2' ? 0.62 : 0.44);
           emitParticles(slamX, slamGroundY + 0.16, slamZ, 0xb8a894, 15, 5.2, 0.14);
           emitParticles(slamX, slamGroundY + 0.24, slamZ, 0x6b4d35, 8, 3.8, 0.11);
           world?.addScreenShake?.(atk.key === 'charged_r2' ? 0.24 : 0.18, 0.14);

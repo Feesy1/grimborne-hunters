@@ -5912,7 +5912,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
       swordVisualPivot.rotation.set(0, 0, 0);
       const center0 = new THREE.Vector3();
       box0.getCenter(center0);
-      const targetLen = 1.72;
+      const targetLen = 1.48;
       const sc = targetLen / Math.max(1e-4, size0.y);
       wrapper.scale.setScalar(sc);
       wrapper.position.set(-center0.x * sc, -box0.min.y * sc, -center0.z * sc);
