@@ -9,7 +9,7 @@ import {
   LEVELS,
   getLevelDef,
   RUN_UPGRADES
-} from './config.js?v=20261124z95';
+} from './config.js?v=20261124z96';
 import {
   TWO_PI,
   ARENA_PLAYER_LIMIT,
@@ -21,7 +21,7 @@ import {
   lerpAngle,
   resolveArenaBiomeForLevel,
   createCombatBridge
-} from './combat/bridge.js?v=20261124z95';
+} from './combat/bridge.js?v=20261124z96';
 import {
   updateBossAI,
   updateSoulsBossAI,
@@ -31,7 +31,7 @@ import {
   cancelSoulsBossTelegraph,
   applySoulsBossParry,
   SOULS_BOSS_MULTI_PARRY
-} from './combat/bossAi.js?v=20261124z95';
+} from './combat/bossAi.js?v=20261124z96';
 import {
   createPoiseController,
   STANCE_DAMAGE_TABLE,
@@ -40,26 +40,26 @@ import {
   getPlayerHitstunSpec,
   SOULS_GUARD_CFG,
   computeBlockedStaminaCost
-} from './combat/poiseSystem.js?v=20261124z95';
+} from './combat/poiseSystem.js?v=20261124z96';
 import {
   SOULS_ROLL_CFG,
   getSoulsRollIframes,
   sampleSoulsRollStepDist,
   sampleAttackLungeStep,
   createAliveStanceSmoother
-} from './souls/soulsLocomotion.js?v=20261124z95';
+} from './souls/soulsLocomotion.js?v=20261124z96';
 import {
   SOULS_STAMINA_CFG,
   createSoulsStaminaController,
   createSoulsActionBuffer
-} from './souls/soulsStaminaBuffer.js?v=20261124z95';
+} from './souls/soulsStaminaBuffer.js?v=20261124z96';
 import {
   SOULS_ATTACK_SPECS,
   getSoulsAttackSpec,
   computeSoulsDamage,
   testSweptBladeHits
-} from './souls/soulsHitboxDamage.js?v=20261124z95';
-import * as SOULS_MOB_AI from './souls/soulsMobAi.js?v=20261124z95';
+} from './souls/soulsHitboxDamage.js?v=20261124z96';
+import * as SOULS_MOB_AI from './souls/soulsMobAi.js?v=20261124z96';
 import {
   initSoulsMobState,
   stepSoulsMobAi,
@@ -67,7 +67,7 @@ import {
   onSoulsMobInterrupted,
   resetSoulsPackCoordinator,
   releaseSoulsAttackToken
-} from './souls/soulsMobAi.js?v=20261124z95';
+} from './souls/soulsMobAi.js?v=20261124z96';
 import {
   SOULS_CASTLE_CONSTANTS,
   SOULS_CASTLE_BONFIRE,
@@ -86,36 +86,36 @@ import {
   canInteractWithBossDoor,
   findInteractableRelic,
   clampCastlePosition
-} from './souls/soulsCastleLayout.js?v=20261124z95';
+} from './souls/soulsCastleLayout.js?v=20261124z96';
 import {
   createDissolveAshSystem
-} from './souls/soulsDissolveVfx.js?v=20261124z95';
+} from './souls/soulsDissolveVfx.js?v=20261124z96';
 import {
   enhanceSoulsBossModel,
   updateSoulsBossVisuals,
   triggerSoulsBossHitFlash,
   disposeSoulsBossVisuals
-} from './souls/soulsBossVisuals.js?v=20261124z95';
+} from './souls/soulsBossVisuals.js?v=20261124z96';
 import {
   createSoulsGameFeel,
   getImpactSparkBurst
-} from './souls/soulsGameFeel.js?v=20261124z95';
+} from './souls/soulsGameFeel.js?v=20261124z96';
 import {
   BOSS_DOOR_CUTSCENE_DURATION,
   BOSS_DOOR_CUTSCENE_ACTS
-} from './souls/soulsCutsceneChoreography.js?v=20261124z95';
+} from './souls/soulsCutsceneChoreography.js?v=20261124z96';
 import {
   BOSS_ESCAPE_CUTSCENE_DURATION,
   BOSS_ESCAPE_ACTS
-} from './souls/soulsEscapeCutscene.js?v=20261124z95';
+} from './souls/soulsEscapeCutscene.js?v=20261124z96';
 import {
   resetActorPhysics,
   applyKnockbackImpulse,
   stepActorPhysicsBody
-} from './souls/soulsPhysicsFeel.js?v=20261124z95';
+} from './souls/soulsPhysicsFeel.js?v=20261124z96';
 import {
   createWeaponTrailSystem
-} from './souls/soulsWeaponTrails.js?v=20261124z95';
+} from './souls/soulsWeaponTrails.js?v=20261124z96';
 
 export function createCombatController({
   world,
@@ -837,6 +837,7 @@ export function createCombatController({
     world?.setShoreGrateBroken?.(true);
     world?.setShoreSwordPickedUp?.(withSword);
     world?.setShoreBonfireLit?.(bonfireLit);
+    world?.resetShoreDestructibles?.();
     world?.setBossAtmosphere?.(false);
     world?.setSoulsFogGate?.(false);
     world?.setCombatOrbitYaw?.(finalCamYaw);
@@ -7609,24 +7610,29 @@ export function createCombatController({
       const rawInteractIn = Boolean(input?.interact);
       if (isExteriorShoreNow) {
         // Exterior River Shore («Берег Пепельного Стока») Interactive Landmarks:
-        //   1. Fallen Oath Broadsword (`swordPos`) -> [E] Подобрать Меч Клятвы
+        //   1. Fallen Great Club (`swordPos`) -> [E] Подобрать Большую Дубину
         //   2. Shore Bonfire (`bonfirePos`) -> [E] Зажечь Костёр Берега / Отдохнуть
         //   3. Ash Gorge Gate (`gatePos`) -> [E] Пепельное Ущелье (Глава II)
+        //   4. Carved Runic Waystone Monolith (`monolithPos`) -> [E] Прочесть надпись на стеле
         const shoreAnchors = world?.getExteriorShoreAnchors?.() || {};
         const swordAnchor = shoreAnchors.swordPos || { x: 2.8, y: 0.08, z: 5.2 };
         const bonfireAnchor = shoreAnchors.bonfirePos || { x: -2.2, y: 0.21, z: 15.0 };
         const gateAnchor = shoreAnchors.gatePos || { x: 0.0, y: 0.56, z: 31.0 };
+        const monolithAnchor = shoreAnchors.monolithPos || { x: -5.0, y: 0.42, z: 16.4 };
 
         const distSword = Math.hypot(player.x - swordAnchor.x, player.z - swordAnchor.z);
         const distShoreBf = Math.hypot(player.x - bonfireAnchor.x, player.z - bonfireAnchor.z);
         const distGate = Math.hypot(player.x - gateAnchor.x, player.z - gateAnchor.z);
+        const distMonolith = Math.hypot(player.x - monolithAnchor.x, player.z - monolithAnchor.z);
 
         const nearShoreSword = !soulsDoorCutsceneActive && !souls.shoreSwordPickedUp && distSword <= 2.75;
         const nearShoreBonfire = !soulsDoorCutsceneActive && !nearShoreSword && distShoreBf <= 2.95;
         const nearShoreGate = !soulsDoorCutsceneActive && !nearShoreSword && !nearShoreBonfire && distGate <= 3.55;
+        const nearShoreMonolith =
+          !soulsDoorCutsceneActive && !nearShoreSword && !nearShoreBonfire && !nearShoreGate && distMonolith <= 2.75;
 
         souls.canRestAtBonfire = Boolean(nearShoreBonfire);
-        souls.canInteract = Boolean(nearShoreSword || nearShoreBonfire || nearShoreGate);
+        souls.canInteract = Boolean(nearShoreSword || nearShoreBonfire || nearShoreGate || nearShoreMonolith);
         souls.canOpenBossDoors = souls.canInteract;
         const shoreLabel = nearShoreSword
           ? 'Подобрать Большую Дубину'
@@ -7634,7 +7640,9 @@ export function createCombatController({
             ? (souls.shoreBonfireLit ? 'Отдохнуть у Костра Берега' : 'Зажечь Костёр Берега')
             : nearShoreGate
               ? 'Пепельное Ущелье (Глава II)'
-              : 'Открыть врата';
+              : nearShoreMonolith
+                ? 'Прочесть надпись на стеле'
+                : 'Открыть врата';
         souls.interactLabel = shoreLabel;
         souls.interactPromptRu = shoreLabel;
 
@@ -7681,6 +7689,18 @@ export function createCombatController({
               shoreSwordPickedUp: Boolean(souls.shoreSwordPickedUp),
               shoreBonfireLit: Boolean(souls.shoreBonfireLit)
             });
+          } else if (nearShoreMonolith) {
+            const loreLines = [
+              '«Из стоков Замка Пепла живыми выходят лишь те, кого отвергла сама Бездна...»',
+              '«Зажги Костёр Берега, путник. В Пепельном Ущелье клинок важнее клятвы.»',
+              '«Палач Разлома ещё хранит печать. Вернись сильнее, Охотник.»'
+            ];
+            const idx = (souls.monolithReadCount || 0) % loreLines.length;
+            souls.monolithReadCount = (souls.monolithReadCount || 0) + 1;
+            audio?.playSwordPickupChime?.();
+            emitParticles(monolithAnchor.x, (monolithAnchor.y || 0.4) + 1.35, monolithAnchor.z, 0x93c5fd, 16, 3.6, 0.12);
+            floatText(`🗿 ${loreLines[idx]}`, monolithAnchor.x, monolithAnchor.z - 0.6, '#bfdbfe');
+            callbacks?.onSoulsCue?.('НАДПИСЬ ПАЛОМНИКА', 'guard_counter');
           }
         }
         souls.prevInteractInput = rawInteractIn;
@@ -8608,13 +8628,27 @@ export function createCombatController({
       player.z = resolvedPlayer.z;
     }
 
-    // Interactive Breakable 3D Candle Clusters in Abandoned Knight Rift (walking or rolling through knocks them down!)
+    // Interactive Breakable 3D Candle Clusters (Castle) & Wooden Barrels/Crates (Exterior Shore) on Roll!
     if (isSoulslike && !soulsDoorCutsceneActive && (moveMag > 0.05 || isDashingNow)) {
-      const brokenCandles = world?.tryBreakCandlesNear?.(player.x, player.z, 0.72);
-      if (Array.isArray(brokenCandles) && brokenCandles.length > 0) {
-        for (let ci = 0; ci < brokenCandles.length; ci++) {
-          const c = brokenCandles[ci];
-          if (c) emitParticles(c.x, 0.25, c.z, 0xfde68a, 5, 2.2, 0.08);
+      const onExteriorShore = souls.zoneMode === 'exterior_shore';
+      if (onExteriorShore && isDashingNow) {
+        const smashed = world?.hitShoreDestructibles?.(player.x, player.z, 0.95);
+        if (smashed && smashed.count > 0) {
+          for (let bi = 0; bi < smashed.hits.length; bi++) {
+            const bh = smashed.hits[bi];
+            emitParticles(bh.x, bh.y, bh.z, 0x9c7b57, 14, 4.6, 0.13);
+            emitParticles(bh.x, bh.y + 0.15, bh.z, 0x5c4632, 8, 3.2, 0.10);
+          }
+          audio?.playBossHammerHit?.(0.42);
+          world?.addScreenShake?.(0.09, 0.08);
+        }
+      } else if (!onExteriorShore) {
+        const brokenCandles = world?.tryBreakCandlesNear?.(player.x, player.z, 0.72);
+        if (Array.isArray(brokenCandles) && brokenCandles.length > 0) {
+          for (let ci = 0; ci < brokenCandles.length; ci++) {
+            const c = brokenCandles[ci];
+            if (c) emitParticles(c.x, 0.25, c.z, 0xfde68a, 5, 2.2, 0.08);
+          }
         }
       }
     }
@@ -9142,6 +9176,24 @@ export function createCombatController({
 
         // Active hitbox window: test swept blade capsule across [startup, startup + active]
         if (atk.elapsed >= activeStart && prevElapsed <= activeEnd) {
+          // Smash interactive wooden barrels & cargo crates on the Exterior Shore during active weapon swing!
+          if (souls.zoneMode === 'exterior_shore') {
+            const propAim = Number.isFinite(atk.strikeAngle) ? atk.strikeAngle : player.facing;
+            const hitCenterDist = Math.min(1.65, (atk.range || 2.2) * 0.58);
+            const propHitX = player.x + Math.sin(propAim) * hitCenterDist;
+            const propHitZ = player.z + Math.cos(propAim) * hitCenterDist;
+            const propHitRad = Math.max(1.25, (atk.range || 2.2) * 0.52);
+            const smashed = world?.hitShoreDestructibles?.(propHitX, propHitZ, propHitRad);
+            if (smashed && smashed.count > 0) {
+              for (let bi = 0; bi < smashed.hits.length; bi++) {
+                const bh = smashed.hits[bi];
+                emitParticles(bh.x, bh.y, bh.z, 0xa8865f, 18, 5.2, 0.14);
+                emitParticles(bh.x, bh.y + 0.18, bh.z, 0x5c4632, 10, 3.6, 0.11);
+              }
+              audio?.playBossHammerHit?.(0.52);
+              world?.addScreenShake?.(0.13, 0.10);
+            }
+          }
           const curSeg =
             heroModel?.handle?.getWeaponSegmentWorld?.() ||
             heroModel?.obj?.userData?.getWeaponSegmentWorld?.() ||

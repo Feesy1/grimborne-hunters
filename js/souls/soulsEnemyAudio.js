@@ -3,7 +3,7 @@
 // reinforcement, presence EQ to cut through orchestral boss music, transparent soft-limiter,
 // optional music ducking hook, anti-spam protection, and zero-dependency Web Audio fallbacks.
 
-const ASSET_VER = '20261124z95';
+const ASSET_VER = '20261124z96';
 
 export const SOULS_ENEMY_AUDIO_MANIFEST = Object.freeze({
   // New Pass-1 ElevenLabs / Studio Boss & Heavy Mob Assets (highest priority)

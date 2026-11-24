@@ -8,7 +8,7 @@
 //      + exact 30-FPS lip-sync curves (`BOSS_ESCAPE_VO_DURATIONS_SEC`, `sampleEscapeBossMouthOpen`)
 //   2. Lightweight filtered-noise environmental beds (chasm fall wind, river plunge, exterior shore river/waterfall).
 
-export const SOULS_ESCAPE_AUDIO_VERSION = '20261124z95';
+export const SOULS_ESCAPE_AUDIO_VERSION = '20261124z96';
 export const BOSS_ESCAPE_VO_COUNT = 3;
 export const BOSS_ESCAPE_LIPSYNC_FPS = 30;
 

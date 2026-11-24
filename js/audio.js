@@ -1,12 +1,12 @@
 // Procedural Web Audio API Dark-Fantasy Synthesizer + Abandoned Knight Rift Studio Audio Router
 // Instant startup, crisp dynamics, full suspend/mute compliance.
 
-import { createSoulsEnvAudio } from './souls/soulsEnvAudio.js?v=20261124z95';
-import { createSoulsHeroAudio } from './souls/soulsHeroAudio.js?v=20261124z95';
-import { createSoulsEnemyAudio } from './souls/soulsEnemyAudio.js?v=20261124z95';
-import { createSoulsMusicManager } from './souls/soulsMusicManager.js?v=20261124z95';
-import { createSoulsSpatialAudio } from './souls/soulsSpatialAudio.js?v=20261124z95';
-import { createSoulsEscapeAudio } from './souls/soulsEscapeAudio.js?v=20261124z95';
+import { createSoulsEnvAudio } from './souls/soulsEnvAudio.js?v=20261124z96';
+import { createSoulsHeroAudio } from './souls/soulsHeroAudio.js?v=20261124z96';
+import { createSoulsEnemyAudio } from './souls/soulsEnemyAudio.js?v=20261124z96';
+import { createSoulsMusicManager } from './souls/soulsMusicManager.js?v=20261124z96';
+import { createSoulsSpatialAudio } from './souls/soulsSpatialAudio.js?v=20261124z96';
+import { createSoulsEscapeAudio } from './souls/soulsEscapeAudio.js?v=20261124z96';
 
 export function createAudioEngine() {
   let ctx = null;
@@ -26,7 +26,7 @@ export function createAudioEngine() {
 
   function preloadExternalSamples(audioCtx) {
     if (!audioCtx || typeof fetch === 'undefined') return;
-    const stepVer = '20261124z95';
+    const stepVer = '20261124z96';
     const files = [
       ['step_warrior_1', `./assets/audio/step_warrior_1.wav?v=${stepVer}`],
       ['step_warrior_2', `./assets/audio/step_warrior_2.wav?v=${stepVer}`],
@@ -261,7 +261,7 @@ export function createAudioEngine() {
     getVoiceVolume: () => cutsceneVoiceVolume,
     getStoneReverbDest: () => getOrCreateStoneReverbSend(),
     duckMusic: (db, holdSec, relSec) => soulsMusic?.duck?.(db, holdSec, relSec),
-    assetVer: '20261124z95'
+    assetVer: '20261124z96'
   });
   soulsEscape.setMuted?.(muted);
   soulsEscape.setVoiceVolume?.(Math.max(0, Math.min(1.6, cutsceneVoiceVolume * 1.08)));
@@ -270,8 +270,8 @@ export function createAudioEngine() {
   // - rift_explore: Elden Castle Drone (Bonfire / Castle Corridor / East Alcove)
   // - boss_phase1/boss_phase2: unified Epic Boss Battle (God of War Style)
   // Routed directly to masterGain (bypassing retro 980Hz musicFilter lowpass!) with own musicVolume scaling
-  const SOULS_EXPLORE_TRACK_URL = './assets/audio/music_rift_explore.mp3?v=20261124z95';
-  const SOULS_BOSS_TRACK_URL = './assets/audio/music_boss_rift.mp3?v=20261124z95';
+  const SOULS_EXPLORE_TRACK_URL = './assets/audio/music_rift_explore.mp3?v=20261124z96';
+  const SOULS_BOSS_TRACK_URL = './assets/audio/music_boss_rift.mp3?v=20261124z96';
   let soulsAmbientActive = false;
   const soulsMusic = createSoulsMusicManager({
     getCtx: () => ctx,

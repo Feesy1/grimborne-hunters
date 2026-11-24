@@ -163,6 +163,11 @@ const EXTERIOR_STATIC_COLLIDERS = Object.freeze([
   { x:  3.85, z: 31.0, r: 1.48 },
   { x: -3.55, z: 29.3, r: 0.66 },
   { x:  3.55, z: 29.3, r: 0.66 },
+  // Collapsed Gothic Pilgrim Archway flanking piers (8.2m clear center walkway!)
+  { x: -4.4, z: 10.6, r: 1.05 },
+  { x:  3.8, z: 10.6, r: 1.05 },
+  // Carved Runic Waystone Monolith beside Shore Bonfire
+  { x: -5.0, z: 16.4, r: 0.72 },
   { x: -8.6, z:  0.8, r: 1.45 },
   { x: -9.4, z:  8.5, r: 1.55 },
   { x: -9.8, z: 18.8, r: 1.60 },
@@ -244,6 +249,7 @@ export const EXTERIOR_SHORE_ANCHORS = Object.freeze({
   wakePos: Object.freeze({ x: 0.0, y: evalExteriorGroundY(0.0, 2.5), z: 2.5 }),
   swordPos: Object.freeze({ x: 2.8, y: evalExteriorGroundY(2.8, 5.2), z: 5.2 }),
   bonfirePos: Object.freeze({ x: -2.2, y: evalExteriorGroundY(-2.2, 15.0), z: 15.0 }),
+  monolithPos: Object.freeze({ x: -5.0, y: evalExteriorGroundY(-5.0, 16.4), z: 16.4 }),
   gatePos: Object.freeze({ x: 0.0, y: evalExteriorGroundY(0.0, 31.0), z: 31.0 }),
   waterfallPos: Object.freeze({ x: 0.0, y: 0.0, z: -14.0 }),
   castlePos: Object.freeze({ x: 0.0, y: 18.0, z: -56.0 }),
@@ -539,13 +545,15 @@ function buildShorePebblePbr(THREE, size, anisotropy, trackTex) {
       const bh = hPix[p4] * (1 / 255);
       const gr = nGrain(u * 4, v * 4);
       const wet = nWet(u * 2, v * 2);
-      heightF[idx] = clamp01(bh * 0.85 + gr * 0.15);
-      aoF[idx] = clamp01(0.40 + bh * 0.60);
-      roughF[idx] = clamp01(lerp(0.88, 0.46 + (1.0 - wet) * 0.26, smoothstep(0.18, 0.72, bh)));
-      const grainMod = 0.86 + gr * 0.28;
-      aPix[p4]     = clamp(aPix[p4] * grainMod, 0, 255) | 0;
-      aPix[p4 + 1] = clamp(aPix[p4 + 1] * grainMod, 0, 255) | 0;
-      aPix[p4 + 2] = clamp(aPix[p4 + 2] * grainMod, 0, 255) | 0;
+      heightF[idx] = clamp01(bh * 0.72 + gr * 0.28);
+      aoF[idx] = clamp01(0.46 + bh * 0.54);
+      // Matte damp dark-fantasy coastal shingle & ash soil (ZERO plastic shiny brown ovals!)
+      roughF[idx] = clamp01(lerp(0.94, 0.72 + (1.0 - wet) * 0.18, smoothstep(0.22, 0.78, bh)));
+      // Cool slate-charcoal shift + fine grain variation so pebbles feel natural & earthy
+      const grainMod = 0.84 + gr * 0.28;
+      aPix[p4]     = clamp(aPix[p4] * 0.90 * grainMod + 10, 0, 255) | 0;
+      aPix[p4 + 1] = clamp(aPix[p4 + 1] * 0.96 * grainMod + 12, 0, 255) | 0;
+      aPix[p4 + 2] = clamp(aPix[p4 + 2] * 1.12 * grainMod + 16, 0, 255) | 0;
     }
   }
   ctx.putImageData(aImg, 0, 0);
@@ -590,14 +598,14 @@ function buildWetBasaltPbr(THREE, size, anisotropy, trackTex) {
       const by = r * rowH + 3 * sc;
       const bw = colW - 6 * sc;
       const bh = rowH - 6 * sc;
-      const base = 42 + Math.floor(rng() * 26);
-      const blu = base + 8 + Math.floor(rng() * 9);
-      const hv = Math.round(138 + rng() * 96);
+      const base = 64 + Math.floor(rng() * 34);
+      const blu = base + 10 + Math.floor(rng() * 12);
+      const hv = Math.round(145 + rng() * 94);
 
       const g = ctx.createLinearGradient(bx, by, bx, by + bh);
-      g.addColorStop(0, `rgb(${base + 14},${base + 16},${blu + 16})`);
-      g.addColorStop(0.52, `rgb(${base},${base + 2},${blu})`);
-      g.addColorStop(1, `rgb(${Math.max(16, base - 12)},${Math.max(18, base - 10)},${Math.max(22, blu - 8)})`);
+      g.addColorStop(0, `rgb(${base + 18},${base + 20},${blu + 20})`);
+      g.addColorStop(0.52, `rgb(${base},${base + 3},${blu})`);
+      g.addColorStop(1, `rgb(${Math.max(24, base - 16)},${Math.max(26, base - 14)},${Math.max(32, blu - 10)})`);
       ctx.fillStyle = g;
       ctx.fillRect(bx, by, bw, bh);
 
@@ -734,12 +742,12 @@ function buildNaturalCliffPbr(THREE, size, anisotropy, trackTex) {
       const mossMask = smoothstep(0.58, 0.84, mossNoise) * smoothstep(0.36, 0.74, hVal);
       const wetStreak = smoothstep(0.56, 0.84, nStrata(u * 5, v * 1));
 
-      let r = lerp(26, 70, hVal) * (0.85 + fine * 0.30);
-      let g = lerp(30, 76, hVal) * (0.85 + fine * 0.30);
-      let b = lerp(39, 92, hVal) * (0.85 + fine * 0.30);
-      r = lerp(r, 34, mossMask * 0.62);
-      g = lerp(g, 58, mossMask * 0.62);
-      b = lerp(b, 42, mossMask * 0.62);
+      let r = lerp(42, 102, hVal) * (0.86 + fine * 0.28);
+      let g = lerp(48, 112, hVal) * (0.86 + fine * 0.28);
+      let b = lerp(60, 134, hVal) * (0.86 + fine * 0.28);
+      r = lerp(r, 44, mossMask * 0.65);
+      g = lerp(g, 78, mossMask * 0.65);
+      b = lerp(b, 50, mossMask * 0.65);
 
       aPix[p4]     = clamp(r, 0, 255) | 0;
       aPix[p4 + 1] = clamp(g, 0, 255) | 0;
@@ -3710,12 +3718,12 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
         float edgeY = smoothstep(0.0, 0.24, vUv.y) * (1.0 - smoothstep(0.50, 1.0, vUv.y));
         float density = smoothstep(0.28, 0.74, n) * edgeX * edgeY;
         if (density < 0.01) discard;
-        // Moonlit silvery cloud crests on top + brooding indigo valley shadow underneath!
+        // Subtle brooding twilight mountain mist hugging the crag (NEVER a flat solid grey cut!)
         float moonSide = smoothstep(0.95, 0.10, vUv.x);
-        vec3 shadowCol = vec3(0.055, 0.078, 0.132);
-        vec3 silverRim = vec3(0.42, 0.56, 0.80);
-        vec3 col = mix(shadowCol, silverRim, clamp(vUv.y * 0.88 + moonSide * 0.38 * n, 0.0, 1.0));
-        gl_FragColor = vec4(col, density * 0.68);
+        vec3 shadowCol = vec3(0.035, 0.055, 0.098);
+        vec3 silverRim = vec3(0.24, 0.35, 0.54);
+        vec3 col = mix(shadowCol, silverRim, clamp(vUv.y * 0.78 + moonSide * 0.32 * n, 0.0, 1.0));
+        gl_FragColor = vec4(col, density * 0.36);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }
@@ -3833,32 +3841,61 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     const pos = geo.attributes.position;
     const uv = geo.attributes.uv;
     const cols = new Float32Array(pos.count * 3);
-    const cDry = new THREE.Color(0x6d7588);
-    const cWet = new THREE.Color(0x343c4d);
-    const cPath = new THREE.Color(0x7e8598);
-    const cMoss = new THREE.Color(0x46584a);
-    const cCliff = new THREE.Color(0x2b3242);
+    const cDry = new THREE.Color(0x7c869c);
+    const cWet = new THREE.Color(0x3a465c);
+    const cPath = new THREE.Color(0x9aa3b8);
+    const cMoss = new THREE.Color(0x4b6850);
+    const cCliff = new THREE.Color(0x3a455a);
+    const cWarmFire = new THREE.Color(0xffa44a);
     const cTmp = new THREE.Color();
+
+    // Zero-PointLight Baked Warm Firelight Radiance Pools (Club Lantern, 4 Road Lanterns, Pier Lantern, Twin Gate Braziers)
+    const bakedWarmPools = [
+      { x:  2.80, z:  5.20, r: 4.0, w: 0.48 }, // Great Club Watch-Camp Storm-Lantern
+      { x: -3.60, z:  8.20, r: 3.6, w: 0.42 }, // Pilgrim Lantern #1 (West Road)
+      { x:  6.20, z:  9.80, r: 3.4, w: 0.36 }, // Wooden River Jetty Lantern
+      { x:  3.20, z: 13.80, r: 3.6, w: 0.42 }, // Pilgrim Lantern #2 (East Road)
+      { x: -2.20, z: 15.00, r: 4.8, w: 0.28 }, // Shore Bonfire Hearth Warm Embers
+      { x: -4.40, z: 21.60, r: 3.6, w: 0.42 }, // Pilgrim Lantern #3 (Graveyard Path)
+      { x:  3.40, z: 24.40, r: 3.6, w: 0.42 }, // Pilgrim Lantern #4 (Gate Approach)
+      { x: -3.55, z: 29.30, r: 5.5, w: 0.62 }, // Left Ash Gorge Gate Brazier
+      { x:  3.55, z: 29.30, r: 5.5, w: 0.62 }  // Right Ash Gorge Gate Brazier
+    ];
 
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i);
       const z = pos.getZ(i);
       const y = evalExteriorGroundY(x, z);
       pos.setY(i, y);
-      uv.setXY(i, x * 0.25, z * 0.25);
+      // Higher-frequency crisp gravel & shingle UV tiling (no football-sized pebbles!)
+      uv.setXY(i, x * 0.46, z * 0.46);
 
       const rDist = getRiverSignedDist(x, z);
-      const wetT = 1.0 - smoothstep(-0.3, 2.7, rDist);
-      const pathT = (z >= 4.0 && z <= 33.5) ? (1.0 - smoothstep(1.2, 2.8, Math.abs(x - getPathCenterX(z)))) : 0.0;
-      const cliffT = smoothstep(0.85, 3.2, y);
+      const wetT = 1.0 - smoothstep(-0.2, 2.5, rDist);
+      const pathT = (z >= 4.0 && z <= 33.5) ? (1.0 - smoothstep(1.25, 3.0, Math.abs(x - getPathCenterX(z)))) : 0.0;
+      const cliffT = smoothstep(0.95, 3.4, y);
       const mossNoise = clamp01(0.5 + 0.5 * Math.sin(x * 0.55 + z * 0.37) * Math.cos(z * 0.41 - x * 0.28));
-      const mossT = smoothstep(0.52, 0.86, mossNoise) * (1.0 - pathT) * (1.0 - wetT) * smoothstep(0.14, 0.9, y);
+      const mossT = smoothstep(0.45, 0.82, mossNoise) * (1.0 - pathT) * (1.0 - wetT) * smoothstep(0.12, 0.9, y);
 
       cTmp.copy(cDry);
-      cTmp.lerp(cPath, pathT * 0.65);
-      cTmp.lerp(cMoss, mossT * 0.55);
-      cTmp.lerp(cWet, wetT * 0.86);
-      cTmp.lerp(cCliff, cliffT * 0.86);
+      cTmp.lerp(cPath, pathT * 0.62);
+      cTmp.lerp(cMoss, mossT * 0.65);
+      cTmp.lerp(cWet, wetT * 0.80);
+      cTmp.lerp(cCliff, cliffT * 0.72);
+
+      // Accumulate soft warm amber firelight spill onto surrounding stones & flagstones
+      let warmSum = 0.0;
+      for (let pi = 0; pi < bakedWarmPools.length; pi++) {
+        const bp = bakedWarmPools[pi];
+        const d = Math.hypot(x - bp.x, z - bp.z);
+        if (d < bp.r) {
+          const f = 1.0 - d / bp.r;
+          warmSum += f * f * bp.w;
+        }
+      }
+      if (warmSum > 0.005) {
+        cTmp.lerp(cWarmFire, Math.min(0.75, warmSum));
+      }
       cols[i * 3]     = cTmp.r;
       cols[i * 3 + 1] = cTmp.g;
       cols[i * 3 + 2] = cTmp.b;
@@ -3872,16 +3909,34 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   shoreTerrainMesh.receiveShadow = true;
   exteriorGroup.add(shoreTerrainMesh);
 
-  // Ancient Half-Buried Weathered Flagstone Stepping Slabs along the Coastal Trail (wakePos -> bonfire -> gate)
+  // Ancient Broken Mossy Gothic Pilgrim Flagstones & Road Curbing (irregular weathered stones — ZERO uniform waffle grid!)
   const pathSlabParts = [];
-  for (let pz = 5.4; pz <= 30.2; pz += 1.65) {
-    const cx = getPathCenterX(pz) + (extRng() - 0.5) * 0.52;
-    const gy = evalExteriorGroundY(cx, pz);
-    const sw = 1.25 + extRng() * 0.72;
-    const sd = 0.88 + extRng() * 0.52;
-    const slab = new THREE.BoxGeometry(sw, 0.14, sd);
-    xformGeo(slab, cx, gy - 0.025, pz, (extRng() - 0.5) * 0.04, (extRng() - 0.5) * 0.35, (extRng() - 0.5) * 0.04);
-    pathSlabParts.push(tintGeo(THREE, slab, 0x8a92a8, 0x454c5e));
+  for (let pz = 5.6; pz <= 30.2; pz += 1.45) {
+    const basePx = getPathCenterX(pz);
+    const slabsInRow = extRng() < 0.45 ? 2 : 1;
+    for (let si = 0; si < slabsInRow; si++) {
+      const cx = basePx + (slabsInRow === 2 ? (si === 0 ? -0.68 : 0.68) : 0) + (extRng() - 0.5) * 0.42;
+      const cz = pz + (extRng() - 0.5) * 0.34;
+      const gy = evalExteriorGroundY(cx, cz);
+      const sw = (slabsInRow === 2 ? 0.86 : 1.38) + extRng() * 0.46;
+      const sd = 0.72 + extRng() * 0.46;
+      const slab = new THREE.CylinderGeometry(Math.max(sw, sd) * 0.52, Math.max(sw, sd) * 0.56, 0.14, 6);
+      slab.scale(sw / Math.max(sw, sd), 1.0, sd / Math.max(sw, sd));
+      xformGeo(slab, cx, gy - 0.025, cz, (extRng() - 0.5) * 0.05, extRng() * 1.4, (extRng() - 0.5) * 0.05);
+      pathSlabParts.push(tintGeo(THREE, slab, extRng() < 0.35 ? 0x7e9482 : 0x9aa6be, 0x4c566b));
+    }
+    // Low weathered stone kerb blocks lining the road edges every other step
+    if (Math.floor(pz) % 3 === 0 && pz >= 7.5 && pz <= 27.5) {
+      for (const side of [-1, 1]) {
+        const kx = basePx + side * (2.05 + extRng() * 0.35);
+        const kz = pz + (extRng() - 0.5) * 0.5;
+        const kgy = evalExteriorGroundY(kx, kz);
+        if (kgy < WATER_LEVEL + 0.08) continue;
+        const kerb = new THREE.BoxGeometry(0.32 + extRng() * 0.14, 0.26 + extRng() * 0.12, 0.68 + extRng() * 0.28);
+        xformGeo(kerb, kx, kgy + 0.05, kz, (extRng() - 0.5) * 0.14, (extRng() - 0.5) * 0.28, side * 0.08);
+        pathSlabParts.push(tintGeo(THREE, kerb, 0x8d9cb6, 0x454f63));
+      }
+    }
   }
   const extAshlarMat = regNormalMat(
     trackMat(new THREE.MeshStandardMaterial({
@@ -3892,9 +3947,9 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
       aoMap: basaltPbr.orm,
       aoMapIntensity: 0.74,
       vertexColors: true,
-      color: 0xc2cce2,
-      roughness: 0.90,
-      metalness: 0.06
+      color: 0xc4d8f6,
+      roughness: 0.85,
+      metalness: 0.07
     })),
     basaltPbr.normal
   );
@@ -4009,66 +4064,84 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
       }
 
       void main() {
-        float t = uTime * 1.95;
-        vec2 fUvA = vec2(vUv.x * 7.8, vUv.y * 2.5 - t);
-        vec2 fUvB = vec2(vUv.x * 13.5 + 3.4, vUv.y * 4.6 - t * 1.55);
+        float t = uTime * 1.45;
+        // World-space isotropic multi-octave mountain-stream ripples (ZERO UV-stretched clay bands!)
+        vec2 wp = vWorldPos.xz;
+        vec2 fUvA = vec2(wp.x * 1.15, wp.y * 0.88 - t * 1.85);
+        vec2 fUvB = vec2(wp.x * 2.65 + 4.1, wp.y * 2.15 - t * 2.85);
+        vec2 fUvC = vec2(wp.x * 5.8 - 2.3, wp.y * 4.9 - t * 3.7);
         float n1 = uLowSpec < 0.5 ? fbm3(fUvA) : fbm2(fUvA);
-        float n2 = uLowSpec < 0.5 ? fbm3(fUvB + vec2(n1 * 0.9, -t * 0.35)) : fbm2(fUvB);
-        float rpl = n1 * 0.54 + n2 * 0.46;
+        float n2 = uLowSpec < 0.5 ? fbm3(fUvB + vec2(n1 * 0.55, -t * 0.4)) : fbm2(fUvB);
+        float n3 = vnoise(fUvC + vec2(n2 * 0.7));
+        float rpl = n1 * 0.42 + n2 * 0.38 + n3 * 0.20;
 
-        // Crisp fine-scale river ripple normal (zero thick grey clay sausages!)
-        float eps = 0.09;
-        float hX = fbm2(fUvA + vec2(eps, 0.0)) * 0.54 + fbm2(fUvB + vec2(eps * 1.5, 0.0)) * 0.46;
-        float hZ = fbm2(fUvA + vec2(0.0, eps)) * 0.54 + fbm2(fUvB + vec2(0.0, eps * 1.5)) * 0.46;
-        vec3 N = normalize(vec3((rpl - hX) * 2.25, 1.0, (rpl - hZ) * 2.55));
+        // Crisp fine-scale liquid normal for realistic faceted moonlight & firelight reflections!
+        float eps = 0.075;
+        float hX = fbm2(fUvA + vec2(eps, 0.0)) * 0.42 + fbm2(fUvB + vec2(eps * 2.2, 0.0)) * 0.38 + vnoise(fUvC + vec2(eps * 4.8, 0.0)) * 0.20;
+        float hZ = fbm2(fUvA + vec2(0.0, eps)) * 0.42 + fbm2(fUvB + vec2(0.0, eps * 2.2)) * 0.38 + vnoise(fUvC + vec2(0.0, eps * 4.8)) * 0.20;
+        vec3 N = normalize(vec3((rpl - hX) * 2.85, 1.0, (rpl - hZ) * 2.85));
         vec3 V = normalize(cameraPosition - vWorldPos);
-        float fres = pow(1.0 - max(dot(N, V), 0.0), 4.2);
+        float fres = pow(1.0 - max(dot(N, V), 0.0), 4.6);
 
-        // Deep matte nocturnal slate-obsidian mountain river reflecting moonlit indigo sky
-        vec3 deepCol = vec3(0.005, 0.010, 0.019);
-        vec3 midCol  = vec3(0.014, 0.025, 0.042);
-        vec3 skyRefl = vec3(0.11, 0.17, 0.28);
+        // Deep glassy nocturnal obsidian mountain river reflecting moonlit indigo sky & lantern gold!
+        vec3 deepCol = vec3(0.004, 0.010, 0.022);
+        vec3 midCol  = vec3(0.012, 0.026, 0.052);
+        vec3 skyRefl = vec3(0.11, 0.19, 0.34);
         vec3 col = mix(deepCol, midCol, rpl * 0.55);
-        col = mix(col, skyRefl, fres * 0.48);
+        col = mix(col, skyRefl, fres * 0.52);
 
-        // Shimmering Silver Moonlight Path (лунная дорожка) dancing down the dark water!
+        // Razor-sharp sparkling Silver Moonlight Glints dancing along tiny wavelets!
         vec3 moonL = normalize(vec3(-0.27, 0.43, -0.861));
         vec3 Hm = normalize(moonL + V);
-        float moonSharp = pow(max(dot(N, Hm), 0.0), 120.0);
-        float moonPath  = pow(max(dot(N, Hm), 0.0), 22.0) * (0.14 + 0.16 * smoothstep(0.45, 0.85, n2));
-        col += vec3(0.76, 0.88, 1.08) * (moonSharp * 1.45 + moonPath);
+        float moonSparkle = pow(max(dot(N, Hm), 0.0), 210.0) * 2.45;
+        float moonSheen   = pow(max(dot(N, Hm), 0.0), 46.0) * (0.06 + 0.14 * smoothstep(0.50, 0.86, n3));
+        col += vec3(0.76, 0.90, 1.15) * (moonSparkle + moonSheen);
 
-        // Warm amber reflection glint when Shore Bonfire is lit + subtle gate brazier reflection near z=29!
+        // Warm amber reflections dancing across the dark water from:
+        //   1) Shore Bonfire (when lit), 2) Pier Lantern (8.1, 9.8), 3) Club Camp Lantern (3.1, 4.7), 4) Gate Brazier
         if (uBonfireLit > 0.01) {
           vec3 bPos = vec3(-2.2, 1.8, 15.0);
           vec3 Lb = bPos - vWorldPos;
           float bd = length(Lb);
           vec3 Hb = normalize(normalize(Lb) + V);
-          float bSpec = pow(max(dot(N, Hb), 0.0), 28.0) * exp(-bd * 0.105) * uBonfireLit;
-          col += vec3(1.30, 0.52, 0.12) * bSpec * 1.15;
+          float bSpec = pow(max(dot(N, Hb), 0.0), 42.0) * exp(-bd * 0.095) * uBonfireLit;
+          col += vec3(1.55, 0.66, 0.15) * bSpec * 1.45;
         }
+        vec3 pPos = vec3(8.1, 2.1, 8.7);
+        vec3 Lp = pPos - vWorldPos;
+        float pd = length(Lp);
+        vec3 Hp = normalize(normalize(Lp) + V);
+        float pSpec = pow(max(dot(N, Hp), 0.0), 34.0) * exp(-pd * 0.18);
+        col += vec3(1.45, 0.72, 0.20) * pSpec * 1.35;
+
+        vec3 cPos = vec3(3.16, 1.6, 4.72);
+        vec3 Lc = cPos - vWorldPos;
+        float cd = length(Lc);
+        vec3 Hc = normalize(normalize(Lc) + V);
+        float cSpec = pow(max(dot(N, Hc), 0.0), 36.0) * exp(-cd * 0.18);
+        col += vec3(1.35, 0.68, 0.18) * cSpec * 1.10;
+
         vec3 gPos = vec3(3.55, 2.4, 29.3);
         vec3 Lg = gPos - vWorldPos;
         float gd = length(Lg);
         vec3 Hg = normalize(normalize(Lg) + V);
-        float gSpec = pow(max(dot(N, Hg), 0.0), 30.0) * exp(-gd * 0.12);
-        col += vec3(1.05, 0.42, 0.10) * gSpec * 0.68;
+        float gSpec = pow(max(dot(N, Hg), 0.0), 38.0) * exp(-gd * 0.12);
+        col += vec3(1.20, 0.52, 0.14) * gSpec * 0.90;
 
-        // Crisp churning plunge-pool whitewater + lacy dynamic shoreline lap foam + longitudinal current streaks!
+        // Delicate crisp shoreline foam lace ONLY on immediate water rim + localized waterfall plunge whitewater!
         float poolD = length(vWorldPos.xz - vec2(0.3, -10.8));
-        float poolFoam = exp(-poolD * poolD * 0.058) * smoothstep(0.28, 0.72, n2 * 0.65 + n1 * 0.35) * 1.12;
+        float poolFoam = exp(-poolD * poolD * 0.115) * smoothstep(0.42, 0.80, n2 * 0.58 + n3 * 0.42) * 0.78;
         float shoreEdge = min(vUv.x, 1.0 - vUv.x);
-        float lapWave = sin(uTime * 2.3 + vUv.y * 2.8) * 0.025;
-        float bankBand = 1.0 - smoothstep(0.05, 0.17 + lapWave, shoreEdge);
-        float bankFoam = bankBand * smoothstep(0.36, 0.76, n2 * 0.7 + n1 * 0.3) * 0.88;
-        float streamUv = vnoise(vec2(vUv.x * 11.0 + n1 * 0.9, vUv.y * 0.95 - t * 0.72));
-        float rapidsFoam = smoothstep(0.68, 0.90, streamUv * 0.62 + n2 * 0.45) * 0.48;
-        float foam = clamp(poolFoam + bankFoam + rapidsFoam, 0.0, 0.92);
-        col = mix(col, vec3(0.68, 0.80, 0.94), foam * 0.82);
+        float lapWave = sin(uTime * 2.4 + wp.y * 0.75) * 0.008;
+        float bankBand = 1.0 - smoothstep(0.016, 0.064 + lapWave, shoreEdge);
+        float bankFoam = bankBand * smoothstep(0.52, 0.84, n2 * 0.55 + n3 * 0.45) * 0.48;
+        float rapidsFoam = smoothstep(0.80, 0.95, n2 * 0.52 + n3 * 0.48) * 0.18;
+        float foam = clamp(poolFoam + bankFoam + rapidsFoam, 0.0, 0.72);
+        col = mix(col, vec3(0.58, 0.72, 0.88), foam * 0.62);
 
-        // Smooth natural water shoreline alpha (blends seamlessly onto wet glossy shingle!)
-        float edgeAlpha = smoothstep(0.015, 0.11, shoreEdge);
-        float alpha = clamp(edgeAlpha * (0.90 + foam * 0.10), 0.0, 0.96);
+        // Smooth natural water shoreline alpha (blends seamlessly onto wet shingle!)
+        float edgeAlpha = smoothstep(0.015, 0.10, shoreEdge);
+        float alpha = clamp(edgeAlpha * (0.92 + foam * 0.08), 0.0, 0.96);
         if (alpha < 0.01) discard;
 
         gl_FragColor = vec4(col, alpha);
@@ -4260,10 +4333,10 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     const c = cliffMassSpecs[i];
     const g = buildCraggyCliffMassGeo(THREE, c.rx, c.ry, c.rz, c.seed, rockDetail, {
       flatTop: c.flatTop,
-      topHex: 0x586680,
-      midHex: 0x2c3446,
-      botHex: 0x131722,
-      mossHex: 0x2d4335
+      topHex: 0x7c8eae,
+      midHex: 0x45526c,
+      botHex: 0x22293a,
+      mossHex: 0x3f5e46
     });
     xformGeo(g, c.x, c.y, c.z, 0, extRng() * 6.28, 0);
     basaltParts.push(g);
@@ -4945,13 +5018,32 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   bonfireCoals.position.y = 0.33;
   bonfireGroup.add(bonfireCoals);
 
-  // Reusable Volumetric 3D FBM Fire Assembly (4 intersecting sculpted licking sheets for rich 360° flames!)
+  // Reusable Volumetric Multi-Tongue Souls Fire Assembly (6 offset curved flame sheets + soft amber haze orb -> ZERO white-cone X-seam!)
   function createFlameAssemblyMesh(scaleW, scaleH, litUniformRef) {
+    const group = new THREE.Group();
     const flameParts = [];
-    for (let k = 0; k < 4; k++) {
-      const plane = new THREE.PlaneGeometry(scaleW, scaleH, 6, 12);
-      plane.translate(0, scaleH * 0.5, 0);
-      plane.rotateY((k / 4) * Math.PI);
+    const sheetSpecs = [
+      { w: scaleW * 1.00, h: scaleH * 1.04, ry: 0.00, ox:  0.00, oz:  0.00 },
+      { w: scaleW * 0.94, h: scaleH * 0.96, ry: 1.05, ox:  0.05, oz: -0.04 },
+      { w: scaleW * 0.92, h: scaleH * 0.98, ry: 2.10, ox: -0.05, oz:  0.04 },
+      { w: scaleW * 0.72, h: scaleH * 1.18, ry: 0.52, ox:  0.09, oz:  0.07 },
+      { w: scaleW * 0.70, h: scaleH * 1.12, ry: 1.57, ox: -0.09, oz: -0.06 },
+      { w: scaleW * 0.68, h: scaleH * 0.86, ry: 2.62, ox:  0.02, oz: -0.09 }
+    ];
+    for (let k = 0; k < sheetSpecs.length; k++) {
+      const sp = sheetSpecs[k];
+      const plane = new THREE.PlaneGeometry(sp.w, sp.h, 6, 12);
+      // Slight organic cylindrical bow so flames look round & volumetric from every angle
+      const pp = plane.attributes.position;
+      for (let vi = 0; vi < pp.count; vi++) {
+        const lx = pp.getX(vi);
+        const ly = pp.getY(vi);
+        const bow = (1.0 - Math.min(1.0, (lx / (sp.w * 0.5)) ** 2)) * sp.w * 0.14;
+        pp.setZ(vi, bow);
+        pp.setY(vi, ly + sp.h * 0.5);
+      }
+      plane.rotateY(sp.ry);
+      plane.translate(sp.ox, 0, sp.oz);
       flameParts.push(plane);
     }
     const geo = trackGeo(mergeNonIndexedGeos(THREE, flameParts));
@@ -4964,22 +5056,28 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
         uniform float uTime;
         uniform float uLit;
         varying vec2 vUv;
+        varying vec3 vWorldPos;
         void main() {
           vUv = uv;
           vec3 p = position;
           float h = clamp(uv.y, 0.0, 1.0);
-          float sway = sin(uTime * 7.6 - h * 5.4 + p.x * 3.2) * 0.18 * h * h;
-          float swayZ = cos(uTime * 6.4 - h * 4.6 + p.z * 3.2) * 0.14 * h * h;
-          p.x = p.x * (1.0 - h * 0.50) + sway;
-          p.z = p.z * (1.0 - h * 0.50) + swayZ;
-          p.y *= (0.20 + 0.80 * uLit);
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+          float phase = p.x * 4.5 + p.z * 3.8;
+          float swayX = (sin(uTime * 6.8 - h * 6.2 + phase) * 0.18 + sin(uTime * 11.4 - h * 9.0) * 0.06) * h * h;
+          float swayZ = (cos(uTime * 5.9 - h * 5.5 - phase) * 0.16 + cos(uTime * 9.8 - h * 8.2) * 0.05) * h * h;
+          float taper = 1.0 - smoothstep(0.15, 1.0, h) * 0.68;
+          p.x = p.x * taper + swayX;
+          p.z = p.z * taper + swayZ;
+          p.y *= (0.15 + 0.85 * uLit);
+          vec4 wp = modelMatrix * vec4(p, 1.0);
+          vWorldPos = wp.xyz;
+          gl_Position = projectionMatrix * viewMatrix * wp;
         }
       `,
       fragmentShader: `
         uniform float uTime;
         uniform float uLit;
         varying vec2 vUv;
+        varying vec3 vWorldPos;
         float hash21(vec2 p) {
           p = fract(p * vec2(127.1, 311.7));
           p += dot(p, p + 34.53);
@@ -4998,17 +5096,21 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
         void main() {
           if (uLit < 0.02) discard;
           float cx = abs(vUv.x - 0.5) * 2.0;
-          float n1 = vnoise(vec2(vUv.x * 5.0, vUv.y * 4.2 - uTime * 4.2));
-          float n2 = vnoise(vec2(vUv.x * 10.5 + 2.1, vUv.y * 8.6 - uTime * 7.2));
-          float turb = n1 * 0.58 + n2 * 0.42;
-          float shape = (1.0 - cx * cx * (1.28 + vUv.y * 1.15)) * (1.0 - smoothstep(0.24, 0.98, vUv.y + (turb - 0.48) * 0.55));
-          float mask = smoothstep(0.18, 0.64, shape + (turb - 0.46) * 0.42) * smoothstep(0.0, 0.12, vUv.y);
+          float seed = fract(sin(dot(floor(vWorldPos.xz * 2.5), vec2(12.9898, 78.233))) * 43758.5453);
+          float n1 = vnoise(vec2(vUv.x * 4.4 + seed * 3.0, vUv.y * 3.8 - uTime * 3.8));
+          float n2 = vnoise(vec2(vUv.x * 9.8 - seed * 2.0, vUv.y * 7.8 - uTime * 6.8));
+          float n3 = vnoise(vec2(vUv.x * 16.0, vUv.y * 12.0 - uTime * 9.5));
+          float turb = n1 * 0.48 + n2 * 0.34 + n3 * 0.18;
+          // Distinct separated licking fire tongues (zero solid triangle cone!)
+          float tongueCut = smoothstep(0.24, 0.82, turb + (1.0 - vUv.y) * 0.42 - cx * cx * 0.92);
+          float verticalEnv = smoothstep(0.0, 0.14, vUv.y) * (1.0 - smoothstep(0.32, 0.98, vUv.y + (0.52 - turb) * 0.65));
+          float mask = tongueCut * verticalEnv;
           if (mask < 0.02) discard;
-          // Rich Dark-Fantasy Amber-Crimson-Gold Fire Tongues (keeps vivid orange-red edges, compact bright core!)
-          float temp = clamp(mask * (1.02 - vUv.y * 0.82), 0.0, 1.0);
-          vec3 col = mix(vec3(0.95, 0.12, 0.015), vec3(1.85, 0.58, 0.07), smoothstep(0.12, 0.52, temp));
-          col = mix(col, vec3(2.35, 1.75, 0.78), smoothstep(0.68, 0.98, temp));
-          gl_FragColor = vec4(col, mask * 0.88 * uLit);
+          // Rich crimson-ember outer tongues -> vivid blazing Souls orange -> warm compact amber-gold heart (never clipped white!)
+          float heat = clamp(mask * (1.08 - vUv.y * 0.88) + (turb - 0.5) * 0.25, 0.0, 1.0);
+          vec3 col = mix(vec3(0.72, 0.08, 0.008), vec3(1.18, 0.34, 0.03), smoothstep(0.08, 0.50, heat));
+          col = mix(col, vec3(1.48, 0.86, 0.24), smoothstep(0.56, 0.94, heat));
+          gl_FragColor = vec4(col, mask * 0.42 * uLit);
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
         }
@@ -5020,8 +5122,114 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     }));
     const m = new THREE.Mesh(geo, mat);
     m.renderOrder = 4;
-    return m;
+    group.add(m);
+
+    // Soft additive warm atmospheric fire-haze billboard halo (adds lush volumetric aura around the flames!)
+    const haloMat = trackMat(new THREE.ShaderMaterial({
+      uniforms: { uTime: extSkyUniforms.uTime, uLit: litUniformRef },
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          vec4 mv = modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+          mv.xy += position.xy;
+          gl_Position = projectionMatrix * mv;
+        }
+      `,
+      fragmentShader: `
+        uniform float uTime;
+        uniform float uLit;
+        varying vec2 vUv;
+        void main() {
+          if (uLit < 0.02) discard;
+          float d = length(vUv * 2.0 - 1.0);
+          if (d > 1.0) discard;
+          float flick = 0.86 + 0.14 * sin(uTime * 8.3) * cos(uTime * 5.7);
+          float g = exp(-d * d * 4.2) * (1.0 - smoothstep(0.62, 1.0, d));
+          vec3 col = mix(vec3(0.95, 0.26, 0.04), vec3(1.25, 0.62, 0.16), exp(-d * d * 6.0));
+          gl_FragColor = vec4(col * flick, g * 0.34 * uLit);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    }));
+    const halo = new THREE.Mesh(trackGeo(new THREE.PlaneGeometry(scaleW * 2.5, scaleH * 1.9)), haloMat);
+    halo.position.y = scaleH * 0.44;
+    halo.renderOrder = 3;
+    group.add(halo);
+    return group;
   }
+
+  // Terrain-Conforming Flickering Warm Firelight Ground Pool Decal (ZERO PointLights -> ZERO shader hitches!)
+  function addWarmGroundPool(px, pz, radius, colorRgb, strength, litUniformRef, phaseOff = 0) {
+    const segs = isMobile ? 4 : 6;
+    const g = new THREE.PlaneGeometry(radius * 2, radius * 2, segs, segs);
+    g.rotateX(-Math.PI * 0.5);
+    const p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const wx = px + p.getX(i);
+      const wz = pz + p.getZ(i);
+      p.setXYZ(i, wx, evalExteriorGroundY(wx, wz) + 0.048, wz);
+    }
+    const mat = trackMat(new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: extSkyUniforms.uTime,
+        uLit: litUniformRef,
+        uCol: { value: new THREE.Vector3(colorRgb[0], colorRgb[1], colorRgb[2]) },
+        uStr: { value: strength },
+        uPhase: { value: phaseOff }
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        varying float vGroundY;
+        void main() {
+          vUv = uv;
+          vGroundY = position.y;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float uTime;
+        uniform float uLit;
+        uniform vec3 uCol;
+        uniform float uStr;
+        uniform float uPhase;
+        varying vec2 vUv;
+        varying float vGroundY;
+        void main() {
+          if (uLit < 0.01) discard;
+          float dryMask = smoothstep(-0.28, -0.02, vGroundY);
+          if (dryMask < 0.01) discard;
+          float d = length(vUv * 2.0 - 1.0);
+          if (d > 1.0) discard;
+          float flick = 0.88 + 0.12 * sin(uTime * 6.4 + uPhase) * cos(uTime * 4.1 - uPhase * 0.7);
+          float fall = pow(max(0.0, 1.0 - d), 2.15) * (1.0 - smoothstep(0.72, 1.0, d));
+          gl_FragColor = vec4(uCol * flick, fall * uStr * uLit * dryMask);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    }));
+    const mesh = new THREE.Mesh(trackGeo(g), mat);
+    mesh.renderOrder = 2;
+    exteriorGroup.add(mesh);
+    return mesh;
+  }
+
+  const alwaysOneUniform = { value: 1.0 };
+  // Warm flickering firelight pool under the Shore Bonfire (activates seamlessly when lit!)
+  addWarmGroundPool(bx, bz, 5.8, [1.05, 0.42, 0.08], 0.46, bonfireCoalsUniforms.uLit, 0.7);
+  // Subtle permanent dying-ember glow under unlit bonfire so player spots the sanctuary immediately!
+  addWarmGroundPool(bx, bz, 2.6, [0.85, 0.34, 0.08], 0.16, alwaysOneUniform, 1.3);
+  // Warm flickering firelight pools under BOTH Ash Gorge Gate Braziers!
+  addWarmGroundPool(-3.55, 29.3, 5.2, [1.10, 0.44, 0.10], 0.48, alwaysOneUniform, 2.1);
+  addWarmGroundPool( 3.55, 29.3, 5.2, [1.10, 0.44, 0.10], 0.48, alwaysOneUniform, 4.3);
 
   const bonfireFlameMesh = createFlameAssemblyMesh(1.18, 1.72, bonfireCoalsUniforms.uLit);
   bonfireFlameMesh.position.y = 0.28;
@@ -5190,21 +5398,14 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
       xformGeo(new THREE.CylinderGeometry(0.055, 0.19, tr.h * 0.52, 6), midX, midY + tr.h * 0.22, midZ, tr.leanZ * 1.4, tr.ry + 0.5, -tr.leanX * 1.3),
       0x48424a, 0x201d24
     ));
-    // 5 Primary wind-bent branches + secondary skeletal twigs!
+    // 5 Primary wind-bent branches tucked naturally inside the pine canopy!
     for (let b = 0; b < 5; b++) {
       const ba = tr.ry + b * 1.32 + 0.35;
-      const bh = midY + (b - 1.2) * tr.h * 0.13;
-      const blen = 1.65 + (b % 2) * 1.05;
-      const tipX = midX + Math.cos(ba) * blen * 0.85;
-      const tipY = bh + 0.32;
-      const tipZ = midZ + Math.sin(ba) * blen * 0.85;
-      const br = new THREE.CylinderGeometry(0.024, 0.085, blen, 5);
-      xformGeo(br, midX + Math.cos(ba) * blen * 0.42, bh, midZ + Math.sin(ba) * blen * 0.42, Math.sin(ba) * 1.15, ba, Math.cos(ba) * 1.15);
+      const bh = midY + (b - 1.4) * tr.h * 0.11;
+      const blen = 0.85 + (b % 2) * 0.42;
+      const br = new THREE.CylinderGeometry(0.028, 0.078, blen, 5);
+      xformGeo(br, midX + Math.cos(ba) * blen * 0.40, bh, midZ + Math.sin(ba) * blen * 0.40, Math.sin(ba) * 1.25, ba, Math.cos(ba) * 1.25);
       deadTreeParts.push(tintGeo(THREE, br, 0x48444e, 0x1f1d24));
-      // Secondary forked twig
-      const twig = new THREE.CylinderGeometry(0.012, 0.036, blen * 0.55, 4);
-      xformGeo(twig, tipX, tipY, tipZ, Math.sin(ba + 0.6) * 0.85, ba + 0.6, Math.cos(ba + 0.6) * 0.85);
-      deadTreeParts.push(tintGeo(THREE, twig, 0x4d4a56, 0x222028));
     }
   }
   const deadTreeMat = regNormalMat(
@@ -5216,7 +5417,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
       roughness: 0.94,
       metalness: 0.03,
       vertexColors: true,
-      color: 0x868a9a
+      color: 0xb4b6c4
     })),
     barkPbr.normal
   );
@@ -5454,6 +5655,508 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     bannerClothMat
   );
   exteriorGroup.add(bannerClothMesh);
+
+  // --------------------------------------------------------------------------
+  // C8b. z96 AAA STARTING LOCATION OVERHAUL — Architectural Landmarks, Lanterns,
+  //      Wooden River Jetty, Ruined Gothic Archway, Cemetery of Ash Tombs,
+  //      Carved Runic Waystone, Full Pine Canopies, Fireflies & Smashable Barrels!
+  //      (ZERO extra PointLights -> ZERO shader-compile hitches, 150+ FPS!)
+  // --------------------------------------------------------------------------
+  const z96StoneParts = [];
+  const z96WoodParts = [];
+  const z96IronParts = [];
+  const z96FoliageParts = [];
+  const z96LanternGlowParts = [];
+  const z96LanternHalos = [];
+
+  // Shared helper: Forged-Iron Wrought Lantern Cage + Warm Glowing Glass Core + Additive Halo + Ground Pool
+  function addWroughtLantern(lx, ly, lz, { withPost = true, postHeight = 3.0, leanZ = 0.06, yaw = 0, poolR = 3.5, poolStr = 0.38 } = {}) {
+    const gY = evalExteriorGroundY(lx, lz);
+    let lampX = lx, lampY = ly, lampZ = lz;
+    if (withPost) {
+      // Stepped carved stone footing + forged iron lamp pole + curved gooseneck arm
+      z96StoneParts.push(tintGeo(THREE, xformGeo(new THREE.CylinderGeometry(0.22, 0.30, 0.34, 6), lx, gY + 0.14, lz), 0x8b9ab8, 0x3b4458));
+      z96IronParts.push(xformGeo(new THREE.CylinderGeometry(0.042, 0.062, postHeight, 6), lx, gY + postHeight * 0.5, lz, leanZ, yaw, 0));
+      // Decorative wrought-iron scroll collar + horizontal bracket arm jutting toward road!
+      const armDirX = Math.sin(yaw);
+      const armDirZ = Math.cos(yaw);
+      const topY = gY + postHeight;
+      z96IronParts.push(xformGeo(new THREE.BoxGeometry(0.06, 0.06, 0.72), lx + armDirX * 0.34, topY - 0.10, lz + armDirZ * 0.34, 0, yaw, 0));
+      z96IronParts.push(xformGeo(new THREE.BoxGeometry(0.045, 0.045, 0.56), lx + armDirX * 0.22, topY - 0.34, lz + armDirZ * 0.22, -0.68, yaw, 0));
+      z96IronParts.push(xformGeo(new THREE.ConeGeometry(0.075, 0.24, 4), lx, topY + 0.14, lz));
+      lampX = lx + armDirX * 0.64;
+      lampY = topY - 0.34;
+      lampZ = lz + armDirZ * 0.64;
+    }
+    // Wrought-iron lantern cap, bottom saucer & 4 cage bars
+    z96IronParts.push(xformGeo(new THREE.ConeGeometry(0.16, 0.14, 6), lampX, lampY + 0.22, lampZ));
+    z96IronParts.push(xformGeo(new THREE.CylinderGeometry(0.14, 0.10, 0.06, 6), lampX, lampY - 0.14, lampZ));
+    for (let k = 0; k < 4; k++) {
+      const a = (k / 4) * Math.PI * 2 + 0.4;
+      z96IronParts.push(xformGeo(new THREE.CylinderGeometry(0.012, 0.012, 0.30, 4), lampX + Math.cos(a) * 0.11, lampY + 0.04, lampZ + Math.sin(a) * 0.11));
+    }
+    // Warm amber glowing glass core
+    z96LanternGlowParts.push(xformGeo(new THREE.CylinderGeometry(0.095, 0.078, 0.24, 6), lampX, lampY + 0.04, lampZ));
+    z96LanternHalos.push({ x: lampX, y: lampY + 0.04, z: lampZ, size: 1.55 });
+    // Flickering warm firelight pool on the ground directly below!
+    if (poolR > 0.2) {
+      addWarmGroundPool(lampX, lampZ, poolR, [1.05, 0.54, 0.14], poolStr, alwaysOneUniform, lx * 0.9 + lz * 0.7);
+    }
+  }
+
+  // 1) GREAT CLUB FALLEN HUNTER'S DRIFTWOOD & STORM-LANTERN CAMP at swordPos (2.8, 5.2)!
+  //    Makes the Great Club's resting spot an unforgettable, warm-lit visual focal point right from wakePos!
+  {
+    const cx = EXTERIOR_SHORE_ANCHORS.swordPos.x;
+    const cz = EXTERIOR_SHORE_ANCHORS.swordPos.z;
+    const cgy = evalExteriorGroundY(cx, cz);
+    // Bleached gnarled driftwood timber log bracing the mossy stone mound behind the Great Club
+    z96WoodParts.push(tintGeo(THREE, xformGeo(new THREE.CylinderGeometry(0.13, 0.20, 2.35, 7), cx + 0.48, cgy + 0.14, cz + 0.32, 0.18, 0.72, 1.38), 0x6b5a4a, 0x2b231d));
+    z96WoodParts.push(tintGeo(THREE, xformGeo(new THREE.CylinderGeometry(0.07, 0.12, 1.15, 6), cx + 0.85, cgy + 0.36, cz + 0.65, -0.35, 0.9, 1.05), 0x746252, 0x312822));
+    // Crooked weathered timber lantern stake & glowing storm-lantern bathing the Great Club in golden light!
+    z96WoodParts.push(tintGeo(THREE, xformGeo(new THREE.CylinderGeometry(0.045, 0.065, 1.82, 6), cx + 0.85, cgy + 0.86, cz - 0.55, 0.08, 0, -0.14), 0x5c4b3d, 0x261e18));
+    z96WoodParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(0.55, 0.055, 0.055), cx + 0.58, cgy + 1.62, cz - 0.52, 0, 0.15, 0.08), 0x5c4b3d, 0x261e18));
+    addWroughtLantern(cx + 0.36, cgy + 1.36, cz - 0.48, { withPost: false, poolR: 4.1, poolStr: 0.42 });
+    // Half-buried dented knight helm & mossy cairn rocks framing the club camp
+    z96IronParts.push(xformGeo(new THREE.SphereGeometry(0.17, 7, 6), cx - 0.75, cgy + 0.12, cz + 0.62));
+    z96StoneParts.push(tintGeo(THREE, xformGeo(buildSculptedRockGeo(THREE, 0.44, 961, 0.62, 1), cx + 0.72, cgy + 0.18, cz + 0.55), 0x76869c, 0x313a4b));
+    z96StoneParts.push(tintGeo(THREE, xformGeo(buildSculptedRockGeo(THREE, 0.32, 962, 0.54, 1), cx - 0.68, cgy + 0.10, cz - 0.48), 0x6a7f6c, 0x2a352f));
+  }
+
+  // 2) COLLAPSED GOTHIC PILGRIM STONE ARCHWAY SPANNING THE COASTAL ROAD at z = 10.6 (x = -4.4 .. +3.8)!
+  //    Iconic Dark Souls framing gateway between the Landing/Great Club and the Bonfire Sanctuary!
+  {
+    const az = 10.6;
+    const leftX = -4.4;
+    const rightX = 3.8;
+    const midX = (leftX + rightX) * 0.5;
+    const halfSpan = (rightX - leftX) * 0.5;
+    const gyL = evalExteriorGroundY(leftX, az);
+    const gyR = evalExteriorGroundY(rightX, az);
+    const archBaseY = Math.max(gyL, gyR);
+    for (const [px, gy, side] of [[leftX, gyL, -1], [rightX, gyR, 1]]) {
+      // Multi-tiered battered Gothic stone plinth, buttressed pier shaft, carved capital & outer flying buttress stub!
+      z96StoneParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(1.75, 0.58, 1.95), px, gy + 0.22, az), 0x8d9cb8, 0x3b4459));
+      z96StoneParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(1.32, 4.45, 1.48), px, gy + 2.55, az), 0x8493b0, 0x353e52));
+      z96StoneParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(0.55, 3.65, 0.95), px + side * 0.78, gy + 1.85, az, 0, 0, -side * 0.14), 0x7b8ba8, 0x323a4d));
+      z96StoneParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(1.68, 0.38, 1.82), px, gy + 4.82, az), 0x9aa9c6, 0x455068));
+      // Broken upper turret stub + mossy corner stones
+      z96StoneParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(1.05, side < 0 ? 1.45 : 0.85, 1.15), px + side * 0.15, gy + (side < 0 ? 5.65 : 5.35), az), 0x8898b6, 0x3d475e));
+      // Scattered tumbled stone blocks beside base
+      for (let rb = 0; rb < 3; rb++) {
+        const rx = px + side * (1.05 + rb * 0.42);
+        const rz = az + (rb - 1) * 0.75;
+        const rgy = evalExteriorGroundY(rx, rz);
+        z96StoneParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(0.46 + rb * 0.1, 0.34, 0.42), rx, rgy + 0.14, rz, 0.15 * rb, 0.6 * rb, -0.18 * side), 0x7e9182, 0x343d4d));
+      }
+    }
+    // Soaring broken pointed Gothic arch spanning 8.2m overhead (dramatic weathered gap near upper-right!)
+    const segs = 12;
+    for (let i = 0; i < segs; i++) {
+      if (i === 7) continue; // Dramatic ancient breach in the upper-right arch!
+      const a0 = (i / segs) * Math.PI;
+      const a1 = ((i + 1) / segs) * Math.PI;
+      const x0 = midX - Math.cos(a0) * halfSpan;
+      const y0 = archBaseY + 4.72 + Math.pow(Math.sin(a0), 0.78) * 3.15;
+      const x1 = midX - Math.cos(a1) * halfSpan;
+      const y1 = archBaseY + 4.72 + Math.pow(Math.sin(a1), 0.78) * 3.15;
+      const len = Math.hypot(x1 - x0, y1 - y0) + 0.16;
+      const ang = Math.atan2(y1 - y0, x1 - x0);
+      z96StoneParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(len, 0.62, 1.38), (x0 + x1) * 0.5, (y0 + y1) * 0.5, az, 0, 0, ang), 0x95a5c4, 0x414b62));
+    }
+    // Hanging rusted chains dangling from the broken arch!
+    addHangingChainParts(THREE, z96IronParts, midX - 1.25, archBaseY + 7.25, az, 7, 0.22, -0.08, 0.08);
+    addHangingChainParts(THREE, z96IronParts, midX + 1.55, archBaseY + 6.75, az, 6, 0.22,  0.10, -0.06);
+  }
+
+  // 3) WEATHERED WOODEN RIVER JETTY / FERRYMAN'S PIER jutting over the dark moonlit river (x = 5.4..9.0, z = 8.4..11.4)!
+  {
+    const pierZ = 9.9;
+    const deckY = WATER_LEVEL + 0.62;
+    // 6 thick weathered oak pilings driven into river bed + horizontal stringer beams
+    for (let px = 5.5; px <= 8.8; px += 1.65) {
+      for (const pzOff of [-1.25, 1.25]) {
+        const postH = px > 8.0 ? 2.45 : 1.95;
+        z96WoodParts.push(tintGeo(THREE, xformGeo(new THREE.CylinderGeometry(0.13, 0.16, postH, 7), px, deckY - 0.55 + postH * 0.35, pierZ + pzOff, 0.03 * Math.sign(pzOff), 0, -0.03), 0x5c4c3f, 0x201914));
+      }
+    }
+    for (const pzOff of [-1.05, 0.0, 1.05]) {
+      z96WoodParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(4.1, 0.14, 0.16), 7.1, deckY - 0.08, pierZ + pzOff), 0x4f4034, 0x1e1712));
+    }
+    // 14 slightly uneven, cracked, mossy weathered oak deck planks (gap near broken outer end!)
+    for (let pi = 0; pi < 14; pi++) {
+      if (pi === 11) continue;
+      const px = 5.2 + pi * 0.285;
+      const pLen = 2.65 + ((pi * 37) % 10) * 0.03;
+      const tilt = ((pi % 3) - 1) * 0.025;
+      z96WoodParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(0.24, 0.065, pLen), px, deckY + tilt * 0.4, pierZ + ((pi % 2) - 0.5) * 0.06, tilt, ((pi % 5) - 2) * 0.015, tilt), pi % 4 === 0 ? 0x6f826a : 0xa1805d, 0x4a392a));
+    }
+    // Tall hanging Ferryman Pier Lantern on the end piling — casts warm amber shimmer onto the black river!
+    z96WoodParts.push(tintGeo(THREE, xformGeo(new THREE.CylinderGeometry(0.05, 0.07, 2.35, 6), 8.65, deckY + 1.15, pierZ - 1.25), 0x8a6d52, 0x3b2d21));
+    z96IronParts.push(xformGeo(new THREE.BoxGeometry(0.65, 0.05, 0.05), 8.38, deckY + 2.18, pierZ - 1.25));
+    addWroughtLantern(8.12, deckY + 1.94, pierZ - 1.25, { withPost: false, poolR: 0, poolStr: 0 });
+    addWarmGroundPool(4.65, pierZ, 2.35, [1.05, 0.56, 0.16], 0.30, alwaysOneUniform, 3.1);
+  }
+
+  // 4) CEMETERY OF ASH ROADSIDE TOMBSTONES, LEANING STONE CROSSES & CARVED RUNIC WAYSTONE MONOLITH (-5.0, 16.4)!
+  {
+    const tombSpecs = [
+      [-6.4, 12.2, 0.85, 0.42,  0.14,  0.18, false],
+      [-7.8, 13.4, 1.25, 0.48, -0.08, -0.15, true],
+      [-6.8, 14.8, 0.96, 0.44,  0.10,  0.22, false],
+      [-8.4, 15.6, 1.42, 0.52, -0.12, -0.10, true],
+      [-6.6, 17.8, 1.05, 0.46,  0.08,  0.16, false],
+      [-8.1, 19.2, 1.32, 0.44, -0.14, -0.18, true],
+      [-6.2, 20.4, 0.78, 0.40,  0.18,  0.12, false],
+      [-7.6, 22.0, 1.18, 0.48, -0.06,  0.24, false],
+      [-6.5, 23.6, 1.38, 0.46,  0.11, -0.14, true],
+      [-8.2, 24.4, 0.92, 0.44, -0.15,  0.10, false],
+      [ 4.9, 16.4, 1.08, 0.45,  0.12, -0.20, false],
+      [ 5.6, 18.2, 1.36, 0.46, -0.08, -0.12, true],
+      [ 5.2, 20.4, 0.94, 0.42,  0.14, -0.18, false],
+      [-5.8,  8.6, 1.12, 0.46,  0.08,  0.28, true]
+    ];
+    for (let i = 0; i < tombSpecs.length; i++) {
+      const [tx, tz, th, tw, leanX, yaw, isCross] = tombSpecs[i];
+      const tgy = evalExteriorGroundY(tx, tz);
+      if (isCross) {
+        // Ancient weathered Gothic stone cross
+        z96StoneParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(tw * 0.42, th, 0.18), tx, tgy + th * 0.46, tz, leanX, yaw, (i % 2 ? 0.08 : -0.08)), 0x8e9db8, 0x3b4458));
+        z96StoneParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(tw * 1.45, tw * 0.36, 0.17), tx, tgy + th * 0.68, tz, leanX, yaw, (i % 2 ? 0.08 : -0.08)), 0x94a3be, 0x414a5e));
+      } else {
+        // Arched weathered tombstone slab + moss-rimmed base
+        z96StoneParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(tw, th, 0.16), tx, tgy + th * 0.45, tz, leanX, yaw, (i % 2 ? -0.06 : 0.06)), i % 3 === 0 ? 0x7b9384 : 0x8b9ab5, 0x394254));
+        z96StoneParts.push(tintGeo(THREE, xformGeo(new THREE.CylinderGeometry(tw * 0.48, tw * 0.48, 0.16, 8), tx, tgy + th * 0.90, tz, Math.PI * 0.5, yaw, 0), 0x92a1bc, 0x404a5e));
+      }
+      // Small glowing pilgrim vigil candle perched beside every 4th tombstone!
+      if (i % 4 === 0) {
+        z96LanternGlowParts.push(xformGeo(new THREE.CylinderGeometry(0.032, 0.038, 0.12, 5), tx + 0.28, tgy + 0.08, tz + 0.24));
+        z96LanternHalos.push({ x: tx + 0.28, y: tgy + 0.16, z: tz + 0.24, size: 0.52 });
+      }
+    }
+
+    // CARVED RUNIC WAYSTONE MONOLITH at (-5.0, 16.4) beside Shore Bonfire (Interactive [E] Lore Tablet!)
+    const mx = EXTERIOR_SHORE_ANCHORS.monolithPos.x;
+    const mz = EXTERIOR_SHORE_ANCHORS.monolithPos.z;
+    const mgy = evalExteriorGroundY(mx, mz);
+    z96StoneParts.push(tintGeo(THREE, xformGeo(new THREE.CylinderGeometry(0.76, 0.92, 0.28, 8), mx, mgy + 0.12, mz), 0x8b9ab8, 0x3b4458));
+    z96StoneParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(0.86, 2.35, 0.42), mx, mgy + 1.32, mz, 0.04, 0.65, -0.04), 0x97a7c6, 0x434d64));
+    z96StoneParts.push(tintGeo(THREE, xformGeo(new THREE.ConeGeometry(0.56, 0.68, 4), mx, mgy + 2.80, mz, 0.04, 0.65 + Math.PI * 0.25, -0.04), 0xa1b1d0, 0x4c5770));
+    // Cool glacial moon-blue carved runic glyph bars facing the bonfire/path (contrasts with warm amber bonfire!)
+    const runeGlyphMat = trackMat(new THREE.MeshBasicMaterial({ color: 0x76baff }));
+    const runeGlyphParts = [
+      xformGeo(new THREE.BoxGeometry(0.06, 0.64, 0.04), mx + 0.17, mgy + 1.48, mz + 0.15, 0.04, 0.65, -0.04),
+      xformGeo(new THREE.BoxGeometry(0.28, 0.05, 0.04), mx + 0.17, mgy + 1.66, mz + 0.15, 0.04, 0.65, -0.04),
+      xformGeo(new THREE.BoxGeometry(0.22, 0.05, 0.04), mx + 0.17, mgy + 1.44, mz + 0.15, 0.04, 0.65, -0.04),
+      xformGeo(new THREE.BoxGeometry(0.16, 0.05, 0.04), mx + 0.17, mgy + 1.24, mz + 0.15, 0.04, 0.65, -0.04)
+    ];
+    exteriorGroup.add(new THREE.Mesh(trackGeo(mergeNonIndexedGeos(THREE, runeGlyphParts)), runeGlyphMat));
+    addWarmGroundPool(mx, mz, 2.2, [0.36, 0.68, 1.15], 0.22, alwaysOneUniform, 5.5);
+  }
+
+  // 5) HALF-SUNKEN BROKEN GOTHIC WATCHTOWER SPIRE JUTTING OUT OF THE DARK RIVER (x = 12.8, z = 16.8)!
+  {
+    const tx = 12.8, tz = 16.8;
+    const ty = WATER_LEVEL - 1.35;
+    z96StoneParts.push(tintGeo(THREE, xformGeo(new THREE.CylinderGeometry(1.48, 1.78, 7.2, 10), tx, ty + 2.65, tz, 0.14, 0.4, -0.30), 0x7e8ea8, 0x2c3547));
+    z96StoneParts.push(tintGeo(THREE, xformGeo(new THREE.CylinderGeometry(1.68, 1.56, 0.55, 10), tx + 0.88, ty + 5.75, tz + 0.36, 0.14, 0.4, -0.30), 0x8c9cb8, 0x3b455a));
+    // Broken jagged crenellations around top rim
+    for (let mi = 0; mi < 5; mi++) {
+      if (mi === 2) continue;
+      const ma = (mi / 5) * Math.PI * 2 + 0.3;
+      z96StoneParts.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(0.55, 0.85, 0.45), tx + 1.00 + Math.cos(ma) * 1.35, ty + 6.22, tz + 0.40 + Math.sin(ma) * 1.35, 0.14, ma, -0.30), 0x92a2be, 0x3f495f));
+    }
+  }
+
+  // 6) FOUR WROUGHT-IRON COASTAL PILGRIM LANTERN POSTS LINING THE ROAD FROM LANDING -> BONFIRE -> GATE!
+  addWroughtLantern(-3.6, 0,  8.2, { withPost: true, postHeight: 2.95, leanZ:  0.05, yaw:  1.25, poolR: 3.6, poolStr: 0.36 });
+  addWroughtLantern( 3.2, 0, 13.8, { withPost: true, postHeight: 3.05, leanZ: -0.04, yaw: -1.35, poolR: 3.6, poolStr: 0.36 });
+  addWroughtLantern(-4.4, 0, 21.6, { withPost: true, postHeight: 2.90, leanZ:  0.06, yaw:  1.18, poolR: 3.6, poolStr: 0.36 });
+  addWroughtLantern( 3.4, 0, 24.4, { withPost: true, postHeight: 3.10, leanZ: -0.05, yaw: -1.42, poolR: 3.6, poolStr: 0.36 });
+
+  // 7) BROODING DARK-SOULS MULTI-BOUGH WIND-SWEPT PINE CANOPIES (ZERO toy cones — jagged drooping needle fronds!)
+  for (let i = 0; i < pinePlacements.length; i++) {
+    const tr = pinePlacements[i];
+    const gy = evalExteriorGroundY(tr.x, tr.z) - 0.25;
+    const midX = tr.x + Math.sin(tr.leanX) * tr.h * 0.45;
+    const midY = gy + tr.h * 0.52;
+    const midZ = tr.z + Math.sin(tr.leanZ) * tr.h * 0.45;
+    const tiers = [
+      { yOff: -0.35, boughs: 7, len: 2.35, w: 0.72, droop: 0.44, topC: 0x1b302a, botC: 0x0a1311 },
+      { yOff:  0.85, boughs: 7, len: 1.95, w: 0.62, droop: 0.40, topC: 0x203831, botC: 0x0c1714 },
+      { yOff:  1.95, boughs: 6, len: 1.48, w: 0.50, droop: 0.34, topC: 0x254038, botC: 0x0f1c18 },
+      { yOff:  2.95, boughs: 5, len: 0.96, w: 0.38, droop: 0.26, topC: 0x2c4a41, botC: 0x13221e }
+    ];
+    for (let ti = 0; ti < tiers.length; ti++) {
+      const td = tiers[ti];
+      const ox = midX + Math.sin(tr.leanX) * td.yOff * 0.45;
+      const oz = midZ + Math.sin(tr.leanZ) * td.yOff * 0.45;
+      for (let bi = 0; bi < td.boughs; bi++) {
+        const ang = tr.ry + ti * 0.65 + (bi / td.boughs) * Math.PI * 2 + Math.sin(i * 3.1 + bi * 2.3) * 0.22;
+        const bLen = td.len * (0.82 + 0.32 * Math.abs(Math.sin(bi * 2.1 + i * 1.7)));
+        const bW = td.w * (0.85 + 0.25 * Math.abs(Math.cos(bi * 1.7 + ti)));
+        // Tapered flattened drooping pine bough frond radiating outward from the crooked trunk!
+        const bough = new THREE.ConeGeometry(bW, bLen, 5, 1);
+        bough.scale(1.0, 1.0, 0.36);
+        bough.rotateX(Math.PI * 0.5 + td.droop);
+        bough.rotateY(ang);
+        const cx = ox + Math.sin(ang) * bLen * 0.46;
+        const cy = midY + td.yOff - Math.sin(td.droop) * bLen * 0.30;
+        const cz = oz + Math.cos(ang) * bLen * 0.46;
+        bough.translate(cx, cy, cz);
+        z96FoliageParts.push(tintGeo(THREE, bough, td.topC, td.botC));
+      }
+    }
+    // Wind-swept ragged pine crown spire tip
+    const topCrown = new THREE.ConeGeometry(0.46, 1.35, 5);
+    topCrown.scale(1.0, 1.0, 0.72);
+    xformGeo(topCrown, midX + Math.sin(tr.leanX) * 1.65, midY + 3.65, midZ + Math.sin(tr.leanZ) * 1.65, tr.leanZ * 0.7, tr.ry, -tr.leanX * 0.7);
+    z96FoliageParts.push(tintGeo(THREE, topCrown, 0x2c4b42, 0x111f1b));
+  }
+  // Organic arching coastal fern bushes (smoothly curved botanical blades — ZERO spiky low-poly shards!)
+  const fernSpots = [
+    [-5.2, 2.4], [-7.4, 7.6], [-5.2, 11.4], [4.5, 11.4], [-6.0, 15.8],
+    [-6.2, 19.6], [4.6, 15.2], [5.4, 21.6], [-4.8, 25.4], [4.8, 25.8],
+    [1.8, 6.2], [3.8, 4.4], [-3.8, 14.2], [-0.8, 16.2]
+  ];
+  for (let fi = 0; fi < fernSpots.length; fi++) {
+    const [fx, fz] = fernSpots[fi];
+    const fgy = evalExteriorGroundY(fx, fz);
+    for (let fr = 0; fr < 7; fr++) {
+      const fa = (fr / 7) * Math.PI * 2 + fi * 0.73;
+      const fBlade = buildCurvedReedBladeGeo(0.14 + (fr % 2) * 0.04, 0.56 + (fr % 3) * 0.11, 0.44, fa);
+      fBlade.translate(fx + Math.cos(fa) * 0.08, fgy - 0.02, fz + Math.sin(fa) * 0.08);
+      z96FoliageParts.push(tintGeo(THREE, fBlade, 0x2b4b38, 0x101f17));
+    }
+  }
+
+  // Dedicated warm weathered oak PBR material for Ferryman's Pier, Driftwood Camp & Smashable Barrels/Crates!
+  const warmOakMat = regNormalMat(
+    trackMat(new THREE.MeshStandardMaterial({
+      map: barkPbr.albedo,
+      normalMap: lowSpecMode ? null : barkPbr.normal,
+      normalScale: new THREE.Vector2(0.88, 0.88),
+      roughnessMap: barkPbr.orm,
+      roughness: 0.85,
+      metalness: 0.05,
+      vertexColors: true,
+      color: 0xe6d2b6
+    })),
+    barkPbr.normal
+  );
+
+  // Merge static z96 architectural & foliage layers into just 4 batched meshes (ultra-fast draw count!)
+  const z96StoneMesh = new THREE.Mesh(trackGeo(mergeNonIndexedGeos(THREE, z96StoneParts, { boxUvTile: 2.2, withColor: true })), extAshlarMat);
+  z96StoneMesh.receiveShadow = true;
+  exteriorGroup.add(z96StoneMesh);
+
+  const z96WoodMesh = new THREE.Mesh(trackGeo(mergeNonIndexedGeos(THREE, z96WoodParts, { boxUvTile: 1.5, withColor: true })), warmOakMat);
+  z96WoodMesh.receiveShadow = true;
+  exteriorGroup.add(z96WoodMesh);
+
+  const z96IronMesh = new THREE.Mesh(trackGeo(mergeNonIndexedGeos(THREE, z96IronParts, { boxUvTile: 1.2 })), rustedGrateMat);
+  exteriorGroup.add(z96IronMesh);
+
+  const z96FoliageMat = trackMat(new THREE.MeshStandardMaterial({
+    vertexColors: true,
+    color: 0xaec4bc,
+    roughness: 0.92,
+    metalness: 0.02,
+    side: THREE.DoubleSide
+  }));
+  const z96FoliageMesh = new THREE.Mesh(trackGeo(mergeNonIndexedGeos(THREE, z96FoliageParts, { withColor: true })), z96FoliageMat);
+  exteriorGroup.add(z96FoliageMesh);
+
+  // Glowing Amber Glass Lantern Cores & Soft Additive Lantern Halos
+  const lanternCoreMat = trackMat(new THREE.MeshBasicMaterial({ color: 0xffb44c }));
+  const z96LanternGlowMesh = new THREE.Mesh(trackGeo(mergeNonIndexedGeos(THREE, z96LanternGlowParts)), lanternCoreMat);
+  exteriorGroup.add(z96LanternGlowMesh);
+
+  const lanternHaloMat = trackMat(new THREE.ShaderMaterial({
+    uniforms: { uTime: extSkyUniforms.uTime },
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        vec4 mv = modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+        mv.xy += position.xy;
+        gl_Position = projectionMatrix * mv;
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      varying vec2 vUv;
+      void main() {
+        float d = length(vUv * 2.0 - 1.0);
+        if (d > 1.0) discard;
+        float flick = 0.90 + 0.10 * sin(uTime * 5.8);
+        float g = exp(-d * d * 4.8) * (1.0 - smoothstep(0.65, 1.0, d));
+        vec3 col = mix(vec3(1.0, 0.42, 0.08), vec3(1.5, 0.96, 0.44), exp(-d * d * 7.5));
+        gl_FragColor = vec4(col * flick, g * 0.62);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }
+    `,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  }));
+  for (let hi = 0; hi < z96LanternHalos.length; hi++) {
+    const h = z96LanternHalos[hi];
+    const hm = new THREE.Mesh(trackGeo(new THREE.PlaneGeometry(h.size, h.size)), lanternHaloMat);
+    hm.position.set(h.x, h.y, h.z);
+    hm.renderOrder = 4;
+    exteriorGroup.add(hm);
+  }
+
+  // 8) DRIFTING NOCTURNAL RIVER FIREFLIES / WILLOW WISPS (soft bioluminescent golden-cyan motes!)
+  const FIREFLY_COUNT = isMobile ? 32 : 68;
+  const ffPos = new Float32Array(FIREFLY_COUNT * 3);
+  const ffSeed = new Float32Array(FIREFLY_COUNT * 3);
+  for (let i = 0; i < FIREFLY_COUNT; i++) {
+    const fx = -8.5 + extRng() * 19.0;
+    const fz = -2.0 + extRng() * 31.0;
+    ffPos[i * 3]     = fx;
+    ffPos[i * 3 + 1] = Math.max(WATER_LEVEL + 0.45, evalExteriorGroundY(fx, fz) + 0.55) + extRng() * 2.1;
+    ffPos[i * 3 + 2] = fz;
+    ffSeed[i * 3]     = extRng();
+    ffSeed[i * 3 + 1] = 0.5 + extRng() * 1.1;
+    ffSeed[i * 3 + 2] = extRng();
+  }
+  const fireflyGeo = trackGeo(new THREE.BufferGeometry());
+  fireflyGeo.setAttribute('position', new THREE.BufferAttribute(ffPos, 3));
+  fireflyGeo.setAttribute('aSeed', new THREE.BufferAttribute(ffSeed, 3));
+  const fireflyMat = trackMat(new THREE.ShaderMaterial({
+    uniforms: { uTime: extSkyUniforms.uTime, uTex: { value: mistSpriteTex } },
+    vertexShader: `
+      attribute vec3 aSeed;
+      uniform float uTime;
+      varying float vPulse;
+      varying float vHue;
+      void main() {
+        vec3 p = position;
+        float t = uTime * (0.45 + aSeed.y * 0.45) + aSeed.x * 24.0;
+        p.x += sin(t * 1.1 + aSeed.z * 6.28) * 0.65;
+        p.y += sin(t * 1.7 + aSeed.x * 12.0) * 0.35;
+        p.z += cos(t * 0.9 - aSeed.z * 6.28) * 0.65;
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        gl_Position = projectionMatrix * mv;
+        gl_PointSize = clamp(85.0 / max(1.5, -mv.z), 3.0, 14.0);
+        vPulse = 0.25 + 0.75 * pow(0.5 + 0.5 * sin(uTime * (2.2 + aSeed.y * 2.0) + aSeed.x * 30.0), 2.2);
+        vHue = aSeed.z;
+      }
+    `,
+    fragmentShader: `
+      uniform sampler2D uTex;
+      varying float vPulse;
+      varying float vHue;
+      void main() {
+        vec4 t = texture2D(uTex, gl_PointCoord);
+        float a = t.a * vPulse * 0.85;
+        if (a < 0.01) discard;
+        vec3 col = mix(vec3(1.55, 1.12, 0.38), vec3(0.65, 1.25, 1.55), step(0.68, vHue));
+        gl_FragColor = vec4(col, a);
+      }
+    `,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  }));
+  const fireflyPoints = new THREE.Points(fireflyGeo, fireflyMat);
+  fireflyPoints.renderOrder = 5;
+  exteriorGroup.add(fireflyPoints);
+
+  // 9) INTERACTIVE SMASHABLE WOODEN BARRELS & CARGO CRATES (Smash them to splinters with your new Great Club!)
+  const destructibleSpecs = [
+    { x:  4.55, z:  8.55, kind: 'barrel' },
+    { x:  4.95, z:  9.35, kind: 'crate'  },
+    { x:  4.65, z: 11.20, kind: 'barrel' },
+    { x: -4.95, z:  6.35, kind: 'crate'  },
+    { x: -4.45, z:  7.25, kind: 'barrel' },
+    { x: -3.25, z: 11.75, kind: 'barrel' },
+    { x:  2.95, z: 11.55, kind: 'crate'  },
+    { x: -3.75, z: 13.75, kind: 'barrel' },
+    { x:  4.85, z: 26.85, kind: 'crate'  },
+    { x: -5.15, z: 27.15, kind: 'barrel' }
+  ];
+  const barrelBaseGeo = trackGeo((() => {
+    const p = [];
+    p.push(tintGeo(THREE, xformGeo(new THREE.CylinderGeometry(0.32, 0.29, 0.86, 10), 0, 0.43, 0), 0xb48a5f, 0x5c432d));
+    p.push(tintGeo(THREE, xformGeo(new THREE.TorusGeometry(0.325, 0.024, 5, 12), 0, 0.22, 0, Math.PI * 0.5, 0, 0), 0x8692a4, 0x454e5d));
+    p.push(tintGeo(THREE, xformGeo(new THREE.TorusGeometry(0.335, 0.024, 5, 12), 0, 0.64, 0, Math.PI * 0.5, 0, 0), 0x8692a4, 0x454e5d));
+    return mergeNonIndexedGeos(THREE, p, { boxUvTile: 1.2, withColor: true });
+  })());
+  const crateBaseGeo = trackGeo((() => {
+    const p = [];
+    p.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(0.76, 0.72, 0.76), 0, 0.36, 0), 0xac845b, 0x563f2a));
+    p.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(0.82, 0.09, 0.82), 0, 0.06, 0), 0x826345, 0x423020));
+    p.push(tintGeo(THREE, xformGeo(new THREE.BoxGeometry(0.82, 0.09, 0.82), 0, 0.66, 0), 0x826345, 0x423020));
+    return mergeNonIndexedGeos(THREE, p, { boxUvTile: 1.2, withColor: true });
+  })());
+  const splinterGeo = trackGeo(
+    tintGeo(THREE, new THREE.BoxGeometry(0.11, 0.05, 0.46), 0xc2986b, 0x624830)
+  );
+
+  const destructibleProps = [];
+  const activeSplinters = [];
+  for (let di = 0; di < destructibleSpecs.length; di++) {
+    const ds = destructibleSpecs[di];
+    const gy = evalExteriorGroundY(ds.x, ds.z);
+    const mesh = new THREE.Mesh(ds.kind === 'barrel' ? barrelBaseGeo : crateBaseGeo, warmOakMat);
+    mesh.position.set(ds.x, gy - 0.02, ds.z);
+    mesh.rotation.y = (di * 1.13) % 6.28;
+    mesh.receiveShadow = true;
+    exteriorGroup.add(mesh);
+    destructibleProps.push({ x: ds.x, y: gy, z: ds.z, r: 0.52, broken: false, mesh });
+  }
+
+  function spawnWoodSplinters(ox, oy, oz) {
+    for (let k = 0; k < 6; k++) {
+      const ang = (k / 6) * Math.PI * 2 + Math.random() * 0.6;
+      const spd = 2.4 + Math.random() * 2.8;
+      const m = new THREE.Mesh(splinterGeo, warmOakMat);
+      m.position.set(ox + Math.cos(ang) * 0.14, oy + 0.38, oz + Math.sin(ang) * 0.14);
+      m.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
+      exteriorGroup.add(m);
+      activeSplinters.push({
+        mesh: m,
+        vx: Math.cos(ang) * spd,
+        vy: 3.0 + Math.random() * 2.4,
+        vz: Math.sin(ang) * spd,
+        rx: (Math.random() - 0.5) * 11,
+        ry: (Math.random() - 0.5) * 11,
+        age: 0,
+        maxAge: 2.2
+      });
+    }
+  }
+
+  function hitDestructibles(hx, hz, radius = 1.65) {
+    if (stageMode !== 'exterior_shore') return { count: 0, hits: [] };
+    const hits = [];
+    for (let i = 0; i < destructibleProps.length; i++) {
+      const p = destructibleProps[i];
+      if (p.broken) continue;
+      if (Math.hypot(p.x - hx, p.z - hz) <= radius + p.r) {
+        p.broken = true;
+        p.mesh.visible = false;
+        spawnWoodSplinters(p.x, p.y, p.z);
+        hits.push({ x: p.x, y: p.y + 0.4, z: p.z });
+      }
+    }
+    return { count: hits.length, hits };
+  }
+
+  function resetDestructibles() {
+    for (let i = 0; i < destructibleProps.length; i++) {
+      destructibleProps[i].broken = false;
+      destructibleProps[i].mesh.visible = true;
+    }
+    for (let i = activeSplinters.length - 1; i >= 0; i--) {
+      exteriorGroup.remove(activeSplinters[i].mesh);
+    }
+    activeSplinters.length = 0;
+  }
 
   // --------------------------------------------------------------------------
   // C9. Rolling Volumetric Coastal Ground Mist Sheets + Waterfall Spray + Falling Ash Flakes!
@@ -6019,6 +6722,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
       wakePos: { ...EXTERIOR_SHORE_ANCHORS.wakePos },
       swordPos: { ...EXTERIOR_SHORE_ANCHORS.swordPos },
       bonfirePos: { ...EXTERIOR_SHORE_ANCHORS.bonfirePos },
+      monolithPos: { ...EXTERIOR_SHORE_ANCHORS.monolithPos },
       gatePos: { ...EXTERIOR_SHORE_ANCHORS.gatePos },
       waterfallPos: { ...EXTERIOR_SHORE_ANCHORS.waterfallPos }
     };
@@ -6050,6 +6754,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
 
     shoreAshGeo.setDrawRange(0, lowSpecMode ? Math.floor(SHORE_ASH_COUNT * 0.45) : SHORE_ASH_COUNT);
     shoreMistGeo.setDrawRange(0, lowSpecMode ? Math.floor(SHORE_MIST_COUNT * 0.45) : SHORE_MIST_COUNT);
+    fireflyGeo.setDrawRange(0, lowSpecMode ? Math.floor(FIREFLY_COUNT * 0.45) : FIREFLY_COUNT);
     shaftDustGeo.setDrawRange(0, lowSpecMode ? Math.floor(SHAFT_DUST_COUNT * 0.45) : SHAFT_DUST_COUNT);
     castlePlumePoints.visible = !lowSpecMode;
     rollingMistMesh.visible = !lowSpecMode;
@@ -6131,10 +6836,49 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
           bl.intensity = 5.2 * gfl;
         }
       }
+
+      // Step flying wooden barrel/crate splinters (ballistic arc + ground bounce + scale fade)
+      for (let si = activeSplinters.length - 1; si >= 0; si--) {
+        const sp = activeSplinters[si];
+        sp.age += safeDt;
+        if (sp.age >= sp.maxAge) {
+          exteriorGroup.remove(sp.mesh);
+          activeSplinters.splice(si, 1);
+          continue;
+        }
+        sp.vy -= 14.5 * safeDt;
+        sp.mesh.position.x += sp.vx * safeDt;
+        sp.mesh.position.y += sp.vy * safeDt;
+        sp.mesh.position.z += sp.vz * safeDt;
+        sp.mesh.rotation.x += sp.rx * safeDt;
+        sp.mesh.rotation.y += sp.ry * safeDt;
+        const groundY = evalExteriorGroundY(sp.mesh.position.x, sp.mesh.position.z) + 0.04;
+        if (sp.mesh.position.y < groundY) {
+          sp.mesh.position.y = groundY;
+          if (Math.abs(sp.vy) > 0.65) {
+            sp.vy = -sp.vy * 0.32;
+            sp.vx *= 0.56;
+            sp.vz *= 0.56;
+            sp.rx *= 0.5;
+            sp.ry *= 0.5;
+          } else {
+            sp.vy = 0;
+            sp.vx *= 0.82;
+            sp.vz *= 0.82;
+            sp.rx *= 0.7;
+            sp.ry *= 0.7;
+          }
+        }
+        if (sp.age > sp.maxAge - 0.45) {
+          const sc = Math.max(0.01, (sp.maxAge - sp.age) / 0.45);
+          sp.mesh.scale.setScalar(sc);
+        }
+      }
     }
   }
 
   function dispose() {
+    resetDestructibles();
     setStageMode('none');
     attachRealSwordModel(null);
     for (let i = 0; i < ownedGeos.length; i++) ownedGeos[i]?.dispose?.();
@@ -6179,6 +6923,8 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     setGrateBroken,
     setSwordPickedUp,
     setBonfireLit,
+    hitDestructibles,
+    resetDestructibles,
     attachRealSwordModel,
     getAnchors,
     clampPosition,

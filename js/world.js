@@ -4,14 +4,14 @@
 import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { DRACOLoader } from '../vendor/DRACOLoader.js';
-import { ARENA_HALF_SIZE } from './config.js?v=20261124z95';
-import { createSoulsArena } from './soulsArena.js?v=20261124z95';
+import { ARENA_HALF_SIZE } from './config.js?v=20261124z96';
+import { createSoulsArena } from './soulsArena.js?v=20261124z96';
 import {
   BOSS_DOOR_CUTSCENE_DURATION,
   evaluateBossDoorCutscene,
   getBossDoorCutsceneSkipState,
   computeBossDoorCutsceneShakeOffset
-} from './souls/soulsCutsceneChoreography.js?v=20261124z95';
+} from './souls/soulsCutsceneChoreography.js?v=20261124z96';
 import {
   BOSS_ESCAPE_CUTSCENE_DURATION,
   BOSS_ESCAPE_CUTSCENE_SKIP_TIME,
@@ -21,19 +21,19 @@ import {
   sampleBossEscapeCutscene,
   getBossEscapeCutsceneSkipState,
   computeBossEscapeCameraShakeOffset
-} from './souls/soulsEscapeCutscene.js?v=20261124z95';
+} from './souls/soulsEscapeCutscene.js?v=20261124z96';
 import {
   EXTERIOR_SHORE_ANCHORS,
   createSoulsExteriorShore
-} from './souls/soulsExteriorShore.js?v=20261124z95';
-import { createSoulsEscapeVfx } from './souls/soulsEscapeVfx.js?v=20261124z95';
+} from './souls/soulsExteriorShore.js?v=20261124z96';
+import { createSoulsEscapeVfx } from './souls/soulsEscapeVfx.js?v=20261124z96';
 import {
   clampCastleCameraPosition,
   SOULS_CASTLE_CONSTANTS
-} from './souls/soulsCastleLayout.js?v=20261124z95';
-import { createSoulsEnvironmentMap } from './souls/soulsLightingRig.js?v=20261124z95';
-import { applyEldenDissolveToModel } from './souls/soulsDissolveVfx.js?v=20261124z95';
-import * as SoulsFireVfx from './souls/soulsFireVfx.js?v=20261124z95';
+} from './souls/soulsCastleLayout.js?v=20261124z96';
+import { createSoulsEnvironmentMap } from './souls/soulsLightingRig.js?v=20261124z96';
+import { applyEldenDissolveToModel } from './souls/soulsDissolveVfx.js?v=20261124z96';
+import * as SoulsFireVfx from './souls/soulsFireVfx.js?v=20261124z96';
 import {
   createCourtyardStoneTexture,
   createHubMistTexture,
@@ -44,7 +44,7 @@ import {
   createHubContactAoTexture,
   createArcaneCircleTexture,
   getSlashCrescentGeo
-} from './world/textures.js?v=20261124z95';
+} from './world/textures.js?v=20261124z96';
 
 const sharedDracoLoader = new DRACOLoader();
 sharedDracoLoader.setDecoderPath('./vendor/draco/');
@@ -162,11 +162,11 @@ export function createArenaWorld(canvas) {
     plazaRune: new THREE.Color(0x38bdf8)
   };
   const PALETTE_SOULS_SHORE = {
-    bg: new THREE.Color(0x091120),
-    fog: new THREE.Color(0x0d182b),
-    hemiSky: new THREE.Color(0x739cd4),
-    hemiGround: new THREE.Color(0x1e2536),
-    dir: new THREE.Color(0xc2dcff),
+    bg: new THREE.Color(0x0b1528),
+    fog: new THREE.Color(0x111f36),
+    hemiSky: new THREE.Color(0x8db8ee),
+    hemiGround: new THREE.Color(0x33405c),
+    dir: new THREE.Color(0xd8e8ff),
     plazaRune: new THREE.Color(0xf59e0b)
   };
   let soulsZoneMode = 'castle'; // 'castle' | 'shaft_river' | 'exterior_shore'
@@ -508,11 +508,14 @@ export function createArenaWorld(canvas) {
       dirLight.color.copy(pal.dir);
       // Drive nocturnal moonlight / cavern bounce cleanly through permanent lights (0 extra lights -> 0 shader recompile!)
       if (next === 'exterior_shore') {
-        hemiLight.intensity = 1.05;
-        dirLight.intensity = 1.65;
-        burningGroundLight.color.setHex(0xff8a30);
+        hemiLight.intensity = 1.62;
+        dirLight.intensity = 2.35;
+        ambientLight.intensity = 0.46;
+        burningGroundLight.color.setHex(0xff8c2b);
+        burningGroundLight.distance = 24;
+        burningGroundLight.decay = 1.55;
         burningGroundLight.position.set(EXTERIOR_SHORE_ANCHORS.bonfirePos.x, 1.85, EXTERIOR_SHORE_ANCHORS.bonfirePos.z);
-        burningGroundLight.intensity = soulsExteriorShore?.isBonfireLit?.() ? 5.2 : 0.0;
+        burningGroundLight.intensity = soulsExteriorShore?.isBonfireLit?.() ? 9.5 : 1.8;
       } else if (next === 'shaft_river') {
         hemiLight.intensity = 0.92;
         dirLight.intensity = 1.25;
@@ -6952,7 +6955,7 @@ export function createArenaWorld(canvas) {
     if (devEditors) return Promise.resolve(devEditors);
     if (!isDevModeEnabled()) return Promise.resolve(null);
     if (!devEditorsPromise) {
-      devEditorsPromise = import('./world/devEditors.js?v=20261124z95')
+      devEditorsPromise = import('./world/devEditors.js?v=20261124z96')
         .then((mod) => {
           devEditors = mod.createWorldDevEditors({
             scene,
@@ -9119,11 +9122,16 @@ export function createArenaWorld(canvas) {
     setShoreBonfireLit: (lit) => {
       ensureSoulsExteriorShore()?.setBonfireLit?.(Boolean(lit));
       if (soulsZoneMode === 'exterior_shore') {
-        burningGroundLight.color.setHex(0xff8a30);
+        burningGroundLight.color.setHex(0xff8c2b);
+        burningGroundLight.distance = 24;
+        burningGroundLight.decay = 1.55;
         burningGroundLight.position.set(EXTERIOR_SHORE_ANCHORS.bonfirePos.x, 1.85, EXTERIOR_SHORE_ANCHORS.bonfirePos.z);
-        burningGroundLight.intensity = lit ? 5.2 : 0.0;
+        burningGroundLight.intensity = lit ? 9.5 : 1.8;
       }
     },
+    hitShoreDestructibles: (x, z, r = 1.65) =>
+      soulsExteriorShore?.hitDestructibles?.(x, z, r) || { count: 0, hits: [] },
+    resetShoreDestructibles: () => soulsExteriorShore?.resetDestructibles?.(),
     setShoreGrateBroken: (broken) => ensureSoulsExteriorShore()?.setGrateBroken?.(Boolean(broken)),
     triggerShoreGrateBreak: () => ensureSoulsExteriorShore()?.triggerGrateBreak?.(),
     getSoulsEscapeVfx: () => ensureSoulsEscapeVfx(),
