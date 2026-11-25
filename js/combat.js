@@ -9,7 +9,7 @@ import {
   LEVELS,
   getLevelDef,
   RUN_UPGRADES
-} from './config.js?v=20261125z103';
+} from './config.js?v=20261125z104';
 import {
   TWO_PI,
   ARENA_PLAYER_LIMIT,
@@ -21,7 +21,7 @@ import {
   lerpAngle,
   resolveArenaBiomeForLevel,
   createCombatBridge
-} from './combat/bridge.js?v=20261125z103';
+} from './combat/bridge.js?v=20261125z104';
 import {
   updateBossAI,
   updateSoulsBossAI,
@@ -31,7 +31,7 @@ import {
   cancelSoulsBossTelegraph,
   applySoulsBossParry,
   SOULS_BOSS_MULTI_PARRY
-} from './combat/bossAi.js?v=20261125z103';
+} from './combat/bossAi.js?v=20261125z104';
 import {
   createPoiseController,
   STANCE_DAMAGE_TABLE,
@@ -40,26 +40,26 @@ import {
   getPlayerHitstunSpec,
   SOULS_GUARD_CFG,
   computeBlockedStaminaCost
-} from './combat/poiseSystem.js?v=20261125z103';
+} from './combat/poiseSystem.js?v=20261125z104';
 import {
   SOULS_ROLL_CFG,
   getSoulsRollIframes,
   sampleSoulsRollStepDist,
   sampleAttackLungeStep,
   createAliveStanceSmoother
-} from './souls/soulsLocomotion.js?v=20261125z103';
+} from './souls/soulsLocomotion.js?v=20261125z104';
 import {
   SOULS_STAMINA_CFG,
   createSoulsStaminaController,
   createSoulsActionBuffer
-} from './souls/soulsStaminaBuffer.js?v=20261125z103';
+} from './souls/soulsStaminaBuffer.js?v=20261125z104';
 import {
   SOULS_ATTACK_SPECS,
   getSoulsAttackSpec,
   computeSoulsDamage,
   testSweptBladeHits
-} from './souls/soulsHitboxDamage.js?v=20261125z103';
-import * as SOULS_MOB_AI from './souls/soulsMobAi.js?v=20261125z103';
+} from './souls/soulsHitboxDamage.js?v=20261125z104';
+import * as SOULS_MOB_AI from './souls/soulsMobAi.js?v=20261125z104';
 import {
   initSoulsMobState,
   stepSoulsMobAi,
@@ -67,7 +67,7 @@ import {
   onSoulsMobInterrupted,
   resetSoulsPackCoordinator,
   releaseSoulsAttackToken
-} from './souls/soulsMobAi.js?v=20261125z103';
+} from './souls/soulsMobAi.js?v=20261125z104';
 import {
   SOULS_CASTLE_CONSTANTS,
   SOULS_CASTLE_BONFIRE,
@@ -86,36 +86,36 @@ import {
   canInteractWithBossDoor,
   findInteractableRelic,
   clampCastlePosition
-} from './souls/soulsCastleLayout.js?v=20261125z103';
+} from './souls/soulsCastleLayout.js?v=20261125z104';
 import {
   createDissolveAshSystem
-} from './souls/soulsDissolveVfx.js?v=20261125z103';
+} from './souls/soulsDissolveVfx.js?v=20261125z104';
 import {
   enhanceSoulsBossModel,
   updateSoulsBossVisuals,
   triggerSoulsBossHitFlash,
   disposeSoulsBossVisuals
-} from './souls/soulsBossVisuals.js?v=20261125z103';
+} from './souls/soulsBossVisuals.js?v=20261125z104';
 import {
   createSoulsGameFeel,
   getImpactSparkBurst
-} from './souls/soulsGameFeel.js?v=20261125z103';
+} from './souls/soulsGameFeel.js?v=20261125z104';
 import {
   BOSS_DOOR_CUTSCENE_DURATION,
   BOSS_DOOR_CUTSCENE_ACTS
-} from './souls/soulsCutsceneChoreography.js?v=20261125z103';
+} from './souls/soulsCutsceneChoreography.js?v=20261125z104';
 import {
   BOSS_ESCAPE_CUTSCENE_DURATION,
   BOSS_ESCAPE_ACTS
-} from './souls/soulsEscapeCutscene.js?v=20261125z103';
+} from './souls/soulsEscapeCutscene.js?v=20261125z104';
 import {
   resetActorPhysics,
   applyKnockbackImpulse,
   stepActorPhysicsBody
-} from './souls/soulsPhysicsFeel.js?v=20261125z103';
+} from './souls/soulsPhysicsFeel.js?v=20261125z104';
 import {
   createWeaponTrailSystem
-} from './souls/soulsWeaponTrails.js?v=20261125z103';
+} from './souls/soulsWeaponTrails.js?v=20261125z104';
 
 export function createCombatController({
   world,
@@ -312,7 +312,11 @@ export function createCombatController({
     if (souls.zoneMode === 'exterior_shore' && typeof world?.clampSoulsPosition === 'function') {
       const res = world.clampSoulsPosition(x, z, r, {
         currentY: Number.isFinite(player.visualGroundY) ? player.visualGroundY : 0,
-        shortcutUnlocked: Boolean(souls.gorgeShortcutUnlocked)
+        shortcutUnlocked: Boolean(souls.gorgeShortcutUnlocked),
+        liftUnlocked: Boolean(souls.liftUnlocked),
+        liftY: Number.isFinite(world?.getRiverReachLiftY?.()) ? world.getRiverReachLiftY() : 2.65,
+        monasteryShortcutUnlocked: Boolean(souls.monasteryShortcutUnlocked),
+        logShortcutUnlocked: Boolean(souls.logShortcutUnlocked)
       });
       if (out && typeof out === 'object') {
         out.x = res.x;
@@ -464,6 +468,10 @@ export function createCombatController({
       shoreSwordPickedUp: false,
       shoreBonfireLit: false,
       gorgeShortcutUnlocked: false,
+      liftUnlocked: false,
+      monasteryShortcutUnlocked: false,
+      logShortcutUnlocked: false,
+      claimedRiverChests: new Set(),
       gorgeLoreCounts: {},
       shoreNoSwordHintCd: 0,
       zoneTitleRu: 'Зал Костра',
@@ -7641,15 +7649,27 @@ export function createCombatController({
         const nearShoreSword = !soulsDoorCutsceneActive && !souls.shoreSwordPickedUp && distSword <= 2.75;
 
         const gorgeInteractables = world?.getExteriorShoreInteractables?.() || [];
+        const scStateMap = {
+          shortcutUnlocked: Boolean(souls.gorgeShortcutUnlocked),
+          liftUnlocked: Boolean(souls.liftUnlocked),
+          monasteryShortcutUnlocked: Boolean(souls.monasteryShortcutUnlocked),
+          logShortcutUnlocked: Boolean(souls.logShortcutUnlocked)
+        };
+        const liveLiftY = Number.isFinite(world?.getRiverReachLiftY?.()) ? world.getRiverReachLiftY() : 2.65;
         let activeInter = null;
         let activeInterDist = Infinity;
         if (!soulsDoorCutsceneActive && !nearShoreSword) {
           for (let ii = 0; ii < gorgeInteractables.length; ii++) {
             const it = gorgeInteractables[ii];
             if (!it) continue;
-            // Once shortcut gate is unlocked, don't nag with prompt at the open gate
-            if (it.type === 'shortcut_gate' && souls.gorgeShortcutUnlocked) continue;
-            const dy = (curPlayerY - (Number.isFinite(it.y) ? it.y : 0)) * 1.25;
+            // Once a shortcut gate is unlocked, don't nag with prompt at the open gate
+            if (it.type === 'shortcut_gate') {
+              const sk = it.stateKey || 'shortcutUnlocked';
+              if (scStateMap[sk]) continue;
+            }
+            if (it.type === 'chest' && souls.claimedRiverChests?.has?.(it.id)) continue;
+            const itY = it.type === 'lift_platform' ? liveLiftY : (Number.isFinite(it.y) ? it.y : 0);
+            const dy = (curPlayerY - itY) * 1.25;
             const d3 = Math.hypot(player.x - it.x, dy, player.z - it.z);
             const trigR = Number(it.radius) || 2.35;
             if (d3 <= trigR && d3 < activeInterDist) {
@@ -7668,12 +7688,20 @@ export function createCombatController({
         if (nearShoreSword) {
           shoreLabel = 'Подобрать Большую Дубину';
         } else if (activeInter) {
+          const sk = activeInter.stateKey || activeInter.setsState || 'shortcutUnlocked';
+          const isUnlocked = Boolean(scStateMap[sk]);
           if (activeInter.id === 'shore_bonfire') {
             shoreLabel = souls.shoreBonfireLit ? 'Отдохнуть у Костра Берега' : 'Зажечь Костёр Берега';
           } else if (activeInter.type === 'shortcut_gate') {
-            shoreLabel = souls.gorgeShortcutUnlocked ? (activeInter.unlockedPrompt || 'Ворота открыты') : (activeInter.lockedPrompt || 'Закрыто с другой стороны');
+            shoreLabel = isUnlocked ? (activeInter.unlockedPrompt || 'Ворота открыты') : (activeInter.lockedPrompt || 'Закрыто с другой стороны');
           } else if (activeInter.type === 'shortcut_lever') {
-            shoreLabel = souls.gorgeShortcutUnlocked ? (activeInter.activatedPrompt || 'Механизм ворот опущен') : (activeInter.prompt || 'Потянуть рычаг ворот');
+            shoreLabel = isUnlocked ? (activeInter.activatedPrompt || 'Механизм активирован') : (activeInter.prompt || 'Активировать короткий путь');
+          } else if (activeInter.type === 'lift_lever') {
+            shoreLabel = (!souls.liftUnlocked && activeInter.targetFloor === 'bottom')
+              ? (activeInter.lockedPrompt || 'Заклинило сверху — активируйте на Скальных высотах')
+              : (souls.liftUnlocked ? (activeInter.activatedPrompt || activeInter.prompt || 'Вызвать подъёмник') : (activeInter.prompt || 'Освободить подъёмник'));
+          } else if (activeInter.type === 'lift_platform') {
+            shoreLabel = souls.liftUnlocked ? (activeInter.prompt || 'Запустить подъёмник') : 'Противовес заблокирован сверху';
           } else if (activeInter.type === 'locked_gate') {
             shoreLabel = activeInter.lockedPrompt || 'Заперто';
           } else {
@@ -7716,7 +7744,7 @@ export function createCombatController({
             emitShockwave(activeInter.x, activeInter.z, 5.2, 0xfbbf24, 0.55);
             emitParticles(activeInter.x, (activeInter.y || 0) + 0.95, activeInter.z, 0xfde047, 28, 6.4, 0.16);
             emitParticles(player.x, (activeInter.y || 0) + 1.0, player.z, 0xf59e0b, 18, 4.8, 0.14);
-            const bfTitle = isShoreBf ? 'КОСТЁР БЕРЕГА ЗАЖЖЁН' : (activeInter.title || 'КОСТЁР БАШНИ ПЕРЕВАЛА').toUpperCase();
+            const bfTitle = isShoreBf ? 'КОСТЁР БЕРЕГА ЗАЖЖЁН' : (activeInter.title || 'КОСТЁР РЕЧНОГО ПРЕДЕЛА').toUpperCase();
             floatText(`🔥 ${bfTitle} • ЧЕКПОИНТ СОХРАНЁН • ${souls.flasks}/${souls.flasksMax} ФЛЯГ`, player.x, player.z - 0.9, '#fde047');
             callbacks?.onSoulsCue?.(bfTitle, 'guard_counter');
             callbacks?.onShoreBonfireLit?.({
@@ -7725,32 +7753,88 @@ export function createCombatController({
               shoreSwordPickedUp: Boolean(souls.shoreSwordPickedUp)
             });
           } else if (activeInter?.type === 'shortcut_lever') {
-            if (!souls.gorgeShortcutUnlocked) {
-              souls.gorgeShortcutUnlocked = true;
-              world?.setGorgeShortcutUnlocked?.(true);
+            const sk = activeInter.setsState || activeInter.stateKey || 'shortcutUnlocked';
+            const alreadyOpen = Boolean(scStateMap[sk]);
+            if (!alreadyOpen) {
+              if (sk === 'monasteryShortcutUnlocked') {
+                souls.monasteryShortcutUnlocked = true;
+                world?.setRiverReachShortcuts?.({ monasteryShortcutUnlocked: true });
+              } else if (sk === 'logShortcutUnlocked') {
+                souls.logShortcutUnlocked = true;
+                world?.setRiverReachShortcuts?.({ logShortcutUnlocked: true });
+              } else {
+                souls.gorgeShortcutUnlocked = true;
+                world?.setGorgeShortcutUnlocked?.(true);
+              }
               audio?.playBossDoorOpen?.();
               audio?.playSwordPickupChime?.();
               world?.addScreenShake?.(0.24, 0.28);
               emitParticles(activeInter.x, (activeInter.y || 4.2) + 0.85, activeInter.z, 0xfbbf24, 24, 5.2, 0.14);
-              floatText('⚙️ КОРОТКИЙ ПУТЬ ОТКРЫТ • Кованые ворота утёса распахнуты!', player.x, player.z - 0.8, '#fde047');
+              floatText(`⚙️ КОРОТКИЙ ПУТЬ ОТКРЫТ • ${activeInter.title || 'Срез разблокирован!'}`, player.x, player.z - 0.8, '#fde047');
               callbacks?.onSoulsCue?.('КОРОТКИЙ ПУТЬ ОТКРЫТ', 'guard_counter');
             } else {
-              floatText('⚙️ Механизм ворот уже опущен', player.x, player.z - 0.8, '#cbd5e1');
+              floatText(`⚙️ ${activeInter.activatedPrompt || 'Механизм уже активирован'}`, player.x, player.z - 0.8, '#cbd5e1');
             }
+          } else if (activeInter?.type === 'lift_lever' || activeInter?.type === 'lift_platform') {
+            if (!souls.liftUnlocked && activeInter.setsState === 'liftUnlocked') {
+              souls.liftUnlocked = true;
+              world?.setRiverReachShortcuts?.({ liftUnlocked: true });
+              world?.triggerRiverReachLift?.('top');
+              audio?.playBossDoorOpen?.();
+              audio?.playSwordPickupChime?.();
+              world?.addScreenShake?.(0.26, 0.30);
+              emitParticles(activeInter.x, (activeInter.y || 17.65) + 0.9, activeInter.z, 0xfbbf24, 26, 5.5, 0.15);
+              floatText('⚙️ КЛЕТЬ-ПОДЪЁМНИК ОСВОБОЖДЕНА • Связь Скальных высот (06) ↔ Ущелья (04) открыта!', player.x, player.z - 0.8, '#fde047');
+              callbacks?.onSoulsCue?.('ПОДЪЁМНИК ОТКРЫТ', 'guard_counter');
+            } else if (!souls.liftUnlocked) {
+              audio?.playBossArmorScrape?.(0.5);
+              world?.addScreenShake?.(0.08, 0.10);
+              floatText(`🔒 ${activeInter.lockedPrompt || 'Противовес заблокирован сверху на Скальных высотах'}`, player.x, player.z - 0.8, '#cbd5e1');
+            } else {
+              const targetFloor = activeInter.type === 'lift_lever'
+                ? (activeInter.targetFloor === 'top' ? (liveLiftY > 10.0 ? 'bottom' : 'top') : (liveLiftY < 10.0 ? 'top' : 'bottom'))
+                : (liveLiftY > 10.0 ? 'bottom' : 'top');
+              world?.triggerRiverReachLift?.(targetFloor);
+              audio?.playBossDoorOpen?.();
+              world?.addScreenShake?.(0.16, 0.22);
+              floatText(targetFloor === 'top' ? '⬆️ Клеть поднимается к Скальным высотам (06)...' : '⬇️ Клеть спускается в Глубокое ущелье (04)...', player.x, player.z - 0.8, '#c4b5fd');
+            }
+          } else if (activeInter?.type === 'chest') {
+            if (!souls.claimedRiverChests) souls.claimedRiverChests = new Set();
+            souls.claimedRiverChests.add(activeInter.id);
+            souls.flasksMax = Math.min(8, (souls.flasksMax || 4) + 1);
+            souls.flasks = souls.flasksMax;
+            player.hp = stats.maxHp;
+            audio?.playSwordPickupChime?.();
+            audio?.playPickup?.('heart');
+            world?.addScreenShake?.(0.14, 0.16);
+            emitShockwave(activeInter.x, activeInter.z, 4.4, 0x38bdf8, 0.5);
+            emitParticles(activeInter.x, (activeInter.y || curPlayerY) + 0.9, activeInter.z, 0xfde047, 26, 5.2, 0.15);
+            floatText(`💎 ${activeInter.title} • +1 ФЛЯГА (${souls.flasksMax})!`, activeInter.x, activeInter.z - 0.6, '#fde047');
+            callbacks?.onSoulsCue?.((activeInter.title || 'ТАЙНИК ОТКРЫТ').toUpperCase(), 'guard_counter');
+          } else if (activeInter?.type === 'region_gate' || activeInter?.type === 'boss_altar') {
+            audio?.playSwordPickupChime?.();
+            audio?.playBossDoorOpen?.();
+            world?.addScreenShake?.(0.22, 0.24);
+            emitShockwave(activeInter.x, activeInter.z, 6.0, 0xf59e0b, 0.65);
+            emitParticles(activeInter.x, (activeInter.y || curPlayerY) + 1.2, activeInter.z, 0xfbbf24, 30, 5.8, 0.16);
+            const txt = activeInter.loreText || '«Врата в Регион II ждут Стража Перевала...»';
+            floatText(`🏰 ${txt}`, activeInter.x, activeInter.z - 0.6, '#fde047');
+            callbacks?.onSoulsCue?.((activeInter.title || 'ЗАБРОШЕННЫЙ МОНАСТЫРЬ').toUpperCase(), 'guard_counter');
           } else if (activeInter?.type === 'shortcut_gate') {
             audio?.playBossArmorScrape?.(0.5);
             world?.addScreenShake?.(0.08, 0.10);
-            floatText('🔒 Закрыто с другой стороны • Найдите рычаг на верхней террасе', player.x, player.z - 0.8, '#cbd5e1');
+            floatText(`🔒 ${activeInter.lockedPrompt || 'Закрыто с другой стороны'}`, player.x, player.z - 0.8, '#cbd5e1');
           } else if (activeInter?.type === 'locked_gate') {
             audio?.playBossArmorScrape?.(0.5);
             world?.addScreenShake?.(0.08, 0.10);
-            floatText(`🔒 ${activeInter.lockedPrompt || 'Заперто — мост за перевалом обрушен'}`, player.x, player.z - 0.8, '#cbd5e1');
+            floatText(`🔒 ${activeInter.lockedPrompt || 'Заперто'}`, player.x, player.z - 0.8, '#cbd5e1');
           } else if (activeInter) {
             const txt = activeInter.loreText || '«Тёмные воды несут эхо павшего Замка Пепла...»';
             audio?.playSwordPickupChime?.();
             emitParticles(activeInter.x, (activeInter.y || curPlayerY) + 1.15, activeInter.z, 0x93c5fd, 16, 3.6, 0.12);
             floatText(`🗿 ${txt}`, activeInter.x, activeInter.z - 0.6, '#bfdbfe');
-            callbacks?.onSoulsCue?.((activeInter.title || 'ХРОНИКА УЩЕЛЬЯ').toUpperCase(), 'guard_counter');
+            callbacks?.onSoulsCue?.((activeInter.title || 'ХРОНИКА РЕЧНОГО ПРЕДЕЛА').toUpperCase(), 'guard_counter');
           }
         }
         souls.prevInteractInput = rawInteractIn;
@@ -11422,7 +11506,11 @@ export function createCombatController({
     if (souls.zoneMode === 'exterior_shore' && typeof world?.clampSoulsPosition === 'function') {
       const res = world.clampSoulsPosition(x, z, player.radius, {
         currentY: Number.isFinite(explicitY) ? explicitY : (Number.isFinite(player.visualGroundY) ? player.visualGroundY : 0),
-        shortcutUnlocked: Boolean(souls.gorgeShortcutUnlocked)
+        shortcutUnlocked: Boolean(souls.gorgeShortcutUnlocked),
+        liftUnlocked: Boolean(souls.liftUnlocked),
+        liftY: Number.isFinite(world?.getRiverReachLiftY?.()) ? world.getRiverReachLiftY() : 2.65,
+        monasteryShortcutUnlocked: Boolean(souls.monasteryShortcutUnlocked),
+        logShortcutUnlocked: Boolean(souls.logShortcutUnlocked)
       });
       player.x = res.x;
       player.z = res.z;

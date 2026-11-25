@@ -32,6 +32,42 @@
 
 export const WATER_LEVEL = -0.10;
 
+import {
+  RIVER_REACH_LIFT_MIN_Y,
+  RIVER_REACH_LIFT_MAX_Y,
+  RIVER_REACH_LIFT_CENTER,
+  evalRiverReachBaseTerrainY,
+  resolveRiverReachLayer,
+  evalRiverReachGroundY,
+  evalRiverReachSurfaceType,
+  clampRiverReachPosition,
+  getRiverReachZoneTitleAt,
+  getRiverReachLiftY,
+  RIVER_REACH_STATIC_COLLIDERS,
+  RIVER_REACH_ANCHORS,
+  RIVER_REACH_FIRE_SOURCES,
+  RIVER_REACH_EXTENDED_FIRE_SOURCES,
+  RIVER_REACH_INTERACTABLES,
+  RIVER_REACH_EXTENDED_INTERACTABLES
+} from './soulsRiverReachTopology.js?v=20261125z104';
+
+export {
+  RIVER_REACH_LIFT_MIN_Y,
+  RIVER_REACH_LIFT_MAX_Y,
+  RIVER_REACH_LIFT_CENTER,
+  evalRiverReachBaseTerrainY,
+  resolveRiverReachLayer,
+  evalRiverReachGroundY,
+  evalRiverReachSurfaceType,
+  clampRiverReachPosition,
+  getRiverReachZoneTitleAt,
+  getRiverReachLiftY,
+  RIVER_REACH_STATIC_COLLIDERS,
+  RIVER_REACH_ANCHORS,
+  RIVER_REACH_FIRE_SOURCES,
+  RIVER_REACH_INTERACTABLES
+};
+
 // ============================================================================
 // Pure Zero-GC Math Utilities
 // ============================================================================
@@ -330,130 +366,7 @@ function isInsideGrottoFootprint(x, z, currentY) {
 // Guaranteed BIT-FOR-BIT match with Zone 0 (z <= 31.0), exact 0.000m at (0, 2.5)!
 // ============================================================================
 export function evalBaseTerrainY(x, z) {
-  if (!Number.isFinite(x) || !Number.isFinite(z)) return 0.0;
-
-  const northRise =
-    smoothstep(3.2, 32.0, z) * 0.56 +
-    smoothstep(32.0, 57.0, z) * 0.28 +
-    smoothstep(57.0, 93.0, z) * 0.62 +
-    smoothstep(94.5, 102.2, z) * 1.19;
-
-  const dWake = Math.hypot(x - 0.0, z - 2.5);
-  const wakeFlatMask = smoothstep(0.9, 3.6, dWake);
-  const dBonfire = Math.hypot(x + 2.2, z - 15.0);
-  const bonfireFlatMask = smoothstep(1.2, 3.4, dBonfire);
-  const dGate = Math.hypot(x - 0.0, z - 31.0);
-  const gateFlatMask = smoothstep(1.8, 4.4, dGate);
-  const dCamp1 = Math.hypot(x + 2.95, z - 45.2);
-  const camp1FlatMask = smoothstep(1.2, 3.8, dCamp1);
-  const dCamp2 = Math.hypot(x + 3.55, z - 71.2);
-  const camp2FlatMask = smoothstep(1.2, 3.8, dCamp2);
-  const courtFlatMask =
-    1.0 -
-    smoothstep(100.8, 102.4, z) *
-      (1.0 - smoothstep(118.5, 122.0, z)) *
-      (1.0 - smoothstep(6.2, 9.2, Math.abs(x + 0.6)));
-  const padMask =
-    wakeFlatMask *
-    bonfireFlatMask *
-    gateFlatMask *
-    camp1FlatMask *
-    camp2FlatMask *
-    courtFlatMask;
-
-  const microWave =
-    (Math.sin(x * 0.42 + z * 0.29) * 0.045 +
-      Math.cos(x * 0.77 - z * 0.54) * 0.025 +
-      Math.sin((x + z) * 0.19) * 0.03) *
-    padMask;
-
-  let h = northRise + microWave;
-
-  // Branch A: Sculpted Lower Riverbank Smuggler's Shoal shelf (z = 36..60, x = 2.4..6.2, y ≈ 0.12..0.26m)
-  const shoalMask = evalShoalMask(x, z);
-  if (shoalMask > 1e-4) {
-    const shoalY =
-      0.19 +
-      Math.sin(z * 0.31 + x * 0.45) * 0.042 +
-      Math.cos(z * 0.17 - x * 0.23) * 0.024;
-    h = lerp(h, shoalY, shoalMask);
-  }
-
-  // River bank slope into underwater bed (protects Smuggler's Shoal rocky rim until rDist < 0.75m)
-  const rDist = getGorgeRiverSignedDist(x, z);
-  if (rDist < 2.8) {
-    const shoreUpper = lerp(2.6, 0.75, shoalMask);
-    const shoreLower = lerp(-2.4, -1.75, shoalMask);
-    const shoreT = smoothstep(shoreLower, shoreUpper, rDist);
-    const bedY = lerp(-0.82, h, shoreT);
-    h = lerp(h, bedY, 1.0 - (1.0 - wakeFlatMask) * 0.65);
-  }
-
-  // Right-side (-X) basalt cliff wall rising beside the shore & gorge road.
-  // Recesses cleanly for:
-  //   - Shortcut Stair Entry Apron (z = 41.5..46.0)
-  //   - Grotto Entry Doorway (z = 86.2..91.2)
-  //   - Zone 3 Cliffside Crypt Nook (z = 106.5..117.0)
-  const pathX = getGorgePathCenterX(z);
-  const apronRecess =
-    smoothstep(41.2, 43.0, z) * (1.0 - smoothstep(44.8, 46.6, z)) * 3.6;
-  const grottoDoorRecess =
-    smoothstep(85.8, 87.3, z) * (1.0 - smoothstep(90.1, 91.6, z)) * 2.2;
-  const cryptExpand =
-    smoothstep(105.0, 108.5, z) * (1.0 - smoothstep(115.2, 118.5, z)) * 3.8;
-  const gorgeWallEdge = lerp(
-    -10.2,
-    pathX - 6.0 - apronRecess - grottoDoorRecess - cryptExpand,
-    smoothstep(28.0, 38.0, z)
-  );
-  const westSlope = smoothstep(gorgeWallEdge, gorgeWallEdge - 9.2, x);
-  let cliffAdd = westSlope * westSlope * (5.2 + smoothstep(32.0, 88.0, z) * 2.6);
-
-  // Keep base terrain cleanly below the architectural stone slabs of Upper Chapel Terrace
-  // (x = -12.4..-7.8, z = 51..81) so terrain mesh never pokes through the paved terrace floor!
-  if (z > 50.0 && z < 82.5 && x < -7.0 && x > -13.5) {
-    const terraceCarve =
-      smoothstep(50.2, 52.5, z) *
-      (1.0 - smoothstep(79.5, 82.0, z)) *
-      smoothstep(-7.0, -8.2, x) *
-      (1.0 - smoothstep(-11.8, -13.4, x));
-    const maxUnderY = evalUpperTerraceY(z) - 0.35;
-    if (h + cliffAdd > maxUnderY) {
-      cliffAdd = lerp(cliffAdd, Math.max(0.0, maxUnderY - h), terraceCarve);
-    }
-  }
-  h += cliffAdd;
-
-  // Back slope behind Castle of Ash outfall waterfall (z < -10.5)
-  const archOpenMask = smoothstep(3.4, 6.2, Math.abs(x));
-  const backSlope = smoothstep(-10.5, -16.2, z);
-  h += backSlope * backSlope * (1.4 + 6.8 * archOpenMask);
-
-  // Far-left (+X) riverbank forested mountain slope across the river
-  const rcx = getGorgeRiverCenterX(z);
-  const rhw = getGorgeRiverHalfWidth(z);
-  const eastBankT = smoothstep(rcx + rhw + 0.6, rcx + rhw + 9.5, x);
-  h += eastBankT * eastBankT * 6.8;
-
-  // Far-north misty chasm dropoff past the closed Watchtower Portcullis (z > 123)
-  const chasmDrop = smoothstep(123.0, 134.0, z);
-  h -= chasmDrop * 2.4;
-
-  // Smooth flat apron blend into Shortcut Stair foot (x = -5.4..-8.8, z = 42.4..45.0 -> y ≈ 0.78m)
-  if (z > 41.8 && z < 45.6 && x < -4.2 && x > -9.8) {
-    const apronT =
-      smoothstep(41.8, 43.2, z) *
-      (1.0 - smoothstep(44.6, 45.6, z)) *
-      smoothstep(-4.2, -6.2, x) *
-      (1.0 - smoothstep(-8.6, -9.8, x));
-    h = lerp(h, SHORTCUT_STAIR_Y_START, apronT);
-  }
-
-  // Exact 0.000m guarantee at wakePos (0, 2.5)
-  if (dWake < 0.9) {
-    h = lerp(0.0, h, smoothstep(0.25, 0.9, dWake));
-  }
-  return h;
+  return evalRiverReachBaseTerrainY(x, z);
 }
 
 // ============================================================================
@@ -463,6 +376,12 @@ export function resolveGorgeLayer(x, z, currentY = 0, state = null) {
   const px = Number.isFinite(x) ? x : 0.0;
   const pz = Number.isFinite(z) ? z : 2.5;
   const cy = Number.isFinite(currentY) ? currentY : 0.0;
+
+  // 0. Delegate seamlessly to Region I 8-Sector River Reach extended layers (P02, P03, P07, P08, SC-2 Lift, Sectors 03..08)
+  const extLayer = resolveRiverReachLayer(px, pz, cy, state);
+  if (extLayer !== null) {
+    return extLayer;
+  }
 
   // 1. Zone 3 Upper Watchtower Bastion Rampart Walk & Staircase
   if (pz >= 102.5) {
@@ -516,6 +435,21 @@ export function evalGorgeGroundY(x, z, currentY = 0, state = null) {
   const cy = Number.isFinite(currentY) ? currentY : 0.0;
   const layer = resolveGorgeLayer(x, z, cy, state);
 
+  if (
+    layer === 'lift_cage' ||
+    layer === 'upper_lift_walkway' ||
+    layer === 'aqueduct_east' ||
+    layer === 'river_ford' ||
+    layer === 'sector03' ||
+    layer === 'sector05' ||
+    layer === 'sector06' ||
+    layer === 'monastery_shortcut' ||
+    layer === 'sector07' ||
+    layer === 'sector08'
+  ) {
+    return evalRiverReachGroundY(x, z, cy, state);
+  }
+
   if (layer === 'bridge') {
     return BRIDGE_Y;
   }
@@ -554,6 +488,21 @@ export function evalGorgeSurfaceType(x, z, currentY = 0, state = null) {
   const cy = Number.isFinite(currentY) ? currentY : 0.0;
   const layer = resolveGorgeLayer(x, z, cy, state);
 
+  if (
+    layer === 'lift_cage' ||
+    layer === 'upper_lift_walkway' ||
+    layer === 'aqueduct_east' ||
+    layer === 'river_ford' ||
+    layer === 'sector03' ||
+    layer === 'sector05' ||
+    layer === 'sector06' ||
+    layer === 'monastery_shortcut' ||
+    layer === 'sector07' ||
+    layer === 'sector08'
+  ) {
+    return evalRiverReachSurfaceType(x, z, cy, state);
+  }
+
   if (layer === 'bridge' || layer === 'bastion_upper') {
     return 'stone_bridge';
   }
@@ -582,24 +531,7 @@ export function evalGorgeSurfaceType(x, z, currentY = 0, state = null) {
 }
 
 export function getGorgeZoneTitleAt(x, z, y = 0) {
-  const px = Number.isFinite(x) ? x : 0.0;
-  const pz = Number.isFinite(z) ? z : 2.5;
-  const py = Number.isFinite(y) ? y : 0.0;
-
-  if (pz < 32.5) return 'Берег Пепельного Стока';
-
-  const layer = resolveGorgeLayer(px, pz, py, null);
-  if (layer === 'bridge') return 'Акведук Разлома';
-  if (layer === 'grotto') return 'Грот Контрабандистов';
-  if (layer === 'upper_terrace') return 'Верхняя Часовня Утёса';
-  if (layer === 'bastion_upper') {
-    return py >= 3.45 ? 'Верхние Стены Перевала' : 'Разрушенная Башня Перевала';
-  }
-  if (layer === 'river_shoal') return 'Речная Отмель';
-
-  if (pz < 58.5) return 'Тракт Древней Арки';
-  if (pz < 97.5) return 'Фонарная Набережная';
-  return 'Разрушенная Башня Перевала';
+  return getRiverReachZoneTitleAt(x, z, y);
 }
 
 // ============================================================================
@@ -678,7 +610,10 @@ export const GORGE_STATIC_COLLIDERS = Object.freeze([
   Object.freeze({ id: 'z3_portcullis_l', x:  4.05, z: 120.40, r: 1.25, layer: 'main', yMin: 1.0, yMax: 9.0 }),
 
   // Zone 3: Upper Bastion Rampart corner beacon brazier (tucked in SE parapet corner)
-  Object.freeze({ id: 'z3_upper_beacon', x:  5.70, z: 104.50, r: 0.42, layer: 'bastion_upper', yMin: 5.0, yMax: 8.5 })
+  Object.freeze({ id: 'z3_upper_beacon', x:  5.70, z: 104.50, r: 0.42, layer: 'bastion_upper', yMin: 5.0, yMax: 8.5 }),
+
+  // Region I Extended Sectors (03, 05, 06, 07, 08) Static Colliders
+  ...RIVER_REACH_STATIC_COLLIDERS
 ]);
 
 // ============================================================================
@@ -687,6 +622,7 @@ export const GORGE_STATIC_COLLIDERS = Object.freeze([
 let _bestX = 0.0;
 let _bestZ = 0.0;
 let _bestDistSq = Infinity;
+const _rrDelegateScratch = { x: 0.0, y: 0.0, z: 0.0, layer: 'main', surface: 'wet_stone' };
 
 function resetUnionClamp() {
   _bestDistSq = Infinity;
@@ -764,6 +700,20 @@ export function clampGorgePosition(x, z, currentY = 0, r = 0.55, state = null, o
   const cy = Number.isFinite(currentY) ? currentY : 0.0;
   const rad = Number.isFinite(r) ? Math.max(0.15, r) : 0.55;
   const shortcutUnlocked = Boolean(state && state.shortcutUnlocked);
+
+  // 0. Delegate seamlessly to Region I 8-Sector River Reach extended layers
+  //    (P02 Pier/Ford, P03 Fisherman's Bridge, P07 East Aqueduct, P08 Basalt Pass, SC-2 Lift, Sectors 03..08)
+  const extLayer = resolveRiverReachLayer(px, pz, cy, state);
+  if (extLayer !== null) {
+    const target = out || _rrDelegateScratch;
+    const res = clampRiverReachPosition(px, pz, cy, rad, state, target);
+    if (res.layer !== 'main' && res.layer !== 'bridge') {
+      if (out) return out;
+      return { x: res.x, z: res.z, y: res.y, layer: res.layer, surface: res.surface };
+    }
+    px = res.x;
+    pz = res.z;
+  }
 
   let activeLayer = resolveGorgeLayer(px, pz, cy, state);
 
@@ -918,10 +868,11 @@ export function clampGorgePosition(x, z, currentY = 0, r = 0.55, state = null, o
           );
         }
         // B_span (Monumental Aqueduct Bridge main deck: x = -12.2..+5.5, z = 80.3..83.7, y = 5.60m)
+        // Opens seamlessly east past x = +5.25 into P07 East Aqueduct Bridge Extension!
         if (!inside && cy >= BRIDGE_OVERLAP_SPLIT_Y) {
           inside = considerUnionRect(
             px, pz,
-            BRIDGE_X_MIN + rad, BRIDGE_X_MAX - rad,
+            BRIDGE_X_MIN + rad, 6.00,
             BRIDGE_Z_MIN + rad, BRIDGE_Z_MAX - rad
           );
         }
@@ -984,10 +935,13 @@ export function clampGorgePosition(x, z, currentY = 0, r = 0.55, state = null, o
   // --------------------------------------------------------------------------
   if (activeLayer === 'main' || activeLayer === 'river_shoal') {
     px = clamp(px, -24.0 + rad, 24.0 - rad);
-    pz = clamp(pz, -16.0 + rad, 120.2 - rad);
+    const inOpenPortcullisPre = px >= -1.20 && px <= 2.80;
+    const inLowerLiftAlcove = px >= -7.40 && px <= -3.40;
+    const zUpperBoundPre = inOpenPortcullisPre ? 121.50 : inLowerLiftAlcove ? 120.00 - rad : 120.2 - rad;
+    pz = clamp(pz, -16.0 + rad, zUpperBoundPre);
 
     const minZWall = -4.2 + smoothstep(-8.0, 2.0, px) * 0.8 + rad;
-    const maxZWall = 119.65 - rad;
+    const maxZWall = inOpenPortcullisPre ? 121.50 : inLowerLiftAlcove ? 120.00 - rad : 119.65 - rad;
     if (pz < minZWall) pz = minZWall;
     if (pz > maxZWall) pz = maxZWall;
 
@@ -997,6 +951,7 @@ export function clampGorgePosition(x, z, currentY = 0, r = 0.55, state = null, o
     //   3) Watchtower Bastion Staircase entry (z = 101.5..104.6 -> x = -3.8)
     //   4) Watchtower Bastion Staircase solid flank wall (z = 104.6..109.5 -> x = -1.4 for low Y)
     //   5) Watchtower Cliffside Crypt Nook underpass (z = 109.5..115.8 -> opens to x = -8.5)
+    //   6) SC-2 Lower Lift Station Alcove 4.5 (z = 116.4..120.0 -> opens to x = -7.4)
     const pathX = getGorgePathCenterX(pz);
     const shoreRightWall =
       -11.2 +
@@ -1017,17 +972,18 @@ export function clampGorgePosition(x, z, currentY = 0, r = 0.55, state = null, o
       gorgeRightWall = lerp(gorgeRightWall, -7.00, doorOpen);
     }
 
-    // Zone 3 Watchtower Lower Courtyard west wall + Stair flank + Crypt Nook underpass
+    // Zone 3 Watchtower Lower Courtyard west wall + Stair flank + Crypt Nook + SC-2 Lower Lift Alcove
     if (pz >= 99.5) {
       const bastionT = smoothstep(99.5, 102.0, pz);
       let z3WestWall = -3.85;
       if (pz >= 104.7 && pz < 109.6) {
         // Solid east masonry flank of the Bastion Ascent Staircase (prevents side-clipping into mid-stair!)
         z3WestWall = -1.40;
-      } else if (pz >= 109.6 && pz <= 115.8) {
-        // Deep Crypt Nook underpass directly beneath the y=5.65m West Gallery!
-        const nookOpen = smoothstep(109.6, 110.3, pz) * (1.0 - smoothstep(115.0, 115.8, pz));
-        z3WestWall = lerp(-3.85, -8.55, nookOpen);
+      } else if (pz >= 109.6) {
+        // Deep Crypt Nook underpass (z = 109.6..115.8) flowing smoothly north into SC-2 Lower Lift Alcove 4.5 (x = -7.4)!
+        const nookOpen = smoothstep(109.6, 110.3, pz);
+        const liftAlcoveT = smoothstep(115.0, 116.4, pz);
+        z3WestWall = lerp(-3.85, lerp(-8.55, -7.40, liftAlcoveT), nookOpen);
       }
       gorgeRightWall = lerp(gorgeRightWall, z3WestWall, bastionT);
     }
@@ -1078,7 +1034,10 @@ export function clampGorgePosition(x, z, currentY = 0, r = 0.55, state = null, o
     }
 
     px = clamp(px, -24.0 + rad, 24.0 - rad);
-    pz = clamp(pz, -16.0 + rad, 119.65 - rad);
+    const inOpenPortcullisPost = px >= -1.20 && px <= 2.80;
+    const inLowerLiftAlcovePost = px >= -7.40 && px <= -3.40;
+    const zUpperBoundPost = inOpenPortcullisPost ? 121.50 : inLowerLiftAlcovePost ? 120.00 - rad : 119.65 - rad;
+    pz = clamp(pz, -16.0 + rad, zUpperBoundPost);
   }
 
   // Final authoritative layer, elevation & surface resolution
@@ -1144,7 +1103,8 @@ export const GORGE_ANCHORS = Object.freeze({
   bastionUpperParapetPos: Object.freeze({ x: 0.8, y: BASTION_UPPER_Y, z: 117.8, layer: 'bastion_upper' }),
   bastionUpperOverlookPos: Object.freeze({ x: 4.5, y: BASTION_UPPER_Y, z: 105.2, layer: 'bastion_upper' }),
 
-  bounds: Object.freeze({ minX: -24.0, maxX: 24.0, minZ: -16.0, maxZ: 124.0 })
+  // Region I 8-Sector River Reach Anchors (44 POIs '1.1'..'8.5' + Sector Spawns '01'..'08' + Extended Bounds)
+  ...RIVER_REACH_ANCHORS
 });
 
 // ============================================================================
@@ -1273,7 +1233,9 @@ export const GORGE_FIRE_SOURCES = Object.freeze([
     radius: 18.0,
     lightIntensity: 8.0,
     alwaysLit: true
-  })
+  }),
+  // Region I Extended Bonfires (Village, Camp, Cliff, Viaduct) + 36+ Braziers & Lanterns across Sectors 03..08
+  ...RIVER_REACH_EXTENDED_FIRE_SOURCES
 ]);
 
 // ============================================================================
@@ -1403,14 +1365,15 @@ export const GORGE_INTERACTABLES = Object.freeze([
   }),
   Object.freeze({
     id: 'watchtower_portcullis',
-    type: 'locked_gate',
+    type: 'lore',
     x: 0.80,
     y: BASTION_LOWER_Y,
     z: 119.40,
     layer: 'main',
     radius: 2.20,
-    title: 'Северная Решётка Перевала',
-    lockedPrompt: 'Заперто — мост за перевалом обрушен'
+    title: 'Поднятая Северная Решётка Перевала',
+    prompt: 'Осмотреть проход на Скальные высоты',
+    loreText: '«Решётка Башни Перевала поднята — за аркой тропа уходит вверх по Базальтовому перевалу к Скальным высотам и Древним сооружениям.»'
   }),
   Object.freeze({
     id: 'bastion_upper_overlook',
@@ -1423,7 +1386,10 @@ export const GORGE_INTERACTABLES = Object.freeze([
     title: 'Дозорный Бастион',
     prompt: 'Осмотреть Ущелье Лунного Стока',
     loreText: '«С верхних стен Перевала открывается вся цепь огней: костры тракта, акведук и багровое зарево Замка Пепла.»'
-  })
+  }),
+  // Region I Extended Interactables (4 Extended Bonfires, SC-2 Lift Bottom/Top Controls, SC-3/SC-4 Shortcuts,
+  // 5 Secret Chests/Relics, Cathedral Boss Altar 8.3, Region II Citadel Finale Gate 8.5, Vistas & Lore)
+  ...RIVER_REACH_EXTENDED_INTERACTABLES
 ]);
 
 // ============================================================================

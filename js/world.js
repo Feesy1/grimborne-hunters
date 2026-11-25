@@ -4,14 +4,14 @@
 import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { DRACOLoader } from '../vendor/DRACOLoader.js';
-import { ARENA_HALF_SIZE } from './config.js?v=20261125z103';
-import { createSoulsArena } from './soulsArena.js?v=20261125z103';
+import { ARENA_HALF_SIZE } from './config.js?v=20261125z104';
+import { createSoulsArena } from './soulsArena.js?v=20261125z104';
 import {
   BOSS_DOOR_CUTSCENE_DURATION,
   evaluateBossDoorCutscene,
   getBossDoorCutsceneSkipState,
   computeBossDoorCutsceneShakeOffset
-} from './souls/soulsCutsceneChoreography.js?v=20261125z103';
+} from './souls/soulsCutsceneChoreography.js?v=20261125z104';
 import {
   BOSS_ESCAPE_CUTSCENE_DURATION,
   BOSS_ESCAPE_CUTSCENE_SKIP_TIME,
@@ -21,23 +21,23 @@ import {
   sampleBossEscapeCutscene,
   getBossEscapeCutsceneSkipState,
   computeBossEscapeCameraShakeOffset
-} from './souls/soulsEscapeCutscene.js?v=20261125z103';
+} from './souls/soulsEscapeCutscene.js?v=20261125z104';
 import {
   EXTERIOR_SHORE_ANCHORS,
   createSoulsExteriorShore
-} from './souls/soulsExteriorShore.js?v=20261125z103';
-import { createSoulsEscapeVfx } from './souls/soulsEscapeVfx.js?v=20261125z103';
+} from './souls/soulsExteriorShore.js?v=20261125z104';
+import { createSoulsEscapeVfx } from './souls/soulsEscapeVfx.js?v=20261125z104';
 import {
   clampCastleCameraPosition,
   SOULS_CASTLE_CONSTANTS
-} from './souls/soulsCastleLayout.js?v=20261125z103';
+} from './souls/soulsCastleLayout.js?v=20261125z104';
 import {
   createSoulsEnvironmentMap,
   createSoulsShoreEnvironmentMap
-} from './souls/soulsLightingRig.js?v=20261125z103';
-import { setSoulsRimLight } from './models.js?v=20261125z103';
-import { applyEldenDissolveToModel } from './souls/soulsDissolveVfx.js?v=20261125z103';
-import * as SoulsFireVfx from './souls/soulsFireVfx.js?v=20261125z103';
+} from './souls/soulsLightingRig.js?v=20261125z104';
+import { setSoulsRimLight } from './models.js?v=20261125z104';
+import { applyEldenDissolveToModel } from './souls/soulsDissolveVfx.js?v=20261125z104';
+import * as SoulsFireVfx from './souls/soulsFireVfx.js?v=20261125z104';
 import {
   createCourtyardStoneTexture,
   createHubMistTexture,
@@ -48,7 +48,7 @@ import {
   createHubContactAoTexture,
   createArcaneCircleTexture,
   getSlashCrescentGeo
-} from './world/textures.js?v=20261125z103';
+} from './world/textures.js?v=20261125z104';
 
 const sharedDracoLoader = new DRACOLoader();
 sharedDracoLoader.setDecoderPath('./vendor/draco/');
@@ -283,7 +283,7 @@ export function createArenaWorld(canvas) {
   const getCombatFogForBiome = (b = currentBiome, isModeSwitch = false) => {
     if (b === 'souls_citadel') {
       if (soulsZoneMode === 'shaft_river') return { near: 8, far: 48 };
-      if (soulsZoneMode === 'exterior_shore') return { near: 20, far: 128 };
+      if (soulsZoneMode === 'exterior_shore') return { near: 26, far: 185 };
       return { near: 14, far: 58 };
     }
     if (b === 'frost_ruins') return { near: 46, far: 116 };
@@ -310,7 +310,7 @@ export function createArenaWorld(canvas) {
     44,
     Math.max(window.innerWidth, 1) / Math.max(window.innerHeight, 1),
     0.35,
-    360
+    560
   );
   camera.position.copy(COMBAT_CAM_OFFSET);
   camera.lookAt(0, 0.5, 0);
@@ -7069,7 +7069,7 @@ export function createArenaWorld(canvas) {
     if (devEditors) return Promise.resolve(devEditors);
     if (!isDevModeEnabled()) return Promise.resolve(null);
     if (!devEditorsPromise) {
-      devEditorsPromise = import('./world/devEditors.js?v=20261125z103')
+      devEditorsPromise = import('./world/devEditors.js?v=20261125z104')
         .then((mod) => {
           devEditors = mod.createWorldDevEditors({
             scene,
@@ -9272,6 +9272,18 @@ export function createArenaWorld(canvas) {
     getExteriorShoreZoneTitle: (x = 0, z = 0, currentY) => (soulsExteriorShore?.getZoneTitleAt?.(x, z, currentY) || 'Берег Пепельного Стока'),
     setGorgeShortcutUnlocked: (unlocked) => ensureSoulsExteriorShore()?.setShortcutUnlocked?.(Boolean(unlocked)),
     isGorgeShortcutUnlocked: () => Boolean(soulsExteriorShore?.isShortcutUnlocked?.()),
+    setRiverReachShortcuts: (patch, instant = false) => ensureSoulsExteriorShore()?.setRiverReachShortcuts?.(patch, instant),
+    getRiverReachShortcuts: () => (soulsExteriorShore?.getRiverReachShortcuts?.() || {}),
+    triggerRiverReachLift: (targetFloor) => ensureSoulsExteriorShore()?.triggerRiverReachLift?.(targetFloor),
+    getRiverReachLiftY: () => {
+      const y = soulsExteriorShore?.getRiverReachLiftY?.();
+      return Number.isFinite(y) ? y : 2.65;
+    },
+    setCombatOrbitPitch: (pitch) => {
+      if (Number.isFinite(pitch)) {
+        orbitPitch = orbitTargetPitch = Math.max(-0.25, Math.min(1.15, Number(pitch)));
+      }
+    },
     getExteriorShoreReadyPromise: () => soulsExteriorShore?.getReadyPromise?.() || Promise.resolve(),
     attachShoreRealSwordModel,
     setShoreSwordPickedUp: (picked) => ensureSoulsExteriorShore()?.setSwordPickedUp?.(Boolean(picked)),

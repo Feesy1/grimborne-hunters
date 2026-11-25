@@ -35,6 +35,9 @@ import {
   GORGE_ANCHORS,
   GORGE_FIRE_SOURCES,
   GORGE_INTERACTABLES,
+  RIVER_REACH_LIFT_MIN_Y,
+  RIVER_REACH_LIFT_MAX_Y,
+  evalRiverReachBaseTerrainY,
   getGorgePathCenterX,
   getGorgeRiverCenterX,
   getGorgeRiverHalfWidth,
@@ -44,20 +47,22 @@ import {
   evalGorgeSurfaceType,
   clampGorgePosition,
   getGorgeZoneTitleAt
-} from './soulsGorgeTopology.js?v=20261125z103';
+} from './soulsGorgeTopology.js?v=20261125z104';
 import {
   createSoulsGorgeRoad,
   createGorgePbrTextures
-} from './soulsGorgeRoad.js?v=20261125z103';
+} from './soulsGorgeRoad.js?v=20261125z104';
+import { createSoulsRiverReachEast } from './soulsRiverReachEast.js?v=20261125z104';
+import { createSoulsRiverReachNorth } from './soulsRiverReachNorth.js?v=20261125z104';
 import {
   createGorgeSkyMaterial,
   createGorgeRiverMaterial,
   createValleyMistRig
-} from './soulsGorgeAtmosphere.js?v=20261125z103';
+} from './soulsGorgeAtmosphere.js?v=20261125z104';
 import {
   createStylizedGorgeTerrainMaterial,
   createMossCoatedStoneMaterial
-} from './soulsGorgeTerrainMat.js?v=20261125z103';
+} from './soulsGorgeTerrainMat.js?v=20261125z104';
 
 const CHASM_STENCIL_ID = 65; // 0x41: odd bit-0 masks bossRing; far outside world.js crater pool slots (3..33)
 
@@ -2879,7 +2884,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   if (extSkyMat.uniforms?.uFogColor?.value) {
     extSkyMat.uniforms.uFogColor.value.setHex(0x1a2a40);
   }
-  const extSkyDome = new THREE.Mesh(trackGeo(new THREE.SphereGeometry(255, 32, 20)), extSkyMat);
+  const extSkyDome = new THREE.Mesh(trackGeo(new THREE.SphereGeometry(430, 32, 20)), extSkyMat);
   extSkyDome.position.set(0, -6, 0);
   extSkyDome.renderOrder = -20;
   exteriorGroup.add(extSkyDome);
@@ -5509,6 +5514,46 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     destructibleProps
   });
 
+  // C8d. FULL 8-SECTOR «РЕЧНОЙ ПРЕДЕЛ» WORLD EXPANSION (Sectors 01-05 East + Sectors 06-08 North)
+  const riverReachEastCtrl = createSoulsRiverReachEast(THREE, {
+    parentGroup: exteriorGroup,
+    gltfLoader: opts?.gltfLoader || null,
+    pbrTex: gorgePbrTex,
+    terrainMat: shoreTerrainMat,
+    riverMat: extRiverMat,
+    campfireRig: gorgeRoadCtrl?.campfireRig || null,
+    isMobile,
+    lowSpecMode,
+    trackGeo,
+    trackMat,
+    regNormalMat,
+    xformGeo,
+    tintGeo,
+    mergeNonIndexedGeos,
+    uTimeUniform: extSkyUniforms.uTime,
+    mistSpriteTex,
+    evalTerrainY: evalRiverReachBaseTerrainY
+  });
+
+  const riverReachNorthCtrl = createSoulsRiverReachNorth(THREE, {
+    parentGroup: exteriorGroup,
+    gltfLoader: opts?.gltfLoader || null,
+    pbrTex: gorgePbrTex,
+    terrainMat: shoreTerrainMat,
+    campfireRig: gorgeRoadCtrl?.campfireRig || null,
+    isMobile,
+    lowSpecMode,
+    trackGeo,
+    trackMat,
+    regNormalMat,
+    xformGeo,
+    tintGeo,
+    mergeNonIndexedGeos,
+    uTimeUniform: extSkyUniforms.uTime,
+    mistSpriteTex,
+    evalTerrainY: evalRiverReachBaseTerrainY
+  });
+
   // Layered Nocturnal Blue-Slate Valley Mist Rig (River Sheets + Depth Curtains + Road Wisps, z103)
   const valleyMistRig = createValleyMistRig(THREE, {
     parentGroup: exteriorGroup,
@@ -6090,12 +6135,87 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   }
 
   let gorgeShortcutUnlocked = false;
+  let liftUnlocked = false;
+  let liftY = RIVER_REACH_LIFT_MIN_Y;
+  let liftTargetY = RIVER_REACH_LIFT_MIN_Y;
+  let liftRiding = false;
+  let monasteryShortcutUnlocked = false;
+  let logShortcutUnlocked = false;
+
   function setShortcutUnlocked(unlocked, instant = false) {
     gorgeShortcutUnlocked = Boolean(unlocked);
     gorgeRoadCtrl?.setShortcutUnlocked?.(gorgeShortcutUnlocked, instant);
   }
   function isShortcutUnlocked() {
     return gorgeShortcutUnlocked;
+  }
+
+  function setRiverReachShortcuts(patch = null, instant = false) {
+    if (!patch || typeof patch !== 'object') return getRiverReachShortcuts();
+    if (patch.shortcutUnlocked !== undefined) {
+      setShortcutUnlocked(Boolean(patch.shortcutUnlocked), instant);
+    }
+    if (patch.liftUnlocked !== undefined) {
+      liftUnlocked = Boolean(patch.liftUnlocked);
+    }
+    if (Number.isFinite(patch.liftY)) {
+      liftY = clamp(patch.liftY, RIVER_REACH_LIFT_MIN_Y, RIVER_REACH_LIFT_MAX_Y);
+      liftTargetY = liftY;
+      liftRiding = false;
+    }
+    if (patch.monasteryShortcutUnlocked !== undefined) {
+      monasteryShortcutUnlocked = Boolean(patch.monasteryShortcutUnlocked);
+      riverReachNorthCtrl?.setMonasteryShortcutUnlocked?.(monasteryShortcutUnlocked, instant);
+    }
+    if (patch.logShortcutUnlocked !== undefined) {
+      logShortcutUnlocked = Boolean(patch.logShortcutUnlocked);
+      riverReachEastCtrl?.setLogShortcutUnlocked?.(logShortcutUnlocked, instant);
+    }
+    riverReachNorthCtrl?.setLiftState?.({ unlocked: liftUnlocked, y: liftY, riding: liftRiding });
+    return getRiverReachShortcuts();
+  }
+
+  function getRiverReachShortcuts() {
+    return {
+      shortcutUnlocked: gorgeShortcutUnlocked,
+      liftUnlocked,
+      liftY,
+      liftTargetY,
+      liftRiding,
+      monasteryShortcutUnlocked,
+      logShortcutUnlocked
+    };
+  }
+
+  function triggerRiverReachLift(targetFloor = null) {
+    if (!liftUnlocked) return liftY;
+    if (targetFloor === 'top') {
+      liftTargetY = RIVER_REACH_LIFT_MAX_Y;
+    } else if (targetFloor === 'bottom') {
+      liftTargetY = RIVER_REACH_LIFT_MIN_Y;
+    } else {
+      liftTargetY = liftY > (RIVER_REACH_LIFT_MIN_Y + RIVER_REACH_LIFT_MAX_Y) * 0.5
+        ? RIVER_REACH_LIFT_MIN_Y
+        : RIVER_REACH_LIFT_MAX_Y;
+    }
+    liftRiding = Math.abs(liftTargetY - liftY) > 0.02;
+    riverReachNorthCtrl?.setLiftState?.({ unlocked: liftUnlocked, y: liftY, riding: liftRiding });
+    return liftY;
+  }
+
+  function getRiverReachLiftY() {
+    return liftY;
+  }
+
+  function buildTopologyState(extraOpts = null) {
+    return {
+      shortcutUnlocked: gorgeShortcutUnlocked,
+      liftUnlocked,
+      liftY,
+      monasteryShortcutUnlocked,
+      logShortcutUnlocked,
+      ...(extraOpts || {})
+    };
   }
 
   function getAnchors() {
@@ -6134,22 +6254,23 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   }
 
   function clampPosition(x, z, r = 0.55, opts = null) {
-    const mergedOpts = opts
-      ? { shortcutUnlocked: gorgeShortcutUnlocked, ...opts }
-      : { shortcutUnlocked: gorgeShortcutUnlocked };
-    return clampExteriorPosition(x, z, r, mergedOpts);
+    return clampExteriorPosition(x, z, r, buildTopologyState(opts));
   }
 
   function getGroundY(x, z, currentY) {
-    return evalExteriorGroundY(x, z, currentY, { shortcutUnlocked: gorgeShortcutUnlocked });
+    return evalExteriorGroundY(x, z, currentY, buildTopologyState());
   }
 
   function getSurfaceType(x, z, currentY) {
-    return evalExteriorSurfaceType(x, z, currentY, { shortcutUnlocked: gorgeShortcutUnlocked });
+    return evalExteriorSurfaceType(x, z, currentY, buildTopologyState());
   }
 
   function getReadyPromise() {
-    return gorgeRoadCtrl?.readyPromise || Promise.resolve(true);
+    return Promise.all([
+      gorgeRoadCtrl?.readyPromise || Promise.resolve(true),
+      riverReachEastCtrl?.readyPromise || Promise.resolve(true),
+      riverReachNorthCtrl?.readyPromise || Promise.resolve(true)
+    ]);
   }
 
   function setLowSpecMode(lowSpec) {
@@ -6227,11 +6348,21 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     if (stageMode === 'exterior_shore') {
       extSkyUniforms.uTime.value = t;
       const camPos = updateOpts?.camPos || updateOpts?.camera?.position || null;
+      if (Math.abs(liftTargetY - liftY) > 0.005) {
+        const liftSpeed = 4.6; // smooth ~3.2s ride across 15m vertical shaft
+        const stepY = safeDt * liftSpeed;
+        liftY = liftY < liftTargetY ? Math.min(liftTargetY, liftY + stepY) : Math.max(liftTargetY, liftY - stepY);
+        liftRiding = Math.abs(liftTargetY - liftY) > 0.005;
+        riverReachNorthCtrl?.setLiftState?.({ unlocked: liftUnlocked, y: liftY, riding: liftRiding });
+      }
       gorgeRoadCtrl?.update?.(safeDt, t, camPos);
+      riverReachEastCtrl?.update?.(safeDt, t, camPos);
+      riverReachNorthCtrl?.update?.(safeDt, t, camPos);
       valleyMistRig?.update?.(t, camPos);
-      // Keep sky dome centered on camera XZ so the Full Moon, storm clouds & stars stay at true infinite horizon!
+      // Keep sky dome centered on camera XYZ so the Full Moon, storm clouds & stars stay at true infinite horizon across all 8 sectors!
       if (camPos && Number.isFinite(camPos.x) && Number.isFinite(camPos.z)) {
-        extSkyDome.position.set(camPos.x, -6.0, camPos.z);
+        const skyY = Number.isFinite(camPos.y) ? camPos.y - 6.0 : -6.0;
+        extSkyDome.position.set(camPos.x, skyY, camPos.z);
       }
 
       if (!swordPickedUp) {
@@ -6304,6 +6435,8 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     setStageMode('none');
     attachRealSwordModel(null);
     valleyMistRig?.dispose?.();
+    riverReachEastCtrl?.dispose?.();
+    riverReachNorthCtrl?.dispose?.();
     for (let i = 0; i < ownedGeos.length; i++) ownedGeos[i]?.dispose?.();
     for (let i = 0; i < ownedMats.length; i++) ownedMats[i]?.dispose?.();
     for (let i = 0; i < ownedTex.length; i++) ownedTex[i]?.dispose?.();
@@ -6348,6 +6481,10 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     setBonfireLit,
     setShortcutUnlocked,
     isShortcutUnlocked,
+    setRiverReachShortcuts,
+    getRiverReachShortcuts,
+    triggerRiverReachLift,
+    getRiverReachLiftY,
     hitDestructibles,
     resetDestructibles,
     attachRealSwordModel,

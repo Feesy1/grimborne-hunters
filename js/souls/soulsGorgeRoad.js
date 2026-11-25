@@ -24,14 +24,14 @@ import {
   getGorgeRiverCenterX,
   getGorgeRiverHalfWidth,
   getGorgeRiverSignedDist
-} from './soulsGorgeTopology.js?v=20261125z103';
-import { createCampfireVfxRig } from './soulsGorgeAtmosphere.js?v=20261125z103';
+} from './soulsGorgeTopology.js?v=20261125z104';
+import { createCampfireVfxRig } from './soulsGorgeAtmosphere.js?v=20261125z104';
 import {
   createStylizedGorgeTerrainMaterial,
   createMossCoatedStoneMaterial
-} from './soulsGorgeTerrainMat.js?v=20261125z103';
+} from './soulsGorgeTerrainMat.js?v=20261125z104';
 
-const ASSET_VER = '20261125z103';
+const ASSET_VER = '20261125z104';
 const TEX_BASE = './assets/env/textures';
 const NATURE_GLB_URL = `./assets/env/gorge_nature.glb?v=${ASSET_VER}`;
 const RUINS_GLB_URL = `./assets/env/gorge_ruins.glb?v=${ASSET_VER}`;
@@ -637,8 +637,9 @@ export function createSoulsGorgeRoad(THREE, ctx) {
   addMasonryBox(archStoneParts, 0.72, 5.7, 0.72, 5.42, 2.65, 84.10, 0, 0, 0, 0x8a99b4, 0x343d50);
   addMasonryBox(archStoneParts, 2.60, 0.52, 4.90, 4.60, 5.14, 82.0, 0, 0, 0, 0x8c9bb6, 0x3a4358);
   addMasonryBox(archDeckParts,  2.6, 0.26, 4.9, 4.60, 5.48, 82.0, 0, 0, 0, 0xa0aec8, 0x4e586d);
-  // Overlook balcony low broken weathered parapets (north, south & east river edge)
-  addMasonryBox(archStoneParts, 0.44, 0.78, 4.9, 5.80, 5.96, 82.0, 0, 0, 0, 0x96a6c2, 0x444e63);
+  // Overlook balcony low broken weathered parapets (north & south curbs + open east portal posts into P07 East Aqueduct Extension!)
+  addMasonryBox(archStoneParts, 0.54, 1.15, 0.56, 5.78, 6.14, 79.82, 0, 0, 0, 0x96a6c2, 0x444e63);
+  addMasonryBox(archStoneParts, 0.54, 1.15, 0.56, 5.78, 6.14, 84.18, 0, 0, 0, 0x96a6c2, 0x444e63);
   addMasonryBox(archStoneParts, 2.4, 0.72, 0.42, 4.60, 5.94, 79.58, 0, 0, 0, 0x96a6c2, 0x444e63);
   addMasonryBox(archStoneParts, 2.4, 0.72, 0.42, 4.60, 5.94, 84.42, 0, 0, 0, 0x96a6c2, 0x444e63);
   // West bridge transition deck tying `Stone_Arch_Bridge_Bay` (-6.1) seamlessly into Upper Chapel Terrace (-12.4)
@@ -742,6 +743,8 @@ export function createSoulsGorgeRoad(THREE, ctx) {
     trackGeo(mergeNonIndexedGeos(THREE, portcullisParts, { boxUvTile: 1.4 })),
     rustedGrateMat
   );
+  // Hoisted open for z104 seam P08 (Sector 04 -> Sector 06 Cliff Heights!)
+  portcullisMesh.position.y = 4.15;
   portcullisMesh.castShadow = true;
   portcullisMesh.receiveShadow = true;
   gorgeGroup.add(portcullisMesh);
@@ -1411,19 +1414,19 @@ export function createSoulsGorgeRoad(THREE, ctx) {
       createInstancedFromMesh(mossMound, mossMoundMat, mossXforms, { castShadow: true, receiveShadow: true });
     }
 
-    // 5. Monumental Eroded Alpine Distant Mountains (`Distant_Mountain_A/B`) framing the horizon beneath the Full Moon!
+    // 5. Monumental Eroded Alpine Distant Mountains (`Distant_Mountain_A/B`) framing the far-west horizon (clear of all 8 sectors!)
     const mtnA = natureMap.get('Distant_Mountain_A');
     const mtnB = natureMap.get('Distant_Mountain_B');
     const mtnAXforms = [
-      { x: -28.0, y: -3.5, z: 136.0, ry: 0.35, sx: 1.45, sy: 1.65, sz: 1.45 },
-      { x:  44.0, y: -3.5, z: 132.0, ry: -0.45, sx: 1.55, sy: 1.60, sz: 1.55 },
-      { x:  62.0, y: -4.0, z: 88.0,  ry: 1.25, sx: 1.35, sy: 1.45, sz: 1.35 },
-      { x: -62.0, y: -4.0, z: 100.0, ry: -1.10, sx: 1.40, sy: 1.45, sz: 1.35 }
+      { x: -72.0, y: -3.5, z:  42.0, ry:  0.35, sx: 1.55, sy: 1.75, sz: 1.55 },
+      { x: -78.0, y: -3.5, z: 108.0, ry: -0.45, sx: 1.65, sy: 1.85, sz: 1.65 },
+      { x: -84.0, y: -2.0, z: 174.0, ry:  1.15, sx: 1.75, sy: 2.05, sz: 1.70 },
+      { x: -66.0, y: -4.0, z: -26.0, ry: -1.10, sx: 1.50, sy: 1.60, sz: 1.45 }
     ];
     const mtnBXforms = [
-      { x:  14.0, y: -4.5, z: 162.0, ry: 0.18, sx: 1.70, sy: 1.88, sz: 1.65 },
-      { x: -18.0, y: -4.5, z: 176.0, ry: -0.28, sx: 1.85, sy: 2.05, sz: 1.75 },
-      { x:  56.0, y: -4.5, z: 172.0, ry: 0.62, sx: 1.75, sy: 1.78, sz: 1.70 }
+      { x: -94.0, y: -3.0, z:  76.0, ry:  0.18, sx: 1.85, sy: 2.15, sz: 1.75 },
+      { x: -98.0, y: -2.0, z: 146.0, ry: -0.28, sx: 1.95, sy: 2.35, sz: 1.85 },
+      { x: -92.0, y:  0.0, z: 228.0, ry:  0.62, sx: 2.05, sy: 2.45, sz: 1.90 }
     ];
     createInstancedFromMesh(mtnA, distantMountainMat, mtnAXforms, { castShadow: false, receiveShadow: false });
     createInstancedFromMesh(mtnB, distantMountainMat, mtnBXforms, { castShadow: false, receiveShadow: false });
@@ -1752,6 +1755,7 @@ export function createSoulsGorgeRoad(THREE, ctx) {
 
   return {
     gorgeGroup,
+    campfireRig,
     readyPromise,
     setShortcutUnlocked,
     isShortcutUnlocked: () => shortcutUnlocked,

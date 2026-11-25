@@ -3,15 +3,15 @@
 // Procedural/Sampled Spatial Audio, Gothic Title Screen & HUD.
 
 import * as THREE from '../vendor/three.module.js';
-import { SOULS_LEVEL_DEF } from './config.js?v=20261125z103';
-import { createArenaWorld } from './world.js?v=20261125z103';
-import * as models from './models.js?v=20261125z103';
-import { createProgressionStore, mergeCloudState } from './progression.js?v=20261125z103';
-import { createCombatController } from './combat.js?v=20261125z103';
-import { createAudioEngine } from './audio.js?v=20261125z103';
-import { initYandexSdk } from './yandexSdk.js?v=20261125z103';
-import { createUIManager } from './ui.js?v=20261125z103';
-import { createInputController } from './input.js?v=20261125z103';
+import { SOULS_LEVEL_DEF } from './config.js?v=20261125z104';
+import { createArenaWorld } from './world.js?v=20261125z104';
+import * as models from './models.js?v=20261125z104';
+import { createProgressionStore, mergeCloudState } from './progression.js?v=20261125z104';
+import { createCombatController } from './combat.js?v=20261125z104';
+import { createAudioEngine } from './audio.js?v=20261125z104';
+import { initYandexSdk } from './yandexSdk.js?v=20261125z104';
+import { createUIManager } from './ui.js?v=20261125z104';
+import { createInputController } from './input.js?v=20261125z104';
 
 const SOULS_LOCAL_SAVE_KEY = 'grimborne_souls_save_v1';
 
@@ -904,6 +904,13 @@ async function bootstrap() {
         return true;
       }
       return Boolean(combat.teleportToExteriorShore?.(opts));
+    },
+    teleportToSector: (sectorKey = '01') => {
+      const anchors = world?.getExteriorShoreAnchors?.() || {};
+      const key = String(sectorKey || '01');
+      const pt = anchors[`sector_${key}`] || anchors[key] || anchors.wakePos;
+      if (!pt) return null;
+      return combat.debugTeleport?.(pt.x, pt.z, pt.y) || null;
     },
     equipWeapon: (weaponId = 'great_club') => combat.equipWeapon?.(weaponId) || null,
     equipGreatClub: () => combat.equipWeapon?.('great_club') || null,
