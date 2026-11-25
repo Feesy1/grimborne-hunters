@@ -1,0 +1,16 @@
+{
+  "grimborne-precommit-guard": {
+    "PreToolUse": [
+      {
+        "matcher": "run_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "D:\\RGBMoCap\\runtime\\python.exe hooks/pre_commit_guard.py",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}

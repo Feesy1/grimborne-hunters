@@ -4,8 +4,8 @@
 // - Save Reset Confirmation Modal
 // - In-Game Pause Modal (Resume / Restart at Bonfire / Settings / Main Menu)
 
-import { el } from './resolvers.js?v=20261124z95';
-import { createModalIconSvg, setModalButtonContent } from './svgIcons.js?v=20261124z95';
+import { el } from './resolvers.js?v=20261125z106';
+import { createModalIconSvg, setModalButtonContent } from './svgIcons.js?v=20261125z106';
 
 export function createModalsController({
   root,

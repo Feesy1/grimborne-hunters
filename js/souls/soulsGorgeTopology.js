@@ -49,7 +49,7 @@ import {
   RIVER_REACH_EXTENDED_FIRE_SOURCES,
   RIVER_REACH_INTERACTABLES,
   RIVER_REACH_EXTENDED_INTERACTABLES
-} from './soulsRiverReachTopology.js?v=20261125z105';
+} from './soulsRiverReachTopology.js?v=20261125z106';
 
 export {
   RIVER_REACH_LIFT_MIN_Y,

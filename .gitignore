@@ -7,6 +7,9 @@ server.ps1
 assets/arena_map.jpg
 assets/models/*.blend
 assets/models/*.blend1
+*.blend
+__pycache__/
+*.pyc
 strelok_3d.html
 assets/strelok_preview/
 # temporary debug/build artifacts

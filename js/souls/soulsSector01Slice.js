@@ -7,10 +7,10 @@
 //     tree trunk, and unbroken barrel/crate blocks movement; smashing any barrel/crate clears its collider live!)
 //   - Depth-aware translucent river shoreline + realistic streaming outfall waterfall + live wading ripples & splashes!
 
-import { createMossCoatedStoneMaterial } from './soulsGorgeTerrainMat.js?v=20261125z105';
-import { createGorgeRiverMaterial } from './soulsGorgeAtmosphere.js?v=20261125z105';
+import { createMossCoatedStoneMaterial } from './soulsGorgeTerrainMat.js?v=20261125z106';
+import { createGorgeRiverMaterial } from './soulsGorgeAtmosphere.js?v=20261125z106';
 
-export const SECTOR01_ASSET_VER = '20261125z105';
+export const SECTOR01_ASSET_VER = '20261125z106';
 export const SECTOR01_WATER_LEVEL = -0.10;
 
 const ARCH_GLB_URL = `./assets/env/sector01_arch.glb?v=${SECTOR01_ASSET_VER}`;

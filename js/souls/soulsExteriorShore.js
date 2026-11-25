@@ -47,28 +47,28 @@ import {
   evalGorgeSurfaceType,
   clampGorgePosition,
   getGorgeZoneTitleAt
-} from './soulsGorgeTopology.js?v=20261125z105';
+} from './soulsGorgeTopology.js?v=20261125z106';
 import {
   createSoulsGorgeRoad,
   createGorgePbrTextures
-} from './soulsGorgeRoad.js?v=20261125z105';
-import { createSoulsRiverReachEast } from './soulsRiverReachEast.js?v=20261125z105';
-import { createSoulsRiverReachNorth } from './soulsRiverReachNorth.js?v=20261125z105';
+} from './soulsGorgeRoad.js?v=20261125z106';
+import { createSoulsRiverReachEast } from './soulsRiverReachEast.js?v=20261125z106';
+import { createSoulsRiverReachNorth } from './soulsRiverReachNorth.js?v=20261125z106';
 import {
   createGorgeSkyMaterial,
   createGorgeRiverMaterial,
   createValleyMistRig
-} from './soulsGorgeAtmosphere.js?v=20261125z105';
+} from './soulsGorgeAtmosphere.js?v=20261125z106';
 import {
   createStylizedGorgeTerrainMaterial,
   createMossCoatedStoneMaterial
-} from './soulsGorgeTerrainMat.js?v=20261125z105';
+} from './soulsGorgeTerrainMat.js?v=20261125z106';
 import {
   SECTOR01_ANCHORS,
   evalSector01TerrainY,
   evalSector01SurfaceType,
   createSoulsSector01Slice
-} from './soulsSector01Slice.js?v=20261125z105';
+} from './soulsSector01Slice.js?v=20261125z106';
 
 // Vertical Slice Lock (z105): focuses Exterior Shore 100% on a handcrafted, metric-locked Sector 01
 // while keeping all archived Sectors 02–08 modules intact in the repository for staged expansion.
