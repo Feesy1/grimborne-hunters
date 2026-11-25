@@ -318,20 +318,24 @@ export function createGorgeRiverMaterial(THREE, uTimeUniform, uBonfireLitUniform
     side: THREE.DoubleSide,
     fog: false,
     vertexShader: `
+      attribute float aWaterDepth;
       uniform float uTime;
       varying vec2 vUv;
       varying vec3 vWorldPos;
       varying float vWave;
+      varying float vWaterDepth;
       void main() {
         vUv = uv;
+        vWaterDepth = aWaterDepth;
         vec3 p = position;
         float t = uTime * 2.15;
         float edge = sin(clamp(uv.x, 0.0, 1.0) * 3.14159265);
-        float w = (sin(uv.y * 5.2 - t * 2.1 + uv.x * 4.2) * 0.024
-                +  cos(uv.y * 8.8 - t * 2.9 - uv.x * 7.0) * 0.013) * edge;
+        float shallowCalm = smoothstep(0.0, 0.35, aWaterDepth);
+        float w = (sin(uv.y * 5.2 - t * 2.1 + uv.x * 4.2) * 0.022
+                +  cos(uv.y * 8.8 - t * 2.9 - uv.x * 7.0) * 0.011) * edge * (0.25 + 0.75 * shallowCalm);
         // Outfall waterfall plunge pool surge near (0.3, -10.5)
         float poolD = length(p.xz - vec2(0.3, -10.5));
-        float poolSurge = exp(-poolD * poolD * 0.055) * sin(t * 4.4 - poolD * 2.5) * 0.058;
+        float poolSurge = exp(-poolD * poolD * 0.055) * sin(t * 4.4 - poolD * 2.5) * 0.052;
         p.y += w + poolSurge;
         vWave = w + poolSurge;
         vec4 localPos = vec4(p, 1.0);
@@ -351,6 +355,7 @@ export function createGorgeRiverMaterial(THREE, uTimeUniform, uBonfireLitUniform
       varying vec2 vUv;
       varying vec3 vWorldPos;
       varying float vWave;
+      varying float vWaterDepth;
 
       float hash21(vec2 p) {
         p = fract(p * vec2(127.1, 311.7));
@@ -420,65 +425,64 @@ export function createGorgeRiverMaterial(THREE, uTimeUniform, uBonfireLitUniform
         float ndotv = max(dot(N, V), 0.0);
         float fres = pow(1.0 - ndotv, 4.2);
 
-        // Deep obsidian-navy glassy core (#030811) -> shallow slate sheen (#0a1728)
-        vec3 deepCore    = vec3(0.0010, 0.0025, 0.0058);
-        vec3 shallowCol  = vec3(0.0034, 0.0092, 0.0225);
-        vec3 darkSkyRefl = vec3(0.018, 0.034, 0.064);
+        // Natural depth-aware translucent dark mountain river (NO abrupt straight-line bank cut!)
+        // When aWaterDepth is supplied (>=0), shallow water over pebbles stays crystal-clear & laps organically!
+        float lapNoise = (h0 - 0.5) * 0.055 + sin(uTime * 2.1 + wp.y * 0.9) * 0.015;
+        float dWater = vWaterDepth + lapNoise;
+        float depthFade = smoothstep(0.005, 0.24, dWater);
+        float deepMask = smoothstep(0.18, 0.72, dWater);
+
+        vec3 deepCore    = vec3(0.0020, 0.0052, 0.0110);
+        vec3 shallowCol  = vec3(0.0085, 0.0190, 0.0320);
+        vec3 darkSkyRefl = vec3(0.024, 0.044, 0.076);
 
         float shoreEdge = min(vUv.x, 1.0 - vUv.x);
-        float shallowMask = 1.0 - smoothstep(0.03, 0.28, shoreEdge);
-        vec3 col = mix(deepCore, shallowCol, clamp(smoothstep(0.28, 0.80, h0) * 0.58 + shallowMask * 0.42, 0.0, 1.0));
-        // Subtle dark wet stone absorption very close to the shoreline
-        col *= mix(0.68, 1.0, smoothstep(0.015, 0.14, shoreEdge));
-        col = mix(col, darkSkyRefl, fres * 0.46);
+        vec3 col = mix(shallowCol, deepCore, deepMask);
+        col = mix(col, darkSkyRefl, fres * (0.28 + 0.34 * deepMask));
 
-        // Rich silvery-white broken moonlight reflection band aligned with canonical moon direction
+        // Restrained natural moonlight ripples on moving river water (NOT blinding solid white band!)
         vec3 moonDir = ${CANONICAL_MOON_DIR_GLSL};
         vec3 Hm = normalize(moonDir + V);
         float ndh = max(dot(N, Hm), 0.0);
 
-        // High-frequency capillary breakup keeps bright silver ribbons broken across dark mirror troughs
-        float capMask = smoothstep(0.42, 0.80, vnoise(vec2(wp.x * 2.2, wp.y * 4.0 - t * 2.15) + vec2(h0 * 1.4)));
-        float moonGlint  = pow(ndh, 195.0) * 2.85 * (0.45 + 0.55 * capMask);
-        float moonRibbon = pow(ndh, 54.0) * 0.44 * smoothstep(0.46, 0.84, h0 * 0.62 + capMask * 0.38);
-        float moonSheen  = pow(ndh, 15.0) * 0.068 * (0.55 + 0.45 * fres);
-        float distSpecFade = 1.0 - smoothstep(75.0, 152.0, camDist) * 0.65;
+        float capMask = smoothstep(0.46, 0.84, vnoise(vec2(wp.x * 2.4, wp.y * 4.2 - t * 2.15) + vec2(h0 * 1.4)));
+        float moonGlint  = pow(ndh, 210.0) * 1.35 * (0.35 + 0.65 * capMask);
+        float moonRibbon = pow(ndh, 62.0) * 0.24 * smoothstep(0.48, 0.86, h0 * 0.62 + capMask * 0.38);
+        float moonSheen  = pow(ndh, 18.0) * 0.045 * (0.55 + 0.45 * fres);
+        float distSpecFade = (1.0 - smoothstep(65.0, 145.0, camDist) * 0.65) * smoothstep(0.03, 0.22, dWater);
 
-        col += vec3(0.86, 0.92, 1.04) * moonGlint * distSpecFade;
-        col += vec3(0.56, 0.68, 0.88) * moonRibbon * distSpecFade;
-        col += vec3(0.24, 0.34, 0.52) * moonSheen * distSpecFade;
+        col += vec3(0.82, 0.90, 1.02) * moonGlint * distSpecFade;
+        col += vec3(0.48, 0.62, 0.84) * moonRibbon * distSpecFade;
+        col += vec3(0.20, 0.30, 0.48) * moonSheen * distSpecFade;
 
-        // Gentle warm orange reflections near Shore Bonfire & Gorge Campfires
-        float flick = 0.88 + 0.12 * sin(uTime * 7.4 + wp.x * 0.8 + wp.y * 0.5);
+        // Warm gentle lantern & bonfire shimmer on moving water
+        float flick = 0.90 + 0.10 * sin(uTime * 6.8 + wp.x * 0.8 + wp.y * 0.5);
         if (uBonfireLit > 0.01) {
-          col += evalWarmFireRefl(vec3(0.0, 1.45, 2.0), vWorldPos, N, V, flick, 1.10 * uBonfireLit);
-          col += evalWarmFireRefl(vec3(-2.2, 1.55, 15.0), vWorldPos, N, V, flick, 1.05 * uBonfireLit);
+          col += evalWarmFireRefl(vec3(-2.3, 1.55, 16.0), vWorldPos, N, V, flick, 0.72 * uBonfireLit);
         }
-        col += evalWarmFireRefl(vec3(-3.3, 1.65, 41.5), vWorldPos, N, V, flick, 0.95);
-        col += evalWarmFireRefl(vec3(-2.9, 1.75, 69.5), vWorldPos, N, V, flick, 0.95);
-        col += evalWarmFireRefl(vec3(-3.8, 1.95, 95.0), vWorldPos, N, V, flick, 0.95);
-        col += evalWarmFireRefl(vec3(5.10, 6.20, 82.0), vWorldPos, N, V, flick, 0.65);
+        col += evalWarmFireRefl(vec3(3.1, 2.95, 6.2), vWorldPos, N, V, flick, 0.55);
+        col += evalWarmFireRefl(vec3(3.85, 2.35, 28.2), vWorldPos, N, V, flick, 0.65);
 
-        // Subtle dark shoreline ripple edge + waterfall plunge pool froth
-        float poolD = length(wp - vec2(0.3, -10.8));
-        float poolFoam = exp(-poolD * poolD * 0.115) * smoothstep(0.42, 0.80, h0) * 0.65;
-        float lapWave = sin(uTime * 2.05 + wp.y * 0.72) * 0.005;
-        float bankBand = 1.0 - smoothstep(0.010, 0.042 + lapWave, shoreEdge);
-        float bankRipple = bankBand * smoothstep(0.54, 0.86, h0 * 0.65 + capMask * 0.35) * 0.24;
-        float foam = clamp(poolFoam + bankRipple, 0.0, 0.62);
-        col = mix(col, vec3(0.34, 0.46, 0.64), foam * 0.48);
+        // Organic waterfall plunge-pool churn + delicate lapping shoreline foam wisps
+        float poolD = length(wp - vec2(0.2, -10.8));
+        float poolFoam = exp(-poolD * poolD * 0.095) * smoothstep(0.34, 0.78, h0 * 0.65 + capMask * 0.35) * 0.78;
+        float lapEdge = smoothstep(0.005, 0.055, dWater) * (1.0 - smoothstep(0.055, 0.16, dWater));
+        float lapFoam = lapEdge * smoothstep(0.48, 0.82, h0 * 0.55 + capMask * 0.45) * 0.34;
+        float foam = clamp(poolFoam + lapFoam, 0.0, 0.78);
+        col = mix(col, vec3(0.44, 0.56, 0.72), foam * 0.58);
 
-        // Smooth distance mist blending into scene fog (#132032) so far river vanishes softly into the canyon
-        float distMist = smoothstep(32.0, 148.0, camDist);
-        float zHorizonMist = smoothstep(104.0, 156.0, vWorldPos.z);
-        float totalMist = clamp(distMist * distMist * 0.90 + zHorizonMist * 0.48, 0.0, 0.96);
+        // Smooth distance mist blending into scene fog
+        float distMist = smoothstep(32.0, 138.0, camDist);
+        float zHorizonMist = smoothstep(95.0, 152.0, vWorldPos.z);
+        float totalMist = clamp(distMist * distMist * 0.88 + zHorizonMist * 0.48, 0.0, 0.96);
         col = mix(col, uFogColor, totalMist);
 
-        // Smooth shoreline alpha + far-end vanish
-        float edgeAlpha = smoothstep(0.010, 0.088, shoreEdge);
+        // Real depth-driven shoreline alpha (visible wet pebbles under shallow water -> deep dark river!)
+        float edgeAlpha = smoothstep(0.008, 0.075, shoreEdge);
         float farFade = 1.0 - smoothstep(144.0, 158.0, vWorldPos.z);
-        float alpha = clamp(edgeAlpha * farFade * (0.94 + foam * 0.06), 0.0, 0.97);
-        if (alpha < 0.008) discard;
+        float waterOpacity = mix(0.28, 0.94, smoothstep(0.02, 0.52, dWater)) * depthFade;
+        float alpha = clamp(edgeAlpha * farFade * max(waterOpacity, foam * 0.72), 0.0, 0.96);
+        if (alpha < 0.01) discard;
 
         gl_FragColor = vec4(col, alpha);
         #include <tonemapping_fragment>

@@ -9,7 +9,7 @@ import {
   LEVELS,
   getLevelDef,
   RUN_UPGRADES
-} from './config.js?v=20261125z104';
+} from './config.js?v=20261125z105';
 import {
   TWO_PI,
   ARENA_PLAYER_LIMIT,
@@ -21,7 +21,7 @@ import {
   lerpAngle,
   resolveArenaBiomeForLevel,
   createCombatBridge
-} from './combat/bridge.js?v=20261125z104';
+} from './combat/bridge.js?v=20261125z105';
 import {
   updateBossAI,
   updateSoulsBossAI,
@@ -31,7 +31,7 @@ import {
   cancelSoulsBossTelegraph,
   applySoulsBossParry,
   SOULS_BOSS_MULTI_PARRY
-} from './combat/bossAi.js?v=20261125z104';
+} from './combat/bossAi.js?v=20261125z105';
 import {
   createPoiseController,
   STANCE_DAMAGE_TABLE,
@@ -40,26 +40,26 @@ import {
   getPlayerHitstunSpec,
   SOULS_GUARD_CFG,
   computeBlockedStaminaCost
-} from './combat/poiseSystem.js?v=20261125z104';
+} from './combat/poiseSystem.js?v=20261125z105';
 import {
   SOULS_ROLL_CFG,
   getSoulsRollIframes,
   sampleSoulsRollStepDist,
   sampleAttackLungeStep,
   createAliveStanceSmoother
-} from './souls/soulsLocomotion.js?v=20261125z104';
+} from './souls/soulsLocomotion.js?v=20261125z105';
 import {
   SOULS_STAMINA_CFG,
   createSoulsStaminaController,
   createSoulsActionBuffer
-} from './souls/soulsStaminaBuffer.js?v=20261125z104';
+} from './souls/soulsStaminaBuffer.js?v=20261125z105';
 import {
   SOULS_ATTACK_SPECS,
   getSoulsAttackSpec,
   computeSoulsDamage,
   testSweptBladeHits
-} from './souls/soulsHitboxDamage.js?v=20261125z104';
-import * as SOULS_MOB_AI from './souls/soulsMobAi.js?v=20261125z104';
+} from './souls/soulsHitboxDamage.js?v=20261125z105';
+import * as SOULS_MOB_AI from './souls/soulsMobAi.js?v=20261125z105';
 import {
   initSoulsMobState,
   stepSoulsMobAi,
@@ -67,7 +67,7 @@ import {
   onSoulsMobInterrupted,
   resetSoulsPackCoordinator,
   releaseSoulsAttackToken
-} from './souls/soulsMobAi.js?v=20261125z104';
+} from './souls/soulsMobAi.js?v=20261125z105';
 import {
   SOULS_CASTLE_CONSTANTS,
   SOULS_CASTLE_BONFIRE,
@@ -86,36 +86,36 @@ import {
   canInteractWithBossDoor,
   findInteractableRelic,
   clampCastlePosition
-} from './souls/soulsCastleLayout.js?v=20261125z104';
+} from './souls/soulsCastleLayout.js?v=20261125z105';
 import {
   createDissolveAshSystem
-} from './souls/soulsDissolveVfx.js?v=20261125z104';
+} from './souls/soulsDissolveVfx.js?v=20261125z105';
 import {
   enhanceSoulsBossModel,
   updateSoulsBossVisuals,
   triggerSoulsBossHitFlash,
   disposeSoulsBossVisuals
-} from './souls/soulsBossVisuals.js?v=20261125z104';
+} from './souls/soulsBossVisuals.js?v=20261125z105';
 import {
   createSoulsGameFeel,
   getImpactSparkBurst
-} from './souls/soulsGameFeel.js?v=20261125z104';
+} from './souls/soulsGameFeel.js?v=20261125z105';
 import {
   BOSS_DOOR_CUTSCENE_DURATION,
   BOSS_DOOR_CUTSCENE_ACTS
-} from './souls/soulsCutsceneChoreography.js?v=20261125z104';
+} from './souls/soulsCutsceneChoreography.js?v=20261125z105';
 import {
   BOSS_ESCAPE_CUTSCENE_DURATION,
   BOSS_ESCAPE_ACTS
-} from './souls/soulsEscapeCutscene.js?v=20261125z104';
+} from './souls/soulsEscapeCutscene.js?v=20261125z105';
 import {
   resetActorPhysics,
   applyKnockbackImpulse,
   stepActorPhysicsBody
-} from './souls/soulsPhysicsFeel.js?v=20261125z104';
+} from './souls/soulsPhysicsFeel.js?v=20261125z105';
 import {
   createWeaponTrailSystem
-} from './souls/soulsWeaponTrails.js?v=20261125z104';
+} from './souls/soulsWeaponTrails.js?v=20261125z105';
 
 export function createCombatController({
   world,
@@ -7716,9 +7716,8 @@ export function createCombatController({
             souls.shoreSwordPickedUp = true;
             world?.setShoreSwordPickedUp?.(true);
             equipHeroWeapon('great_club');
-            audio?.playSwordPickupChime?.();
-            audio?.playBossHammerWhoosh?.(false);
-            world?.addScreenShake?.(0.16, 0.14);
+            audio?.playClubPickup?.();
+            world?.addScreenShake?.(0.14, 0.12);
             emitParticles(swordAnchor.x, (swordAnchor.y || 0) + 0.55, swordAnchor.z, 0xd6b588, 22, 5.0, 0.14);
             emitParticles(player.x, curPlayerY + 1.0, player.z, 0xfef08a, 14, 4.4, 0.13);
             floatText('🪵 БОЛЬШАЯ ДУБИНА ПОДОБРАНА!', player.x, player.z - 0.9, '#fde047');
@@ -7739,8 +7738,7 @@ export function createCombatController({
             syncSoulsStaminaMirror();
             souls.bonfireHealCooldown = 3.5;
             souls.bonfireRestTimer = 4.5;
-            audio?.playPickup?.('heart');
-            audio?.playFlaskDrink?.();
+            audio?.playBonfireKindle?.();
             emitShockwave(activeInter.x, activeInter.z, 5.2, 0xfbbf24, 0.55);
             emitParticles(activeInter.x, (activeInter.y || 0) + 0.95, activeInter.z, 0xfde047, 28, 6.4, 0.16);
             emitParticles(player.x, (activeInter.y || 0) + 1.0, player.z, 0xf59e0b, 18, 4.8, 0.14);
@@ -7822,11 +7820,11 @@ export function createCombatController({
             floatText(`🏰 ${txt}`, activeInter.x, activeInter.z - 0.6, '#fde047');
             callbacks?.onSoulsCue?.((activeInter.title || 'ЗАБРОШЕННЫЙ МОНАСТЫРЬ').toUpperCase(), 'guard_counter');
           } else if (activeInter?.type === 'shortcut_gate') {
-            audio?.playBossArmorScrape?.(0.5);
+            audio?.playIronGateLocked?.();
             world?.addScreenShake?.(0.08, 0.10);
             floatText(`🔒 ${activeInter.lockedPrompt || 'Закрыто с другой стороны'}`, player.x, player.z - 0.8, '#cbd5e1');
           } else if (activeInter?.type === 'locked_gate') {
-            audio?.playBossArmorScrape?.(0.5);
+            audio?.playIronGateLocked?.();
             world?.addScreenShake?.(0.08, 0.10);
             floatText(`🔒 ${activeInter.lockedPrompt || 'Заперто'}`, player.x, player.z - 0.8, '#cbd5e1');
           } else if (activeInter) {
@@ -8775,7 +8773,7 @@ export function createCombatController({
             emitParticles(bh.x, bh.y, bh.z, 0x9c7b57, 14, 4.6, 0.13);
             emitParticles(bh.x, bh.y + 0.15, bh.z, 0x5c4632, 8, 3.2, 0.10);
           }
-          audio?.playBossHammerHit?.(0.42);
+          audio?.playWoodSmash?.();
           world?.addScreenShake?.(0.09, 0.08);
         }
       } else if (!onExteriorShore) {
@@ -9191,6 +9189,12 @@ export function createCombatController({
       if (soulsDoorCutsceneActive) return;
       const surface = world?.getSurfaceType?.(player.x, player.z) || 'dirt';
       audio?.playFootstep?.(currentClassId, stepParity, isSprintingNow, surface);
+      if (surface === 'shallow_water') {
+        const sideSign = stepParity % 2 === 0 ? -0.18 : 0.18;
+        const fx = player.x + Math.cos(player.facing) * sideSign;
+        const fz = player.z - Math.sin(player.facing) * sideSign;
+        world?.emitShoreWaterRipple?.(fx, fz, isSprintingNow);
+      }
       if (currentClassId === 'mage') {
         const sideSign = stepParity % 2 === 0 ? -0.18 : 0.18;
         const fx = player.x + Math.cos(player.facing) * sideSign;
@@ -9326,7 +9330,7 @@ export function createCombatController({
                 emitParticles(bh.x, bh.y, bh.z, 0xa8865f, 18, 5.2, 0.14);
                 emitParticles(bh.x, bh.y + 0.18, bh.z, 0x5c4632, 10, 3.6, 0.11);
               }
-              audio?.playBossHammerHit?.(0.52);
+              audio?.playWoodSmash?.();
               world?.addScreenShake?.(0.13, 0.10);
             }
           }

@@ -1,12 +1,12 @@
 // Procedural Web Audio API Dark-Fantasy Synthesizer + Abandoned Knight Rift Studio Audio Router
 // Instant startup, crisp dynamics, full suspend/mute compliance.
 
-import { createSoulsEnvAudio } from './souls/soulsEnvAudio.js?v=20261125z104';
-import { createSoulsHeroAudio } from './souls/soulsHeroAudio.js?v=20261125z104';
-import { createSoulsEnemyAudio } from './souls/soulsEnemyAudio.js?v=20261125z104';
-import { createSoulsMusicManager } from './souls/soulsMusicManager.js?v=20261125z104';
-import { createSoulsSpatialAudio } from './souls/soulsSpatialAudio.js?v=20261125z104';
-import { createSoulsEscapeAudio } from './souls/soulsEscapeAudio.js?v=20261125z104';
+import { createSoulsEnvAudio } from './souls/soulsEnvAudio.js?v=20261125z105';
+import { createSoulsHeroAudio } from './souls/soulsHeroAudio.js?v=20261125z105';
+import { createSoulsEnemyAudio } from './souls/soulsEnemyAudio.js?v=20261125z105';
+import { createSoulsMusicManager } from './souls/soulsMusicManager.js?v=20261125z105';
+import { createSoulsSpatialAudio } from './souls/soulsSpatialAudio.js?v=20261125z105';
+import { createSoulsEscapeAudio } from './souls/soulsEscapeAudio.js?v=20261125z105';
 
 export function createAudioEngine() {
   let ctx = null;
@@ -26,7 +26,7 @@ export function createAudioEngine() {
 
   function preloadExternalSamples(audioCtx) {
     if (!audioCtx || typeof fetch === 'undefined') return;
-    const stepVer = '20261125z104';
+    const stepVer = '20261125z105';
     const files = [
       ['step_warrior_1', `./assets/audio/step_warrior_1.wav?v=${stepVer}`],
       ['step_warrior_2', `./assets/audio/step_warrior_2.wav?v=${stepVer}`],
@@ -261,7 +261,7 @@ export function createAudioEngine() {
     getVoiceVolume: () => cutsceneVoiceVolume,
     getStoneReverbDest: () => getOrCreateStoneReverbSend(),
     duckMusic: (db, holdSec, relSec) => soulsMusic?.duck?.(db, holdSec, relSec),
-    assetVer: '20261125z104'
+    assetVer: '20261125z105'
   });
   soulsEscape.setMuted?.(muted);
   soulsEscape.setVoiceVolume?.(Math.max(0, Math.min(1.6, cutsceneVoiceVolume * 1.08)));
@@ -270,8 +270,8 @@ export function createAudioEngine() {
   // - rift_explore: Elden Castle Drone (Bonfire / Castle Corridor / East Alcove)
   // - boss_phase1/boss_phase2: unified Epic Boss Battle (God of War Style)
   // Routed directly to masterGain (bypassing retro 980Hz musicFilter lowpass!) with own musicVolume scaling
-  const SOULS_EXPLORE_TRACK_URL = './assets/audio/music_rift_explore.mp3?v=20261125z104';
-  const SOULS_BOSS_TRACK_URL = './assets/audio/music_boss_rift.mp3?v=20261125z104';
+  const SOULS_EXPLORE_TRACK_URL = './assets/audio/music_rift_explore.mp3?v=20261125z105';
+  const SOULS_BOSS_TRACK_URL = './assets/audio/music_boss_rift.mp3?v=20261125z105';
   let soulsAmbientActive = false;
   const soulsMusic = createSoulsMusicManager({
     getCtx: () => ctx,
@@ -1353,15 +1353,54 @@ export function createAudioEngine() {
       const minStepMs = isSprinting ? 160 : 180;
       if (!readyToPlay() || !canTrigger('footstep', minStepMs)) return;
 
+      // Dedicated shallow-water wading splash (authentic wet splash + bubbling tail, NEVER dry stone clack!)
+      if (surface === 'shallow_water') {
+        const gainMul = isSprinting ? 1.25 : 0.88;
+        const tilt = (stepParity & 1) ? 1.07 : 0.94;
+        // 1) Wet boot plunge splash (bandpass filtered white noise sweeping downward)
+        playFilteredNoise({
+          brown: false,
+          filterType: 'bandpass',
+          freqStart: (2200 + Math.random() * 500) * tilt,
+          freqEnd: (680 + Math.random() * 180) * tilt,
+          q: 1.15,
+          startTime: 0.0,
+          duration: isSprinting ? 0.21 : 0.16,
+          gainPeak: 0.22 * gainMul
+        });
+        // 2) Low submerged gravel slosh under foot
+        playFilteredNoise({
+          brown: true,
+          filterType: 'lowpass',
+          freqStart: 620 * tilt,
+          freqEnd: 240 * tilt,
+          q: 0.85,
+          startTime: 0.015,
+          duration: 0.17,
+          gainPeak: 0.19 * gainMul
+        });
+        // 3) High water-droplet scatter tail
+        playFilteredNoise({
+          brown: false,
+          filterType: 'highpass',
+          freqStart: 3100,
+          freqEnd: 4600,
+          q: 0.9,
+          startTime: 0.045,
+          duration: 0.14,
+          gainPeak: 0.09 * gainMul
+        });
+        return;
+      }
+
       // Dedicated Abandoned Knight Rift & Exterior Shore 44.1 kHz authentic stone/shore footsteps + plate clink
-      // (zero earthen step_warrior_1..6.wav samples on stone, wet stone, shore gravel, or shallow river rim!)
+      // (zero earthen step_warrior_1..6.wav samples on stone, wet stone, or shore gravel!)
       if (
         surface === 'stone_courtyard' ||
         surface === 'stone_bridge' ||
         surface === 'cathedral_stone' ||
         surface === 'wet_stone' ||
-        surface === 'gravel' ||
-        surface === 'shallow_water'
+        surface === 'gravel'
       ) {
         preloadSoulsAudio(ctx);
         soulsEnv.playStoneFootstep({ classId, stepParity, isSprinting, surface });
@@ -2522,6 +2561,153 @@ export function createAudioEngine() {
       preloadSoulsAudio(ctx);
       soulsHero.playParrySuccess?.();
       try { soulsSpatial?.playBossArmorShift?.(0.35); } catch {}
+    },
+
+    // Distinct heavy timber grip thud + warm dark-fantasy discovery chord for Great Club pickup
+    playClubPickup() {
+      if (!readyToPlay()) return;
+      const now = ctx.currentTime;
+      // Solid heavy oak handle grip thud
+      playFilteredNoise({
+        brown: true,
+        filterType: 'lowpass',
+        freqStart: 420,
+        freqEnd: 110,
+        q: 1.2,
+        startTime: 0.0,
+        duration: 0.16,
+        gainPeak: 0.36
+      });
+      // Subtle warm low heroic fifth (D3 + A3) — atmospheric & non-metallic
+      const dest = compressor || sfxGain || ctx.destination;
+      for (const [freq, delay, gainMax] of [[146.83, 0.03, 0.11], [220.0, 0.09, 0.09], [293.66, 0.16, 0.06]]) {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, now + delay);
+        g.gain.setValueAtTime(0.0001, now + delay);
+        g.gain.exponentialRampToValueAtTime(gainMax, now + delay + 0.05);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + delay + 0.72);
+        osc.connect(g);
+        g.connect(dest);
+        osc.start(now + delay);
+        osc.stop(now + delay + 0.76);
+      }
+    },
+
+    // Distinct warm Bonfire ignition whoosh + crackling embers + solemn sanctuary hum
+    playBonfireKindle() {
+      if (!readyToPlay()) return;
+      const now = ctx.currentTime;
+      // 1) Deep swirling flame ignition rush
+      playFilteredNoise({
+        brown: true,
+        filterType: 'bandpass',
+        freqStart: 180,
+        freqEnd: 740,
+        q: 0.9,
+        startTime: 0.0,
+        duration: 0.58,
+        gainPeak: 0.34
+      });
+      // 2) Crisp crackling fire sparks burst
+      playFilteredNoise({
+        brown: false,
+        filterType: 'bandpass',
+        freqStart: 3200,
+        freqEnd: 1400,
+        q: 1.6,
+        startTime: 0.06,
+        duration: 0.42,
+        gainPeak: 0.14
+      });
+      // 3) Soft warm sanctuary choir-like low sine bloom (never metallic clang!)
+      const dest = compressor || sfxGain || ctx.destination;
+      for (const [freq, gainMax] of [[130.81, 0.09], [196.0, 0.07], [261.63, 0.045]]) {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now + 0.04);
+        g.gain.setValueAtTime(0.0001, now + 0.04);
+        g.gain.linearRampToValueAtTime(gainMax, now + 0.28);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + 1.35);
+        osc.connect(g);
+        g.connect(dest);
+        osc.start(now + 0.04);
+        osc.stop(now + 1.40);
+      }
+    },
+
+    // Distinct heavy locked iron portcullis / stone gate rattle (NOT sword parry!)
+    playIronGateLocked() {
+      if (!readyToPlay()) return;
+      // Heavy dull iron-on-stone thud + brief low chain clatter
+      playFilteredNoise({
+        brown: true,
+        filterType: 'lowpass',
+        freqStart: 280,
+        freqEnd: 85,
+        q: 1.4,
+        startTime: 0.0,
+        duration: 0.22,
+        gainPeak: 0.34
+      });
+      playFilteredNoise({
+        brown: false,
+        filterType: 'bandpass',
+        freqStart: 1280,
+        freqEnd: 780,
+        q: 3.2,
+        startTime: 0.04,
+        duration: 0.14,
+        gainPeak: 0.13
+      });
+      playFilteredNoise({
+        brown: false,
+        filterType: 'bandpass',
+        freqStart: 1050,
+        freqEnd: 620,
+        q: 3.0,
+        startTime: 0.14,
+        duration: 0.12,
+        gainPeak: 0.09
+      });
+    },
+
+    // Distinct hollow wooden barrel / crate splinter crash
+    playWoodSmash() {
+      if (!readyToPlay()) return;
+      // Sharp oak stave snap + hollow woody thump + clattering splinters
+      playFilteredNoise({
+        brown: false,
+        filterType: 'bandpass',
+        freqStart: 1650 + Math.random() * 350,
+        freqEnd: 520,
+        q: 1.25,
+        startTime: 0.0,
+        duration: 0.14,
+        gainPeak: 0.34
+      });
+      playFilteredNoise({
+        brown: true,
+        filterType: 'lowpass',
+        freqStart: 520,
+        freqEnd: 130,
+        q: 1.0,
+        startTime: 0.0,
+        duration: 0.18,
+        gainPeak: 0.32
+      });
+      playFilteredNoise({
+        brown: false,
+        filterType: 'bandpass',
+        freqStart: 1180,
+        freqEnd: 640,
+        q: 1.8,
+        startTime: 0.09,
+        duration: 0.13,
+        gainPeak: 0.15
+      });
     },
 
     setExteriorShoreAmbient(active, opts = null) {

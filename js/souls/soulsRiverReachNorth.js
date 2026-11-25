@@ -22,9 +22,9 @@
 //      `gorge_nature`, `gorge_ruins`), Always-Visible Regional Sightlines, Roaring Campfires/Braziers (ZERO PointLights),
 //      Botanical Undergrowth, and Region II Alpine Mountain Fangs (`z = 335..410`).
 
-import { createMossCoatedStoneMaterial } from './soulsGorgeTerrainMat.js?v=20261125z104';
+import { createMossCoatedStoneMaterial } from './soulsGorgeTerrainMat.js?v=20261125z105';
 
-const ASSET_VER = '20261125z104';
+const ASSET_VER = '20261125z105';
 const GLB_URLS = Object.freeze({
   campHeights: `./assets/env/sector0506_camp_heights.glb?v=${ASSET_VER}`,
   ruins07: `./assets/env/sector07_ruins.glb?v=${ASSET_VER}`,

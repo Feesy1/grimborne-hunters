@@ -3,7 +3,7 @@ cd "$(dirname "$0")" || exit 1
 PORT=8090
 
 if ! command -v python3 >/dev/null 2>&1; then
-  echo "python3 not found. Please install Python 3 or open https://feesy1.github.io/grimborne-hunters/?v=20261125z104"
+  echo "python3 not found. Please install Python 3 or open https://feesy1.github.io/grimborne-hunters/?v=20261125z105"
   read -r -p "Press Enter to exit..."
   exit 1
 fi

@@ -24,14 +24,14 @@ import {
   getGorgeRiverCenterX,
   getGorgeRiverHalfWidth,
   getGorgeRiverSignedDist
-} from './soulsGorgeTopology.js?v=20261125z104';
-import { createCampfireVfxRig } from './soulsGorgeAtmosphere.js?v=20261125z104';
+} from './soulsGorgeTopology.js?v=20261125z105';
+import { createCampfireVfxRig } from './soulsGorgeAtmosphere.js?v=20261125z105';
 import {
   createStylizedGorgeTerrainMaterial,
   createMossCoatedStoneMaterial
-} from './soulsGorgeTerrainMat.js?v=20261125z104';
+} from './soulsGorgeTerrainMat.js?v=20261125z105';
 
-const ASSET_VER = '20261125z104';
+const ASSET_VER = '20261125z105';
 const TEX_BASE = './assets/env/textures';
 const NATURE_GLB_URL = `./assets/env/gorge_nature.glb?v=${ASSET_VER}`;
 const RUINS_GLB_URL = `./assets/env/gorge_ruins.glb?v=${ASSET_VER}`;

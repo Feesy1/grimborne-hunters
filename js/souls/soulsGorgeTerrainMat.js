@@ -137,9 +137,9 @@ export function createStylizedGorgeTerrainMaterial(THREE, optsOrPbrTex = {}, may
     aoMap: null, // Dual-scale ORM AO is sampled directly in world space to avoid repeating single-scale AO grids
     vertexColors: true,
     color: opts.color !== undefined ? opts.color : 0xffffff,
-    roughness: Number.isFinite(opts.roughness) ? opts.roughness : 0.86,
-    metalness: Number.isFinite(opts.metalness) ? opts.metalness : 0.04,
-    envMapIntensity: Number.isFinite(opts.envMapIntensity) ? opts.envMapIntensity : 0.55
+    roughness: Number.isFinite(opts.roughness) ? opts.roughness : 0.94,
+    metalness: Number.isFinite(opts.metalness) ? opts.metalness : 0.0,
+    envMapIntensity: Number.isFinite(opts.envMapIntensity) ? opts.envMapIntensity : 0.24
   });
 
   const terrainUniforms = {
@@ -410,13 +410,9 @@ export function createStylizedGorgeTerrainMaterial(THREE, optsOrPbrTex = {}, may
           vec3 patinaHue = mix(vec3(0.95, 0.97, 1.03), vec3(1.04, 1.00, 0.94), sgVnoise2(wp * 0.045 + vec2(8.2, -6.1)));
           terrainCol *= patinaVal * patinaHue;
 
-          // Organic rain puddles on flat road pockets (never underwater!)
-          vec2 pud = sgEvalPuddle(wp, vTerrainWorldPos.y, tWorldN.y, vTerrainMix.x * (1.0 - tBankW * 0.75), vTerrainMix.w, tCobbleSeam);
-          tPuddleCore = pud.x;
-          tPuddleHalo = pud.y;
-          // Damp stone darkening halo + deep dark wet stone beneath standing water
-          terrainCol *= mix(1.0, 0.62, tPuddleHalo * 0.62);
-          terrainCol *= mix(1.0, 0.42, tPuddleCore * 0.85);
+          // Matte weathered dark-fantasy road & shore (ZERO glossy photo-paper puddles!)
+          tPuddleCore = 0.0;
+          tPuddleHalo = 0.0;
 
           diffuseColor.rgb = diffuse * terrainCol;
         }`
@@ -456,20 +452,19 @@ export function createStylizedGorgeTerrainMaterial(THREE, optsOrPbrTex = {}, may
           {
             float r1 = texture2D(roughnessMap, tUvC1).g;
             float r2 = texture2D(roughnessMap, tUvC2).g;
-            roughnessFactor *= mix(r1, r2, tCobbleW2);
+            // Remap ORM roughness strictly into authentic matte stone [0.84..0.97] — ZERO glossy plastic!
+            float ormR = mix(r1, r2, tCobbleW2);
+            roughnessFactor = mix(0.84, 0.97, clamp(ormR, 0.0, 1.0));
           }
         #endif
-        // Macro patina roughness variation
-        roughnessFactor = clamp(roughnessFactor + (tMacroNoise - 0.5) * 0.14, 0.14, 0.98);
-        // Velvety matte moss shoulders
-        roughnessFactor = mix(roughnessFactor, 0.93, tMossW * 0.82);
-        // Damp basalt gravel & glossy wet sheen along waterline (y < 0.42) — controlled roughness so it NEVER looks like white ice!
-        float bankAboveSub = smoothstep(uWaterlineY - 0.08, uWaterlineY + 0.05, vTerrainWorldPos.y);
-        roughnessFactor = mix(roughnessFactor, 0.80, tBankW * (1.0 - tWaterlineWet) * 0.65);
-        roughnessFactor = mix(roughnessFactor, 0.34, tWaterlineWet * bankAboveSub * 0.72);
-        // Damp puddle fringe + dark wet standing rain puddles (0.20..0.28 avoids direct dirLight whiteout sheet!)
-        roughnessFactor = mix(roughnessFactor, 0.44, tPuddleHalo * (1.0 - tPuddleCore) * 0.68);
-        roughnessFactor = mix(roughnessFactor, mix(0.28, 0.20, tPuddleCore), tPuddleCore * 0.88);`
+        // Subtle macro weathered roughness variation (always matte!)
+        roughnessFactor = clamp(roughnessFactor + (tMacroNoise - 0.5) * 0.07, 0.80, 0.98);
+        // Velvety matte moss & loam shoulders
+        roughnessFactor = mix(roughnessFactor, 0.96, tMossW * 0.88);
+        // Natural damp dark pebbles right along the river waterline (y < 0.22): subtly damp [0.60..0.74], NEVER shiny white sheet!
+        float bankAboveSub = smoothstep(uWaterlineY - 0.06, uWaterlineY + 0.04, vTerrainWorldPos.y);
+        roughnessFactor = mix(roughnessFactor, 0.88, tBankW * (1.0 - tWaterlineWet) * 0.65);
+        roughnessFactor = mix(roughnessFactor, 0.62, tWaterlineWet * bankAboveSub * 0.65);`
       )
       .replace(
         '#include <normal_fragment_maps>',
@@ -491,118 +486,24 @@ export function createStylizedGorgeTerrainMaterial(THREE, optsOrPbrTex = {}, may
             vec3 mapN = normalize(mix(nC1, nC2, tCobbleW2));
             ${mossNormBlendGlsl}
             ${rockNormBlendGlsl}
-            mapN.xy *= normalScale;
+            mapN.xy *= normalScale * 0.78;
             normal = normalize(tbn * mapN);
           }
         #elif defined( USE_BUMPMAP )
           normal = perturbNormalArb(- vViewPosition, normal, dHdxy_fwd(), faceDirection);
-        #endif
-        // Flatten puddle normals toward horizontal mirror plane with fine wind ripples
-        if (tPuddleCore > 0.04) {
-          vec3 flatViewN = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
-          float ripA = sin(vTerrainWorldPos.x * 9.2 + uTime * 2.1) * cos(vTerrainWorldPos.z * 8.4 - uTime * 1.7) * 0.013;
-          float ripB = sin(vTerrainWorldPos.z * 13.5 + vTerrainWorldPos.x * 6.0 - uTime * 2.6) * 0.008;
-          normal = normalize(mix(normal, normalize(flatViewN + vec3(ripA, 0.0, ripB)), tPuddleCore * 0.92));
-        }`
+        #endif`
       )
       .replace(
         '#include <tonemapping_fragment>',
         `{
-          // Pre-Tonemapping HDR Wet Puddle & Waterline Pebble Reflections (smooth ACES Filmic rolloff, ZERO clipping!)
-          float waterBankSheen = tWaterlineWet * smoothstep(uWaterlineY - 0.06, uWaterlineY + 0.06, vTerrainWorldPos.y) * (1.0 - tPuddleCore) * 0.34;
-          float totalWetRefl = max(tPuddleCore, waterBankSheen);
-          if (totalWetRefl > 0.02) {
+          // Subtle physical wet-pebble glint strictly within ~16cm of the river waterline (ZERO glossy road mirror glare!)
+          float waterBankSheen = tWaterlineWet * smoothstep(uWaterlineY - 0.05, uWaterlineY + 0.05, vTerrainWorldPos.y) * 0.12;
+          if (waterBankSheen > 0.01) {
             vec3 Vw = normalize(cameraPosition - vTerrainWorldPos);
             vec3 moonDir = normalize(vec3(0.240, 0.315, 0.918));
-
-            if (tPuddleCore > 0.02) {
-              float ripX = sin(vTerrainWorldPos.x * 10.8 + vTerrainWorldPos.z * 4.8 + uTime * 2.3) * 0.022;
-              float ripZ = cos(vTerrainWorldPos.z * 10.2 - vTerrainWorldPos.x * 4.2 - uTime * 1.9) * 0.022;
-              vec3 Nw = normalize(vec3(ripX, 1.0, ripZ));
-              float ndv = max(dot(Nw, Vw), 0.0);
-              float fres = 0.03 + 0.97 * pow(max(1.0 - ndv, 0.0001), 3.8);
-
-              // Silver-blue moonlit sky & crisp moonlight glint in damp cobble puddles (dark obsidian mirror, ZERO icy glare!)
-              vec3 Hm = normalize(moonDir + Vw);
-              float moonSpec = pow(max(dot(Nw, Hm), 0.0), 125.0) * 0.36 + pow(max(dot(Nw, Hm), 0.0), 30.0) * 0.04;
-              vec3 reflCol = vec3(0.024, 0.044, 0.082) * (0.20 + fres * 0.56)
-                           + vec3(0.66, 0.78, 0.96) * moonSpec;
-
-              // Warm flickering amber campfire, brazier & lantern reflections in puddles
-              float flk = 0.88 + 0.12 * sin(uTime * 8.8 + vTerrainWorldPos.x * 2.9 + vTerrainWorldPos.z * 1.4);
-              float warmAccum = 0.0;
-
-              // Shore Bonfire (dynamic via uBonfireLit)
-              if (uBonfireLit > 0.01) {
-                vec3 dB = vec3(-2.20, 1.45, 15.00) - vTerrainWorldPos;
-                float lenB = length(dB);
-                vec3 hB = normalize(dB / max(lenB, 0.001) + Vw);
-                warmAccum += (pow(max(dot(Nw, hB), 0.0), 32.0) * 1.40 + pow(max(dot(Nw, hB), 0.0), 10.0) * 0.22)
-                           * exp(-lenB * 0.155) * uBonfireLit * flk;
-              }
-
-              // Zone 0 Gate Braziers
-              {
-                vec3 dG1 = vec3(-3.55, 2.25, 29.30) - vTerrainWorldPos;
-                float lenG1 = length(dG1);
-                vec3 hG1 = normalize(dG1 / max(lenG1, 0.001) + Vw);
-                warmAccum += pow(max(dot(Nw, hG1), 0.0), 28.0) * 0.85 * exp(-lenG1 * 0.18) * flk;
-
-                vec3 dG2 = vec3(3.55, 2.25, 29.30) - vTerrainWorldPos;
-                float lenG2 = length(dG2);
-                vec3 hG2 = normalize(dG2 / max(lenG2, 0.001) + Vw);
-                warmAccum += pow(max(dot(Nw, hG2), 0.0), 28.0) * 0.85 * exp(-lenG2 * 0.18) * flk;
-              }
-
-              // Zone 1 Campfire 1, Zone 2 Campfire 2, Zone 3 Watchtower Hearth
-              {
-                vec3 d1 = vec3(-2.95, 1.45, 45.20) - vTerrainWorldPos;
-                float l1 = length(d1);
-                vec3 h1 = normalize(d1 / max(l1, 0.001) + Vw);
-                warmAccum += (pow(max(dot(Nw, h1), 0.0), 34.0) * 1.55 + pow(max(dot(Nw, h1), 0.0), 10.0) * 0.26) * exp(-l1 * 0.148) * flk;
-
-                vec3 d2 = vec3(-3.55, 1.85, 71.20) - vTerrainWorldPos;
-                float l2 = length(d2);
-                vec3 h2 = normalize(d2 / max(l2, 0.001) + Vw);
-                warmAccum += (pow(max(dot(Nw, h2), 0.0), 34.0) * 1.55 + pow(max(dot(Nw, h2), 0.0), 10.0) * 0.26) * exp(-l2 * 0.148) * flk;
-
-                vec3 d3 = vec3(0.65, 3.85, 111.20) - vTerrainWorldPos;
-                float l3 = length(d3);
-                vec3 h3 = normalize(d3 / max(l3, 0.001) + Vw);
-                warmAccum += (pow(max(dot(Nw, h3), 0.0), 30.0) * 1.40 + pow(max(dot(Nw, h3), 0.0), 10.0) * 0.22) * exp(-l3 * 0.15) * flk;
-              }
-
-              // Archway & Lantern Road hanging lanterns
-              {
-                vec3 dLA = vec3(-2.55, 4.10, 55.10) - vTerrainWorldPos;
-                float lLA = length(dLA);
-                warmAccum += pow(max(dot(Nw, normalize(dLA / max(lLA, 0.001) + Vw)), 0.0), 28.0) * exp(-lLA * 0.185) * 0.90;
-
-                vec3 dL1 = vec3(-3.20, 4.10, 66.20) - vTerrainWorldPos;
-                float lL1 = length(dL1);
-                warmAccum += pow(max(dot(Nw, normalize(dL1 / max(lL1, 0.001) + Vw)), 0.0), 28.0) * exp(-lL1 * 0.185) * 0.90;
-
-                vec3 dL2 = vec3(-3.25, 4.25, 75.40) - vTerrainWorldPos;
-                float lL2 = length(dL2);
-                warmAccum += pow(max(dot(Nw, normalize(dL2 / max(lL2, 0.001) + Vw)), 0.0), 28.0) * exp(-lL2 * 0.185) * 0.90;
-
-                vec3 dL3 = vec3(-2.05, 4.40, 84.20) - vTerrainWorldPos;
-                float lL3 = length(dL3);
-                warmAccum += pow(max(dot(Nw, normalize(dL3 / max(lL3, 0.001) + Vw)), 0.0), 28.0) * exp(-lL3 * 0.185) * 0.90;
-              }
-
-              reflCol += vec3(1.52, 0.70, 0.19) * warmAccum;
-              gl_FragColor.rgb += reflCol * tPuddleCore * (0.46 + 0.54 * fres);
-            }
-
-            // Subtle glossy wet pebble & silt sheen right along the river waterline (y < 0.42)
-            if (waterBankSheen > 0.02) {
-              vec3 Nbank = tWorldN;
-              vec3 Hb = normalize(moonDir + Vw);
-              float bSpec = pow(max(dot(Nbank, Hb), 0.0), 36.0) * 0.45 + pow(max(dot(Nbank, Hb), 0.0), 12.0) * 0.10;
-              float bFres = pow(max(1.0 - max(dot(Nbank, Vw), 0.0), 0.0001), 3.4);
-              gl_FragColor.rgb += (vec3(0.54, 0.68, 0.90) * bSpec + vec3(0.038, 0.064, 0.110) * bFres) * waterBankSheen;
-            }
+            vec3 Hb = normalize(moonDir + Vw);
+            float bSpec = pow(max(dot(tWorldN, Hb), 0.0), 42.0) * 0.22;
+            gl_FragColor.rgb += vec3(0.45, 0.56, 0.76) * bSpec * waterBankSheen;
           }
         }
         #include <tonemapping_fragment>`
@@ -628,114 +529,114 @@ const MOSS_STONE_KIND_PRESETS = Object.freeze({
   ruin: Object.freeze({
     texKey: 'ruinStone',
     color: 0xffffff,
-    roughness: 0.86,
-    metalness: 0.03,
-    normalScale: 0.92,
-    aoMapIntensity: 0.68,
-    mossAmount: 0.58,
-    groundAO: 0.28,
-    rimStrength: 0.16,
+    roughness: 0.93,
+    metalness: 0.0,
+    normalScale: 0.78,
+    aoMapIntensity: 0.66,
+    mossAmount: 0.34,
+    groundAO: 0.24,
+    rimStrength: 0.09,
     stoneDesat: 0.24,
     albedoScale: 1.06,
-    wetStrength: 0.64,
-    waterlineRough: 0.34,
-    envMapIntensity: 0.48
+    wetStrength: 0.42,
+    waterlineRough: 0.58,
+    envMapIntensity: 0.24
   }),
   cliff: Object.freeze({
     texKey: 'cliffRock',
     color: 0xffffff,
-    roughness: 0.92,
-    metalness: 0.02,
-    normalScale: 1.00,
-    aoMapIntensity: 0.70,
-    mossAmount: 0.72,
-    groundAO: 0.30,
-    rimStrength: 0.14,
+    roughness: 0.95,
+    metalness: 0.0,
+    normalScale: 0.85,
+    aoMapIntensity: 0.68,
+    mossAmount: 0.48,
+    groundAO: 0.26,
+    rimStrength: 0.08,
     stoneDesat: 0.22,
-    albedoScale: 1.14,
-    wetStrength: 0.68,
-    waterlineRough: 0.34,
-    envMapIntensity: 0.46
+    albedoScale: 1.12,
+    wetStrength: 0.45,
+    waterlineRough: 0.60,
+    envMapIntensity: 0.22
   }),
   boulder: Object.freeze({
     texKey: 'cliffRock',
     color: 0xffffff,
-    roughness: 0.74,
-    metalness: 0.04,
-    normalScale: 0.92,
+    roughness: 0.91,
+    metalness: 0.0,
+    normalScale: 0.80,
     aoMapIntensity: 0.66,
-    mossAmount: 0.66,
-    groundAO: 0.30,
-    rimStrength: 0.16,
+    mossAmount: 0.44,
+    groundAO: 0.26,
+    rimStrength: 0.09,
     stoneDesat: 0.22,
-    albedoScale: 1.02,
-    wetStrength: 0.78,
-    waterlineRough: 0.28,
-    envMapIntensity: 0.54
+    albedoScale: 1.04,
+    wetStrength: 0.52,
+    waterlineRough: 0.56,
+    envMapIntensity: 0.24
   }),
   deck: Object.freeze({
     texKey: 'cobble',
     color: 0xffffff,
-    roughness: 0.82,
-    metalness: 0.04,
-    normalScale: 0.88,
-    aoMapIntensity: 0.66,
-    mossAmount: 0.14,
-    groundAO: 0.22,
-    rimStrength: 0.12,
-    stoneDesat: 0.20,
-    albedoScale: 1.08,
-    wetStrength: 0.62,
-    waterlineRough: 0.30,
-    envMapIntensity: 0.48
+    roughness: 0.94,
+    metalness: 0.0,
+    normalScale: 0.74,
+    aoMapIntensity: 0.64,
+    mossAmount: 0.12,
+    groundAO: 0.20,
+    rimStrength: 0.07,
+    stoneDesat: 0.22,
+    albedoScale: 1.04,
+    wetStrength: 0.38,
+    waterlineRough: 0.58,
+    envMapIntensity: 0.22
   }),
   timber: Object.freeze({
     texKey: 'woodTimber',
     color: 0xffffff,
-    roughness: 0.86,
-    metalness: 0.02,
-    normalScale: 0.88,
+    roughness: 0.92,
+    metalness: 0.0,
+    normalScale: 0.80,
     aoMapIntensity: 0.62,
     mossAmount: 0.0,
-    groundAO: 0.24,
-    rimStrength: 0.12,
+    groundAO: 0.22,
+    rimStrength: 0.06,
     stoneDesat: 0.06,
-    albedoScale: 1.12,
-    wetStrength: 0.50,
-    waterlineRough: 0.40,
-    envMapIntensity: 0.44
+    albedoScale: 1.10,
+    wetStrength: 0.35,
+    waterlineRough: 0.64,
+    envMapIntensity: 0.22
   }),
   bark: Object.freeze({
     texKey: 'bark',
     color: 0xffffff,
-    roughness: 0.90,
-    metalness: 0.02,
-    normalScale: 1.05,
-    aoMapIntensity: 0.62,
-    mossAmount: 0.22,
-    groundAO: 0.28,
-    rimStrength: 0.18,
+    roughness: 0.95,
+    metalness: 0.0,
+    normalScale: 0.92,
+    aoMapIntensity: 0.64,
+    mossAmount: 0.18,
+    groundAO: 0.26,
+    rimStrength: 0.08,
     stoneDesat: 0.08,
-    albedoScale: 1.24,
-    wetStrength: 0.56,
-    waterlineRough: 0.38,
-    envMapIntensity: 0.44
+    albedoScale: 1.18,
+    wetStrength: 0.36,
+    waterlineRough: 0.62,
+    envMapIntensity: 0.20
   }),
   zone0_gate: Object.freeze({
     texKey: 'ruinStone',
     color: 0xffffff,
-    roughness: 0.84,
-    metalness: 0.04,
-    normalScale: 0.94,
-    aoMapIntensity: 0.68,
-    mossAmount: 0.50,
-    groundAO: 0.28,
-    rimStrength: 0.16,
+    roughness: 0.92,
+    metalness: 0.0,
+    normalScale: 0.82,
+    aoMapIntensity: 0.66,
+    mossAmount: 0.32,
+    groundAO: 0.24,
+    rimStrength: 0.10,
     stoneDesat: 0.22,
-    albedoScale: 1.04,
-    wetStrength: 0.68,
-    waterlineRough: 0.32,
-    envMapIntensity: 0.48
+    albedoScale: 1.06,
+    wetStrength: 0.44,
+    waterlineRough: 0.58,
+    envMapIntensity: 0.24
   })
 });
 
@@ -916,20 +817,17 @@ export function createMossCoatedStoneMaterial(THREE, pbrTex, opts = {}) {
           vec3 mineralTint = mix(vec3(0.95, 0.97, 1.03), vec3(1.04, 1.00, 0.94), mMacro);
           diffuseColor.rgb *= patinaMod * mineralTint;
 
-          // 3) World-Space Upward-Facing Velvety Forest Moss (unified living overgrown world!)
+          // 3) Subtle Natural Crevice Moss (NEVER flat green paint covering entire rocks!)
           if (uMossAmount > 0.005) {
-            float mossNoise = (mMacro * 0.62 + mFine * 0.38) * 2.0 - 1.0;
-            // Suppress moss below river waterline so submerged river boulders stay dark wet basalt
-            float aboveWaterMoss = smoothstep(uWaterlineY + 0.04, 0.26, vMossWorldPos.y + mossNoise * 0.08);
-            msMossMask = clamp(smoothstep(0.46, 0.82, msWorldN.y + mossNoise * 0.24) * uMossAmount * aboveWaterMoss, 0.0, 0.96);
+            float mossNoise = (mMacro * 0.52 + mFine * 0.48) * 2.0 - 1.0;
+            float gritBreak = sgVnoise3(vMossWorldPos * 3.8 + vec3(1.7, -2.3, 4.1));
+            float aboveWaterMoss = smoothstep(uWaterlineY + 0.08, 0.34, vMossWorldPos.y + mossNoise * 0.08);
+            msMossMask = clamp(smoothstep(0.62, 0.90, msWorldN.y + mossNoise * 0.26) * smoothstep(0.28, 0.72, gritBreak) * uMossAmount * aboveWaterMoss, 0.0, 0.72);
 
-            vec3 mossDeep = vec3(0.098, 0.180, 0.068);
-            vec3 mossLush = vec3(0.172, 0.275, 0.095);
-            vec3 mossCol = mix(mossDeep, mossLush, clamp(mMacro * 0.65 + mFine * 0.35, 0.0, 1.0));
-            // Subtle dark moisture-wick ring along moss fringe
-            float mossFringe = smoothstep(0.02, 0.26, msMossMask) * (1.0 - msMossMask);
-            diffuseColor.rgb *= mix(1.0, 0.78, mossFringe);
-            diffuseColor.rgb = mix(diffuseColor.rgb, mossCol, clamp(msMossMask * 0.96, 0.0, 0.96));
+            vec3 mossDeep = vec3(0.055, 0.095, 0.044);
+            vec3 mossLush = vec3(0.098, 0.152, 0.062);
+            vec3 mossCol = mix(mossDeep, mossLush, clamp(mMacro * 0.55 + gritBreak * 0.45, 0.0, 1.0));
+            diffuseColor.rgb = mix(diffuseColor.rgb, mossCol, clamp(msMossMask * 0.85, 0.0, 0.76));
           }
 
           // 4) Grounded Base Contact AO (y < 0.75 + local foot seam) & Wet Waterline Darkening (y < 0.45)
@@ -965,39 +863,29 @@ export function createMossCoatedStoneMaterial(THREE, pbrTex, opts = {}) {
       .replace(
         '#include <roughnessmap_fragment>',
         `#include <roughnessmap_fragment>
-        // Subtle macro weathered roughness variation
-        roughnessFactor = clamp(roughnessFactor + (msPatinaN - 0.5) * 0.12, 0.12, 0.98);
-        // Velvety matte moss tops raise roughness toward 0.90
-        roughnessFactor = mix(roughnessFactor, 0.90, msMossMask * 0.88);
-        // Glossy wet stone sheen near river waterline (y < 0.45)
-        roughnessFactor = mix(roughnessFactor, uWaterlineRough, msWaterWet * (1.0 - msMossMask) * uWetStrength * 0.85);`
+        // Keep stone/timber authentically matte (remapped ORM floor at 0.78 -> ZERO glossy plastic!)
+        roughnessFactor = clamp(mix(0.80, 0.97, roughnessFactor) + (msPatinaN - 0.5) * 0.08, 0.76, 0.98);
+        // Velvety matte moss tops raise roughness toward 0.95
+        roughnessFactor = mix(roughnessFactor, 0.95, msMossMask * 0.88);
+        // Natural damp stone near river waterline (y < 0.36) — subtly damp, NEVER mirror-white!
+        roughnessFactor = mix(roughnessFactor, max(0.56, uWaterlineRough), msWaterWet * (1.0 - msMossMask) * uWetStrength * 0.72);`
       )
       .replace(
         '#include <tonemapping_fragment>',
         `{
-          // Pre-Tonemapping Hero-Cohesive Stylized Moonlit Rim + Wet Waterline Specular Glints (ACES Filmic safe!)
+          // Restrained silver moonlight rim (subtle form separation without glossy halo!)
           vec3 Vw = normalize(cameraPosition - vMossWorldPos);
           vec3 moonDir = normalize(vec3(0.240, 0.315, 0.918));
           float ndv = max(dot(msWorldN, Vw), 0.0);
 
           if (uRimStrength > 0.001) {
-            float rimFres = pow(max(1.0 - ndv, 0.0001), 3.2);
-            float upBias = smoothstep(-0.22, 0.65, msWorldN.y);
-            float moonBias = smoothstep(-0.35, 0.72, dot(msWorldN, moonDir));
-            float rimMask = rimFres * (0.26 + 0.42 * upBias + 0.32 * moonBias) * uRimStrength;
-            // Softer velvet grazing sheen on moss, crisp sculpted silver-slate rim on rock/ruin silhouettes
-            rimMask *= mix(1.0, 0.58, msMossMask);
-            vec3 rimCol = mix(vec3(0.38, 0.50, 0.72), vec3(0.24, 0.38, 0.28), msMossMask * 0.45);
+            float rimFres = pow(max(1.0 - ndv, 0.0001), 3.6);
+            float upBias = smoothstep(-0.15, 0.70, msWorldN.y);
+            float moonBias = smoothstep(-0.25, 0.75, dot(msWorldN, moonDir));
+            float rimMask = rimFres * (0.20 + 0.44 * upBias + 0.36 * moonBias) * uRimStrength;
+            rimMask *= mix(1.0, 0.45, msMossMask);
+            vec3 rimCol = mix(vec3(0.30, 0.40, 0.58), vec3(0.18, 0.28, 0.20), msMossMask * 0.45);
             gl_FragColor.rgb += rimCol * rimMask;
-          }
-
-          if (msWaterWet > 0.04 && uWetStrength > 0.05) {
-            float aboveBed = smoothstep(uWaterlineY - 0.12, uWaterlineY + 0.04, vMossWorldPos.y);
-            vec3 Hm = normalize(moonDir + Vw);
-            float wetSpec = pow(max(dot(msWorldN, Hm), 0.0), 46.0) * 0.44 + pow(max(dot(msWorldN, Hm), 0.0), 14.0) * 0.08;
-            float wetFres = pow(max(1.0 - ndv, 0.0001), 3.6);
-            gl_FragColor.rgb += (vec3(0.56, 0.70, 0.92) * wetSpec + vec3(0.045, 0.075, 0.130) * wetFres)
-                              * msWaterWet * aboveBed * (1.0 - msMossMask) * uWetStrength * 0.62;
           }
         }
         #include <tonemapping_fragment>`

@@ -13,9 +13,9 @@
 // Pure Vanilla ES Module (Three.js r160, ZERO external CDN deps, ZERO extra PointLights,
 // ZERO per-frame GC allocations, full dispose() hygiene, 60–120 FPS with distance chunk culling).
 
-import { createMossCoatedStoneMaterial } from './soulsGorgeTerrainMat.js?v=20261125z104';
+import { createMossCoatedStoneMaterial } from './soulsGorgeTerrainMat.js?v=20261125z105';
 
-const ASSET_VER = '20261125z104';
+const ASSET_VER = '20261125z105';
 const WATER_LEVEL = -0.10;
 
 const VILLAGE_GLB_URL = `./assets/env/sector03_village.glb?v=${ASSET_VER}`;

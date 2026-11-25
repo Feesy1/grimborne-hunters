@@ -47,22 +47,32 @@ import {
   evalGorgeSurfaceType,
   clampGorgePosition,
   getGorgeZoneTitleAt
-} from './soulsGorgeTopology.js?v=20261125z104';
+} from './soulsGorgeTopology.js?v=20261125z105';
 import {
   createSoulsGorgeRoad,
   createGorgePbrTextures
-} from './soulsGorgeRoad.js?v=20261125z104';
-import { createSoulsRiverReachEast } from './soulsRiverReachEast.js?v=20261125z104';
-import { createSoulsRiverReachNorth } from './soulsRiverReachNorth.js?v=20261125z104';
+} from './soulsGorgeRoad.js?v=20261125z105';
+import { createSoulsRiverReachEast } from './soulsRiverReachEast.js?v=20261125z105';
+import { createSoulsRiverReachNorth } from './soulsRiverReachNorth.js?v=20261125z105';
 import {
   createGorgeSkyMaterial,
   createGorgeRiverMaterial,
   createValleyMistRig
-} from './soulsGorgeAtmosphere.js?v=20261125z104';
+} from './soulsGorgeAtmosphere.js?v=20261125z105';
 import {
   createStylizedGorgeTerrainMaterial,
   createMossCoatedStoneMaterial
-} from './soulsGorgeTerrainMat.js?v=20261125z104';
+} from './soulsGorgeTerrainMat.js?v=20261125z105';
+import {
+  SECTOR01_ANCHORS,
+  evalSector01TerrainY,
+  evalSector01SurfaceType,
+  createSoulsSector01Slice
+} from './soulsSector01Slice.js?v=20261125z105';
+
+// Vertical Slice Lock (z105): focuses Exterior Shore 100% on a handcrafted, metric-locked Sector 01
+// while keeping all archived Sectors 02–08 modules intact in the repository for staged expansion.
+const SECTOR01_VERTICAL_SLICE_MODE = true;
 
 const CHASM_STENCIL_ID = 65; // 0x41: odd bit-0 masks bossRing; far outside world.js crater pool slots (3..33)
 
@@ -119,11 +129,18 @@ function getExteriorZoneTitleAt(x, z, currentY) {
   return getGorgeZoneTitleAt(x, z, currentY);
 }
 
-export const EXTERIOR_SHORE_ANCHORS = Object.freeze({
-  ...GORGE_ANCHORS,
-  shaftCenter: Object.freeze({ x: 0.0, y: 0.0, z: 0.0 }),
-  gratePos: Object.freeze({ x: 0.0, y: 1.8, z: 26.0 })
-});
+export const EXTERIOR_SHORE_ANCHORS = Object.freeze(
+  SECTOR01_VERTICAL_SLICE_MODE
+    ? {
+        ...GORGE_ANCHORS,
+        ...SECTOR01_ANCHORS
+      }
+    : {
+        ...GORGE_ANCHORS,
+        shaftCenter: Object.freeze({ x: 0.0, y: 0.0, z: 0.0 }),
+        gratePos: Object.freeze({ x: 0.0, y: 1.8, z: 26.0 })
+      }
+);
 
 // ============================================================================
 // Jagged Chasm Rim Curve (shared 1:1 between stencil aperture, shaft walls & rim crack shader)
@@ -3516,10 +3533,34 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   const shoreTerrainMat = createStylizedGorgeTerrainMaterial(THREE, gorgePbrTex, {
     uTimeUniform: extSkyUniforms.uTime,
     lowSpecMode,
-    envMapIntensity: 0.56,
+    envMapIntensity: 0.24,
     trackMat,
     regNormalMat
   });
+
+  // In Sector 01 Vertical Slice mode, mount our handcrafted Sector 01 builder directly into `exteriorGroup`
+  // and divert all legacy procedural Zone 0 clutter into an unmounted `legacyTargetGroup` (0 draw calls!).
+  const sector01BonfireLitUniform = { value: 0.0 };
+  const sector01Slice = SECTOR01_VERTICAL_SLICE_MODE
+    ? createSoulsSector01Slice(THREE, {
+        parentGroup: exteriorGroup,
+        gltfLoader: opts?.gltfLoader || null,
+        pbrTex: gorgePbrTex,
+        terrainMat: shoreTerrainMat,
+        uTimeUniform: extSkyUniforms.uTime,
+        uBonfireLitUniform: sector01BonfireLitUniform,
+        mistSpriteTex,
+        rustedGrateMat,
+        isMobile,
+        lowSpecMode,
+        trackGeo,
+        trackMat,
+        regNormalMat
+      })
+    : null;
+  const legacyGroup = new THREE.Group();
+  legacyGroup.visible = false;
+  const extBuildTarget = SECTOR01_VERTICAL_SLICE_MODE ? legacyGroup : exteriorGroup;
 
   function buildShoreTerrainGeo() {
     const segX = isMobile ? 64 : 112;
@@ -3618,7 +3659,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
 
   const shoreTerrainMesh = new THREE.Mesh(trackGeo(buildShoreTerrainGeo()), shoreTerrainMat);
   shoreTerrainMesh.receiveShadow = true;
-  exteriorGroup.add(shoreTerrainMesh);
+  extBuildTarget.add(shoreTerrainMesh);
 
   // Ancient Broken Mossy Gothic Pilgrim Flagstones & Road Curbing (Zone 0 Shore z = 5.6..30.2)
   const pathSlabParts = [];
@@ -3664,7 +3705,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     extAshlarMat
   );
   pathSlabsMesh.receiveShadow = true;
-  exteriorGroup.add(pathSlabsMesh);
+  extBuildTarget.add(pathSlabsMesh);
 
   // --------------------------------------------------------------------------
   // C4. AAA Curving Gorge River (Moonlight Path + Crisp Shoreline Foam) + Multi-Layered 3D Waterfall!
@@ -3722,7 +3763,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   }
   const extRiverMesh = new THREE.Mesh(trackGeo(buildExteriorRiverRibbonGeo()), extRiverMat);
   extRiverMesh.renderOrder = 1;
-  exteriorGroup.add(extRiverMesh);
+  extBuildTarget.add(extRiverMesh);
 
   // Multi-Layered 3D Roaring Outfall Waterfall Cascade (Core Torrent + Outer Frothy Spray Curtain!)
   function buildWaterfallSheetGeo(zStart, yTop, dropZ, dropY, wStart, wEnd, bulge) {
@@ -3829,7 +3870,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     makeWaterfallMat(1.0, 0.94, 0.0)
   );
   waterfallCoreMesh.renderOrder = 2;
-  exteriorGroup.add(waterfallCoreMesh);
+  extBuildTarget.add(waterfallCoreMesh);
 
   // Layer 2: Outer Frothy Spray & Turbulent Cascade Veil slightly ahead & wider!
   const waterfallVeilMesh = new THREE.Mesh(
@@ -3837,7 +3878,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     makeWaterfallMat(1.24, 0.58, 0.12)
   );
   waterfallVeilMesh.renderOrder = 3;
-  exteriorGroup.add(waterfallVeilMesh);
+  extBuildTarget.add(waterfallVeilMesh);
 
   // --------------------------------------------------------------------------
   // C5. Multi-Octave Displaced Basalt Cliffs & Gorge Mountains (ZERO smooth cones!),
@@ -3969,7 +4010,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   const outfallVoidMat = trackMat(new THREE.MeshBasicMaterial({ color: 0x03050a }));
   const outfallVoid = new THREE.Mesh(trackGeo(new THREE.PlaneGeometry(7.2, 7.6)), outfallVoidMat);
   outfallVoid.position.set(0, 3.5, archZ - 1.35);
-  exteriorGroup.add(outfallVoid);
+  extBuildTarget.add(outfallVoid);
 
   // VIOLENTLY RIPPED & BENT-OUTWARD RUSTY IRON OUTFALL GRATE (organic asymmetric breaks, consistent w/ Act 4!)
   extIronParts.push(xformGeo(new THREE.BoxGeometry(7.6, 0.38, 0.38), 0, 6.45, archZ + 1.35));
@@ -4036,20 +4077,20 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     extBasaltMat
   );
   extBasaltMesh.receiveShadow = true;
-  exteriorGroup.add(extBasaltMesh);
+  extBuildTarget.add(extBasaltMesh);
 
   const extAshlarMesh = new THREE.Mesh(
     trackGeo(mergeNonIndexedGeos(THREE, ashlarParts, { boxUvTile: 2.6, withColor: true })),
     extAshlarMat
   );
   extAshlarMesh.receiveShadow = true;
-  exteriorGroup.add(extAshlarMesh);
+  extBuildTarget.add(extAshlarMesh);
 
   const extIronMesh = new THREE.Mesh(
     trackGeo(mergeNonIndexedGeos(THREE, extIronParts, { boxUvTile: 1.4 })),
     rustedGrateMat
   );
-  exteriorGroup.add(extIronMesh);
+  extBuildTarget.add(extIronMesh);
 
   // Veiled Boss Fog Portal removed — player walks freely straight through the open ruined archway at z = 31 into the Gorge Road!
 
@@ -4070,6 +4111,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     extBasaltMat
   );
   swordMoundMesh.position.y = 0.03;
+  swordMoundMesh.visible = !SECTOR01_VERTICAL_SLICE_MODE;
   swordGroup.add(swordMoundMesh);
 
   // Tilted 12-degree pivot (0.21 rad) holding EITHER the real `sword_tripo` clone OR the refined fallback broadsword!
@@ -4163,7 +4205,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
         float yFade = smoothstep(0.0, 0.16, vUv.y) * pow(1.0 - vUv.y, 2.0);
         float wisp = 0.72 + 0.28 * sin(uTime * 2.8 - vUv.y * 7.0 + vUv.x * 6.283);
         vec3 col = mix(vec3(1.15, 0.74, 0.22), vec3(1.95, 1.62, 0.92), smoothstep(0.55, 0.05, vUv.y));
-        float a = fres * yFade * wisp * 0.42;
+        float a = fres * yFade * wisp * 0.18;
         if (a < 0.006) discard;
         gl_FragColor = vec4(col, a);
       }
@@ -4272,7 +4314,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   const by = EXTERIOR_SHORE_ANCHORS.bonfirePos.y;
   const bz = EXTERIOR_SHORE_ANCHORS.bonfirePos.z;
   bonfireGroup.position.set(bx, by, bz);
-  exteriorGroup.add(bonfireGroup);
+  extBuildTarget.add(bonfireGroup);
 
   function buildShoreBonfireHearthGeo() {
     const parts = [];
@@ -4588,7 +4630,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     }));
     const mesh = new THREE.Mesh(trackGeo(g), mat);
     mesh.renderOrder = 2;
-    exteriorGroup.add(mesh);
+    extBuildTarget.add(mesh);
     return mesh;
   }
 
@@ -4670,7 +4712,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     const bgy = evalExteriorGroundY(bxP, bzP);
     const bf = createFlameAssemblyMesh(1.05, 1.62, gateAlwaysLit);
     bf.position.set(bxP, bgy + 1.68, bzP);
-    exteriorGroup.add(bf);
+    extBuildTarget.add(bf);
 
     // Molten glowing brazier coal bed
     const coalDisc = new THREE.Mesh(
@@ -4679,7 +4721,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     );
     coalDisc.rotation.x = -Math.PI * 0.5;
     coalDisc.position.set(bxP, bgy + 1.78, bzP);
-    exteriorGroup.add(coalDisc);
+    extBuildTarget.add(coalDisc);
 
     const bl = makeLightStub();
     gateBrazierLights.push(bl);
@@ -4725,7 +4767,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   }));
   const brazierSparks = new THREE.Points(brazierSparksGeo, brazierSparksMat);
   brazierSparks.renderOrder = 5;
-  exteriorGroup.add(brazierSparks);
+  extBuildTarget.add(brazierSparks);
 
   // --------------------------------------------------------------------------
   // C8. Living Foreground Details: Gnarled Dead Pines w/ Bark PBR, Curved Arching Bog Reeds,
@@ -4796,7 +4838,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     trackGeo(mergeNonIndexedGeos(THREE, deadTreeParts, { boxUvTile: 1.8, withColor: true })),
     deadTreeMat
   );
-  exteriorGroup.add(deadTreesMesh);
+  extBuildTarget.add(deadTreesMesh);
 
   // 2) CURVED ARCHING MARSH SEDGE & BOG REED TUSSOCKS (Gracefully curved 3D blades in organic clumps — ZERO straight white toothpicks!)
   function buildCurvedReedBladeGeo(bw, bh, droopAmount, yaw) {
@@ -4903,7 +4945,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     trackGeo(mergeNonIndexedGeos(THREE, reedParts)),
     reedMat
   );
-  exteriorGroup.add(reedsMesh);
+  extBuildTarget.add(reedsMesh);
 
   // 3) Environmental Storytelling Wreckage: Broken Wooden Skiff Hull, Tattered Banners, Knight Shields & Rusted Spear!
   const wreckWoodParts = [];
@@ -4985,12 +5027,12 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     trackGeo(mergeNonIndexedGeos(THREE, wreckWoodParts, { boxUvTile: 1.5, withColor: true })),
     deadTreeMat
   );
-  exteriorGroup.add(wreckWoodMesh);
+  extBuildTarget.add(wreckWoodMesh);
   const wreckMetalMesh = new THREE.Mesh(
     trackGeo(mergeNonIndexedGeos(THREE, wreckMetalParts, { boxUvTile: 1.0 })),
     rustedGrateMat
   );
-  exteriorGroup.add(wreckMetalMesh);
+  extBuildTarget.add(wreckMetalMesh);
 
   // Tattered Crimson Banners fluttering gently in coastal wind
   const bannerClothMat = trackMat(new THREE.ShaderMaterial({
@@ -5025,7 +5067,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     trackGeo(mergeNonIndexedGeos(THREE, bannerClothParts)),
     bannerClothMat
   );
-  exteriorGroup.add(bannerClothMesh);
+  extBuildTarget.add(bannerClothMesh);
 
   // --------------------------------------------------------------------------
   // C8b. z96 AAA STARTING LOCATION OVERHAUL — Architectural Landmarks, Lanterns,
@@ -5177,7 +5219,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
       xformGeo(new THREE.BoxGeometry(0.22, 0.05, 0.04), mx + 0.17, mgy + 1.44, mz + 0.15, 0.04, 0.65, -0.04),
       xformGeo(new THREE.BoxGeometry(0.16, 0.05, 0.04), mx + 0.17, mgy + 1.24, mz + 0.15, 0.04, 0.65, -0.04)
     ];
-    exteriorGroup.add(new THREE.Mesh(trackGeo(mergeNonIndexedGeos(THREE, runeGlyphParts)), runeGlyphMat));
+    extBuildTarget.add(new THREE.Mesh(trackGeo(mergeNonIndexedGeos(THREE, runeGlyphParts)), runeGlyphMat));
     addWarmGroundPool(mx, mz, 2.2, [0.36, 0.68, 1.15], 0.22, alwaysOneUniform, 5.5);
   }
 
@@ -5276,14 +5318,14 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   // Merge static z96 architectural & foliage layers into just 4 batched meshes (ultra-fast draw count!)
   const z96StoneMesh = new THREE.Mesh(trackGeo(mergeNonIndexedGeos(THREE, z96StoneParts, { boxUvTile: 2.2, withColor: true })), extAshlarMat);
   z96StoneMesh.receiveShadow = true;
-  exteriorGroup.add(z96StoneMesh);
+  extBuildTarget.add(z96StoneMesh);
 
   const z96WoodMesh = new THREE.Mesh(trackGeo(mergeNonIndexedGeos(THREE, z96WoodParts, { boxUvTile: 1.5, withColor: true })), warmOakMat);
   z96WoodMesh.receiveShadow = true;
-  exteriorGroup.add(z96WoodMesh);
+  extBuildTarget.add(z96WoodMesh);
 
   const z96IronMesh = new THREE.Mesh(trackGeo(mergeNonIndexedGeos(THREE, z96IronParts, { boxUvTile: 1.2 })), rustedGrateMat);
-  exteriorGroup.add(z96IronMesh);
+  extBuildTarget.add(z96IronMesh);
 
   const z96FoliageMat = trackMat(new THREE.MeshStandardMaterial({
     vertexColors: true,
@@ -5294,12 +5336,12 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     side: THREE.DoubleSide
   }));
   const z96FoliageMesh = new THREE.Mesh(trackGeo(mergeNonIndexedGeos(THREE, z96FoliageParts, { withColor: true })), z96FoliageMat);
-  exteriorGroup.add(z96FoliageMesh);
+  extBuildTarget.add(z96FoliageMesh);
 
   // Glowing Amber Glass Lantern Cores & Soft Additive Lantern Halos
   const lanternCoreMat = trackMat(new THREE.MeshBasicMaterial({ color: 0xffb44c }));
   const z96LanternGlowMesh = new THREE.Mesh(trackGeo(mergeNonIndexedGeos(THREE, z96LanternGlowParts)), lanternCoreMat);
-  exteriorGroup.add(z96LanternGlowMesh);
+  extBuildTarget.add(z96LanternGlowMesh);
 
   const lanternHaloMat = trackMat(new THREE.ShaderMaterial({
     uniforms: { uTime: extSkyUniforms.uTime },
@@ -5335,7 +5377,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     const hm = new THREE.Mesh(trackGeo(new THREE.PlaneGeometry(h.size, h.size)), lanternHaloMat);
     hm.position.set(h.x, h.y, h.z);
     hm.renderOrder = 4;
-    exteriorGroup.add(hm);
+    extBuildTarget.add(hm);
   }
 
   // 8) DRIFTING NOCTURNAL RIVER FIREFLIES / WILLOW WISPS (soft bioluminescent golden-cyan motes along full gorge!)
@@ -5393,7 +5435,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   }));
   const fireflyPoints = new THREE.Points(fireflyGeo, fireflyMat);
   fireflyPoints.renderOrder = 5;
-  exteriorGroup.add(fireflyPoints);
+  extBuildTarget.add(fireflyPoints);
 
   // 9) INTERACTIVE SMASHABLE WOODEN BARRELS & CARGO CRATES (Smash them to splinters with your new Great Club!)
   const destructibleSpecs = [
@@ -5435,7 +5477,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     mesh.position.set(ds.x, gy - 0.02, ds.z);
     mesh.rotation.y = (di * 1.13) % 6.28;
     mesh.receiveShadow = true;
-    exteriorGroup.add(mesh);
+    extBuildTarget.add(mesh);
     destructibleProps.push({ x: ds.x, y: gy, z: ds.z, r: 0.52, broken: false, mesh });
   }
 
@@ -5446,7 +5488,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
       const m = new THREE.Mesh(splinterGeo, warmOakMat);
       m.position.set(ox + Math.cos(ang) * 0.14, oy + 0.38, oz + Math.sin(ang) * 0.14);
       m.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
-      exteriorGroup.add(m);
+      extBuildTarget.add(m);
       activeSplinters.push({
         mesh: m,
         vx: Math.cos(ang) * spd,
@@ -5462,6 +5504,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
 
   function hitDestructibles(hx, hz, radius = 1.65) {
     if (stageMode !== 'exterior_shore') return { count: 0, hits: [] };
+    if (sector01Slice) return sector01Slice.hitDestructibles(hx, hz, radius);
     const hits = [];
     for (let i = 0; i < destructibleProps.length; i++) {
       const p = destructibleProps[i];
@@ -5477,12 +5520,16 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   }
 
   function resetDestructibles() {
+    if (sector01Slice) {
+      sector01Slice.resetDestructibles();
+      return;
+    }
     for (let i = 0; i < destructibleProps.length; i++) {
       destructibleProps[i].broken = false;
       destructibleProps[i].mesh.visible = true;
     }
     for (let i = activeSplinters.length - 1; i >= 0; i--) {
-      exteriorGroup.remove(activeSplinters[i].mesh);
+      extBuildTarget.remove(activeSplinters[i].mesh);
     }
     activeSplinters.length = 0;
   }
@@ -5491,7 +5538,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   // C8c. EXTENDED DARK SOULS / BLOODBORNE RIVERSIDE GORGE LOCATION (z = 31 .. 132m)
   //      Real Blender 4.5.9 GLB kits + 1024px PBR + Botanical Foliage + Multi-Elevation Architecture!
   // --------------------------------------------------------------------------
-  const gorgeRoadCtrl = createSoulsGorgeRoad(THREE, {
+  const gorgeRoadCtrl = SECTOR01_VERTICAL_SLICE_MODE ? null : createSoulsGorgeRoad(THREE, {
     parentGroup: exteriorGroup,
     gltfLoader: opts?.gltfLoader || null,
     pbrTex: gorgePbrTex,
@@ -5514,8 +5561,8 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     destructibleProps
   });
 
-  // C8d. FULL 8-SECTOR «РЕЧНОЙ ПРЕДЕЛ» WORLD EXPANSION (Sectors 01-05 East + Sectors 06-08 North)
-  const riverReachEastCtrl = createSoulsRiverReachEast(THREE, {
+  // C8d. FULL 8-SECTOR «РЕЧНОЙ ПРЕДЕЛ» WORLD EXPANSION (archived/paused during Sector 01 Vertical Slice)
+  const riverReachEastCtrl = SECTOR01_VERTICAL_SLICE_MODE ? null : createSoulsRiverReachEast(THREE, {
     parentGroup: exteriorGroup,
     gltfLoader: opts?.gltfLoader || null,
     pbrTex: gorgePbrTex,
@@ -5535,7 +5582,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     evalTerrainY: evalRiverReachBaseTerrainY
   });
 
-  const riverReachNorthCtrl = createSoulsRiverReachNorth(THREE, {
+  const riverReachNorthCtrl = SECTOR01_VERTICAL_SLICE_MODE ? null : createSoulsRiverReachNorth(THREE, {
     parentGroup: exteriorGroup,
     gltfLoader: opts?.gltfLoader || null,
     pbrTex: gorgePbrTex,
@@ -5554,8 +5601,8 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     evalTerrainY: evalRiverReachBaseTerrainY
   });
 
-  // Layered Nocturnal Blue-Slate Valley Mist Rig (River Sheets + Depth Curtains + Road Wisps, z103)
-  const valleyMistRig = createValleyMistRig(THREE, {
+  // Layered Nocturnal Blue-Slate Valley Mist Rig (archived during Sector 01 Vertical Slice)
+  const valleyMistRig = SECTOR01_VERTICAL_SLICE_MODE ? null : createValleyMistRig(THREE, {
     parentGroup: exteriorGroup,
     uTimeUniform: extSkyUniforms.uTime,
     mistSpriteTex,
@@ -5565,7 +5612,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     trackMat,
     evalGroundY: evalBaseTerrainY
   });
-  valleyMistRig.group?.traverse((child) => {
+  valleyMistRig?.group?.traverse((child) => {
     if (child.isMesh && child.material?.uniforms?.uFogColor?.value) {
       child.material.uniforms.uFogColor.value.setHex(0x1a2a40);
     }
@@ -5642,7 +5689,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     rollingMistMat
   );
   rollingMistMesh.renderOrder = 2;
-  exteriorGroup.add(rollingMistMesh);
+  extBuildTarget.add(rollingMistMesh);
 
   // 2) Gently Falling Pale Ash Flakes & Faint Embers drifting across the Shore & Gorge Road!
   const SHORE_ASH_COUNT = isMobile ? 120 : 260;
@@ -5760,7 +5807,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   const shoreMistPoints = new THREE.Points(shoreMistGeo, shoreMistMat);
   shoreMistPoints.renderOrder = 3;
   shoreMistPoints.frustumCulled = false;
-  exteriorGroup.add(shoreMistPoints);
+  extBuildTarget.add(shoreMistPoints);
 
   // Zero-recompile stubs (moonlight & waterfall bounce driven cleanly by world.js permanent dirLight & hemiLight!)
   const moonDirLight = makeLightStub();
@@ -6128,6 +6175,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     bonfireEmbers.visible = bonfireLit;
     bonfireCoalsUniforms.uLit.value = bonfireLit ? 1.0 : 0.0;
     extRiverUniforms.uBonfireLit.value = bonfireLit ? 1.0 : 0.0;
+    sector01Slice?.setBonfireLit?.(bonfireLit);
     if (shoreTerrainMat?.userData?.gorgeUniforms?.uBonfireLitGorge) {
       shoreTerrainMat.userData.gorgeUniforms.uBonfireLitGorge.value = bonfireLit ? 1.0 : 0.0;
     }
@@ -6239,6 +6287,20 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   ];
 
   function getActiveFireSources() {
+    if (sector01Slice) {
+      return [
+        {
+          id: 'shore_bonfire',
+          x: EXTERIOR_SHORE_ANCHORS.bonfirePos.x,
+          z: EXTERIOR_SHORE_ANCHORS.bonfirePos.z,
+          y: EXTERIOR_SHORE_ANCHORS.bonfirePos.y + 1.35,
+          weight: bonfireLit ? 1.0 : 0.22,
+          radius: bonfireLit ? 15.0 : 5.0,
+          lightIntensity: bonfireLit ? 6.2 : 1.15,
+          isBonfire: true
+        }
+      ];
+    }
     _fireSourcesList[0].weight = bonfireLit ? 1.0 : 0.24;
     _fireSourcesList[0].radius = bonfireLit ? 17.5 : 4.8;
     _fireSourcesList[0].lightIntensity = bonfireLit ? 9.5 : 1.8;
@@ -6246,27 +6308,33 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
   }
 
   function getInteractables() {
+    if (sector01Slice) return sector01Slice.getInteractables();
     return GORGE_INTERACTABLES;
   }
 
   function getZoneTitleAt(x, z, currentY) {
+    if (sector01Slice) return sector01Slice.getZoneTitleAt(x, z, currentY);
     return getExteriorZoneTitleAt(x, z, currentY);
   }
 
   function clampPosition(x, z, r = 0.55, opts = null) {
+    if (sector01Slice) return sector01Slice.clampPosition(x, z, r, opts?.out || null);
     return clampExteriorPosition(x, z, r, buildTopologyState(opts));
   }
 
   function getGroundY(x, z, currentY) {
+    if (sector01Slice) return sector01Slice.evalGroundY(x, z);
     return evalExteriorGroundY(x, z, currentY, buildTopologyState());
   }
 
   function getSurfaceType(x, z, currentY) {
+    if (sector01Slice) return sector01Slice.evalSurfaceType(x, z);
     return evalExteriorSurfaceType(x, z, currentY, buildTopologyState());
   }
 
   function getReadyPromise() {
     return Promise.all([
+      sector01Slice?.getReadyPromise?.() || Promise.resolve(true),
       gorgeRoadCtrl?.readyPromise || Promise.resolve(true),
       riverReachEastCtrl?.readyPromise || Promise.resolve(true),
       riverReachNorthCtrl?.readyPromise || Promise.resolve(true)
@@ -6355,6 +6423,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
         liftRiding = Math.abs(liftTargetY - liftY) > 0.005;
         riverReachNorthCtrl?.setLiftState?.({ unlocked: liftUnlocked, y: liftY, riding: liftRiding });
       }
+      sector01Slice?.update?.(safeDt, t);
       gorgeRoadCtrl?.update?.(safeDt, t, camPos);
       riverReachEastCtrl?.update?.(safeDt, t, camPos);
       riverReachNorthCtrl?.update?.(safeDt, t, camPos);
@@ -6435,6 +6504,7 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     setStageMode('none');
     attachRealSwordModel(null);
     valleyMistRig?.dispose?.();
+    sector01Slice?.dispose?.();
     riverReachEastCtrl?.dispose?.();
     riverReachNorthCtrl?.dispose?.();
     for (let i = 0; i < ownedGeos.length; i++) ownedGeos[i]?.dispose?.();
@@ -6487,6 +6557,8 @@ export function createSoulsExteriorShore(THREE, opts = {}) {
     getRiverReachLiftY,
     hitDestructibles,
     resetDestructibles,
+    usesOwnPointLights: () => Boolean(sector01Slice),
+    emitWaterRipple: (x, z, sprint = false) => sector01Slice?.emitWaterRipple?.(x, z, sprint),
     attachRealSwordModel,
     getAnchors,
     getActiveFireSources,
